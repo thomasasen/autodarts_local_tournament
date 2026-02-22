@@ -2439,14 +2439,33 @@
 
       .ata-score-grid {
         display: grid;
-        grid-template-columns: minmax(180px, 1fr) 100px 100px auto auto;
+        grid-template-columns: minmax(180px, 1fr) minmax(170px, 210px) minmax(170px, 210px) auto auto;
         gap: var(--ata-space-2);
-        min-width: 560px;
+        min-width: 760px;
         align-items: center;
       }
 
       .ata-score-grid .ata-small {
         grid-column: 1 / -1;
+      }
+
+      .ata-score-input-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .ata-score-input-wrap input[type="number"] {
+        flex: 0 0 78px;
+      }
+
+      .ata-score-input-name {
+        font-size: 14px;
+        color: var(--ata-color-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .ata-small {
@@ -2717,6 +2736,12 @@
       const startDisabledAttr = startUi.disabled ? "disabled" : "";
       const startTitleAttr = startUi.title ? `title="${escapeHtml(startUi.title)}"` : "";
       const autoStatus = getApiMatchStatusText(match);
+      const winnerHelpText = editable
+        ? `Wähle den Gewinner des Matches (${player1} oder ${player2}).`
+        : "Gewinner kann erst gewählt werden, wenn beide Spieler feststehen.";
+      const legsP1HelpText = `Trage hier die gewonnenen Legs von ${player1} ein (nicht Punkte pro Wurf).`;
+      const legsP2HelpText = `Trage hier die gewonnenen Legs von ${player2} ein (nicht Punkte pro Wurf).`;
+      const saveHelpText = `Speichert Gewinner und Legs für ${player1} vs ${player2}.`;
 
       const winnerOptions = editable
         ? `
@@ -2736,12 +2761,44 @@
           <td>${match.status === STATUS_COMPLETED ? `${match.legs.p1}:${match.legs.p2}` : "-"}</td>
           <td>
             <div class="ata-score-grid">
-              <select data-field="winner" data-match-id="${escapeHtml(match.id)}" ${editable ? "" : "disabled"}>
+              <select
+                data-field="winner"
+                data-match-id="${escapeHtml(match.id)}"
+                title="${escapeHtml(winnerHelpText)}"
+                aria-label="${escapeHtml(winnerHelpText)}"
+                ${editable ? "" : "disabled"}
+              >
                 ${winnerOptions}
               </select>
-              <input type="number" min="0" max="50" data-field="legs-p1" data-match-id="${escapeHtml(match.id)}" value="${match.legs.p1}" ${editable ? "" : "disabled"}>
-              <input type="number" min="0" max="50" data-field="legs-p2" data-match-id="${escapeHtml(match.id)}" value="${match.legs.p2}" ${editable ? "" : "disabled"}>
-              <button type="button" class="ata-btn" data-action="save-match" data-match-id="${escapeHtml(match.id)}" ${editable ? "" : "disabled"}>Speichern</button>
+              <div class="ata-score-input-wrap" title="${escapeHtml(legsP1HelpText)}">
+                <input
+                  type="number"
+                  min="0"
+                  max="50"
+                  data-field="legs-p1"
+                  data-match-id="${escapeHtml(match.id)}"
+                  value="${match.legs.p1}"
+                  aria-label="${escapeHtml(legsP1HelpText)}"
+                  title="${escapeHtml(legsP1HelpText)}"
+                  ${editable ? "" : "disabled"}
+                >
+                <span class="ata-score-input-name">${escapeHtml(player1)}</span>
+              </div>
+              <div class="ata-score-input-wrap" title="${escapeHtml(legsP2HelpText)}">
+                <input
+                  type="number"
+                  min="0"
+                  max="50"
+                  data-field="legs-p2"
+                  data-match-id="${escapeHtml(match.id)}"
+                  value="${match.legs.p2}"
+                  aria-label="${escapeHtml(legsP2HelpText)}"
+                  title="${escapeHtml(legsP2HelpText)}"
+                  ${editable ? "" : "disabled"}
+                >
+                <span class="ata-score-input-name">${escapeHtml(player2)}</span>
+              </div>
+              <button type="button" class="ata-btn" data-action="save-match" data-match-id="${escapeHtml(match.id)}" title="${escapeHtml(saveHelpText)}" ${editable ? "" : "disabled"}>Speichern</button>
               <button type="button" class="ata-btn ata-btn-primary" data-action="start-match" data-match-id="${escapeHtml(match.id)}" ${startDisabledAttr} ${startTitleAttr}>${escapeHtml(startUi.label)}</button>
               <div class="ata-small">${escapeHtml(autoStatus)}</div>
             </div>
