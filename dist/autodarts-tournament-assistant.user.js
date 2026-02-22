@@ -34,6 +34,8 @@
   const API_SYNC_INTERVAL_MS = 2500;
   const API_AUTH_NOTICE_THROTTLE_MS = 15000;
   const API_REQUEST_TIMEOUT_MS = 12000;
+  const BRACKET_OFFSET_LIMIT_X = 360;
+  const BRACKET_OFFSET_LIMIT_Y = 420;
 
   const BRACKET_VIEWER_JS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.js";
   const BRACKET_VIEWER_CSS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.css";
@@ -95,6 +97,7 @@
       authBackoffUntil: 0,
       lastAuthNoticeAt: 0,
     },
+    runtimeStatusSignature: "",
     cleanupStack: [],
   };
 
@@ -109,6 +112,7 @@
       },
       ui: {
         activeTab: "tournament",
+        bracketOffset: { x: 0, y: 0 },
       },
       tournament: null,
     };
@@ -154,6 +158,20 @@
       return fallback;
     }
     return Math.max(min, Math.min(max, num));
+  }
+
+  function normalizeBracketOffset(rawOffset) {
+    const x = clampInt(rawOffset?.x, 0, -BRACKET_OFFSET_LIMIT_X, BRACKET_OFFSET_LIMIT_X);
+    const y = clampInt(rawOffset?.y, 0, -BRACKET_OFFSET_LIMIT_Y, BRACKET_OFFSET_LIMIT_Y);
+    return { x, y };
+  }
+
+  function getBracketOffset() {
+    if (!state.store || !state.store.ui) {
+      return { x: 0, y: 0 };
+    }
+    state.store.ui.bracketOffset = normalizeBracketOffset(state.store.ui.bracketOffset);
+    return state.store.ui.bracketOffset;
   }
 
   function uuid(prefix) {
@@ -370,6 +388,7 @@
       },
       ui: {
         activeTab: TAB_IDS.includes(input?.ui?.activeTab) ? input.ui.activeTab : defaults.ui.activeTab,
+        bracketOffset: normalizeBracketOffset(input?.ui?.bracketOffset || defaults.ui.bracketOffset),
       },
       tournament: normalizeTournament(input?.tournament),
     };
@@ -1041,6 +1060,65 @@
     }
   }
 
+  function collectRuntimeStatus() {
+    const token = getAuthTokenFromCookie();
+    const boardId = getBoardId();
+    const boardPreview = boardId.length > 18 ? `${boardId.slice(0, 7)}...${boardId.slice(-6)}` : boardId;
+    const autoEnabled = Boolean(state.store?.settings?.featureFlags?.autoLobbyStart);
+    const authBlocked = Number(state.apiAutomation?.authBackoffUntil || 0) > Date.now();
+    const hasToken = Boolean(token);
+    const hasBoard = Boolean(boardId);
+    return {
+      hasToken,
+      hasBoard,
+      boardId: boardId || "",
+      autoEnabled,
+      authBlocked,
+      apiLabel: hasToken ? (authBlocked ? "API Auth abgelaufen" : "API Auth bereit") : "API Auth fehlt",
+      boardLabel: hasBoard ? `Board aktiv (${boardPreview})` : "Kein aktives Board",
+      autoLabel: autoEnabled ? "Auto-Lobby ON" : "Auto-Lobby OFF",
+    };
+  }
+
+  function renderRuntimeStatusBar() {
+    const status = collectRuntimeStatus();
+    const apiStateClass = status.hasToken && !status.authBlocked ? "ata-status-ok" : "ata-status-warn";
+    const boardStateClass = status.hasBoard ? "ata-status-ok" : "ata-status-warn";
+    const autoStateClass = status.autoEnabled ? "ata-status-info" : "ata-status-neutral";
+    const hint = status.autoEnabled && (!status.hasToken || !status.hasBoard)
+      ? `<span class="ata-runtime-hint">Hinweis: Fuer API-Halbautomatik werden Auth-Token und aktives Board benoetigt.</span>`
+      : "";
+    return `
+      <div class="ata-runtime-statusbar">
+        <span class="ata-status-pill ${apiStateClass}">${escapeHtml(status.apiLabel)}</span>
+        <span class="ata-status-pill ${boardStateClass}">${escapeHtml(status.boardLabel)}</span>
+        <span class="ata-status-pill ${autoStateClass}">${escapeHtml(status.autoLabel)}</span>
+        ${hint}
+      </div>
+    `;
+  }
+
+  function runtimeStatusSignature() {
+    const status = collectRuntimeStatus();
+    return [
+      status.hasToken ? "1" : "0",
+      status.authBlocked ? "1" : "0",
+      status.boardId || "",
+      status.autoEnabled ? "1" : "0",
+    ].join("|");
+  }
+
+  function refreshRuntimeStatusUi() {
+    const signature = runtimeStatusSignature();
+    if (signature === state.runtimeStatusSignature) {
+      return;
+    }
+    state.runtimeStatusSignature = signature;
+    if (state.drawerOpen) {
+      renderShell();
+    }
+  }
+
   function createApiError(status, message, body) {
     const error = new Error(String(message || "API request failed."));
     error.status = Number(status || 0);
@@ -1590,7 +1668,7 @@
         --ata-z-overlay: 2147483000;
         color: var(--ata-color-text);
         font-family: var(--ata-font-body);
-        font-size: 14px;
+        font-size: 16px;
         line-height: 1.4;
         color-scheme: dark;
       }
@@ -1721,6 +1799,54 @@
         padding: var(--ata-space-5);
       }
 
+      .ata-runtime-statusbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px 20px;
+        border-bottom: 1px solid var(--ata-color-border);
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .ata-status-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--ata-color-text);
+        padding: 4px 10px;
+        font-size: 12px;
+        line-height: 1.2;
+        white-space: nowrap;
+      }
+
+      .ata-status-pill.ata-status-ok {
+        border-color: rgba(90, 210, 153, 0.5);
+        background: rgba(90, 210, 153, 0.2);
+      }
+
+      .ata-status-pill.ata-status-warn {
+        border-color: rgba(252, 129, 129, 0.55);
+        background: rgba(252, 129, 129, 0.2);
+      }
+
+      .ata-status-pill.ata-status-info {
+        border-color: rgba(153, 160, 245, 0.56);
+        background: rgba(114, 121, 224, 0.24);
+      }
+
+      .ata-status-pill.ata-status-neutral {
+        border-color: rgba(255, 255, 255, 0.3);
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .ata-runtime-hint {
+        color: var(--ata-color-muted);
+        font-size: 12px;
+      }
+
       .ata-content::-webkit-scrollbar {
         width: 10px;
       }
@@ -1770,7 +1896,7 @@
 
       .ata-card h3 {
         margin: 0 0 var(--ata-space-3) 0;
-        font-size: 18px;
+        font-size: 21px;
         font-family: var(--ata-font-body);
         font-weight: 700;
       }
@@ -1788,7 +1914,7 @@
 
       .ata-field label {
         color: var(--ata-color-muted);
-        font-size: 12px;
+        font-size: 13px;
         letter-spacing: 0.5px;
         text-transform: uppercase;
       }
@@ -1801,7 +1927,8 @@
         border: 1px solid var(--ata-color-border);
         background: rgba(255, 255, 255, 0.1);
         color: var(--ata-color-text);
-        padding: 9px 10px;
+        padding: 10px 12px;
+        font-size: 15px;
         box-sizing: border-box;
         transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
       }
@@ -1831,7 +1958,8 @@
         background: rgba(255, 255, 255, 0.12);
         color: var(--ata-color-text);
         border-radius: var(--ata-radius-sm);
-        padding: 9px 12px;
+        padding: 10px 14px;
+        font-size: 14px;
         cursor: pointer;
         transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
       }
@@ -1875,7 +2003,7 @@
         padding: 3px 10px;
         margin-right: 8px;
         margin-bottom: 8px;
-        font-size: 12px;
+        font-size: 13px;
       }
 
       .ata-table-wrap {
@@ -1889,7 +2017,7 @@
       table.tournamentRanking {
         width: 100%;
         border-collapse: collapse;
-        font-size: 13px;
+        font-size: 14px;
       }
 
       .ata-table th,
@@ -1904,7 +2032,7 @@
         color: var(--ata-color-muted);
         font-weight: 600;
         text-transform: uppercase;
-        font-size: 12px;
+        font-size: 13px;
         letter-spacing: 0.4px;
       }
 
@@ -1929,7 +2057,7 @@
       }
 
       .ata-small {
-        font-size: 12px;
+        font-size: 13px;
         color: var(--ata-color-muted);
       }
 
@@ -1937,6 +2065,41 @@
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
         gap: var(--ata-space-3);
+      }
+
+      .ata-bracket-dock {
+        position: relative;
+        transform: translate(var(--ata-bracket-offset-x, 0px), var(--ata-bracket-offset-y, 0px));
+        transition: transform 120ms ease;
+      }
+
+      .ata-bracket-dock[data-dragging="1"] {
+        transition: none;
+      }
+
+      .ata-bracket-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--ata-space-2);
+        margin-bottom: var(--ata-space-2);
+      }
+
+      .ata-bracket-drag-handle {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px dashed rgba(255, 255, 255, 0.3);
+        border-radius: var(--ata-radius-sm);
+        background: rgba(255, 255, 255, 0.08);
+        padding: 8px 10px;
+        color: var(--ata-color-muted);
+        cursor: grab;
+        user-select: none;
+      }
+
+      .ata-bracket-drag-handle:active {
+        cursor: grabbing;
       }
 
       .ata-bracket-shell {
@@ -1948,7 +2111,7 @@
 
       .ata-bracket-frame {
         width: 100%;
-        min-height: 420px;
+        min-height: 500px;
         border: 0;
         background: #fff;
       }
@@ -2001,6 +2164,14 @@
         .ata-grid-2 {
           grid-template-columns: 1fr;
         }
+
+        .ata-runtime-statusbar {
+          padding: 10px 14px;
+        }
+
+        .ata-bracket-dock {
+          transform: none;
+        }
       }
     `;
   }
@@ -2015,6 +2186,7 @@
     const noticeHtml = state.notice.message
       ? `<div class="ata-notice ata-notice-${escapeHtml(state.notice.type)}">${escapeHtml(state.notice.message)}</div>`
       : "";
+    const runtimeStatusHtml = renderRuntimeStatusBar();
 
     return `
       <style>${buildStyles()}</style>
@@ -2029,6 +2201,7 @@
             <button type="button" class="ata-close-btn" data-action="close-drawer" aria-label="Schliessen">Schliessen</button>
           </header>
           <nav class="ata-tabs">${tabs}</nav>
+          ${runtimeStatusHtml}
           <main class="ata-content" data-role="content">${noticeHtml}${renderActiveTab()}</main>
         </aside>
       </div>
@@ -2334,6 +2507,7 @@
     }
 
     let html = "";
+    const bracketOffset = getBracketOffset();
 
     if (tournament.mode === "league") {
       const standings = standingsForMatches(tournament, getMatchesByStage(tournament, MATCH_STAGE_LEAGUE));
@@ -2352,10 +2526,18 @@
       html += `
         <section class="ata-card tournamentCard">
           <h3>KO-Bracket</h3>
-          <div class="ata-bracket-shell">
-            <iframe id="ata-bracket-frame" class="ata-bracket-frame" title="Turnierbaum" sandbox="allow-scripts allow-same-origin"></iframe>
-            <div class="ata-bracket-fallback" id="ata-bracket-fallback">
-              ${renderStaticBracketFallback(tournament)}
+          <div class="ata-bracket-dock" id="ata-bracket-dock" style="--ata-bracket-offset-x:${bracketOffset.x}px; --ata-bracket-offset-y:${bracketOffset.y}px;">
+            <div class="ata-bracket-toolbar">
+              <div class="ata-bracket-drag-handle" data-action="drag-bracket" title="Mit linker Maustaste ziehen">
+                <span>Bracket verschieben</span>
+              </div>
+              <button type="button" class="ata-btn" data-action="reset-bracket-offset">Position zuruecksetzen</button>
+            </div>
+            <div class="ata-bracket-shell">
+              <iframe id="ata-bracket-frame" class="ata-bracket-frame" title="Turnierbaum" sandbox="allow-scripts allow-same-origin"></iframe>
+              <div class="ata-bracket-fallback" id="ata-bracket-fallback">
+                ${renderStaticBracketFallback(tournament)}
+              </div>
             </div>
           </div>
           <div class="ata-actions" style="margin-top: 10px;">
@@ -2564,10 +2746,82 @@
       retryBracketButton.addEventListener("click", () => queueBracketRender(true));
     }
 
+    const resetBracketOffsetButton = shadow.querySelector("[data-action='reset-bracket-offset']");
+    if (resetBracketOffsetButton) {
+      resetBracketOffsetButton.addEventListener("click", () => {
+        state.store.ui.bracketOffset = { x: 0, y: 0 };
+        schedulePersist();
+        renderShell();
+      });
+    }
+
+    initBracketDragHandlers(shadow);
+
     const drawer = shadow.querySelector(".ata-drawer");
     if (drawer) {
       drawer.addEventListener("keydown", handleDrawerKeydown);
     }
+  }
+
+  function initBracketDragHandlers(shadow) {
+    const dock = shadow.getElementById("ata-bracket-dock");
+    const dragHandle = shadow.querySelector("[data-action='drag-bracket']");
+    if (!(dock instanceof HTMLElement) || !(dragHandle instanceof HTMLElement)) {
+      return;
+    }
+
+    let dragging = false;
+    let startMouseX = 0;
+    let startMouseY = 0;
+    let startOffset = getBracketOffset();
+    let nextOffset = startOffset;
+
+    const applyOffset = (offset) => {
+      dock.style.setProperty("--ata-bracket-offset-x", `${offset.x}px`);
+      dock.style.setProperty("--ata-bracket-offset-y", `${offset.y}px`);
+    };
+
+    const onMouseMove = (event) => {
+      if (!dragging) {
+        return;
+      }
+      const deltaX = event.clientX - startMouseX;
+      const deltaY = event.clientY - startMouseY;
+      nextOffset = normalizeBracketOffset({
+        x: startOffset.x + deltaX,
+        y: startOffset.y + deltaY,
+      });
+      applyOffset(nextOffset);
+    };
+
+    const onMouseUp = () => {
+      if (!dragging) {
+        return;
+      }
+      dragging = false;
+      dock.dataset.dragging = "0";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      state.store.ui.bracketOffset = normalizeBracketOffset(nextOffset);
+      schedulePersist();
+    };
+
+    dragHandle.addEventListener("mousedown", (event) => {
+      if (event.button !== 0) {
+        return;
+      }
+      event.preventDefault();
+      dragging = true;
+      dock.dataset.dragging = "1";
+      startMouseX = event.clientX;
+      startMouseY = event.clientY;
+      startOffset = getBracketOffset();
+      nextOffset = startOffset;
+      document.body.style.userSelect = "none";
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    });
   }
 
   function handleDrawerKeydown(event) {
@@ -3333,6 +3587,7 @@
 
   async function init() {
     await loadPersistedStore();
+    state.runtimeStatusSignature = runtimeStatusSignature();
     ensureHost();
     renderShell();
 
@@ -3345,6 +3600,9 @@
         logWarn("api", "Background sync loop failed.", error);
       });
     }, API_SYNC_INTERVAL_MS);
+    addInterval(() => {
+      refreshRuntimeStatusUi();
+    }, 1200);
 
     state.ready = true;
     window.dispatchEvent(new CustomEvent(READY_EVENT, {
