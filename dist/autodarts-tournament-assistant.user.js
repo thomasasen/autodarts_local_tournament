@@ -1112,7 +1112,7 @@
       boardLabel: hasBoard
         ? `Board aktiv (${boardPreview})`
         : hasBoardValue
-          ? `Board-ID ungueltig (${boardPreview})`
+          ? `Board-ID ungültig (${boardPreview})`
           : "Kein aktives Board",
       autoLabel: autoEnabled ? "Auto-Lobby ON" : "Auto-Lobby OFF",
     };
@@ -1124,7 +1124,7 @@
     const boardStateClass = status.hasBoard ? "ata-status-ok" : "ata-status-warn";
     const autoStateClass = status.autoEnabled ? "ata-status-info" : "ata-status-neutral";
     const hint = status.autoEnabled && (!status.hasToken || !status.hasBoard)
-      ? `<span class="ata-runtime-hint">Hinweis: Fuer API-Halbautomatik werden Auth-Token und aktives Board benoetigt.</span>`
+      ? `<span class="ata-runtime-hint">Hinweis: Für API-Halbautomatik werden Auth-Token und aktives Board benötigt.</span>`
       : "";
     return `
       <div class="ata-runtime-statusbar">
@@ -1405,7 +1405,7 @@
       return {
         label: "Zum Match",
         disabled: false,
-        title: "Oeffnet das bereits gestartete Match.",
+        title: "Öffnet das bereits gestartete Match.",
       };
     }
 
@@ -1429,7 +1429,7 @@
       return {
         label: "Match starten",
         disabled: true,
-        title: "Match ist noch nicht vollstaendig gesetzt.",
+        title: "Match ist noch nicht vollständig gesetzt.",
       };
     }
 
@@ -1447,8 +1447,8 @@
         label: "Match starten",
         disabled: true,
         title: boardId
-          ? `Board-ID ungueltig (${boardId}). Bitte Board in einer manuellen Lobby waehlen.`
-          : "Kein Board aktiv. Bitte einmal manuell eine Lobby oeffnen und Board waehlen.",
+          ? `Board-ID ungültig (${boardId}). Bitte Board in einer manuellen Lobby wählen.`
+          : "Kein Board aktiv. Bitte einmal manuell eine Lobby öffnen und Board wählen.",
       };
     }
 
@@ -1456,7 +1456,7 @@
       return {
         label: "Match starten",
         disabled: true,
-        title: "Es laeuft bereits ein aktives Match.",
+        title: "Es läuft bereits ein aktives Match.",
       };
     }
 
@@ -1464,7 +1464,7 @@
       return {
         label: "Match starten",
         disabled: true,
-        title: "Ein anderer Matchstart laeuft bereits.",
+        title: "Ein anderer Matchstart läuft bereits.",
       };
     }
 
@@ -1479,7 +1479,7 @@
     return {
       label: "Match starten",
       disabled: false,
-      title: "Erstellt Lobby, fuegt Spieler hinzu und startet automatisch.",
+      title: "Erstellt Lobby, fügt Spieler hinzu und startet automatisch.",
     };
   }
 
@@ -1527,14 +1527,14 @@
 
     const duplicates = getDuplicateParticipantNames(tournament);
     if (duplicates.length) {
-      setNotice("error", "Fuer Auto-Sync muessen Teilnehmernamen eindeutig sein.");
+      setNotice("error", "Für Auto-Sync müssen Teilnehmernamen eindeutig sein.");
       return;
     }
 
     const activeMatch = findActiveStartedMatch(tournament, match.id);
     if (activeMatch) {
       const activeAuto = ensureMatchAutoMeta(activeMatch);
-      setNotice("info", "Es laeuft bereits ein aktives Match. Weiterleitung dorthin.");
+      setNotice("info", "Es läuft bereits ein aktives Match. Weiterleitung dorthin.");
       if (activeAuto.lobbyId) {
         openMatchPage(activeAuto.lobbyId);
       }
@@ -1549,18 +1549,18 @@
 
     const boardId = getBoardId();
     if (!boardId) {
-      setNotice("error", "Board-ID fehlt. Bitte einmal manuell eine Lobby oeffnen und Board auswaehlen.");
+      setNotice("error", "Board-ID fehlt. Bitte einmal manuell eine Lobby öffnen und Board auswählen.");
       return;
     }
     if (!isValidBoardId(boardId)) {
-      setNotice("error", `Board-ID ist ungueltig (${boardId}). Bitte in einer manuellen Lobby ein echtes Board auswaehlen.`);
+      setNotice("error", `Board-ID ist ungültig (${boardId}). Bitte in einer manuellen Lobby ein echtes Board auswählen.`);
       return;
     }
 
     const participant1 = participantById(tournament, match.player1Id);
     const participant2 = participantById(tournament, match.player2Id);
     if (!participant1 || !participant2) {
-      setNotice("error", "Teilnehmerzuordnung im Match ist unvollstaendig.");
+      setNotice("error", "Teilnehmerzuordnung im Match ist unvollständig.");
       return;
     }
 
@@ -2322,9 +2322,9 @@
           <header class="ata-header">
             <div class="ata-title-wrap">
               <h2>Turnier Assistent</h2>
-              <p>Lokales Management fur KO, Liga und Gruppenphase <span class="ata-version">v${escapeHtml(APP_VERSION)}</span></p>
+              <p>Lokales Management für KO, Liga und Gruppenphase <span class="ata-version">v${escapeHtml(APP_VERSION)}</span></p>
             </div>
-            <button type="button" class="ata-close-btn" data-action="close-drawer" aria-label="Schliessen">Schliessen</button>
+            <button type="button" class="ata-close-btn" data-action="close-drawer" aria-label="Schließen">Schließen</button>
           </header>
           <nav class="ata-tabs">${tabs}</nav>
           ${runtimeStatusHtml}
@@ -2416,10 +2416,10 @@
         <div>${participantsHtml}</div>
       </section>
       <section class="ata-card tournamentCard">
-        <h3>Turnier zurucksetzen</h3>
-        <p class="ata-small">Dieser Schritt loescht alle Spielstaende. Bitte vorher exportieren.</p>
+        <h3>Turnier zurücksetzen</h3>
+        <p class="ata-small">Dieser Schritt löscht alle Spielstände. Bitte vorher exportieren.</p>
         <div class="ata-actions">
-          <button type="button" class="ata-btn ata-btn-danger" data-action="reset-tournament">Turnier loeschen</button>
+          <button type="button" class="ata-btn ata-btn-danger" data-action="reset-tournament">Turnier löschen</button>
         </div>
       </section>
     `;
@@ -2492,7 +2492,7 @@
 
     return `
       <section class="ata-card tournamentCard">
-        <h3>Ergebnisfuehrung</h3>
+        <h3>Ergebnisführung</h3>
         <p class="ata-small">API-Halbautomatik: Match per Klick starten, Ergebnis wird automatisch synchronisiert. Manuelle Eingabe bleibt als Fallback aktiv.</p>
         <div class="ata-table-wrap">
           <table class="ata-table tournamentRanking">
@@ -2591,7 +2591,7 @@
   function renderStaticBracketFallback(tournament) {
     const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
     if (!koMatches.length) {
-      return `<p class="ata-small">Kein KO-Bracket vorhanden.</p>`;
+      return `<p class="ata-small">Kein KO-Turnierbaum vorhanden.</p>`;
     }
 
     const rounds = new Map();
@@ -2651,13 +2651,13 @@
     if (tournament.mode === "ko" || tournament.mode === "groups_ko") {
       html += `
         <section class="ata-card tournamentCard">
-          <h3>KO-Bracket</h3>
+          <h3>KO-Turnierbaum</h3>
           <div class="ata-bracket-dock" id="ata-bracket-dock" style="--ata-bracket-offset-x:${bracketOffset.x}px; --ata-bracket-offset-y:${bracketOffset.y}px;">
             <div class="ata-bracket-toolbar">
               <div class="ata-bracket-drag-handle" data-action="drag-bracket" title="Mit linker Maustaste ziehen">
-                <span>Bracket verschieben</span>
+                <span>Turnierbaum verschieben</span>
               </div>
-              <button type="button" class="ata-btn" data-action="reset-bracket-offset">Position zuruecksetzen</button>
+              <button type="button" class="ata-btn" data-action="reset-bracket-offset">Position zurücksetzen</button>
             </div>
             <div class="ata-bracket-shell">
               <iframe id="ata-bracket-frame" class="ata-bracket-frame" title="Turnierbaum" sandbox="allow-scripts allow-same-origin"></iframe>
@@ -2667,9 +2667,9 @@
             </div>
           </div>
           <div class="ata-actions" style="margin-top: 10px;">
-            <button type="button" class="ata-btn" data-action="retry-bracket">Bracket neu laden</button>
+            <button type="button" class="ata-btn" data-action="retry-bracket">Turnierbaum neu laden</button>
           </div>
-          <p class="ata-small">CDN-Render aktiv, Fallback darunter sichtbar fuer robuste Anzeige.</p>
+          <p class="ata-small">CDN-Render aktiv, Fallback darunter sichtbar für robuste Anzeige.</p>
         </section>
       `;
     }
@@ -2693,11 +2693,11 @@
           <input id="ata-import-file" type="file" accept=".json,application/json">
         </div>
         <div class="ata-field" style="margin-top: 10px;">
-          <label for="ata-import-text">JSON einfugen</label>
+          <label for="ata-import-text">JSON einfügen</label>
           <textarea id="ata-import-text" placeholder="{ ... }"></textarea>
         </div>
         <div class="ata-actions" style="margin-top: 10px;">
-          <button type="button" class="ata-btn" data-action="import-text">Eingefugtes JSON importieren</button>
+          <button type="button" class="ata-btn" data-action="import-text">Eingefügtes JSON importieren</button>
         </div>
       </section>
     `;
@@ -2719,7 +2719,7 @@
         <div class="ata-toggle">
           <div>
             <strong>Automatischer Lobby-Start + API-Sync</strong>
-            <div class="ata-small">Default OFF. Aktiviert Matchstart per Klick und automatische Ergebnisuebernahme aus der Autodarts-API.</div>
+            <div class="ata-small">Default OFF. Aktiviert Matchstart per Klick und automatische Ergebnisübernahme aus der Autodarts-API.</div>
           </div>
           <input type="checkbox" id="ata-setting-autolobby" data-action="toggle-autolobby" ${autoLobbyEnabled}>
         </div>
@@ -3078,7 +3078,7 @@
   }
 
   function handleResetTournament() {
-    const confirmed = window.confirm("Soll das Turnier wirklich geloescht werden? Dieser Schritt kann nicht rueckgaengig gemacht werden.");
+    const confirmed = window.confirm("Soll das Turnier wirklich gelöscht werden? Dieser Schritt kann nicht rückgängig gemacht werden.");
     if (!confirmed) {
       return;
     }
@@ -3086,7 +3086,7 @@
     state.apiAutomation.startingMatchId = "";
     state.apiAutomation.authBackoffUntil = 0;
     schedulePersist();
-    setNotice("success", "Turnier wurde geloescht.");
+    setNotice("success", "Turnier wurde gelöscht.");
     state.activeTab = "tournament";
     renderShell();
   }
@@ -3128,7 +3128,7 @@
 
   function importPayload(rawObject) {
     if (!rawObject || typeof rawObject !== "object") {
-      return { ok: false, message: "JSON ist leer oder ungueltig." };
+      return { ok: false, message: "JSON ist leer oder ungültig." };
     }
 
     let tournament = rawObject.tournament || null;
@@ -3196,7 +3196,7 @@
           setNotice("error", result.message || "Datei konnte nicht importiert werden.");
         }
       } catch (error) {
-        setNotice("error", "Datei enthaelt kein gueltiges JSON.");
+        setNotice("error", "Datei enthält kein gültiges JSON.");
         logWarn("io", "File import parse failed.", error);
       }
     };
@@ -3273,14 +3273,148 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="${BRACKET_VIEWER_CSS}">
   <style>
-    html, body { margin: 0; padding: 0; background: #f6f8fa; font-family: Arial, sans-serif; height: 100%; overflow: hidden; }
-    #brackets-root { padding: 12px; min-height: 380px; width: 100%; height: calc(100% - 8px); overflow: auto; cursor: grab; box-sizing: border-box; }
-    #brackets-root[data-dragging="1"] { cursor: grabbing; user-select: none; }
-    #msg { padding: 12px; font-size: 13px; color: #444; }
+    :root {
+      --tb-bg-1: #2b356f;
+      --tb-bg-2: #1f3f72;
+      --tb-panel: rgba(255, 255, 255, 0.08);
+      --tb-panel-border: rgba(255, 255, 255, 0.2);
+      --tb-match: #3b5488;
+      --tb-match-border: rgba(255, 255, 255, 0.28);
+      --tb-score: #5ad299;
+      --tb-text: #f4f7ff;
+      --tb-muted: rgba(232, 237, 255, 0.78);
+      --tb-line: rgba(189, 203, 236, 0.56);
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      color: var(--tb-text);
+      font-family: "Open Sans", "Segoe UI", Tahoma, sans-serif;
+      background: linear-gradient(180deg, var(--tb-bg-1), var(--tb-bg-2));
+    }
+
+    #msg {
+      padding: 14px 18px;
+      font-size: 15px;
+      color: var(--tb-muted);
+      border-bottom: 1px solid var(--tb-panel-border);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    #brackets-root {
+      padding: 16px 16px 22px;
+      min-height: 380px;
+      width: 100%;
+      height: calc(100% - 8px);
+      overflow: auto;
+      cursor: grab;
+      box-sizing: border-box;
+      background:
+        radial-gradient(circle at 14% 8%, rgba(90, 210, 153, 0.07), transparent 45%),
+        radial-gradient(circle at 82% 10%, rgba(114, 121, 224, 0.18), transparent 52%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+    }
+
+    #brackets-root[data-dragging="1"] {
+      cursor: grabbing;
+      user-select: none;
+    }
+
+    #brackets-root .brackets-viewer {
+      color: var(--tb-text);
+      min-width: max-content;
+    }
+
+    #brackets-root .round-title,
+    #brackets-root .round > h3,
+    #brackets-root [class*="round"] > [class*="title"] {
+      background: var(--tb-panel) !important;
+      border: 1px solid var(--tb-panel-border) !important;
+      color: var(--tb-text) !important;
+      border-radius: 8px !important;
+      font-size: 14px !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.2px;
+    }
+
+    #brackets-root .match,
+    #brackets-root [class*="match"] {
+      background: var(--tb-match) !important;
+      border: 1px solid var(--tb-match-border) !important;
+      border-radius: 10px !important;
+      box-shadow: 0 6px 18px rgba(7, 12, 28, 0.25);
+    }
+
+    #brackets-root .participant,
+    #brackets-root .opponent,
+    #brackets-root [class*="participant"],
+    #brackets-root [class*="opponent"] {
+      background: transparent !important;
+      color: var(--tb-text) !important;
+      border-color: rgba(255, 255, 255, 0.18) !important;
+      min-height: 28px;
+    }
+
+    #brackets-root .participant + .participant,
+    #brackets-root .opponent + .opponent,
+    #brackets-root [class*="participant"] + [class*="participant"] {
+      border-top: 1px solid rgba(255, 255, 255, 0.16) !important;
+    }
+
+    #brackets-root .name,
+    #brackets-root [class*="name"] {
+      color: var(--tb-text) !important;
+      font-size: 14px !important;
+      font-weight: 600 !important;
+    }
+
+    #brackets-root .score,
+    #brackets-root [class*="score"] {
+      color: #0a281c !important;
+      background: var(--tb-score) !important;
+      border-radius: 999px !important;
+      padding: 1px 7px !important;
+      min-width: 22px;
+      text-align: center;
+      font-size: 12px !important;
+      font-weight: 700 !important;
+    }
+
+    #brackets-root .winner .name,
+    #brackets-root [class*="winner"] [class*="name"] {
+      color: #ffffff !important;
+      font-weight: 700 !important;
+    }
+
+    #brackets-root svg line,
+    #brackets-root svg path,
+    #brackets-root .connector,
+    #brackets-root [class*="line"] {
+      stroke: var(--tb-line) !important;
+      border-color: var(--tb-line) !important;
+    }
+
+    #brackets-root::-webkit-scrollbar {
+      width: 11px;
+      height: 11px;
+    }
+
+    #brackets-root::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+    }
+
+    #brackets-root::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.28);
+      border-radius: 999px;
+    }
   </style>
 </head>
 <body>
-  <div id="msg">Bracket wird geladen ...</div>
+  <div id="msg">Turnierbaum wird geladen ...</div>
   <div id="brackets-root" class="brackets-viewer"></div>
   <script src="${I18NEXT_UMD_JS}"></script>
   <script src="${BRACKET_VIEWER_JS}"></script>
@@ -3400,8 +3534,8 @@
 
     state.bracket.timeoutHandle = window.setTimeout(() => {
       state.bracket.failed = true;
-      state.bracket.lastError = "Bracket-Render Timeout";
-      setNotice("error", "CDN-Bracket Timeout, Fallback bleibt aktiv.", 3200);
+      state.bracket.lastError = "Turnierbaum-Render-Timeout";
+      setNotice("error", "CDN-Turnierbaum-Timeout, Fallback bleibt aktiv.", 3200);
       logWarn("bracket", "Iframe bracket render timeout.");
     }, 7000);
 
@@ -3462,7 +3596,7 @@
       }
       state.bracket.failed = true;
       state.bracket.lastError = normalizeText(data.message || "Unbekannter Fehler");
-      setNotice("error", `Bracket-Fehler: ${state.bracket.lastError}. Fallback aktiv.`, 3600);
+      setNotice("error", `Turnierbaum-Fehler: ${state.bracket.lastError}. Fallback aktiv.`, 3600);
       logWarn("bracket", "Bracket render error.", data);
     }
   }
