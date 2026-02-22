@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.2.4
+// @version      0.2.5
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,7 +21,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.2.4";
+  const APP_VERSION = "0.2.5";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 1;
   const SAVE_DEBOUNCE_MS = 150;
@@ -3440,11 +3440,14 @@
       var rootEl = document.getElementById("brackets-root");
       var hostEl = document.getElementById("diagram-host");
       var diagram = null;
-      var MATCH_WIDTH = 220;
-      var MATCH_HEIGHT = 88;
-      var ROUND_GAP = 124;
-      var SLOT_GAP = 102;
-      var TOP_PADDING = 76;
+      var MATCH_WIDTH = 204;
+      var MATCH_HEIGHT = 74;
+      var ROUND_GAP = 96;
+      var SLOT_GAP = 90;
+      var TOP_PADDING = 104;
+      var LEFT_PADDING = 140;
+      var HEADER_TOP = 28;
+      var NAME_WIDTH = 150;
 
       function post(data) { window.parent.postMessage(data, "*"); }
 
@@ -3522,19 +3525,19 @@
                 {
                   width: MATCH_WIDTH,
                   minSize: new go.Size(MATCH_WIDTH, MATCH_HEIGHT / 2),
-                  margin: new go.Margin(8, 10, 7, 10),
+                  margin: new go.Margin(5, 8, 4, 8),
                   defaultAlignment: go.Spot.Center
                 },
                 $(go.TextBlock,
                   {
-                    width: 166,
+                    width: NAME_WIDTH,
                     isMultiline: false,
                     overflow: go.TextOverflow.Ellipsis,
-                    font: "600 16px 'Open Sans', 'Segoe UI', sans-serif"
+                    font: "600 15px 'Open Sans', 'Segoe UI', sans-serif"
                   },
                   new go.Binding("text", "p1Name"),
                   new go.Binding("font", "p1Win", function (isWinner) {
-                    return isWinner ? "700 16px 'Open Sans', 'Segoe UI', sans-serif" : "600 16px 'Open Sans', 'Segoe UI', sans-serif";
+                    return isWinner ? "700 15px 'Open Sans', 'Segoe UI', sans-serif" : "600 15px 'Open Sans', 'Segoe UI', sans-serif";
                   }),
                   new go.Binding("stroke", "", function (data) {
                     if (data && data.p1Win) { return "#ffffff"; }
@@ -3542,7 +3545,7 @@
                     return "#f4f7ff";
                   })),
                 $(go.Panel, "Auto",
-                  { alignment: go.Spot.Right, minSize: new go.Size(30, 22) },
+                  { alignment: go.Spot.Right, minSize: new go.Size(28, 20) },
                   $(go.Shape, "RoundedRectangle",
                     { stroke: "transparent", fill: "rgba(255, 255, 255, 0.22)", parameter1: 11 },
                     new go.Binding("fill", "p1Win", function (isWinner) {
@@ -3550,9 +3553,9 @@
                     })),
                   $(go.TextBlock,
                     {
-                      margin: new go.Margin(2, 8, 2, 8),
+                      margin: new go.Margin(2, 7, 2, 7),
                       textAlign: "center",
-                      font: "700 13px 'Open Sans', 'Segoe UI', sans-serif",
+                      font: "700 12px 'Open Sans', 'Segoe UI', sans-serif",
                       stroke: "#eef3ff"
                     },
                     new go.Binding("text", "p1Score"),
@@ -3565,19 +3568,19 @@
                 {
                   width: MATCH_WIDTH,
                   minSize: new go.Size(MATCH_WIDTH, MATCH_HEIGHT / 2),
-                  margin: new go.Margin(7, 10, 8, 10),
+                  margin: new go.Margin(4, 8, 5, 8),
                   defaultAlignment: go.Spot.Center
                 },
                 $(go.TextBlock,
                   {
-                    width: 166,
+                    width: NAME_WIDTH,
                     isMultiline: false,
                     overflow: go.TextOverflow.Ellipsis,
-                    font: "600 16px 'Open Sans', 'Segoe UI', sans-serif"
+                    font: "600 15px 'Open Sans', 'Segoe UI', sans-serif"
                   },
                   new go.Binding("text", "p2Name"),
                   new go.Binding("font", "p2Win", function (isWinner) {
-                    return isWinner ? "700 16px 'Open Sans', 'Segoe UI', sans-serif" : "600 16px 'Open Sans', 'Segoe UI', sans-serif";
+                    return isWinner ? "700 15px 'Open Sans', 'Segoe UI', sans-serif" : "600 15px 'Open Sans', 'Segoe UI', sans-serif";
                   }),
                   new go.Binding("stroke", "", function (data) {
                     if (data && data.p2Win) { return "#ffffff"; }
@@ -3585,7 +3588,7 @@
                     return "#f4f7ff";
                   })),
                 $(go.Panel, "Auto",
-                  { alignment: go.Spot.Right, minSize: new go.Size(30, 22) },
+                  { alignment: go.Spot.Right, minSize: new go.Size(28, 20) },
                   $(go.Shape, "RoundedRectangle",
                     { stroke: "transparent", fill: "rgba(255, 255, 255, 0.22)", parameter1: 11 },
                     new go.Binding("fill", "p2Win", function (isWinner) {
@@ -3593,9 +3596,9 @@
                     })),
                   $(go.TextBlock,
                     {
-                      margin: new go.Margin(2, 8, 2, 8),
+                      margin: new go.Margin(2, 7, 2, 7),
                       textAlign: "center",
-                      font: "700 13px 'Open Sans', 'Segoe UI', sans-serif",
+                      font: "700 12px 'Open Sans', 'Segoe UI', sans-serif",
                       stroke: "#eef3ff"
                     },
                     new go.Binding("text", "p2Score"),
@@ -3619,7 +3622,7 @@
             $(go.TextBlock,
               {
                 margin: new go.Margin(8, 16, 8, 16),
-                font: "700 14px 'Open Sans', 'Segoe UI', sans-serif",
+                font: "700 13px 'Open Sans', 'Segoe UI', sans-serif",
                 stroke: "#f4f7ff"
               },
               new go.Binding("text", "label"))));
@@ -3679,7 +3682,7 @@
           }
           var key = "m-" + String(match.round) + "-" + String(match.number);
           keySet[key] = true;
-          var x = (match.round - 1) * (MATCH_WIDTH + ROUND_GAP);
+          var x = LEFT_PADDING + ((match.round - 1) * (MATCH_WIDTH + ROUND_GAP));
           var offset = ((Math.pow(2, match.round - 1) - 1) / 2) * SLOT_GAP;
           var y = TOP_PADDING + offset + (match.number - 1) * Math.pow(2, match.round - 1) * SLOT_GAP;
 
@@ -3706,11 +3709,11 @@
         });
 
         for (var round = 1; round <= maxRound; round += 1) {
-          var headerX = (round - 1) * (MATCH_WIDTH + ROUND_GAP);
+          var headerX = LEFT_PADDING + ((round - 1) * (MATCH_WIDTH + ROUND_GAP));
           nodes.push({
             key: "h-" + String(round),
             category: "header",
-            loc: toPointString(headerX, 20),
+            loc: toPointString(headerX, HEADER_TOP),
             label: roundLabel(round, maxRound)
           });
         }
@@ -3730,7 +3733,7 @@
           });
         });
 
-        var canvasWidth = ((maxRound - 1) * (MATCH_WIDTH + ROUND_GAP)) + MATCH_WIDTH + 100;
+        var canvasWidth = LEFT_PADDING + ((maxRound - 1) * (MATCH_WIDTH + ROUND_GAP)) + MATCH_WIDTH + 80;
         var canvasHeight = maxBottom + 40;
         return { nodes: nodes, links: links, width: canvasWidth, height: canvasHeight };
       }
