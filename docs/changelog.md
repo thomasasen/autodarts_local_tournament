@@ -1,0 +1,13 @@
+# Changelog
+
+## 0.1.0 (MVP)
+- Neues Loader-Userscript mit RAW-Load + Cache-Fallback.
+- Neues Haupt-Userscript mit:
+  - Shadow-DOM Drawer UI.
+  - Turniererstellung fuer KO, Liga, Gruppen + KO.
+  - Match-Ergebnisfuehrung (auto + manuell).
+  - Tabellenberechnung (Punkte > LegDiff > Legs+).
+  - Bracket-Anzeige via `brackets-viewer` (iframe) + HTML-Fallback.
+  - JSON Export/Import (Datei + Copy/Paste).
+  - Storage-Versionierung (`ata:tournament:v1`) inkl. Migrations-Stub.
+  - SPA-Routing-Stabilisierung und zentralem Cleanup.
