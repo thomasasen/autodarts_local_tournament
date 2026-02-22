@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
-// @namespace    https://github.com/thomasasen/autodarts-tournament-assistant
-// @version      0.1.0
+// @namespace    https://github.com/thomasasen/autodarts_local_tournament
+// @version      0.1.1
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -10,8 +10,8 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @connect      cdn.jsdelivr.net
-// @downloadURL  https://github.com/thomasasen/autodarts-tournament-assistant/raw/refs/heads/main/dist/autodarts-tournament-assistant.user.js
-// @updateURL    https://github.com/thomasasen/autodarts-tournament-assistant/raw/refs/heads/main/dist/autodarts-tournament-assistant.user.js
+// @downloadURL  https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/dist/autodarts-tournament-assistant.user.js
+// @updateURL    https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/dist/autodarts-tournament-assistant.user.js
 // ==/UserScript==
 
 (function () {
@@ -19,7 +19,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.1.0";
+  const APP_VERSION = "0.1.1";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 1;
   const SAVE_DEBOUNCE_MS = 150;

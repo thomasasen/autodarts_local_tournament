@@ -1,4 +1,4 @@
-# autodarts-tournament-assistant
+# autodarts_local_tournament
 
 MVP-Userscript fuer lokale Turniere direkt in `https://play.autodarts.io`.
 
@@ -28,7 +28,7 @@ MVP-Userscript fuer lokale Turniere direkt in `https://play.autodarts.io`.
 
 ## Repo-Struktur
 ```text
-autodarts-tournament-assistant/
+autodarts_local_tournament/
 ├─ installer/
 │  └─ Autodarts Tournament Assistant Loader.user.js
 ├─ dist/
@@ -44,9 +44,9 @@ autodarts-tournament-assistant/
 ## Installation
 1. Tampermonkey im Browser installieren.
 2. Loader installieren:
-   - `https://github.com/thomasasen/autodarts-tournament-assistant/raw/refs/heads/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js`
+   - `https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js`
 3. `https://play.autodarts.io` neu laden.
-4. Im Hauptmenue auf **Turnier** klicken.
+4. Im Hauptmenue auf **xLokale Turniere** klicken.
 
 ## Nutzung
 1. Tab `Turnier`: neues Turnier anlegen (Name, Modus, Teilnehmer, Best-of, Startscore).

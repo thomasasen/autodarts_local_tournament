@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant Loader
-// @namespace    https://github.com/thomasasen/autodarts-tournament-assistant
-// @version      0.1.1
+// @namespace    https://github.com/thomasasen/autodarts_local_tournament
+// @version      0.1.2
 // @description  Loads the latest Autodarts Tournament Assistant userscript with cache fallback.
 // @author       Thomas Asen
 // @license      MIT
@@ -11,8 +11,8 @@
 // @grant        GM_setValue
 // @grant        GM_xmlhttpRequest
 // @connect      raw.githubusercontent.com
-// @downloadURL  https://github.com/thomasasen/autodarts-tournament-assistant/raw/refs/heads/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js
-// @updateURL    https://github.com/thomasasen/autodarts-tournament-assistant/raw/refs/heads/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js
+// @downloadURL  https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js
+// @updateURL    https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js
 // ==/UserScript==
 
 (function () {
@@ -24,10 +24,12 @@
   const CACHE_META_KEY = "ata:loader:cache:meta:v1";
   const REQUEST_TIMEOUT_MS = 10_000;
 
-  const REMOTE_SOURCE_URL = "https://raw.githubusercontent.com/thomasasen/autodarts-tournament-assistant/main/dist/autodarts-tournament-assistant.user.js";
+  const REMOTE_SOURCE_URL = "https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.user.js";
 
   const MENU_ITEM_ID = "ata-loader-menu-item";
-  const MENU_LABEL = "Turnier";
+  const MENU_LABEL = "xLokale Turniere";
+  const TOGGLE_EVENT = "ata:toggle-request";
+  const READY_EVENT = "ata:ready";
   const MENU_LABEL_COLLAPSE_WIDTH = 120;
   const MENU_HINT_ROUTE_PATHS = Object.freeze(["/lobbies", "/boards", "/matches", "/tournaments", "/statistics", "/plus", "/settings"]);
   const MENU_HINT_ROUTES = new Set(MENU_HINT_ROUTE_PATHS);
@@ -43,6 +45,7 @@
   let pollTimer = null;
   let rafQueued = false;
   let menuButton = null;
+  let toggleOnReadyQueued = false;
 
   function log(message, ...args) {
     console.info(`${prefix} ${message}`, ...args);
@@ -176,7 +179,7 @@
 
       await writeStore(CACHE_CODE_KEY, remoteCode);
       await writeStore(CACHE_META_KEY, meta);
-      executeCode(remoteCode, "autodarts-tournament-assistant/remote/main.user.js");
+      executeCode(remoteCode, "autodarts_local_tournament/remote/main.user.js");
       log(`Remote script loaded${meta.versionHint ? ` (v${meta.versionHint})` : ""}.`);
       return;
     } catch (loadError) {
@@ -193,7 +196,7 @@
     }
 
     try {
-      executeCode(cachedCode, "autodarts-tournament-assistant/cache/main.user.js");
+      executeCode(cachedCode, "autodarts_local_tournament/cache/main.user.js");
       const cachedVersion = cachedMeta && typeof cachedMeta === "object"
         ? String(cachedMeta.versionHint || "").trim()
         : "";
@@ -362,16 +365,89 @@
     return fallback;
   }
 
+  function queueToggleWhenReady() {
+    if (toggleOnReadyQueued) {
+      return;
+    }
+
+    toggleOnReadyQueued = true;
+    window.addEventListener(READY_EVENT, () => {
+      toggleOnReadyQueued = false;
+      window.dispatchEvent(new CustomEvent(TOGGLE_EVENT));
+    }, { once: true });
+  }
+
   function triggerTournamentDrawer() {
     try {
       if (window.__ATA_RUNTIME && typeof window.__ATA_RUNTIME.toggleDrawer === "function") {
         window.__ATA_RUNTIME.toggleDrawer();
         return;
       }
-      window.dispatchEvent(new CustomEvent("ata:toggle-request"));
+
+      window.dispatchEvent(new CustomEvent(TOGGLE_EVENT));
+      if (!(window.__ATA_RUNTIME && typeof window.__ATA_RUNTIME.toggleDrawer === "function")) {
+        queueToggleWhenReady();
+      }
     } catch (eventError) {
       warn("Failed to trigger drawer toggle.", eventError);
     }
+  }
+
+  function getSidebarInteractiveElements(sidebar) {
+    if (!(sidebar instanceof Element)) {
+      return [];
+    }
+
+    return Array.from(sidebar.querySelectorAll("a[href], button, [role='button'], [role='link']"))
+      .filter((entry) => entry.id !== MENU_ITEM_ID);
+  }
+
+  function getElementRoutePath(element) {
+    if (!element || !(element instanceof Element)) {
+      return "";
+    }
+
+    if (element instanceof HTMLAnchorElement) {
+      return getAnchorRoutePath(element);
+    }
+
+    const href = element.getAttribute("href")
+      || element.getAttribute("to")
+      || element.getAttribute("data-to")
+      || "";
+    return toRoutePathname(href);
+  }
+
+  function getElementTextLabel(element) {
+    return String(element?.textContent || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+  }
+
+  function isBoardsElement(element) {
+    const routePath = getElementRoutePath(element);
+    if (routePath === "/boards" || routePath.startsWith("/boards/")) {
+      return true;
+    }
+
+    const text = getElementTextLabel(element);
+    return text.includes("meine boards") || text === "boards" || text.endsWith(" boards");
+  }
+
+  function isMenuHintElement(element) {
+    const routePath = getElementRoutePath(element);
+    if (isSidebarRouteHint(routePath)) {
+      return true;
+    }
+
+    const text = getElementTextLabel(element);
+    return text.includes("lobbies")
+      || text.includes("spiele")
+      || text.includes("turniere")
+      || text.includes("spielhistorie")
+      || text.includes("statistiken")
+      || text.includes("boards");
   }
 
   function syncMenuLabelForWidth() {
@@ -396,15 +472,15 @@
       return;
     }
 
-    const sidebarLinks = Array.from(sidebar.querySelectorAll("a[href]"));
-    const boardsButton = sidebarLinks.find((link) => getAnchorRoutePath(link) === "/boards") || null;
+    const sidebarEntries = getSidebarInteractiveElements(sidebar);
+    const boardsButton = sidebarEntries.find((entry) => isBoardsElement(entry)) || null;
     const insertionAnchor = boardsButton
-      || sidebarLinks.find((link) => isSidebarRouteHint(getAnchorRoutePath(link)))
+      || sidebarEntries.find((entry) => isMenuHintElement(entry))
       || null;
 
     let item = document.getElementById(MENU_ITEM_ID);
     if (!item) {
-      const template = insertionAnchor || sidebar.querySelector("a[href], button, [role='button']") || sidebar.lastElementChild;
+      const template = insertionAnchor || sidebarEntries[0] || sidebar.lastElementChild;
       item = template ? template.cloneNode(true) : document.createElement("button");
       item.id = MENU_ITEM_ID;
       const icon = buildMenuIconElement(template);
@@ -441,7 +517,7 @@
       });
     }
 
-    if (insertionAnchor && insertionAnchor.parentElement === sidebar) {
+    if (insertionAnchor && insertionAnchor.isConnected) {
       if (insertionAnchor.nextElementSibling !== item) {
         insertionAnchor.insertAdjacentElement("afterend", item);
       }

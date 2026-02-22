@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+- Alle Loader- und Script-Metadaten auf das korrekte Repo `thomasasen/autodarts_local_tournament` umgestellt (`namespace`, `downloadURL`, `updateURL`, RAW-Quelle).
+- Menuebezeichnung auf `xLokale Turniere` geaendert.
+- Menueposition verbessert: bevorzugt direkt unter `Boards/Meine Boards` (auch bei verschachtelter DOM-Struktur).
+- Klick-Handling verhaertet: Toggle wird bei fruehem Klick ueber `ata:ready` nachgeholt, falls Runtime noch nicht geladen war.
+
 ## 0.1.1
 - Loader-Menuepunkt `Turnier` auf robuste Sidebar-Erkennung umgestellt (analog zum `xConfig`-Muster mit Kandidaten-Scoring).
 - Stabilere Einfuegeposition im Hauptmenue (bevorzugt hinter `Boards`, sonst vor Profilbereich).
