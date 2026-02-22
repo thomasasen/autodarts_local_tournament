@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant Loader
 // @namespace    https://github.com/thomasasen/autodarts-tournament-assistant
-// @version      0.1.0
+// @version      0.1.1
 // @description  Loads the latest Autodarts Tournament Assistant userscript with cache fallback.
 // @author       Thomas Asen
 // @license      MIT
@@ -28,7 +28,9 @@
 
   const MENU_ITEM_ID = "ata-loader-menu-item";
   const MENU_LABEL = "Turnier";
-  const MENU_HINT_ROUTES = new Set(["/lobbies", "/boards", "/matches", "/tournaments"]);
+  const MENU_LABEL_COLLAPSE_WIDTH = 120;
+  const MENU_HINT_ROUTE_PATHS = Object.freeze(["/lobbies", "/boards", "/matches", "/tournaments", "/statistics", "/plus", "/settings"]);
+  const MENU_HINT_ROUTES = new Set(MENU_HINT_ROUTE_PATHS);
   const prefix = "[ATA Loader]";
 
   if (window[EXEC_GUARD_KEY]) {
@@ -40,6 +42,7 @@
   let observerRoot = null;
   let pollTimer = null;
   let rafQueued = false;
+  let menuButton = null;
 
   function log(message, ...args) {
     console.info(`${prefix} ${message}`, ...args);
@@ -206,59 +209,138 @@
     }
   }
 
+  function normalizeRoutePath(pathValue) {
+    let normalized = String(pathValue || "").trim().toLowerCase();
+    if (!normalized) {
+      return "";
+    }
+
+    if (!normalized.startsWith("/")) {
+      normalized = `/${normalized}`;
+    }
+
+    normalized = normalized.replace(/\/{2,}/g, "/").replace(/[?#].*$/, "");
+    if (normalized.length > 1) {
+      normalized = normalized.replace(/\/+$/, "");
+    }
+    return normalized;
+  }
+
+  function toRoutePathname(hrefValue) {
+    const rawHref = String(hrefValue || "").trim();
+    if (!rawHref || rawHref.startsWith("#") || rawHref.startsWith("javascript:")) {
+      return "";
+    }
+
+    try {
+      const parsed = new URL(rawHref, window.location.origin);
+      if (parsed.origin !== window.location.origin) {
+        return "";
+      }
+      return normalizeRoutePath(parsed.pathname);
+    } catch (_) {
+      return normalizeRoutePath(rawHref);
+    }
+  }
+
   function getAnchorRoutePath(anchor) {
     if (!(anchor instanceof HTMLAnchorElement)) {
       return "";
     }
-
-    const href = anchor.getAttribute("href");
-    if (!href) {
-      return "";
-    }
-
-    if (href.startsWith("/")) {
-      return href.split("?")[0].split("#")[0];
-    }
-
-    try {
-      const parsed = new URL(href, location.origin);
-      if (parsed.origin !== location.origin) {
-        return "";
-      }
-      return parsed.pathname;
-    } catch (_) {
-      return "";
-    }
+    return toRoutePathname(anchor.getAttribute("href"));
   }
 
-  function isLikelySidebar(node) {
-    if (!(node instanceof HTMLElement)) {
+  function isSidebarRouteHint(pathValue) {
+    const path = normalizeRoutePath(pathValue);
+    if (!path) {
       return false;
     }
-    const anchors = Array.from(node.querySelectorAll("a[href]"));
-    if (!anchors.length) {
-      return false;
+
+    if (MENU_HINT_ROUTES.has(path)) {
+      return true;
     }
-    return anchors.some((anchor) => MENU_HINT_ROUTES.has(getAnchorRoutePath(anchor)));
+
+    return MENU_HINT_ROUTE_PATHS.some((hint) => path.startsWith(`${hint}/`));
+  }
+
+  function scoreSidebarCandidate(candidate) {
+    if (!(candidate instanceof Element)) {
+      return -1;
+    }
+
+    const anchors = Array.from(candidate.querySelectorAll("a[href]"));
+    const routeHintMatches = anchors.reduce((count, anchor) => {
+      return count + (isSidebarRouteHint(getAnchorRoutePath(anchor)) ? 1 : 0);
+    }, 0);
+
+    let score = 0;
+    const width = candidate.getBoundingClientRect().width;
+    const text = (candidate.textContent || "").toLowerCase();
+
+    if (candidate.classList.contains("navigation")) {
+      score += 24;
+    }
+    if (candidate.matches("nav") || candidate.getAttribute("role") === "navigation") {
+      score += 18;
+    }
+    if (text.includes("lobb") || text.includes("spiel") || text.includes("board") || text.includes("stat")) {
+      score += 6;
+    }
+
+    score += routeHintMatches * 20;
+    score += Math.min(anchors.length, 10);
+
+    if (width > 0 && width < 520) {
+      score += 8;
+    } else if (width > 680) {
+      score -= 16;
+    }
+    if (routeHintMatches === 0 && anchors.length < 2) {
+      score -= 12;
+    }
+
+    return score;
   }
 
   function getSidebarElement() {
-    const candidates = [
-      document.querySelector("#root aside nav"),
-      document.querySelector("#root aside"),
-      document.querySelector("aside nav"),
-      document.querySelector("aside"),
-      document.querySelector("nav"),
-    ];
-
-    for (const candidate of candidates) {
-      if (isLikelySidebar(candidate)) {
-        return candidate;
-      }
+    const root = document.getElementById("root");
+    if (!root) {
+      return null;
     }
 
-    const anySidebar = Array.from(document.querySelectorAll("aside, nav")).find((node) => isLikelySidebar(node));
-    return anySidebar || null;
+    const preferred = [
+      document.querySelector("#root > div > div > .chakra-stack.navigation"),
+      document.querySelector("#root .navigation"),
+      document.querySelector("#root nav[aria-label]"),
+      document.querySelector("#root nav"),
+      document.querySelector("#root [role='navigation']"),
+    ].find((candidate) => candidate && scoreSidebarCandidate(candidate) >= 32);
+    if (preferred) {
+      return preferred;
+    }
+
+    const candidates = new Set(document.querySelectorAll("#root .navigation, #root nav, #root [role='navigation'], #root .chakra-stack, #root .chakra-vstack"));
+    Array.from(document.querySelectorAll("#root a[href]")).forEach((anchor) => {
+      const container = anchor.closest(".navigation, nav, [role='navigation'], .chakra-stack, .chakra-vstack");
+      if (container) {
+        candidates.add(container);
+      }
+    });
+
+    let best = null;
+    let bestScore = -1;
+    candidates.forEach((candidate) => {
+      const score = scoreSidebarCandidate(candidate);
+      if (score > bestScore) {
+        bestScore = score;
+        best = candidate;
+      }
+    });
+
+    if (bestScore < 20) {
+      return null;
+    }
+    return best;
   }
 
   function buildMenuIconElement(template) {
@@ -292,6 +374,22 @@
     }
   }
 
+  function syncMenuLabelForWidth() {
+    const button = menuButton || document.getElementById(MENU_ITEM_ID);
+    const sidebar = getSidebarElement();
+    if (!button || !sidebar) {
+      return;
+    }
+
+    const label = button.querySelector(".ata-loader-menu-label");
+    if (!label) {
+      return;
+    }
+
+    const width = sidebar.getBoundingClientRect().width;
+    label.style.display = width < MENU_LABEL_COLLAPSE_WIDTH ? "none" : "inline";
+  }
+
   function ensureMenuButton() {
     const sidebar = getSidebarElement();
     if (!sidebar) {
@@ -301,7 +399,7 @@
     const sidebarLinks = Array.from(sidebar.querySelectorAll("a[href]"));
     const boardsButton = sidebarLinks.find((link) => getAnchorRoutePath(link) === "/boards") || null;
     const insertionAnchor = boardsButton
-      || sidebarLinks.find((link) => MENU_HINT_ROUTES.has(getAnchorRoutePath(link)))
+      || sidebarLinks.find((link) => isSidebarRouteHint(getAnchorRoutePath(link)))
       || null;
 
     let item = document.getElementById(MENU_ITEM_ID);
@@ -343,13 +441,30 @@
       });
     }
 
-    if (!item.isConnected) {
-      if (insertionAnchor && insertionAnchor.parentElement === sidebar) {
+    if (insertionAnchor && insertionAnchor.parentElement === sidebar) {
+      if (insertionAnchor.nextElementSibling !== item) {
         insertionAnchor.insertAdjacentElement("afterend", item);
-      } else {
+      }
+    } else {
+      const profileSection = Array.from(sidebar.children).find((child) => {
+        return child !== item && (
+          child.querySelector(".chakra-avatar")
+          || child.querySelector("img[src]")
+          || child.querySelector("button[aria-label='notifications']")
+        );
+      });
+
+      if (profileSection) {
+        if (profileSection.previousElementSibling !== item) {
+          sidebar.insertBefore(item, profileSection);
+        }
+      } else if (item.parentElement !== sidebar) {
         sidebar.appendChild(item);
       }
     }
+
+    menuButton = item;
+    syncMenuLabelForWidth();
   }
 
   function queueDomSync() {
@@ -360,19 +475,29 @@
     requestAnimationFrame(() => {
       rafQueued = false;
       ensureMenuButton();
+      syncMenuLabelForWidth();
     });
+  }
+
+  function isManagedNode(node) {
+    if (!(node instanceof Node)) {
+      return false;
+    }
+    const element = node instanceof Element ? node : node.parentElement;
+    if (!element) {
+      return false;
+    }
+    return Boolean(element.closest(`#${MENU_ITEM_ID}`));
   }
 
   function hasExternalDomMutation(mutations) {
     return mutations.some((mutation) => {
-      if (!(mutation.target instanceof Element)) {
+      if (!isManagedNode(mutation.target)) {
         return true;
       }
-      if (mutation.target.closest(`#${MENU_ITEM_ID}`)) {
-        const nodes = [...mutation.addedNodes, ...mutation.removedNodes];
-        return nodes.some((node) => !(node instanceof Element && node.closest(`#${MENU_ITEM_ID}`)));
-      }
-      return true;
+
+      const touchedNodes = [...mutation.addedNodes, ...mutation.removedNodes];
+      return touchedNodes.some((node) => !isManagedNode(node));
     });
   }
 
@@ -415,6 +540,8 @@
       pollTimer = null;
     }
 
+    window.removeEventListener("resize", syncMenuLabelForWidth);
+
     if (domObserver) {
       domObserver.disconnect();
       domObserver = null;
@@ -431,9 +558,12 @@
       startDomObserver();
       if (!document.getElementById(MENU_ITEM_ID)) {
         queueDomSync();
+      } else {
+        syncMenuLabelForWidth();
       }
     }, 1000);
 
+    window.addEventListener("resize", syncMenuLabelForWidth, { passive: true });
     window.addEventListener("pagehide", cleanup, { once: true });
     window.addEventListener("beforeunload", cleanup, { once: true });
   }
@@ -444,4 +574,3 @@
 
   initUiSyncLoop();
 })();
-

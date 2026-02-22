@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+- Loader-Menuepunkt `Turnier` auf robuste Sidebar-Erkennung umgestellt (analog zum `xConfig`-Muster mit Kandidaten-Scoring).
+- Stabilere Einfuegeposition im Hauptmenue (bevorzugt hinter `Boards`, sonst vor Profilbereich).
+- Responsives Label-Verhalten: blendet den Text bei schmaler Sidebar aus, Icon bleibt sichtbar.
+
 ## 0.1.0 (MVP)
 - Neues Loader-Userscript mit RAW-Load + Cache-Fallback.
 - Neues Haupt-Userscript mit:
