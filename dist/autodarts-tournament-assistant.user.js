@@ -1966,6 +1966,11 @@
         --ata-color-accent: #5ad299;
         --ata-color-danger: #fc8181;
         --ata-color-focus: #ffd34f;
+        --ata-control-bg: rgba(16, 30, 62, 0.72);
+        --ata-control-bg-hover: rgba(23, 40, 82, 0.82);
+        --ata-control-bg-disabled: rgba(17, 27, 49, 0.55);
+        --ata-control-border: rgba(181, 201, 243, 0.36);
+        --ata-control-border-strong: rgba(210, 223, 255, 0.62);
         --ata-z-overlay: 2147483000;
         color: var(--ata-color-text);
         font-family: var(--ata-font-body);
@@ -2238,13 +2243,14 @@
       .ata-field textarea {
         width: 100%;
         border-radius: var(--ata-radius-sm);
-        border: 1px solid var(--ata-color-border);
-        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid var(--ata-control-border);
+        background: var(--ata-control-bg);
         color: var(--ata-color-text);
-        padding: 11px 13px;
+        padding: 11px 12px;
         font-size: 18px;
+        font-weight: 600;
         box-sizing: border-box;
-        transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+        transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease, color 120ms ease;
       }
 
       .ata-field input:focus,
@@ -2253,12 +2259,85 @@
         outline: none;
         border-color: var(--ata-color-focus);
         box-shadow: 0 0 0 2px rgba(255, 211, 79, 0.26);
-        background: rgba(255, 255, 255, 0.14);
+        background: var(--ata-control-bg-hover);
       }
 
       .ata-field textarea {
         min-height: 130px;
         resize: vertical;
+      }
+
+      .ata-score-grid select,
+      .ata-score-grid input[type="number"] {
+        border-radius: 8px;
+        border: 1px solid var(--ata-control-border);
+        background: var(--ata-control-bg);
+        color: var(--ata-color-text);
+        box-sizing: border-box;
+        min-height: 40px;
+        font-size: 17px;
+        font-weight: 600;
+        padding: 7px 10px;
+        transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease, color 120ms ease;
+      }
+
+      .ata-score-grid select {
+        width: 100%;
+        appearance: none;
+        background-image:
+          linear-gradient(45deg, transparent 50%, rgba(228, 238, 255, 0.92) 50%),
+          linear-gradient(135deg, rgba(228, 238, 255, 0.92) 50%, transparent 50%),
+          linear-gradient(to right, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.12));
+        background-position:
+          calc(100% - 16px) 50%,
+          calc(100% - 10px) 50%,
+          calc(100% - 30px) 0;
+        background-size: 6px 6px, 6px 6px, 1px 100%;
+        background-repeat: no-repeat;
+        padding-right: 36px;
+      }
+
+      .ata-score-grid input[type="number"] {
+        width: 100%;
+        text-align: center;
+      }
+
+      .ata-score-grid select:hover,
+      .ata-score-grid input[type="number"]:hover,
+      .ata-field input:hover,
+      .ata-field select:hover,
+      .ata-field textarea:hover {
+        background: var(--ata-control-bg-hover);
+        border-color: var(--ata-control-border-strong);
+      }
+
+      .ata-score-grid select:focus,
+      .ata-score-grid input[type="number"]:focus {
+        outline: none;
+        border-color: var(--ata-color-focus);
+        box-shadow: 0 0 0 2px rgba(255, 211, 79, 0.22);
+        background: var(--ata-control-bg-hover);
+      }
+
+      .ata-score-grid select:disabled,
+      .ata-score-grid input[type="number"]:disabled,
+      .ata-field input:disabled,
+      .ata-field select:disabled,
+      .ata-field textarea:disabled {
+        background: var(--ata-control-bg-disabled);
+        color: rgba(229, 236, 255, 0.56);
+        border-color: rgba(185, 199, 236, 0.2);
+        cursor: not-allowed;
+      }
+
+      .ata-drawer input::placeholder,
+      .ata-drawer textarea::placeholder {
+        color: rgba(220, 230, 255, 0.62);
+      }
+
+      .ata-drawer select option {
+        background: #2d3e76;
+        color: #eff3ff;
       }
 
       .ata-actions {
