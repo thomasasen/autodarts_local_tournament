@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.2.0
+// @version      0.2.1
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,7 +21,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.2.0";
+  const APP_VERSION = "0.2.1";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 1;
   const SAVE_DEBOUNCE_MS = 150;
@@ -34,8 +34,6 @@
   const API_SYNC_INTERVAL_MS = 2500;
   const API_AUTH_NOTICE_THROTTLE_MS = 15000;
   const API_REQUEST_TIMEOUT_MS = 12000;
-  const BRACKET_OFFSET_LIMIT_X = 3000;
-  const BRACKET_OFFSET_LIMIT_Y = 1800;
 
   const BRACKET_VIEWER_JS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.js";
   const BRACKET_VIEWER_CSS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.css";
@@ -112,8 +110,6 @@
       },
       ui: {
         activeTab: "tournament",
-        bracketOffset: { x: 0, y: 0 },
-        bracketPan: { x: 0, y: 0 },
       },
       tournament: null,
     };
@@ -159,34 +155,6 @@
       return fallback;
     }
     return Math.max(min, Math.min(max, num));
-  }
-
-  function normalizeBracketOffset(rawOffset) {
-    const x = clampInt(rawOffset?.x, 0, -BRACKET_OFFSET_LIMIT_X, BRACKET_OFFSET_LIMIT_X);
-    const y = clampInt(rawOffset?.y, 0, -BRACKET_OFFSET_LIMIT_Y, BRACKET_OFFSET_LIMIT_Y);
-    return { x, y };
-  }
-
-  function normalizeBracketPan(rawPan) {
-    const x = clampInt(rawPan?.x, 0, 0, BRACKET_OFFSET_LIMIT_X);
-    const y = clampInt(rawPan?.y, 0, 0, BRACKET_OFFSET_LIMIT_Y);
-    return { x, y };
-  }
-
-  function getBracketOffset() {
-    if (!state.store || !state.store.ui) {
-      return { x: 0, y: 0 };
-    }
-    state.store.ui.bracketOffset = normalizeBracketOffset(state.store.ui.bracketOffset);
-    return state.store.ui.bracketOffset;
-  }
-
-  function getBracketPan() {
-    if (!state.store || !state.store.ui) {
-      return { x: 0, y: 0 };
-    }
-    state.store.ui.bracketPan = normalizeBracketPan(state.store.ui.bracketPan);
-    return state.store.ui.bracketPan;
   }
 
   function uuid(prefix) {
@@ -403,8 +371,6 @@
       },
       ui: {
         activeTab: TAB_IDS.includes(input?.ui?.activeTab) ? input.ui.activeTab : defaults.ui.activeTab,
-        bracketOffset: normalizeBracketOffset(input?.ui?.bracketOffset || defaults.ui.bracketOffset),
-        bracketPan: normalizeBracketPan(input?.ui?.bracketPan || defaults.ui.bracketPan),
       },
       tournament: normalizeTournament(input?.tournament),
     };
@@ -2184,37 +2150,6 @@
 
       .ata-bracket-dock {
         position: relative;
-        transform: translate(var(--ata-bracket-offset-x, 0px), var(--ata-bracket-offset-y, 0px));
-        transition: transform 120ms ease;
-      }
-
-      .ata-bracket-dock[data-dragging="1"] {
-        transition: none;
-      }
-
-      .ata-bracket-toolbar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--ata-space-2);
-        margin-bottom: var(--ata-space-2);
-      }
-
-      .ata-bracket-drag-handle {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        border: 1px dashed rgba(255, 255, 255, 0.3);
-        border-radius: var(--ata-radius-sm);
-        background: rgba(255, 255, 255, 0.08);
-        padding: 8px 10px;
-        color: var(--ata-color-muted);
-        cursor: grab;
-        user-select: none;
-      }
-
-      .ata-bracket-drag-handle:active {
-        cursor: grabbing;
       }
 
       .ata-bracket-shell {
@@ -2295,9 +2230,6 @@
           padding: 10px 14px;
         }
 
-        .ata-bracket-dock {
-          transform: none;
-        }
       }
     `;
   }
@@ -2633,7 +2565,6 @@
     }
 
     let html = "";
-    const bracketOffset = getBracketOffset();
 
     if (tournament.mode === "league") {
       const standings = standingsForMatches(tournament, getMatchesByStage(tournament, MATCH_STAGE_LEAGUE));
@@ -2652,13 +2583,7 @@
       html += `
         <section class="ata-card tournamentCard">
           <h3>KO-Turnierbaum</h3>
-          <div class="ata-bracket-dock" id="ata-bracket-dock" style="--ata-bracket-offset-x:${bracketOffset.x}px; --ata-bracket-offset-y:${bracketOffset.y}px;">
-            <div class="ata-bracket-toolbar">
-              <div class="ata-bracket-drag-handle" data-action="drag-bracket" title="Mit linker Maustaste ziehen">
-                <span>Turnierbaum verschieben</span>
-              </div>
-              <button type="button" class="ata-btn" data-action="reset-bracket-offset">Position zurücksetzen</button>
-            </div>
+          <div class="ata-bracket-dock" id="ata-bracket-dock">
             <div class="ata-bracket-shell">
               <iframe id="ata-bracket-frame" class="ata-bracket-frame" title="Turnierbaum" sandbox="allow-scripts allow-same-origin"></iframe>
               <div class="ata-bracket-fallback" id="ata-bracket-fallback">
@@ -2872,83 +2797,10 @@
       retryBracketButton.addEventListener("click", () => queueBracketRender(true));
     }
 
-    const resetBracketOffsetButton = shadow.querySelector("[data-action='reset-bracket-offset']");
-    if (resetBracketOffsetButton) {
-      resetBracketOffsetButton.addEventListener("click", () => {
-        state.store.ui.bracketOffset = { x: 0, y: 0 };
-        state.store.ui.bracketPan = { x: 0, y: 0 };
-        schedulePersist();
-        renderShell();
-      });
-    }
-
-    initBracketDragHandlers(shadow);
-
     const drawer = shadow.querySelector(".ata-drawer");
     if (drawer) {
       drawer.addEventListener("keydown", handleDrawerKeydown);
     }
-  }
-
-  function initBracketDragHandlers(shadow) {
-    const dock = shadow.getElementById("ata-bracket-dock");
-    const dragHandle = shadow.querySelector("[data-action='drag-bracket']");
-    if (!(dock instanceof HTMLElement) || !(dragHandle instanceof HTMLElement)) {
-      return;
-    }
-
-    let dragging = false;
-    let startMouseX = 0;
-    let startMouseY = 0;
-    let startOffset = getBracketOffset();
-    let nextOffset = startOffset;
-
-    const applyOffset = (offset) => {
-      dock.style.setProperty("--ata-bracket-offset-x", `${offset.x}px`);
-      dock.style.setProperty("--ata-bracket-offset-y", `${offset.y}px`);
-    };
-
-    const onMouseMove = (event) => {
-      if (!dragging) {
-        return;
-      }
-      const deltaX = event.clientX - startMouseX;
-      const deltaY = event.clientY - startMouseY;
-      nextOffset = normalizeBracketOffset({
-        x: startOffset.x + deltaX,
-        y: startOffset.y + deltaY,
-      });
-      applyOffset(nextOffset);
-    };
-
-    const onMouseUp = () => {
-      if (!dragging) {
-        return;
-      }
-      dragging = false;
-      dock.dataset.dragging = "0";
-      document.body.style.userSelect = "";
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-      state.store.ui.bracketOffset = normalizeBracketOffset(nextOffset);
-      schedulePersist();
-    };
-
-    dragHandle.addEventListener("mousedown", (event) => {
-      if (event.button !== 0) {
-        return;
-      }
-      event.preventDefault();
-      dragging = true;
-      dock.dataset.dragging = "1";
-      startMouseX = event.clientX;
-      startMouseY = event.clientY;
-      startOffset = getBracketOffset();
-      nextOffset = startOffset;
-      document.body.style.userSelect = "none";
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup", onMouseUp);
-    });
   }
 
   function handleDrawerKeydown(event) {
@@ -3290,6 +3142,8 @@
       margin: 0;
       padding: 0;
       height: 100%;
+      display: flex;
+      flex-direction: column;
       overflow: hidden;
       color: var(--tb-text);
       font-family: "Open Sans", "Segoe UI", Tahoma, sans-serif;
@@ -3306,11 +3160,11 @@
 
     #brackets-root {
       padding: 16px 16px 22px;
-      min-height: 380px;
+      min-height: 360px;
+      flex: 1 1 auto;
       width: 100%;
-      height: calc(100% - 8px);
       overflow: auto;
-      cursor: grab;
+      cursor: auto;
       box-sizing: border-box;
       background:
         radial-gradient(circle at 14% 8%, rgba(90, 210, 153, 0.07), transparent 45%),
@@ -3318,14 +3172,44 @@
         linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
     }
 
-    #brackets-root[data-dragging="1"] {
-      cursor: grabbing;
-      user-select: none;
-    }
-
+    #brackets-root.brackets-viewer,
     #brackets-root .brackets-viewer {
       color: var(--tb-text);
-      min-width: max-content;
+      width: max-content;
+      min-width: 100%;
+      margin: 0;
+      padding: 6px 26px 14px 12px;
+      background: transparent;
+      user-select: text;
+      --primary-background: transparent;
+      --secondary-background: rgba(255, 255, 255, 0.08);
+      --match-background: var(--tb-match);
+      --font-color: var(--tb-text);
+      --hint-color: var(--tb-muted);
+      --label-color: var(--tb-muted);
+      --connector-color: var(--tb-line);
+      --border-color: var(--tb-match-border);
+      --border-hover-color: rgba(255, 255, 255, 0.4);
+      --border-selected-color: rgba(255, 255, 255, 0.5);
+      --text-size: 14px;
+      --round-margin: 28px;
+      --match-width: 190px;
+      --match-horizontal-padding: 10px;
+      --match-vertical-padding: 4px;
+    }
+
+    #brackets-root .bracket h2 {
+      display: none !important;
+    }
+
+    #brackets-root .bracket .rounds {
+      align-items: flex-start !important;
+    }
+
+    #brackets-root .bracket .rounds .round {
+      justify-content: flex-start !important;
+      align-items: flex-start !important;
+      height: auto !important;
     }
 
     #brackets-root .round-title,
@@ -3346,6 +3230,16 @@
       border: 1px solid var(--tb-match-border) !important;
       border-radius: 10px !important;
       box-shadow: 0 6px 18px rgba(7, 12, 28, 0.25);
+      flex: 0 0 auto !important;
+      min-height: 0 !important;
+      align-items: flex-start !important;
+      margin: 6px 0 !important;
+      width: var(--match-width) !important;
+    }
+
+    #brackets-root .opponents,
+    #brackets-root [class*="opponents"] {
+      height: auto !important;
     }
 
     #brackets-root .participant,
@@ -3421,26 +3315,7 @@
   <script>
     (function () {
       var msgEl = document.getElementById("msg");
-      var rootEl = document.getElementById("brackets-root");
-      var dragActive = false;
-      var dragStartX = 0;
-      var dragStartY = 0;
-      var dragStartLeft = 0;
-      var dragStartTop = 0;
       function post(data) { window.parent.postMessage(data, "*"); }
-      function clampNum(value) {
-        var num = parseInt(value, 10);
-        return Number.isFinite(num) && num >= 0 ? num : 0;
-      }
-      function applyPan(pan) {
-        if (!rootEl || !pan) { return; }
-        rootEl.scrollLeft = clampNum(pan.x);
-        rootEl.scrollTop = clampNum(pan.y);
-      }
-      function emitPan() {
-        if (!rootEl) { return; }
-        post({ type: "ata:bracket-pan-changed", x: rootEl.scrollLeft || 0, y: rootEl.scrollTop || 0 });
-      }
       function render(payload) {
         if (!window.bracketsViewer) {
           throw new Error("bracketsViewer not found");
@@ -3451,42 +3326,12 @@
         window.bracketsViewer.render(payload, { selector: "#brackets-root", clear: true });
         if (msgEl) { msgEl.style.display = "none"; }
       }
-      if (rootEl) {
-        rootEl.addEventListener("mousedown", function (event) {
-          if (event.button !== 0) { return; }
-          dragActive = true;
-          dragStartX = event.clientX;
-          dragStartY = event.clientY;
-          dragStartLeft = rootEl.scrollLeft || 0;
-          dragStartTop = rootEl.scrollTop || 0;
-          rootEl.setAttribute("data-dragging", "1");
-          event.preventDefault();
-        });
-        window.addEventListener("mousemove", function (event) {
-          if (!dragActive) { return; }
-          var deltaX = event.clientX - dragStartX;
-          var deltaY = event.clientY - dragStartY;
-          rootEl.scrollLeft = dragStartLeft - deltaX;
-          rootEl.scrollTop = dragStartTop - deltaY;
-        });
-        window.addEventListener("mouseup", function () {
-          if (!dragActive) { return; }
-          dragActive = false;
-          rootEl.setAttribute("data-dragging", "0");
-          emitPan();
-        });
-      }
       window.addEventListener("message", function (event) {
         var data = event.data;
         if (!data || !data.type) { return; }
-        if (data.type === "ata:set-bracket-pan") {
-          applyPan(data.pan || data);
-          return;
-        }
         if (data.type !== "ata:render-bracket") { return; }
         try {
           render(data.payload || {});
-          applyPan(data.pan || {});
           post({ type: "ata:bracket-rendered" });
         } catch (err) {
           post({ type: "ata:bracket-error", message: err && err.message ? err.message : String(err) });
@@ -3540,7 +3385,7 @@
     }, 7000);
 
     if (state.bracket.ready && frame.contentWindow) {
-      frame.contentWindow.postMessage({ type: "ata:render-bracket", payload, pan: getBracketPan() }, "*");
+      frame.contentWindow.postMessage({ type: "ata:render-bracket", payload }, "*");
     }
   }
 
@@ -3559,7 +3404,7 @@
       state.bracket.ready = true;
       const payload = buildBracketPayload(state.store.tournament);
       if (payload && frame.contentWindow) {
-        frame.contentWindow.postMessage({ type: "ata:render-bracket", payload, pan: getBracketPan() }, "*");
+        frame.contentWindow.postMessage({ type: "ata:render-bracket", payload }, "*");
       }
       return;
     }
@@ -3571,21 +3416,7 @@
       }
       state.bracket.failed = false;
       state.bracket.lastError = "";
-      if (frame.contentWindow) {
-        frame.contentWindow.postMessage({ type: "ata:set-bracket-pan", pan: getBracketPan() }, "*");
-      }
       logDebug("bracket", "Bracket rendered successfully.");
-      return;
-    }
-
-    if (data.type === "ata:bracket-pan-changed") {
-      const current = getBracketPan();
-      const next = normalizeBracketPan({ x: data.x, y: data.y });
-      if (current.x === next.x && current.y === next.y) {
-        return;
-      }
-      state.store.ui.bracketPan = next;
-      schedulePersist();
       return;
     }
 
