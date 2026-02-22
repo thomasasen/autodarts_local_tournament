@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.2.2
+// @version      0.2.3
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,7 +21,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.2.2";
+  const APP_VERSION = "0.2.3";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 1;
   const SAVE_DEBOUNCE_MS = 150;
@@ -57,6 +57,17 @@
   const PLAYER_LIMIT_MIN = 2;
   const PLAYER_LIMIT_MAX = 8;
   const GROUP_MODE_MIN = 5;
+  const BYE_PLACEHOLDER_TOKENS = new Set([
+    "bye",
+    "freilos",
+    "tbd",
+    "tobeconfirmed",
+    "tobedetermined",
+    "unknown",
+    "none",
+    "null",
+    "na",
+  ]);
 
   if (window[RUNTIME_GUARD_KEY]) {
     return;
@@ -134,6 +145,15 @@
       .toLowerCase()
       .normalize("NFKD")
       .replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function normalizeToken(value) {
+    return normalizeLookup(value).replace(/[^a-z0-9]+/g, "");
+  }
+
+  function isByePlaceholderValue(value) {
+    const token = normalizeToken(value);
+    return Boolean(token) && BYE_PLACEHOLDER_TOKENS.has(token);
   }
 
   function escapeHtml(value) {
@@ -394,6 +414,13 @@
     const raw = await readStoreValue(STORAGE_KEY, createDefaultStore());
     state.store = migrateStorage(raw);
     state.activeTab = state.store.ui.activeTab;
+    if (state.store.tournament) {
+      const changed = refreshDerivedMatches(state.store.tournament);
+      if (changed) {
+        state.store.tournament.updatedAt = nowIso();
+        schedulePersist();
+      }
+    }
     logDebug("storage", "Store loaded", state.store);
   }
 
@@ -444,6 +471,38 @@
     }
     const participant = participantById(tournament, participantId);
     return participant ? participant.name : "TBD";
+  }
+
+  function buildParticipantIndexes(tournament) {
+    const byId = new Map();
+    const byName = new Map();
+    (tournament?.participants || []).forEach((participant) => {
+      const id = normalizeText(participant?.id || "");
+      if (!id) {
+        return;
+      }
+      byId.set(id, participant);
+      const key = normalizeLookup(participant?.name || "");
+      if (key && !byName.has(key)) {
+        byName.set(key, id);
+      }
+    });
+    return { byId, byName };
+  }
+
+  function resolveParticipantSlotId(tournament, rawValue, indexes = null) {
+    const value = normalizeText(rawValue || "");
+    if (!value || isByePlaceholderValue(value)) {
+      return null;
+    }
+
+    const participantIndexes = indexes || buildParticipantIndexes(tournament);
+    if (participantIndexes.byId.has(value)) {
+      return value;
+    }
+
+    const mappedByName = participantIndexes.byName.get(normalizeLookup(value));
+    return mappedByName || null;
   }
 
   function nextPowerOfTwo(value) {
@@ -590,13 +649,50 @@
     return result.length === array.length ? result : array.slice();
   }
 
+  function setArraySize(array, size, fillValue = null) {
+    const values = Array.isArray(array) ? array.slice(0, size) : [];
+    while (values.length < size) {
+      values.push(fillValue);
+    }
+    return values;
+  }
+
+  function balanceByes(seeding, participantCount) {
+    const values = Array.isArray(seeding) ? seeding.filter((value) => value !== null && value !== undefined) : [];
+    const targetSize = participantCount || nextPowerOfTwo(Math.max(values.length, 1));
+    if (!targetSize) {
+      return [];
+    }
+
+    // Source adapted from brackets-manager.js `helpers.balanceByes`:
+    // https://cdn.jsdelivr.net/npm/brackets-manager@1.6.4/dist/helpers.js
+    if (values.length < targetSize / 2) {
+      const flat = values.flatMap((value) => [value, null]);
+      return setArraySize(flat, targetSize, null);
+    }
+
+    const nonNullCount = values.length;
+    const nullCount = Math.max(0, targetSize - nonNullCount);
+    const splitIndex = Math.max(0, nonNullCount - nullCount);
+    const flat = [];
+
+    for (let i = 0; i < splitIndex; i += 2) {
+      flat.push(values[i] || null, values[i + 1] || null);
+    }
+    for (let i = splitIndex; i < nonNullCount; i += 1) {
+      flat.push(values[i], null);
+    }
+
+    return setArraySize(flat, targetSize, null);
+  }
+
   function buildBalancedKoSeeding(participantIds) {
     const size = nextPowerOfTwo(participantIds.length);
     const seeded = participantIds.slice();
     while (seeded.length < size) {
       seeded.push(null);
     }
-    return applyInnerOuterOrdering(seeded);
+    return balanceByes(applyInnerOuterOrdering(seeded), size);
   }
 
   function buildKoMatches(participantIds) {
@@ -955,7 +1051,12 @@
       return false;
     }
 
-    const hasDoubleBye = roundOneMatches.some((match) => !match.player1Id && !match.player2Id);
+    const participantIndexes = buildParticipantIndexes(tournament);
+    const hasDoubleBye = roundOneMatches.some((match) => {
+      const p1 = resolveParticipantSlotId(tournament, match.player1Id, participantIndexes);
+      const p2 = resolveParticipantSlotId(tournament, match.player2Id, participantIndexes);
+      return !p1 && !p2;
+    });
     if (!hasDoubleBye) {
       return false;
     }
@@ -964,14 +1065,23 @@
       const hasLegs = clampInt(match.legs?.p1, 0, 0, 50) > 0 || clampInt(match.legs?.p2, 0, 0, 50) > 0;
       const auto = match.meta?.auto;
       const hasAutoRun = Boolean(auto?.lobbyId || auto?.status === "started" || auto?.status === "completed");
-      return match.source === "manual" || hasLegs || hasAutoRun;
+      const hasCompletedWinner = Boolean(
+        match.status === STATUS_COMPLETED
+        && match.source !== "auto"
+        && resolveParticipantSlotId(tournament, match.winnerId, participantIndexes),
+      );
+      return match.source === "manual" || hasLegs || hasAutoRun || hasCompletedWinner;
     });
 
     if (hasLockedProgress) {
       return false;
     }
 
-    const orderedIds = buildBalancedKoSeeding(tournament.participants.map((participant) => participant.id));
+    const orderedIds = buildBalancedKoSeeding(
+      tournament.participants
+        .map((participant) => resolveParticipantSlotId(tournament, participant.id, participantIndexes))
+        .filter(Boolean),
+    );
     let changed = false;
 
     roundOneMatches
@@ -1008,13 +1118,16 @@
 
   function autoCompleteByes(tournament) {
     let changed = false;
+    const participantIndexes = buildParticipantIndexes(tournament);
     const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
     koMatches.forEach((match) => {
       if (match.status !== STATUS_PENDING) {
         return;
       }
-      const p1 = match.player1Id;
-      const p2 = match.player2Id;
+      const p1 = resolveParticipantSlotId(tournament, match.player1Id, participantIndexes);
+      const p2 = resolveParticipantSlotId(tournament, match.player2Id, participantIndexes);
+      changed = assignPlayerSlot(match, 1, p1) || changed;
+      changed = assignPlayerSlot(match, 2, p2) || changed;
       if (p1 && !p2) {
         match.status = STATUS_COMPLETED;
         match.winnerId = p1;
@@ -1034,19 +1147,22 @@
 
   function refreshDerivedMatches(tournament) {
     if (!tournament) {
-      return;
+      return false;
     }
 
+    let changedAny = false;
     for (let i = 0; i < 8; i += 1) {
       let changed = false;
       changed = rebalanceLegacyKoSeeding(tournament) || changed;
       changed = resolveGroupsToKoAssignments(tournament) || changed;
       changed = autoCompleteByes(tournament) || changed;
       changed = advanceKoWinners(tournament) || changed;
+      changedAny = changedAny || changed;
       if (!changed) {
         break;
       }
     }
+    return changedAny;
   }
 
   function getOpenMatchByPlayers(tournament, player1Id, player2Id) {
@@ -3187,22 +3303,26 @@
       tournament_id: 1,
       name: participant.name,
     }));
+    const participantIndexes = buildParticipantIndexes(tournament);
 
     const matches = koMatches.map((match) => {
-      const completed = match.status === STATUS_COMPLETED;
-      const status = completed ? 4 : (match.player1Id && match.player2Id ? 2 : 1);
-      const opponent1 = match.player1Id
+      const player1Id = resolveParticipantSlotId(tournament, match.player1Id, participantIndexes);
+      const player2Id = resolveParticipantSlotId(tournament, match.player2Id, participantIndexes);
+      const winnerId = resolveParticipantSlotId(tournament, match.winnerId, participantIndexes);
+      const completed = match.status === STATUS_COMPLETED && Boolean(winnerId && (winnerId === player1Id || winnerId === player2Id));
+      const status = completed ? 4 : (player1Id && player2Id ? 2 : 1);
+      const opponent1 = player1Id
         ? {
-            id: match.player1Id,
+            id: player1Id,
             score: clampInt(match.legs?.p1, 0, 0, 50),
-            result: completed && match.winnerId ? (match.winnerId === match.player1Id ? "win" : "loss") : undefined,
+            result: completed && winnerId ? (winnerId === player1Id ? "win" : "loss") : undefined,
           }
         : null;
-      const opponent2 = match.player2Id
+      const opponent2 = player2Id
         ? {
-            id: match.player2Id,
+            id: player2Id,
             score: clampInt(match.legs?.p2, 0, 0, 50),
-            result: completed && match.winnerId ? (match.winnerId === match.player2Id ? "win" : "loss") : undefined,
+            result: completed && winnerId ? (winnerId === player2Id ? "win" : "loss") : undefined,
           }
         : null;
       return {
