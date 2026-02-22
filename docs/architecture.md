@@ -45,10 +45,11 @@
 - Primaer: `brackets-viewer@1.9.0` in `iframe srcdoc` mit:
   - `i18next@23.16.8`
   - `brackets-viewer.min.js/.css`
+- GoJS wird bewusst nicht verwendet (Lizenz-/Evaluierungsartefakt-Risiko).
 - Message-Contract:
   - Parent -> iframe: `ata:render-bracket`
   - iframe -> Parent: `ata:bracket-frame-ready | ata:bracket-rendered | ata:bracket-error`
-- Fallback: statischer KO-HTML-Renderer im Shadow DOM.
+- Fallback: statischer KO-HTML-Renderer im Shadow DOM, nur bei Renderfehler/Timeout sichtbar.
 
 ## Stabilitaet
 - SPA-Routing:

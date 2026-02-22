@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.7
+- Bracket-Renderer auf `brackets-viewer@1.9.0` vereinheitlicht; GoJS-Anteil entfernt.
+- Bracket-iframe visuell auf Autodarts-Look angepasst (groessere Schrift, bessere Proportionen, volle Breiten-/Scrollnutzung).
+- Doppelte/unerwuenschte interne Bracket-Ueberschrift ausgeblendet.
+- KO-Payload defensiv gehaertet: unbekannte Teilnehmer-IDs werden nicht mehr als valide Opponents uebernommen.
+- HTML-Fallback im View-Tab jetzt standardmaessig verborgen und nur bei Renderfehler/Timeout sichtbar.
+- Diverse UI-Texte korrigiert (u. a. Umlaute bei Fehlermeldungen).
+
 ## 0.2.0
 - API-Halbautomatik umgesetzt:
   - Matchstart per Button im Tab `Spiele` (`Match starten` / `Zum Match`).

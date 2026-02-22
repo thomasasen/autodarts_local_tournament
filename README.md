@@ -15,7 +15,7 @@ MVP-Userscript fuer lokale Turniere direkt in `https://play.autodarts.io`.
   - Manuelle Winner-/Leg-Eingabe
 - Ansicht:
   - Liga-/Gruppentabellen
-  - KO-Bracket via `brackets-viewer` (iframe) + HTML-Fallback
+  - KO-Bracket via `brackets-viewer@1.9.0` (iframe) + HTML-Fallback (nur bei Fehler/Timeout sichtbar)
 - JSON:
   - Export als Datei
   - Export in Zwischenablage
@@ -99,6 +99,8 @@ autodarts_local_tournament/
    - Gegenmassnahme: harte Validierung beim Erstellen und Import.
 8. Cache-Korruption im Loader:
    - Gegenmassnahme: Marker-Validierung vor Ausfuehrung.
+9. GoJS-Evaluierungsartefakte:
+   - Gegenmassnahme: Einsatz von `brackets-viewer` (MIT) statt GoJS.
 
 ## Limitationen
 - Teilnehmerlimit im MVP: `2..8`.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.2.6
+// @version      0.2.7
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,7 +21,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.2.6";
+  const APP_VERSION = "0.2.7";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 1;
   const SAVE_DEBOUNCE_MS = 150;
@@ -35,7 +35,9 @@
   const API_AUTH_NOTICE_THROTTLE_MS = 15000;
   const API_REQUEST_TIMEOUT_MS = 12000;
 
-  const GOJS_JS = "https://cdn.jsdelivr.net/npm/gojs/release/go.js";
+  const BRACKETS_VIEWER_CSS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.css";
+  const BRACKETS_VIEWER_JS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.js";
+  const I18NEXT_JS = "https://cdn.jsdelivr.net/npm/i18next@23.16.8/dist/umd/i18next.min.js";
 
   const STATUS_COMPLETED = "completed";
   const STATUS_PENDING = "pending";
@@ -795,7 +797,7 @@
       errors.push("Bitte einen Turniernamen eingeben.");
     }
     if (!["ko", "league", "groups_ko"].includes(config.mode)) {
-      errors.push("Ungultiger Modus.");
+      errors.push("Ungültiger Modus.");
     }
     if (config.participants.length < PLAYER_LIMIT_MIN || config.participants.length > PLAYER_LIMIT_MAX) {
       errors.push(`Teilnehmerzahl muss zwischen ${PLAYER_LIMIT_MIN} und ${PLAYER_LIMIT_MAX} liegen.`);
@@ -2388,19 +2390,26 @@
         border-radius: var(--ata-radius-md);
         overflow: hidden;
         background: rgba(255, 255, 255, 0.04);
+        min-height: 620px;
       }
 
       .ata-bracket-frame {
         width: 100%;
-        min-height: 500px;
+        min-height: 620px;
+        height: clamp(620px, 72vh, 940px);
         border: 0;
-        background: #fff;
+        background: transparent;
       }
 
       .ata-bracket-fallback {
+        display: none;
         padding: var(--ata-space-3);
         background: rgba(255, 255, 255, 0.05);
         border-top: 1px solid var(--ata-color-border);
+      }
+
+      .ata-bracket-fallback[data-visible="1"] {
+        display: block;
       }
 
       .ata-bracket-grid {
@@ -2459,6 +2468,15 @@
 
         .ata-runtime-statusbar {
           padding: 10px 14px;
+        }
+
+        .ata-bracket-shell {
+          min-height: 420px;
+        }
+
+        .ata-bracket-frame {
+          min-height: 420px;
+          height: clamp(420px, 66vh, 760px);
         }
 
       }
@@ -2796,6 +2814,7 @@
     }
 
     let html = "";
+    const fallbackVisible = state.bracket.failed ? "1" : "0";
 
     if (tournament.mode === "league") {
       const standings = standingsForMatches(tournament, getMatchesByStage(tournament, MATCH_STAGE_LEAGUE));
@@ -2817,7 +2836,7 @@
           <div class="ata-bracket-dock" id="ata-bracket-dock">
             <div class="ata-bracket-shell">
               <iframe id="ata-bracket-frame" class="ata-bracket-frame" title="Turnierbaum" sandbox="allow-scripts allow-same-origin"></iframe>
-              <div class="ata-bracket-fallback" id="ata-bracket-fallback">
+              <div class="ata-bracket-fallback" id="ata-bracket-fallback" data-visible="${fallbackVisible}">
                 ${renderStaticBracketFallback(tournament)}
               </div>
             </div>
@@ -2825,12 +2844,24 @@
           <div class="ata-actions" style="margin-top: 10px;">
             <button type="button" class="ata-btn" data-action="retry-bracket">Turnierbaum neu laden</button>
           </div>
-          <p class="ata-small">CDN-Render aktiv, Fallback darunter sichtbar für robuste Anzeige.</p>
+          <p class="ata-small">CDN-Render aktiv. Der HTML-Fallback wird nur bei Fehlern oder Timeout angezeigt.</p>
         </section>
       `;
     }
 
     return html || `<section class="ata-card tournamentCard"><h3>Ansicht</h3><p>Keine Daten.</p></section>`;
+  }
+
+  function syncBracketFallbackVisibility() {
+    const shadow = state.shadowRoot;
+    if (!shadow || state.activeTab !== "view") {
+      return;
+    }
+    const fallback = shadow.getElementById("ata-bracket-fallback");
+    if (!(fallback instanceof HTMLElement)) {
+      return;
+    }
+    fallback.setAttribute("data-visible", state.bracket.failed ? "1" : "0");
   }
 
   function renderIOTab() {
@@ -2914,6 +2945,7 @@
     bindUiHandlers();
     if (state.activeTab === "view") {
       queueBracketRender();
+      syncBracketFallbackVisibility();
     }
   }
 
@@ -3144,7 +3176,7 @@
 
     const winnerId = normalizeText(winnerSelect.value);
     if (!winnerId) {
-      setNotice("error", "Bitte Gewinner auswahlen.");
+      setNotice("error", "Bitte Gewinner auswählen.");
       return;
     }
 
@@ -3296,17 +3328,34 @@
     }
 
     const bracketSize = tournament.mode === "groups_ko" ? 4 : nextPowerOfTwo(tournament.participants.length);
-    const participants = tournament.participants.map((participant) => ({
-      id: participant.id,
-      tournament_id: 1,
-      name: participant.name,
-    }));
+    const participants = tournament.participants
+      .map((participant) => {
+        const participantId = normalizeText(participant?.id);
+        if (!participantId) {
+          return null;
+        }
+        return {
+          id: participantId,
+          tournament_id: 1,
+          name: normalizeText(participant?.name) || participantId,
+        };
+      })
+      .filter(Boolean);
+    const participantIdSet = new Set(participants.map((participant) => participant.id));
     const participantIndexes = buildParticipantIndexes(tournament);
+    const resolveBracketParticipantId = (slotId) => {
+      const resolved = resolveParticipantSlotId(tournament, slotId, participantIndexes);
+      if (!resolved) {
+        return null;
+      }
+      const participantId = normalizeText(resolved);
+      return participantIdSet.has(participantId) ? participantId : null;
+    };
 
     const matches = koMatches.map((match) => {
-      const player1Id = resolveParticipantSlotId(tournament, match.player1Id, participantIndexes);
-      const player2Id = resolveParticipantSlotId(tournament, match.player2Id, participantIndexes);
-      const winnerId = resolveParticipantSlotId(tournament, match.winnerId, participantIndexes);
+      const player1Id = resolveBracketParticipantId(match.player1Id);
+      const player2Id = resolveBracketParticipantId(match.player2Id);
+      const winnerId = resolveBracketParticipantId(match.winnerId);
       const completed = match.status === STATUS_COMPLETED && Boolean(winnerId && (winnerId === player1Id || winnerId === player2Id));
       const status = completed ? 4 : (player1Id && player2Id ? 2 : 1);
       const opponent1 = player1Id
@@ -3358,18 +3407,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="${BRACKETS_VIEWER_CSS}">
   <style>
     :root {
       --tb-bg-1: #2b356f;
       --tb-bg-2: #1f3f72;
-      --tb-panel: rgba(255, 255, 255, 0.08);
       --tb-panel-border: rgba(255, 255, 255, 0.2);
-      --tb-match: #3b5488;
-      --tb-match-border: rgba(255, 255, 255, 0.28);
-      --tb-score: #5ad299;
       --tb-text: #f4f7ff;
       --tb-muted: rgba(232, 237, 255, 0.78);
-      --tb-line: rgba(189, 203, 236, 0.56);
     }
 
     html, body {
@@ -3378,38 +3423,101 @@
       height: 100%;
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      overflow: hidden !important;
       color: var(--tb-text);
-      font-family: "Open Sans", "Segoe UI", Tahoma, sans-serif;
+      font-family: "Open Sans", "Segoe UI", Tahoma, sans-serif !important;
       background: linear-gradient(180deg, var(--tb-bg-1), var(--tb-bg-2));
     }
 
     #msg {
-      padding: 14px 18px;
-      font-size: 15px;
+      padding: 12px 16px;
+      font-size: 16px;
       color: var(--tb-muted);
       border-bottom: 1px solid var(--tb-panel-border);
       background: rgba(255, 255, 255, 0.05);
     }
 
     #brackets-root {
-      padding: 14px 14px 20px;
-      min-height: 360px;
-      flex: 1 1 auto;
       width: 100%;
+      flex: 1 1 auto;
       overflow: auto;
+      min-height: 420px;
       box-sizing: border-box;
+      padding: 10px;
       background:
         radial-gradient(circle at 14% 8%, rgba(90, 210, 153, 0.07), transparent 45%),
         radial-gradient(circle at 82% 10%, rgba(114, 121, 224, 0.18), transparent 52%),
         linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
     }
 
-    #diagram-host {
+    #ata-brackets-viewer {
+      --primary-background: transparent;
+      --secondary-background: rgba(255, 255, 255, 0.11);
+      --match-background: rgba(59, 84, 136, 0.93);
+      --font-color: #f4f7ff;
+      --win-color: #5ad299;
+      --loss-color: #ff8787;
+      --label-color: rgba(226, 234, 255, 0.82);
+      --hint-color: rgba(205, 217, 248, 0.75);
+      --connector-color: rgba(183, 198, 236, 0.8);
+      --border-color: rgba(255, 255, 255, 0.28);
+      --border-hover-color: rgba(255, 255, 255, 0.46);
+      --border-selected-color: rgba(255, 255, 255, 0.66);
+      --text-size: 16px;
+      --round-margin: 78px;
+      --match-width: 256px;
+      --match-horizontal-padding: 14px;
+      --match-vertical-padding: 10px;
+      --connector-border-width: 2px;
+      --match-border-width: 1px;
+      --match-border-radius: 10px;
+      --participant-image-size: 1.1em;
+      width: max-content;
       min-width: 100%;
-      min-height: 360px;
-      background: transparent;
-      color: var(--tb-text);
+      min-height: calc(100% - 6px);
+      margin: 0;
+      padding: 12px 20px 22px;
+    }
+
+    #ata-brackets-viewer.brackets-viewer {
+      align-items: flex-start;
+      margin: 0;
+    }
+
+    #ata-brackets-viewer h1,
+    #ata-brackets-viewer .bracket h2 {
+      display: none;
+    }
+
+    #ata-brackets-viewer h3 {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.26);
+      border-radius: 10px;
+      font-size: 1em;
+      font-weight: 700;
+      color: #f2f6ff;
+      padding: 9px 10px;
+    }
+
+    #ata-brackets-viewer .match {
+      margin: 12px 0;
+    }
+
+    #ata-brackets-viewer .participant {
+      align-items: center;
+      min-height: 42px;
+      font-size: 1em;
+    }
+
+    #ata-brackets-viewer .participant .name {
+      width: 78%;
+      font-weight: 600;
+    }
+
+    #ata-brackets-viewer .participant .result {
+      width: 22%;
+      font-weight: 700;
+      text-align: center;
     }
 
     #brackets-root::-webkit-scrollbar {
@@ -3431,295 +3539,58 @@
 <body>
   <div id="msg">Turnierbaum wird geladen ...</div>
   <div id="brackets-root">
-    <div id="diagram-host"></div>
+    <div id="ata-brackets-viewer" class="brackets-viewer"></div>
   </div>
-  <script src="${GOJS_JS}"></script>
+  <script src="${I18NEXT_JS}"></script>
+  <script src="${BRACKETS_VIEWER_JS}"></script>
   <script>
     (function () {
       var msgEl = document.getElementById("msg");
-      var rootEl = document.getElementById("brackets-root");
-      var hostEl = document.getElementById("diagram-host");
-      var diagram = null;
-      var NAME_COL_WIDTH = 146;
-      var SCORE_COL_WIDTH = 36;
-      var ROW_HEIGHT = 30;
-      var NODE_WIDTH = NAME_COL_WIDTH + SCORE_COL_WIDTH;
-      var NODE_HEIGHT = ROW_HEIGHT * 2;
-      var LAYER_SPACING = 98;
-      var NODE_SPACING = 18;
-      var TOP_INSET = 72;
-      var LEFT_INSET = 160;
-      var MIN_DIAGRAM_WIDTH = 760;
-      var MIN_DIAGRAM_HEIGHT = 360;
+      var viewerEl = document.getElementById("ata-brackets-viewer");
 
       function post(data) { window.parent.postMessage(data, "*"); }
 
-      function toNumber(value, fallback) {
-        var num = Number(value);
-        return Number.isFinite(num) ? num : fallback;
-      }
-
-      function resolveOpponent(opponent, participantsById) {
-        if (!opponent || opponent.id === null || opponent.id === undefined || opponent.id === "") {
-          return { name: "BYE", score: "", winner: false, bye: true };
+      function ensurePayload(payload) {
+        var safePayload = payload && typeof payload === "object" ? payload : {};
+        if (!Array.isArray(safePayload.stages) || !Array.isArray(safePayload.matches) || !Array.isArray(safePayload.participants)) {
+          throw new Error("invalid bracket payload");
         }
-        var key = String(opponent.id);
-        var name = participantsById[key];
-        if (!name) {
-          return { name: "BYE", score: "", winner: false, bye: true };
-        }
-        var scoreValue = opponent.score === null || opponent.score === undefined ? "" : String(opponent.score);
-        return { name: name, score: scoreValue, winner: opponent.result === "win", bye: false };
-      }
-
-      function ensureDiagram() {
-        if (diagram || !window.go || !hostEl) {
-          return;
-        }
-
-        var go = window.go;
-
-        diagram = new go.Diagram("diagram-host", {
-          isReadOnly: true,
-          allowCopy: false,
-          allowDelete: false,
-          allowInsert: false,
-          allowMove: false,
-          allowSelect: false,
-          autoScale: go.AutoScale.None,
-          contentAlignment: go.Spot.TopLeft,
-          initialDocumentSpot: go.Spot.TopLeft,
-          initialViewportSpot: go.Spot.TopLeft,
-          padding: new go.Margin(TOP_INSET, 24, 24, LEFT_INSET),
-          layout: new go.TreeLayout({
-            angle: 180,
-            layerSpacing: LAYER_SPACING,
-            nodeSpacing: NODE_SPACING,
-            setsPortSpot: false,
-            setsChildPortSpot: false,
-          }),
-          "animationManager.isEnabled": false
-        });
-
-        diagram.nodeTemplate = new go.Node("Auto",
-          {
-            selectable: false,
-            fromSpot: go.Spot.RightCenter,
-            toSpot: go.Spot.LeftCenter
-          })
-          .add(
-            new go.Shape("Rectangle",
-              {
-                stroke: "rgba(255, 255, 255, 0.26)",
-                strokeWidth: 1.1,
-                fill: "rgba(59, 84, 136, 0.92)",
-              })
-              .bind("fill", "cardFill"),
-            new go.Panel("Table")
-              .addColumnDefinition(0, { width: NAME_COL_WIDTH, separatorStroke: "rgba(255, 255, 255, 0.24)" })
-              .addColumnDefinition(1, { width: SCORE_COL_WIDTH, background: "rgba(255, 255, 255, 0.16)" })
-              .addRowDefinition(0, { height: ROW_HEIGHT, separatorStroke: "rgba(255, 255, 255, 0.18)" })
-              .addRowDefinition(1, { height: ROW_HEIGHT })
-              .add(
-                new go.TextBlock("",
-                  {
-                    row: 0,
-                    margin: 6,
-                    width: NAME_COL_WIDTH - 12,
-                    wrap: go.Wrap.None,
-                    overflow: go.TextOverflow.Ellipsis,
-                    isMultiline: false,
-                    textAlign: "left",
-                    font: "600 15px 'Open Sans', 'Segoe UI', sans-serif",
-                    stroke: "#f4f7ff",
-                  })
-                  .bind("text", "player1")
-                  .bind("font", "p1Win", function (isWinner) {
-                    return isWinner ? "700 15px 'Open Sans', 'Segoe UI', sans-serif" : "600 15px 'Open Sans', 'Segoe UI', sans-serif";
-                  })
-                  .bind("stroke", "", function (data) {
-                    if (data && data.p1Win) { return "#ffffff"; }
-                    if (data && data.p1Bye) { return "rgba(232, 237, 255, 0.74)"; }
-                    return "#f4f7ff";
-                  }),
-                new go.TextBlock("",
-                  {
-                    row: 1,
-                    margin: 6,
-                    width: NAME_COL_WIDTH - 12,
-                    wrap: go.Wrap.None,
-                    overflow: go.TextOverflow.Ellipsis,
-                    isMultiline: false,
-                    textAlign: "left",
-                    font: "600 15px 'Open Sans', 'Segoe UI', sans-serif",
-                    stroke: "#f4f7ff",
-                  })
-                  .bind("text", "player2")
-                  .bind("font", "p2Win", function (isWinner) {
-                    return isWinner ? "700 15px 'Open Sans', 'Segoe UI', sans-serif" : "600 15px 'Open Sans', 'Segoe UI', sans-serif";
-                  })
-                  .bind("stroke", "", function (data) {
-                    if (data && data.p2Win) { return "#ffffff"; }
-                    if (data && data.p2Bye) { return "rgba(232, 237, 255, 0.74)"; }
-                    return "#f4f7ff";
-                  }),
-                new go.TextBlock("",
-                  {
-                    column: 1,
-                    row: 0,
-                    margin: 2,
-                    width: SCORE_COL_WIDTH - 6,
-                    isMultiline: false,
-                    textAlign: "center",
-                    font: "700 12px 'Open Sans', 'Segoe UI', sans-serif",
-                    stroke: "#eef3ff",
-                  })
-                  .bind("text", "score1")
-                  .bind("stroke", "p1Win", function (isWinner) {
-                    return isWinner ? "#5ad299" : "#eef3ff";
-                  }),
-                new go.TextBlock("",
-                  {
-                    column: 1,
-                    row: 1,
-                    margin: 2,
-                    width: SCORE_COL_WIDTH - 6,
-                    isMultiline: false,
-                    textAlign: "center",
-                    font: "700 12px 'Open Sans', 'Segoe UI', sans-serif",
-                    stroke: "#eef3ff",
-                  })
-                  .bind("text", "score2")
-                  .bind("stroke", "p2Win", function (isWinner) {
-                    return isWinner ? "#5ad299" : "#eef3ff";
-                  })
-              )
-          );
-
-        diagram.linkTemplate = new go.Link(
-          {
-            routing: go.Routing.Orthogonal,
-            corner: 7,
-            selectable: false,
-          })
-          .add(new go.Shape({ stroke: "rgba(189, 203, 236, 0.70)", strokeWidth: 2 }));
-      }
-
-      function buildModel(payload) {
-        var participants = Array.isArray(payload && payload.participants) ? payload.participants : [];
-        var participantsById = Object.create(null);
-        participants.forEach(function (participant) {
-          if (!participant || participant.id === null || participant.id === undefined) {
-            return;
-          }
-          participantsById[String(participant.id)] = String(participant.name || "");
-        });
-
-        var matchesRaw = Array.isArray(payload && payload.matches) ? payload.matches : [];
-        var matches = matchesRaw
-          .map(function (match) {
-            var round = toNumber(match && match.round_id, 1);
-            var number = toNumber(match && match.number, 1);
-            if (round < 1 || number < 1) {
-              return null;
-            }
-            return {
-              key: "m-" + String(Math.floor(round)) + "-" + String(Math.floor(number)),
-              round: Math.floor(round),
-              number: Math.floor(number),
-              opponent1: match ? match.opponent1 : null,
-              opponent2: match ? match.opponent2 : null,
-            };
-          })
-          .filter(Boolean)
-          .sort(function (left, right) {
-            if (left.round !== right.round) {
-              return left.round - right.round;
-            }
-            return left.number - right.number;
-          });
-
-        var keySet = Object.create(null);
-        var maxRound = 1;
-        var roundOneCount = 0;
-        matches.forEach(function (match) {
-          keySet[match.key] = true;
-          if (match.round > maxRound) {
-            maxRound = match.round;
-          }
-          if (match.round === 1) {
-            roundOneCount += 1;
-          }
-        });
-
-        var nodes = matches.map(function (match) {
-          var parentKey = "m-" + String(match.round + 1) + "-" + String(Math.ceil(match.number / 2));
-          var opponent1 = resolveOpponent(match.opponent1, participantsById);
-          var opponent2 = resolveOpponent(match.opponent2, participantsById);
-          return {
-            key: match.key,
-            parent: keySet[parentKey] ? parentKey : undefined,
-            parentNumber: match.number % 2 === 1 ? 0 : 1,
-            player1: opponent1.name,
-            player2: opponent2.name,
-            score1: opponent1.score,
-            score2: opponent2.score,
-            p1Win: opponent1.winner,
-            p2Win: opponent2.winner,
-            p1Bye: opponent1.bye,
-            p2Bye: opponent2.bye,
-            cardFill: (opponent1.winner || opponent2.winner)
-              ? "rgba(67, 96, 154, 0.95)"
-              : "rgba(59, 84, 136, 0.92)",
-          };
-        });
-
-        var safeRoundOneCount = Math.max(1, roundOneCount || matches.length || 1);
-        var canvasWidth = LEFT_INSET + (maxRound * (NODE_WIDTH + LAYER_SPACING)) + 120;
-        var canvasHeight = TOP_INSET + (safeRoundOneCount * (NODE_HEIGHT + NODE_SPACING)) + 130;
-        return {
-          nodes: nodes,
-          width: canvasWidth,
-          height: canvasHeight,
-        };
-      }
-
-      function applyCanvasSize(model) {
-        if (!hostEl) {
-          return;
-        }
-        var minWidth = rootEl ? Math.max(MIN_DIAGRAM_WIDTH, rootEl.clientWidth - 2) : MIN_DIAGRAM_WIDTH;
-        var minHeight = rootEl ? Math.max(MIN_DIAGRAM_HEIGHT, rootEl.clientHeight - 2) : MIN_DIAGRAM_HEIGHT;
-        hostEl.style.width = String(Math.max(minWidth, toNumber(model.width, minWidth))) + "px";
-        hostEl.style.height = String(Math.max(minHeight, toNumber(model.height, minHeight))) + "px";
+        return safePayload;
       }
 
       function render(payload) {
-        if (!window.go) {
-          throw new Error("gojs not found");
+        if (!window.bracketsViewer || typeof window.bracketsViewer.render !== "function") {
+          throw new Error("brackets-viewer not found");
         }
-        ensureDiagram();
-        if (!diagram) {
-          throw new Error("gojs diagram not initialized");
+        if (!viewerEl) {
+          throw new Error("bracket root not found");
         }
-        var modelData = buildModel(payload || {});
-        applyCanvasSize(modelData);
-        diagram.model = new window.go.TreeModel(modelData.nodes);
-        diagram.layoutDiagram(true);
-        diagram.position = new window.go.Point(0, 0);
-        if (msgEl) { msgEl.style.display = "none"; }
+        var safePayload = ensurePayload(payload);
+        window.bracketsViewer.render(safePayload, {
+          selector: "#ata-brackets-viewer",
+          clear: true,
+        });
+        if (msgEl) {
+          msgEl.style.display = "none";
+        }
       }
+
       window.addEventListener("message", function (event) {
         var data = event.data;
-        if (!data || !data.type) { return; }
-        if (data.type !== "ata:render-bracket") { return; }
+        if (!data || data.type !== "ata:render-bracket") {
+          return;
+        }
         try {
           render(data.payload || {});
           post({ type: "ata:bracket-rendered" });
-        } catch (err) {
-          post({ type: "ata:bracket-error", message: err && err.message ? err.message : String(err) });
+        } catch (error) {
+          post({
+            type: "ata:bracket-error",
+            message: error && error.message ? error.message : String(error),
+          });
         }
       });
+
       post({ type: "ata:bracket-frame-ready" });
     })();
   </script>
@@ -3752,6 +3623,7 @@
       state.bracket.ready = false;
       state.bracket.failed = false;
       state.bracket.lastError = "";
+      syncBracketFallbackVisibility();
       frame.srcdoc = buildBracketFrameSrcdoc();
     }
 
@@ -3763,6 +3635,7 @@
     state.bracket.timeoutHandle = window.setTimeout(() => {
       state.bracket.failed = true;
       state.bracket.lastError = "Turnierbaum-Render-Timeout";
+      syncBracketFallbackVisibility();
       setNotice("error", "CDN-Turnierbaum-Timeout, Fallback bleibt aktiv.", 3200);
       logWarn("bracket", "Iframe bracket render timeout.");
     }, 7000);
@@ -3799,6 +3672,7 @@
       }
       state.bracket.failed = false;
       state.bracket.lastError = "";
+      syncBracketFallbackVisibility();
       logDebug("bracket", "Bracket rendered successfully.");
       return;
     }
@@ -3810,6 +3684,7 @@
       }
       state.bracket.failed = true;
       state.bracket.lastError = normalizeText(data.message || "Unbekannter Fehler");
+      syncBracketFallbackVisibility();
       setNotice("error", `Turnierbaum-Fehler: ${state.bracket.lastError}. Fallback aktiv.`, 3600);
       logWarn("bracket", "Bracket render error.", data);
     }
