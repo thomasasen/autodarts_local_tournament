@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.2.5
+// @version      0.2.6
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,7 +21,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.2.5";
+  const APP_VERSION = "0.2.6";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 1;
   const SAVE_DEBOUNCE_MS = 150;
@@ -3440,31 +3440,23 @@
       var rootEl = document.getElementById("brackets-root");
       var hostEl = document.getElementById("diagram-host");
       var diagram = null;
-      var MATCH_WIDTH = 204;
-      var MATCH_HEIGHT = 74;
-      var ROUND_GAP = 96;
-      var SLOT_GAP = 90;
-      var TOP_PADDING = 104;
-      var LEFT_PADDING = 140;
-      var HEADER_TOP = 28;
-      var NAME_WIDTH = 150;
+      var NAME_COL_WIDTH = 146;
+      var SCORE_COL_WIDTH = 36;
+      var ROW_HEIGHT = 30;
+      var NODE_WIDTH = NAME_COL_WIDTH + SCORE_COL_WIDTH;
+      var NODE_HEIGHT = ROW_HEIGHT * 2;
+      var LAYER_SPACING = 98;
+      var NODE_SPACING = 18;
+      var TOP_INSET = 72;
+      var LEFT_INSET = 160;
+      var MIN_DIAGRAM_WIDTH = 760;
+      var MIN_DIAGRAM_HEIGHT = 360;
 
       function post(data) { window.parent.postMessage(data, "*"); }
 
       function toNumber(value, fallback) {
         var num = Number(value);
         return Number.isFinite(num) ? num : fallback;
-      }
-
-      function toPointString(x, y) {
-        return String(x) + " " + String(y);
-      }
-
-      function roundLabel(round, maxRound) {
-        if (round >= maxRound) {
-          return "Final Round";
-        }
-        return "Round " + String(round);
       }
 
       function resolveOpponent(opponent, participantsById) {
@@ -3486,9 +3478,8 @@
         }
 
         var go = window.go;
-        var $ = go.GraphObject.make;
 
-        diagram = $(go.Diagram, "diagram-host", {
+        diagram = new go.Diagram("diagram-host", {
           isReadOnly: true,
           allowCopy: false,
           allowDelete: false,
@@ -3499,142 +3490,119 @@
           contentAlignment: go.Spot.TopLeft,
           initialDocumentSpot: go.Spot.TopLeft,
           initialViewportSpot: go.Spot.TopLeft,
-          padding: new go.Margin(8, 8, 16, 8),
+          padding: new go.Margin(TOP_INSET, 24, 24, LEFT_INSET),
+          layout: new go.TreeLayout({
+            angle: 180,
+            layerSpacing: LAYER_SPACING,
+            nodeSpacing: NODE_SPACING,
+            setsPortSpot: false,
+            setsChildPortSpot: false,
+          }),
           "animationManager.isEnabled": false
         });
 
-        diagram.nodeTemplate =
-          $(go.Node, "Auto",
-            {
-              locationSpot: go.Spot.TopLeft,
-              fromSpot: go.Spot.RightCenter,
-              toSpot: go.Spot.LeftCenter,
-              selectable: false
-            },
-            new go.Binding("location", "loc", go.Point.parse),
-            $(go.Shape, "RoundedRectangle",
+        diagram.nodeTemplate = new go.Node("Auto",
+          {
+            selectable: false,
+            fromSpot: go.Spot.RightCenter,
+            toSpot: go.Spot.LeftCenter
+          })
+          .add(
+            new go.Shape("Rectangle",
               {
-                stroke: "rgba(255, 255, 255, 0.30)",
-                strokeWidth: 1.2,
+                stroke: "rgba(255, 255, 255, 0.26)",
+                strokeWidth: 1.1,
                 fill: "rgba(59, 84, 136, 0.92)",
-                parameter1: 8
-              }),
-            $(go.Panel, "Vertical",
-              { width: MATCH_WIDTH },
-              $(go.Panel, "Horizontal",
-                {
-                  width: MATCH_WIDTH,
-                  minSize: new go.Size(MATCH_WIDTH, MATCH_HEIGHT / 2),
-                  margin: new go.Margin(5, 8, 4, 8),
-                  defaultAlignment: go.Spot.Center
-                },
-                $(go.TextBlock,
+              })
+              .bind("fill", "cardFill"),
+            new go.Panel("Table")
+              .addColumnDefinition(0, { width: NAME_COL_WIDTH, separatorStroke: "rgba(255, 255, 255, 0.24)" })
+              .addColumnDefinition(1, { width: SCORE_COL_WIDTH, background: "rgba(255, 255, 255, 0.16)" })
+              .addRowDefinition(0, { height: ROW_HEIGHT, separatorStroke: "rgba(255, 255, 255, 0.18)" })
+              .addRowDefinition(1, { height: ROW_HEIGHT })
+              .add(
+                new go.TextBlock("",
                   {
-                    width: NAME_WIDTH,
-                    isMultiline: false,
+                    row: 0,
+                    margin: 6,
+                    width: NAME_COL_WIDTH - 12,
+                    wrap: go.Wrap.None,
                     overflow: go.TextOverflow.Ellipsis,
-                    font: "600 15px 'Open Sans', 'Segoe UI', sans-serif"
-                  },
-                  new go.Binding("text", "p1Name"),
-                  new go.Binding("font", "p1Win", function (isWinner) {
+                    isMultiline: false,
+                    textAlign: "left",
+                    font: "600 15px 'Open Sans', 'Segoe UI', sans-serif",
+                    stroke: "#f4f7ff",
+                  })
+                  .bind("text", "player1")
+                  .bind("font", "p1Win", function (isWinner) {
                     return isWinner ? "700 15px 'Open Sans', 'Segoe UI', sans-serif" : "600 15px 'Open Sans', 'Segoe UI', sans-serif";
-                  }),
-                  new go.Binding("stroke", "", function (data) {
+                  })
+                  .bind("stroke", "", function (data) {
                     if (data && data.p1Win) { return "#ffffff"; }
                     if (data && data.p1Bye) { return "rgba(232, 237, 255, 0.74)"; }
                     return "#f4f7ff";
-                  })),
-                $(go.Panel, "Auto",
-                  { alignment: go.Spot.Right, minSize: new go.Size(28, 20) },
-                  $(go.Shape, "RoundedRectangle",
-                    { stroke: "transparent", fill: "rgba(255, 255, 255, 0.22)", parameter1: 11 },
-                    new go.Binding("fill", "p1Win", function (isWinner) {
-                      return isWinner ? "#5ad299" : "rgba(255, 255, 255, 0.22)";
-                    })),
-                  $(go.TextBlock,
-                    {
-                      margin: new go.Margin(2, 7, 2, 7),
-                      textAlign: "center",
-                      font: "700 12px 'Open Sans', 'Segoe UI', sans-serif",
-                      stroke: "#eef3ff"
-                    },
-                    new go.Binding("text", "p1Score"),
-                    new go.Binding("stroke", "p1Win", function (isWinner) {
-                      return isWinner ? "#0a281c" : "#eef3ff";
-                    })))
-              ),
-              $(go.Shape, "LineH", { stroke: "rgba(255, 255, 255, 0.18)", strokeWidth: 1, width: MATCH_WIDTH }),
-              $(go.Panel, "Horizontal",
-                {
-                  width: MATCH_WIDTH,
-                  minSize: new go.Size(MATCH_WIDTH, MATCH_HEIGHT / 2),
-                  margin: new go.Margin(4, 8, 5, 8),
-                  defaultAlignment: go.Spot.Center
-                },
-                $(go.TextBlock,
-                  {
-                    width: NAME_WIDTH,
-                    isMultiline: false,
-                    overflow: go.TextOverflow.Ellipsis,
-                    font: "600 15px 'Open Sans', 'Segoe UI', sans-serif"
-                  },
-                  new go.Binding("text", "p2Name"),
-                  new go.Binding("font", "p2Win", function (isWinner) {
-                    return isWinner ? "700 15px 'Open Sans', 'Segoe UI', sans-serif" : "600 15px 'Open Sans', 'Segoe UI', sans-serif";
                   }),
-                  new go.Binding("stroke", "", function (data) {
+                new go.TextBlock("",
+                  {
+                    row: 1,
+                    margin: 6,
+                    width: NAME_COL_WIDTH - 12,
+                    wrap: go.Wrap.None,
+                    overflow: go.TextOverflow.Ellipsis,
+                    isMultiline: false,
+                    textAlign: "left",
+                    font: "600 15px 'Open Sans', 'Segoe UI', sans-serif",
+                    stroke: "#f4f7ff",
+                  })
+                  .bind("text", "player2")
+                  .bind("font", "p2Win", function (isWinner) {
+                    return isWinner ? "700 15px 'Open Sans', 'Segoe UI', sans-serif" : "600 15px 'Open Sans', 'Segoe UI', sans-serif";
+                  })
+                  .bind("stroke", "", function (data) {
                     if (data && data.p2Win) { return "#ffffff"; }
                     if (data && data.p2Bye) { return "rgba(232, 237, 255, 0.74)"; }
                     return "#f4f7ff";
-                  })),
-                $(go.Panel, "Auto",
-                  { alignment: go.Spot.Right, minSize: new go.Size(28, 20) },
-                  $(go.Shape, "RoundedRectangle",
-                    { stroke: "transparent", fill: "rgba(255, 255, 255, 0.22)", parameter1: 11 },
-                    new go.Binding("fill", "p2Win", function (isWinner) {
-                      return isWinner ? "#5ad299" : "rgba(255, 255, 255, 0.22)";
-                    })),
-                  $(go.TextBlock,
-                    {
-                      margin: new go.Margin(2, 7, 2, 7),
-                      textAlign: "center",
-                      font: "700 12px 'Open Sans', 'Segoe UI', sans-serif",
-                      stroke: "#eef3ff"
-                    },
-                    new go.Binding("text", "p2Score"),
-                    new go.Binding("stroke", "p2Win", function (isWinner) {
-                      return isWinner ? "#0a281c" : "#eef3ff";
-                    })))
+                  }),
+                new go.TextBlock("",
+                  {
+                    column: 1,
+                    row: 0,
+                    margin: 2,
+                    width: SCORE_COL_WIDTH - 6,
+                    isMultiline: false,
+                    textAlign: "center",
+                    font: "700 12px 'Open Sans', 'Segoe UI', sans-serif",
+                    stroke: "#eef3ff",
+                  })
+                  .bind("text", "score1")
+                  .bind("stroke", "p1Win", function (isWinner) {
+                    return isWinner ? "#5ad299" : "#eef3ff";
+                  }),
+                new go.TextBlock("",
+                  {
+                    column: 1,
+                    row: 1,
+                    margin: 2,
+                    width: SCORE_COL_WIDTH - 6,
+                    isMultiline: false,
+                    textAlign: "center",
+                    font: "700 12px 'Open Sans', 'Segoe UI', sans-serif",
+                    stroke: "#eef3ff",
+                  })
+                  .bind("text", "score2")
+                  .bind("stroke", "p2Win", function (isWinner) {
+                    return isWinner ? "#5ad299" : "#eef3ff";
+                  })
               )
-            ));
+          );
 
-        diagram.nodeTemplateMap.add("header",
-          $(go.Node, "Auto",
-            { locationSpot: go.Spot.TopLeft, selectable: false, layerName: "Foreground" },
-            new go.Binding("location", "loc", go.Point.parse),
-            $(go.Shape, "RoundedRectangle",
-              {
-                stroke: "rgba(255, 255, 255, 0.24)",
-                strokeWidth: 1,
-                fill: "rgba(255, 255, 255, 0.08)",
-                parameter1: 7
-              }),
-            $(go.TextBlock,
-              {
-                margin: new go.Margin(8, 16, 8, 16),
-                font: "700 13px 'Open Sans', 'Segoe UI', sans-serif",
-                stroke: "#f4f7ff"
-              },
-              new go.Binding("text", "label"))));
-
-        diagram.linkTemplate =
-          $(go.Link,
-            {
-              routing: go.Routing.Orthogonal,
-              corner: 8,
-              selectable: false
-            },
-            $(go.Shape, { stroke: "rgba(189, 203, 236, 0.56)", strokeWidth: 2 }));
+        diagram.linkTemplate = new go.Link(
+          {
+            routing: go.Routing.Orthogonal,
+            corner: 7,
+            selectable: false,
+          })
+          .add(new go.Shape({ stroke: "rgba(189, 203, 236, 0.70)", strokeWidth: 2 }));
       }
 
       function buildModel(payload) {
@@ -3656,10 +3624,11 @@
               return null;
             }
             return {
+              key: "m-" + String(Math.floor(round)) + "-" + String(Math.floor(number)),
               round: Math.floor(round),
               number: Math.floor(number),
               opponent1: match ? match.opponent1 : null,
-              opponent2: match ? match.opponent2 : null
+              opponent2: match ? match.opponent2 : null,
             };
           })
           .filter(Boolean)
@@ -3670,80 +3639,57 @@
             return left.number - right.number;
           });
 
-        var nodes = [];
-        var links = [];
         var keySet = Object.create(null);
         var maxRound = 1;
-        var maxBottom = TOP_PADDING + MATCH_HEIGHT;
-
+        var roundOneCount = 0;
         matches.forEach(function (match) {
+          keySet[match.key] = true;
           if (match.round > maxRound) {
             maxRound = match.round;
           }
-          var key = "m-" + String(match.round) + "-" + String(match.number);
-          keySet[key] = true;
-          var x = LEFT_PADDING + ((match.round - 1) * (MATCH_WIDTH + ROUND_GAP));
-          var offset = ((Math.pow(2, match.round - 1) - 1) / 2) * SLOT_GAP;
-          var y = TOP_PADDING + offset + (match.number - 1) * Math.pow(2, match.round - 1) * SLOT_GAP;
+          if (match.round === 1) {
+            roundOneCount += 1;
+          }
+        });
 
+        var nodes = matches.map(function (match) {
+          var parentKey = "m-" + String(match.round + 1) + "-" + String(Math.ceil(match.number / 2));
           var opponent1 = resolveOpponent(match.opponent1, participantsById);
           var opponent2 = resolveOpponent(match.opponent2, participantsById);
-
-          nodes.push({
-            key: key,
-            loc: toPointString(x, y),
-            p1Name: opponent1.name,
-            p2Name: opponent2.name,
-            p1Score: opponent1.score,
-            p2Score: opponent2.score,
+          return {
+            key: match.key,
+            parent: keySet[parentKey] ? parentKey : undefined,
+            parentNumber: match.number % 2 === 1 ? 0 : 1,
+            player1: opponent1.name,
+            player2: opponent2.name,
+            score1: opponent1.score,
+            score2: opponent2.score,
             p1Win: opponent1.winner,
             p2Win: opponent2.winner,
             p1Bye: opponent1.bye,
-            p2Bye: opponent2.bye
-          });
-
-          var bottom = y + MATCH_HEIGHT + 12;
-          if (bottom > maxBottom) {
-            maxBottom = bottom;
-          }
+            p2Bye: opponent2.bye,
+            cardFill: (opponent1.winner || opponent2.winner)
+              ? "rgba(67, 96, 154, 0.95)"
+              : "rgba(59, 84, 136, 0.92)",
+          };
         });
 
-        for (var round = 1; round <= maxRound; round += 1) {
-          var headerX = LEFT_PADDING + ((round - 1) * (MATCH_WIDTH + ROUND_GAP));
-          nodes.push({
-            key: "h-" + String(round),
-            category: "header",
-            loc: toPointString(headerX, HEADER_TOP),
-            label: roundLabel(round, maxRound)
-          });
-        }
-
-        matches.forEach(function (match) {
-          var from = "m-" + String(match.round) + "-" + String(match.number);
-          var toRound = match.round + 1;
-          var toNumber = Math.ceil(match.number / 2);
-          var to = "m-" + String(toRound) + "-" + String(toNumber);
-          if (!keySet[from] || !keySet[to]) {
-            return;
-          }
-          links.push({
-            key: "l-" + from + "-" + to,
-            from: from,
-            to: to
-          });
-        });
-
-        var canvasWidth = LEFT_PADDING + ((maxRound - 1) * (MATCH_WIDTH + ROUND_GAP)) + MATCH_WIDTH + 80;
-        var canvasHeight = maxBottom + 40;
-        return { nodes: nodes, links: links, width: canvasWidth, height: canvasHeight };
+        var safeRoundOneCount = Math.max(1, roundOneCount || matches.length || 1);
+        var canvasWidth = LEFT_INSET + (maxRound * (NODE_WIDTH + LAYER_SPACING)) + 120;
+        var canvasHeight = TOP_INSET + (safeRoundOneCount * (NODE_HEIGHT + NODE_SPACING)) + 130;
+        return {
+          nodes: nodes,
+          width: canvasWidth,
+          height: canvasHeight,
+        };
       }
 
       function applyCanvasSize(model) {
         if (!hostEl) {
           return;
         }
-        var minWidth = rootEl ? Math.max(640, rootEl.clientWidth - 2) : 640;
-        var minHeight = rootEl ? Math.max(360, rootEl.clientHeight - 2) : 360;
+        var minWidth = rootEl ? Math.max(MIN_DIAGRAM_WIDTH, rootEl.clientWidth - 2) : MIN_DIAGRAM_WIDTH;
+        var minHeight = rootEl ? Math.max(MIN_DIAGRAM_HEIGHT, rootEl.clientHeight - 2) : MIN_DIAGRAM_HEIGHT;
         hostEl.style.width = String(Math.max(minWidth, toNumber(model.width, minWidth))) + "px";
         hostEl.style.height = String(Math.max(minHeight, toNumber(model.height, minHeight))) + "px";
       }
@@ -3758,14 +3704,9 @@
         }
         var modelData = buildModel(payload || {});
         applyCanvasSize(modelData);
-        var go = window.go;
-        var $ = go.GraphObject.make;
-        diagram.model = $(go.GraphLinksModel, {
-          linkKeyProperty: "key",
-          nodeDataArray: modelData.nodes,
-          linkDataArray: modelData.links
-        });
-        diagram.position = new go.Point(0, 0);
+        diagram.model = new window.go.TreeModel(modelData.nodes);
+        diagram.layoutDiagram(true);
+        diagram.position = new window.go.Point(0, 0);
         if (msgEl) { msgEl.style.display = "none"; }
       }
       window.addEventListener("message", function (event) {
