@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.1.1
+// @version      0.2.0
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -9,7 +9,9 @@
 // @run-at       document-start
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_xmlhttpRequest
 // @connect      cdn.jsdelivr.net
+// @connect      api.autodarts.io
 // @downloadURL  https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/dist/autodarts-tournament-assistant.user.js
 // @updateURL    https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/dist/autodarts-tournament-assistant.user.js
 // ==/UserScript==
@@ -19,13 +21,19 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.1.1";
+  const APP_VERSION = "0.2.0";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 1;
   const SAVE_DEBOUNCE_MS = 150;
   const UI_HOST_ID = "ata-ui-host";
   const TOGGLE_EVENT = "ata:toggle-request";
   const READY_EVENT = "ata:ready";
+  const API_PROVIDER = "api.autodarts.io";
+  const API_GS_BASE = `https://${API_PROVIDER}/gs/v0`;
+  const API_AS_BASE = `https://${API_PROVIDER}/as/v0`;
+  const API_SYNC_INTERVAL_MS = 2500;
+  const API_AUTH_NOTICE_THROTTLE_MS = 15000;
+  const API_REQUEST_TIMEOUT_MS = 12000;
 
   const BRACKET_VIEWER_JS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.js";
   const BRACKET_VIEWER_CSS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.css";
@@ -80,6 +88,12 @@
       queued: false,
       lastScanAt: 0,
       lastFingerprint: "",
+    },
+    apiAutomation: {
+      syncing: false,
+      startingMatchId: "",
+      authBackoffUntil: 0,
+      lastAuthNoticeAt: 0,
     },
     cleanupStack: [],
   };
@@ -237,6 +251,47 @@
     return allowed.has(score) ? score : 501;
   }
 
+  function normalizeAutomationStatus(value, fallback = "idle") {
+    return ["idle", "started", "completed", "error"].includes(value) ? value : fallback;
+  }
+
+  function normalizeAutomationMeta(rawAuto) {
+    const auto = rawAuto && typeof rawAuto === "object" ? rawAuto : {};
+    const lobbyId = normalizeText(auto.lobbyId || "");
+    let status = normalizeAutomationStatus(normalizeText(auto.status || ""), lobbyId ? "started" : "idle");
+    if (!lobbyId && status !== "error") {
+      status = "idle";
+    }
+    return {
+      provider: API_PROVIDER,
+      lobbyId: lobbyId || null,
+      status,
+      startedAt: normalizeText(auto.startedAt || "") || null,
+      finishedAt: normalizeText(auto.finishedAt || "") || null,
+      lastSyncAt: normalizeText(auto.lastSyncAt || "") || null,
+      lastError: normalizeText(auto.lastError || "") || null,
+    };
+  }
+
+  function normalizeMatchMeta(rawMeta) {
+    const meta = rawMeta && typeof rawMeta === "object" ? rawMeta : {};
+    return {
+      ...meta,
+      auto: normalizeAutomationMeta(meta.auto),
+    };
+  }
+
+  function ensureMatchAutoMeta(match) {
+    if (!match || typeof match !== "object") {
+      return normalizeAutomationMeta(null);
+    }
+    if (!match.meta || typeof match.meta !== "object") {
+      match.meta = {};
+    }
+    match.meta.auto = normalizeAutomationMeta(match.meta.auto);
+    return match.meta.auto;
+  }
+
   function normalizeTournament(rawTournament) {
     if (!rawTournament || typeof rawTournament !== "object") {
       return null;
@@ -286,7 +341,7 @@
         p2: clampInt(match?.legs?.p2, 0, 0, 50),
       },
       updatedAt: normalizeText(match?.updatedAt || nowIso()),
-      meta: match?.meta && typeof match.meta === "object" ? match.meta : {},
+      meta: normalizeMatchMeta(match?.meta),
     }));
 
     return {
@@ -442,7 +497,7 @@
       source: null,
       legs: { p1: 0, p2: 0 },
       updatedAt: nowIso(),
-      meta,
+      meta: normalizeMatchMeta(meta),
     };
   }
 
@@ -749,6 +804,13 @@
     match.winnerId = null;
     match.source = null;
     match.legs = { p1: 0, p2: 0 };
+    const auto = ensureMatchAutoMeta(match);
+    auto.lobbyId = null;
+    auto.status = "idle";
+    auto.startedAt = null;
+    auto.finishedAt = null;
+    auto.lastSyncAt = null;
+    auto.lastError = null;
     match.updatedAt = nowIso();
   }
 
@@ -908,13 +970,596 @@
     match.winnerId = winnerId;
     match.source = source === "auto" ? "auto" : "manual";
     match.legs = { p1: p1Legs, p2: p2Legs };
-    match.updatedAt = nowIso();
+    const now = nowIso();
+    const auto = ensureMatchAutoMeta(match);
+    if (source === "auto") {
+      auto.status = "completed";
+      auto.finishedAt = now;
+      auto.lastSyncAt = now;
+      auto.lastError = null;
+    } else if (auto.lobbyId || auto.status === "started" || auto.status === "error") {
+      auto.status = "completed";
+      auto.finishedAt = now;
+      auto.lastSyncAt = now;
+      auto.lastError = null;
+    }
+    match.updatedAt = now;
 
     refreshDerivedMatches(tournament);
-    tournament.updatedAt = nowIso();
+    tournament.updatedAt = now;
     schedulePersist();
     renderShell();
     return { ok: true };
+  }
+
+  function shouldShowAuthNotice() {
+    const now = Date.now();
+    if (now - state.apiAutomation.lastAuthNoticeAt < API_AUTH_NOTICE_THROTTLE_MS) {
+      return false;
+    }
+    state.apiAutomation.lastAuthNoticeAt = now;
+    return true;
+  }
+
+  function getAuthTokenFromCookie() {
+    try {
+      const value = `; ${document.cookie || ""}`;
+      const parts = value.split("; Authorization=");
+      if (parts.length !== 2) {
+        return "";
+      }
+      let token = parts.pop().split(";").shift() || "";
+      try {
+        token = decodeURIComponent(token);
+      } catch (_) {
+        // Keep raw token if decoding fails.
+      }
+      token = String(token).trim().replace(/^Bearer\s+/i, "");
+      return token;
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function getBoardId() {
+    try {
+      let boardId = localStorage.getItem("autodarts-board");
+      if (!boardId) {
+        return "";
+      }
+      try {
+        const parsed = JSON.parse(boardId);
+        if (typeof parsed === "string") {
+          boardId = parsed;
+        }
+      } catch (_) {
+        // Keep raw value when localStorage entry is not JSON encoded.
+      }
+      return normalizeText(String(boardId || "").replace(/^"+|"+$/g, ""));
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function createApiError(status, message, body) {
+    const error = new Error(String(message || "API request failed."));
+    error.status = Number(status || 0);
+    error.body = body;
+    return error;
+  }
+
+  function extractApiErrorMessage(status, body) {
+    if (typeof body === "string" && normalizeText(body)) {
+      return `HTTP ${status}: ${normalizeText(body)}`;
+    }
+    if (body && typeof body === "object") {
+      const candidate = normalizeText(body.message || body.error || body.detail || body.title || "");
+      if (candidate) {
+        return `HTTP ${status}: ${candidate}`;
+      }
+    }
+    return `HTTP ${status}`;
+  }
+
+  function parseJsonOrText(rawText) {
+    const text = String(rawText || "");
+    if (!text) {
+      return null;
+    }
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      return text;
+    }
+  }
+
+  async function requestJsonViaGm(method, url, payload, headers) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method,
+        url,
+        timeout: API_REQUEST_TIMEOUT_MS,
+        headers,
+        data: payload ? JSON.stringify(payload) : undefined,
+        onload: (response) => {
+          const status = Number(response?.status || 0);
+          const body = parseJsonOrText(response?.responseText || "");
+          if (status >= 200 && status < 300) {
+            resolve(body || {});
+            return;
+          }
+          reject(createApiError(status, extractApiErrorMessage(status, body), body));
+        },
+        onerror: () => {
+          reject(createApiError(0, "Netzwerkfehler bei API-Anfrage.", null));
+        },
+        ontimeout: () => {
+          reject(createApiError(0, "API-Anfrage Timeout.", null));
+        },
+      });
+    });
+  }
+
+  async function requestJsonViaFetch(method, url, payload, headers) {
+    const response = await fetch(url, {
+      method,
+      headers,
+      body: payload ? JSON.stringify(payload) : undefined,
+      cache: "no-store",
+      credentials: "omit",
+    });
+    const text = await response.text();
+    const body = parseJsonOrText(text);
+    if (!response.ok) {
+      throw createApiError(response.status, extractApiErrorMessage(response.status, body), body);
+    }
+    return body || {};
+  }
+
+  async function apiRequestJson(method, url, payload, token) {
+    const headers = { Accept: "application/json" };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    if (payload) {
+      headers["Content-Type"] = "application/json";
+    }
+
+    if (typeof GM_xmlhttpRequest === "function") {
+      try {
+        return await requestJsonViaGm(method, url, payload, headers);
+      } catch (error) {
+        const status = Number(error?.status || 0);
+        if (status > 0) {
+          throw error;
+        }
+        logWarn("api", "GM_xmlhttpRequest failed, falling back to fetch().", error);
+      }
+    }
+
+    return requestJsonViaFetch(method, url, payload, headers);
+  }
+
+  async function createLobby(payload, token) {
+    return apiRequestJson("POST", `${API_GS_BASE}/lobbies`, payload, token);
+  }
+
+  async function addLobbyPlayer(lobbyId, name, boardId, token) {
+    return apiRequestJson("POST", `${API_GS_BASE}/lobbies/${encodeURIComponent(lobbyId)}/players`, { name, boardId }, token);
+  }
+
+  async function startLobby(lobbyId, token) {
+    return apiRequestJson("POST", `${API_GS_BASE}/lobbies/${encodeURIComponent(lobbyId)}/start`, null, token);
+  }
+
+  async function fetchMatchStats(lobbyId, token) {
+    return apiRequestJson("GET", `${API_AS_BASE}/matches/${encodeURIComponent(lobbyId)}/stats`, null, token);
+  }
+
+  function getDuplicateParticipantNames(tournament) {
+    const seen = new Map();
+    const duplicates = [];
+    (tournament?.participants || []).forEach((participant) => {
+      const key = normalizeLookup(participant?.name || "");
+      if (!key) {
+        return;
+      }
+      if (seen.has(key)) {
+        duplicates.push(participant.name);
+        return;
+      }
+      seen.set(key, participant.name);
+    });
+    return duplicates;
+  }
+
+  function findActiveStartedMatch(tournament, excludeMatchId = "") {
+    if (!tournament) {
+      return null;
+    }
+    return tournament.matches.find((match) => {
+      if (excludeMatchId && match.id === excludeMatchId) {
+        return false;
+      }
+      if (match.status !== STATUS_PENDING) {
+        return false;
+      }
+      const auto = ensureMatchAutoMeta(match);
+      return Boolean(auto.lobbyId && auto.status === "started");
+    }) || null;
+  }
+
+  function buildLobbyCreatePayload(tournament) {
+    const legsToWin = Math.floor(sanitizeBestOf(tournament.bestOfLegs) / 2) + 1;
+    return {
+      variant: "X01",
+      isPrivate: true,
+      legs: legsToWin,
+      settings: {
+        baseScore: sanitizeStartScore(tournament.startScore),
+        inMode: "Straight",
+        outMode: "Double",
+        bullMode: "25/50",
+        maxRounds: 50,
+        bullOffMode: "Normal",
+      },
+    };
+  }
+
+  function openMatchPage(lobbyId) {
+    if (!normalizeText(lobbyId)) {
+      return;
+    }
+    window.location.href = `${window.location.origin}/matches/${encodeURIComponent(lobbyId)}`;
+  }
+
+  function resolveWinnerIdFromApiName(tournament, match, winnerName) {
+    const normalizedWinner = normalizeLookup(winnerName);
+    if (!normalizedWinner || !match?.player1Id || !match?.player2Id) {
+      return "";
+    }
+
+    const p1 = participantById(tournament, match.player1Id);
+    const p2 = participantById(tournament, match.player2Id);
+    const p1Name = normalizeLookup(p1?.name || "");
+    const p2Name = normalizeLookup(p2?.name || "");
+    if (!p1Name || !p2Name || p1Name === p2Name) {
+      return "";
+    }
+    if (p1Name === normalizedWinner) {
+      return match.player1Id;
+    }
+    if (p2Name === normalizedWinner) {
+      return match.player2Id;
+    }
+    return "";
+  }
+
+  function getApiMatchLegsFromStats(data) {
+    return {
+      p1: clampInt(data?.matchStats?.[0]?.legsWon, 0, 0, 50),
+      p2: clampInt(data?.matchStats?.[1]?.legsWon, 0, 0, 50),
+    };
+  }
+
+  function getApiMatchStartUi(match, activeStartedMatch) {
+    const auto = ensureMatchAutoMeta(match);
+    if (auto.lobbyId) {
+      return {
+        label: "Zum Match",
+        disabled: false,
+        title: "Oeffnet das bereits gestartete Match.",
+      };
+    }
+
+    if (!state.store.settings.featureFlags.autoLobbyStart) {
+      return {
+        label: "Match starten",
+        disabled: true,
+        title: "Feature-Flag in Einstellungen aktivieren.",
+      };
+    }
+
+    if (match.status !== STATUS_PENDING) {
+      return {
+        label: "Match starten",
+        disabled: true,
+        title: "Match ist bereits abgeschlossen.",
+      };
+    }
+
+    if (!match.player1Id || !match.player2Id) {
+      return {
+        label: "Match starten",
+        disabled: true,
+        title: "Match ist noch nicht vollstaendig gesetzt.",
+      };
+    }
+
+    if (activeStartedMatch && activeStartedMatch.id !== match.id) {
+      return {
+        label: "Match starten",
+        disabled: true,
+        title: "Es laeuft bereits ein aktives Match.",
+      };
+    }
+
+    if (state.apiAutomation.startingMatchId && state.apiAutomation.startingMatchId !== match.id) {
+      return {
+        label: "Match starten",
+        disabled: true,
+        title: "Ein anderer Matchstart laeuft bereits.",
+      };
+    }
+
+    if (state.apiAutomation.startingMatchId === match.id) {
+      return {
+        label: "Startet...",
+        disabled: true,
+        title: "Lobby wird erstellt.",
+      };
+    }
+
+    return {
+      label: "Match starten",
+      disabled: false,
+      title: "Erstellt Lobby, fuegt Spieler hinzu und startet automatisch.",
+    };
+  }
+
+  function getApiMatchStatusText(match) {
+    const auto = ensureMatchAutoMeta(match);
+    if (auto.status === "completed") {
+      return "API-Sync: abgeschlossen";
+    }
+    if (auto.status === "started" && auto.lobbyId) {
+      return `API-Sync: aktiv (Lobby ${auto.lobbyId})`;
+    }
+    if (auto.status === "error") {
+      return `API-Sync: Fehler${auto.lastError ? ` (${auto.lastError})` : ""}`;
+    }
+    return "API-Sync: nicht gestartet";
+  }
+
+  async function handleStartMatch(matchId) {
+    const tournament = state.store.tournament;
+    if (!tournament) {
+      return;
+    }
+
+    const match = findMatch(tournament, matchId);
+    if (!match) {
+      setNotice("error", "Match nicht gefunden.");
+      return;
+    }
+
+    const auto = ensureMatchAutoMeta(match);
+    if (auto.lobbyId) {
+      openMatchPage(auto.lobbyId);
+      return;
+    }
+
+    if (!state.store.settings.featureFlags.autoLobbyStart) {
+      setNotice("info", "Auto-Lobby ist deaktiviert. Bitte im Tab Einstellungen aktivieren.");
+      return;
+    }
+
+    if (match.status !== STATUS_PENDING || !match.player1Id || !match.player2Id) {
+      setNotice("error", "Match kann aktuell nicht gestartet werden.");
+      return;
+    }
+
+    const duplicates = getDuplicateParticipantNames(tournament);
+    if (duplicates.length) {
+      setNotice("error", "Fuer Auto-Sync muessen Teilnehmernamen eindeutig sein.");
+      return;
+    }
+
+    const activeMatch = findActiveStartedMatch(tournament, match.id);
+    if (activeMatch) {
+      const activeAuto = ensureMatchAutoMeta(activeMatch);
+      setNotice("info", "Es laeuft bereits ein aktives Match. Weiterleitung dorthin.");
+      if (activeAuto.lobbyId) {
+        openMatchPage(activeAuto.lobbyId);
+      }
+      return;
+    }
+
+    const token = getAuthTokenFromCookie();
+    if (!token) {
+      setNotice("error", "Kein Autodarts-Token gefunden. Bitte einloggen und Seite neu laden.");
+      return;
+    }
+
+    const boardId = getBoardId();
+    if (!boardId) {
+      setNotice("error", "Board-ID fehlt. Bitte einmal manuell eine Lobby oeffnen und Board auswaehlen.");
+      return;
+    }
+
+    const participant1 = participantById(tournament, match.player1Id);
+    const participant2 = participantById(tournament, match.player2Id);
+    if (!participant1 || !participant2) {
+      setNotice("error", "Teilnehmerzuordnung im Match ist unvollstaendig.");
+      return;
+    }
+
+    let createdLobbyId = "";
+    state.apiAutomation.startingMatchId = match.id;
+    renderShell();
+
+    try {
+      const lobby = await createLobby(buildLobbyCreatePayload(tournament), token);
+      createdLobbyId = normalizeText(lobby?.id || lobby?.uuid || "");
+      if (!createdLobbyId) {
+        throw createApiError(0, "Lobby konnte nicht erstellt werden (keine Lobby-ID).", lobby);
+      }
+
+      await addLobbyPlayer(createdLobbyId, participant1.name, boardId, token);
+      await addLobbyPlayer(createdLobbyId, participant2.name, boardId, token);
+      await startLobby(createdLobbyId, token);
+
+      const now = nowIso();
+      auto.provider = API_PROVIDER;
+      auto.lobbyId = createdLobbyId;
+      auto.status = "started";
+      auto.startedAt = auto.startedAt || now;
+      auto.finishedAt = null;
+      auto.lastSyncAt = now;
+      auto.lastError = null;
+      match.updatedAt = now;
+      tournament.updatedAt = now;
+
+      schedulePersist();
+      renderShell();
+      setNotice("success", "Match gestartet. Weiterleitung ins Match.");
+      openMatchPage(createdLobbyId);
+    } catch (error) {
+      const message = normalizeText(error?.message || "Unbekannter API-Fehler.") || "Unbekannter API-Fehler.";
+      const now = nowIso();
+      auto.provider = API_PROVIDER;
+      auto.lobbyId = createdLobbyId || auto.lobbyId || null;
+      auto.status = "error";
+      auto.lastError = message;
+      auto.lastSyncAt = now;
+      match.updatedAt = now;
+      tournament.updatedAt = now;
+      schedulePersist();
+      renderShell();
+      setNotice("error", `Matchstart fehlgeschlagen: ${message}`);
+      logWarn("api", "Match start failed.", error);
+    } finally {
+      state.apiAutomation.startingMatchId = "";
+      renderShell();
+    }
+  }
+
+  async function syncPendingApiMatches() {
+    if (state.apiAutomation.syncing) {
+      return;
+    }
+    if (!state.store.settings.featureFlags.autoLobbyStart) {
+      return;
+    }
+    if (Date.now() < state.apiAutomation.authBackoffUntil) {
+      return;
+    }
+
+    const tournament = state.store.tournament;
+    if (!tournament) {
+      return;
+    }
+
+    const syncTargets = tournament.matches.filter((match) => {
+      if (match.status !== STATUS_PENDING) {
+        return false;
+      }
+      const auto = ensureMatchAutoMeta(match);
+      return Boolean(auto.lobbyId && auto.status === "started");
+    });
+
+    if (!syncTargets.length) {
+      return;
+    }
+
+    const token = getAuthTokenFromCookie();
+    if (!token) {
+      state.apiAutomation.authBackoffUntil = Date.now() + API_AUTH_NOTICE_THROTTLE_MS;
+      if (shouldShowAuthNotice()) {
+        setNotice("error", "Auto-Sync pausiert: kein Auth-Token gefunden. Bitte neu einloggen.");
+      }
+      return;
+    }
+
+    state.apiAutomation.syncing = true;
+    let hasMetaUpdates = false;
+
+    try {
+      for (const match of syncTargets) {
+        const auto = ensureMatchAutoMeta(match);
+        if (!auto.lobbyId) {
+          continue;
+        }
+
+        try {
+          const stats = await fetchMatchStats(auto.lobbyId, token);
+          if (auto.lastError) {
+            auto.lastSyncAt = nowIso();
+            auto.lastError = null;
+            hasMetaUpdates = true;
+          }
+
+          const winnerIndex = Number(stats?.winner);
+          if (!Number.isInteger(winnerIndex) || winnerIndex < 0) {
+            continue;
+          }
+
+          const winnerName = normalizeText(stats?.players?.[winnerIndex]?.name || "");
+          const winnerId = resolveWinnerIdFromApiName(tournament, match, winnerName);
+          if (!winnerId) {
+            auto.status = "error";
+            auto.lastError = "Gewinner konnte nicht eindeutig zugeordnet werden.";
+            match.updatedAt = nowIso();
+            hasMetaUpdates = true;
+            setNotice("error", `Auto-Sync Fehler bei ${match.id}: Gewinner nicht zuordenbar.`);
+            continue;
+          }
+
+          const legs = getApiMatchLegsFromStats(stats);
+          const result = updateMatchResult(match.id, winnerId, legs, "auto");
+          if (!result.ok) {
+            auto.lastError = result.message || "Auto-Sync konnte Ergebnis nicht speichern.";
+            match.updatedAt = nowIso();
+            hasMetaUpdates = true;
+            continue;
+          }
+
+          const updatedMatch = findMatch(tournament, match.id);
+          if (updatedMatch) {
+            const updatedAuto = ensureMatchAutoMeta(updatedMatch);
+            updatedAuto.provider = API_PROVIDER;
+            updatedAuto.status = "completed";
+            updatedAuto.finishedAt = nowIso();
+            updatedAuto.lastSyncAt = nowIso();
+            updatedAuto.lastError = null;
+            updatedMatch.updatedAt = nowIso();
+            hasMetaUpdates = true;
+          }
+        } catch (error) {
+          const status = Number(error?.status || 0);
+          if (status === 401 || status === 403) {
+            state.apiAutomation.authBackoffUntil = Date.now() + API_AUTH_NOTICE_THROTTLE_MS;
+            if (shouldShowAuthNotice()) {
+              setNotice("error", "Auto-Sync pausiert: Auth abgelaufen. Bitte neu einloggen.");
+            }
+            logWarn("api", "Auto-sync auth error.", error);
+            return;
+          }
+          if (status === 404) {
+            continue;
+          }
+          const errorMessage = normalizeText(error?.message || "API-Sync fehlgeschlagen.") || "API-Sync fehlgeschlagen.";
+          const lastSyncAtMs = auto.lastSyncAt ? Date.parse(auto.lastSyncAt) : 0;
+          const shouldPersistError = auto.lastError !== errorMessage || !Number.isFinite(lastSyncAtMs) || (Date.now() - lastSyncAtMs > API_AUTH_NOTICE_THROTTLE_MS);
+          if (shouldPersistError) {
+            auto.lastError = errorMessage;
+            auto.lastSyncAt = nowIso();
+            match.updatedAt = nowIso();
+            hasMetaUpdates = true;
+          }
+          logWarn("api", `Auto-sync failed for ${match.id}.`, error);
+        }
+      }
+    } finally {
+      state.apiAutomation.syncing = false;
+      if (hasMetaUpdates) {
+        if (state.store.tournament) {
+          state.store.tournament.updatedAt = nowIso();
+        }
+        schedulePersist();
+        renderShell();
+      }
+    }
   }
 
   function buildStyles() {
@@ -926,25 +1571,28 @@
         --ata-space-4: 16px;
         --ata-space-5: 20px;
         --ata-space-6: 24px;
-        --ata-radius-sm: 8px;
-        --ata-radius-md: 12px;
-        --ata-radius-lg: 18px;
-        --ata-shadow-lg: 0 18px 52px rgba(0, 0, 0, 0.32);
-        --ata-font-body: "Space Grotesk", "Segoe UI", Tahoma, sans-serif;
-        --ata-font-head: "Barlow Condensed", "Segoe UI", Tahoma, sans-serif;
-        --ata-color-bg: #0d1319;
-        --ata-color-bg-panel: #14202a;
-        --ata-color-bg-soft: #1b2c39;
-        --ata-color-text: #e7eef4;
-        --ata-color-muted: #9db4c5;
-        --ata-color-border: #2a4152;
-        --ata-color-accent: #1fc28b;
-        --ata-color-danger: #d74f63;
+        --ata-radius-sm: 6px;
+        --ata-radius-md: 10px;
+        --ata-radius-lg: 16px;
+        --ata-shadow-lg: 0 18px 52px rgba(3, 8, 23, 0.52);
+        --ata-font-body: "Open Sans", "Segoe UI", Tahoma, sans-serif;
+        --ata-font-head: "Audiowide", "Open Sans", "Segoe UI", Tahoma, sans-serif;
+        --ata-color-bg: #162d56;
+        --ata-color-bg-panel: #2c326d;
+        --ata-color-bg-panel-2: #1f3f71;
+        --ata-color-bg-soft: rgba(255, 255, 255, 0.1);
+        --ata-color-text: #f4f7ff;
+        --ata-color-muted: rgba(232, 237, 255, 0.74);
+        --ata-color-border: rgba(255, 255, 255, 0.2);
+        --ata-color-accent: #5ad299;
+        --ata-color-danger: #fc8181;
+        --ata-color-focus: #ffd34f;
         --ata-z-overlay: 2147483000;
         color: var(--ata-color-text);
         font-family: var(--ata-font-body);
         font-size: 14px;
-        line-height: 1.35;
+        line-height: 1.4;
+        color-scheme: dark;
       }
 
       .ata-root {
@@ -957,8 +1605,10 @@
       .ata-overlay {
         position: absolute;
         inset: 0;
-        background: radial-gradient(circle at 10% 10%, rgba(31, 194, 139, 0.16), transparent 55%),
-          linear-gradient(120deg, rgba(5, 8, 11, 0.54), rgba(5, 8, 11, 0.7));
+        background:
+          radial-gradient(circle at 15% 12%, rgba(114, 121, 224, 0.22), transparent 50%),
+          radial-gradient(circle at 78% 8%, rgba(90, 210, 153, 0.12), transparent 48%),
+          linear-gradient(120deg, rgba(7, 11, 25, 0.54), rgba(7, 11, 25, 0.76));
         opacity: 0;
         transition: opacity 180ms ease;
       }
@@ -973,7 +1623,7 @@
         grid-template-rows: auto auto 1fr;
         transform: translateX(100%);
         transition: transform 220ms ease;
-        background: linear-gradient(170deg, var(--ata-color-bg-panel), var(--ata-color-bg));
+        background: linear-gradient(180deg, var(--ata-color-bg-panel), var(--ata-color-bg-panel-2) 42%, var(--ata-color-bg));
         box-shadow: var(--ata-shadow-lg);
         border-left: 1px solid var(--ata-color-border);
         pointer-events: auto;
@@ -998,14 +1648,16 @@
         gap: var(--ata-space-4);
         padding: var(--ata-space-5);
         border-bottom: 1px solid var(--ata-color-border);
+        background: rgba(255, 255, 255, 0.03);
       }
 
       .ata-title-wrap h2 {
         margin: 0;
         font-family: var(--ata-font-head);
-        letter-spacing: 0.4px;
-        font-size: 30px;
+        letter-spacing: 0.6px;
+        font-size: 28px;
         line-height: 1;
+        text-transform: uppercase;
       }
 
       .ata-title-wrap p {
@@ -1014,16 +1666,22 @@
       }
 
       .ata-version {
-        color: var(--ata-color-accent);
+        color: #ffd34f;
       }
 
       .ata-close-btn {
         border: 1px solid var(--ata-color-border);
-        background: var(--ata-color-bg-soft);
+        background: rgba(255, 255, 255, 0.12);
         color: var(--ata-color-text);
         border-radius: var(--ata-radius-sm);
         padding: var(--ata-space-2) var(--ata-space-3);
         cursor: pointer;
+        transition: background 120ms ease, border-color 120ms ease;
+      }
+
+      .ata-close-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: rgba(255, 255, 255, 0.36);
       }
 
       .ata-tabs {
@@ -1032,28 +1690,44 @@
         overflow-x: auto;
         padding: var(--ata-space-3) var(--ata-space-5);
         border-bottom: 1px solid var(--ata-color-border);
+        background: rgba(255, 255, 255, 0.02);
       }
 
       .ata-tab {
         border: 1px solid var(--ata-color-border);
-        background: transparent;
+        background: rgba(255, 255, 255, 0.06);
         color: var(--ata-color-text);
         border-radius: 999px;
         padding: 7px 14px;
         cursor: pointer;
         white-space: nowrap;
+        transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+      }
+
+      .ata-tab:hover {
+        background: rgba(255, 255, 255, 0.16);
+        border-color: rgba(255, 255, 255, 0.34);
       }
 
       .ata-tab[data-active="1"] {
-        background: var(--ata-color-accent);
-        border-color: var(--ata-color-accent);
-        color: #03150f;
+        background: #fff;
+        border-color: #fff;
+        color: #1e2d56;
         font-weight: 700;
       }
 
       .ata-content {
         overflow: auto;
         padding: var(--ata-space-5);
+      }
+
+      .ata-content::-webkit-scrollbar {
+        width: 10px;
+      }
+
+      .ata-content::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.24);
+        border-radius: 999px;
       }
 
       .ata-notice {
@@ -1064,32 +1738,41 @@
       }
 
       .ata-notice-info {
-        background: rgba(31, 194, 139, 0.12);
-        border-color: rgba(31, 194, 139, 0.26);
+        background: rgba(114, 121, 224, 0.18);
+        border-color: rgba(153, 160, 245, 0.36);
       }
 
       .ata-notice-error {
-        background: rgba(215, 79, 99, 0.16);
-        border-color: rgba(215, 79, 99, 0.32);
+        background: rgba(252, 129, 129, 0.18);
+        border-color: rgba(252, 129, 129, 0.36);
       }
 
       .ata-notice-success {
-        background: rgba(22, 165, 116, 0.18);
-        border-color: rgba(22, 165, 116, 0.35);
+        background: rgba(90, 210, 153, 0.18);
+        border-color: rgba(90, 210, 153, 0.38);
       }
 
-      .ata-card {
+      .ata-card,
+      .tournamentCard {
         border: 1px solid var(--ata-color-border);
-        background: rgba(27, 44, 57, 0.72);
+        background: rgba(255, 255, 255, 0.08);
         border-radius: var(--ata-radius-lg);
         padding: var(--ata-space-4);
         margin-bottom: var(--ata-space-4);
+        transition: background 150ms ease, border-color 150ms ease;
+      }
+
+      .ata-card:hover,
+      .tournamentCard:hover {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.34);
       }
 
       .ata-card h3 {
         margin: 0 0 var(--ata-space-3) 0;
-        font-size: 20px;
-        font-family: var(--ata-font-head);
+        font-size: 18px;
+        font-family: var(--ata-font-body);
+        font-weight: 700;
       }
 
       .ata-grid-2 {
@@ -1106,7 +1789,7 @@
       .ata-field label {
         color: var(--ata-color-muted);
         font-size: 12px;
-        letter-spacing: 0.3px;
+        letter-spacing: 0.5px;
         text-transform: uppercase;
       }
 
@@ -1116,10 +1799,20 @@
         width: 100%;
         border-radius: var(--ata-radius-sm);
         border: 1px solid var(--ata-color-border);
-        background: #0f1a23;
+        background: rgba(255, 255, 255, 0.1);
         color: var(--ata-color-text);
         padding: 9px 10px;
         box-sizing: border-box;
+        transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+      }
+
+      .ata-field input:focus,
+      .ata-field select:focus,
+      .ata-field textarea:focus {
+        outline: none;
+        border-color: var(--ata-color-focus);
+        box-shadow: 0 0 0 2px rgba(255, 211, 79, 0.26);
+        background: rgba(255, 255, 255, 0.14);
       }
 
       .ata-field textarea {
@@ -1135,11 +1828,26 @@
 
       .ata-btn {
         border: 1px solid var(--ata-color-border);
-        background: var(--ata-color-bg-soft);
+        background: rgba(255, 255, 255, 0.12);
         color: var(--ata-color-text);
         border-radius: var(--ata-radius-sm);
         padding: 9px 12px;
         cursor: pointer;
+        transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+      }
+
+      .ata-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: rgba(255, 255, 255, 0.36);
+      }
+
+      .ata-btn:active {
+        transform: translateY(1px);
+      }
+
+      .ata-btn[disabled] {
+        opacity: 0.5;
+        cursor: not-allowed;
       }
 
       .ata-btn-primary {
@@ -1149,9 +1857,14 @@
         font-weight: 700;
       }
 
+      .ata-btn-primary:hover {
+        background: #77dfae;
+        border-color: #77dfae;
+      }
+
       .ata-btn-danger {
-        border-color: rgba(215, 79, 99, 0.55);
-        background: rgba(215, 79, 99, 0.2);
+        border-color: rgba(252, 129, 129, 0.55);
+        background: rgba(252, 129, 129, 0.2);
       }
 
       .ata-pill {
@@ -1169,9 +1882,11 @@
         overflow-x: auto;
         border: 1px solid var(--ata-color-border);
         border-radius: var(--ata-radius-md);
+        background: rgba(255, 255, 255, 0.04);
       }
 
-      table.ata-table {
+      table.ata-table,
+      table.tournamentRanking {
         width: 100%;
         border-collapse: collapse;
         font-size: 13px;
@@ -1188,13 +1903,29 @@
       .ata-table th {
         color: var(--ata-color-muted);
         font-weight: 600;
+        text-transform: uppercase;
+        font-size: 12px;
+        letter-spacing: 0.4px;
+      }
+
+      .ata-table tbody tr:nth-of-type(odd) {
+        background: #ffffff0d;
+      }
+
+      .ata-table tbody tr:hover {
+        background: #ffd9262b;
       }
 
       .ata-score-grid {
         display: grid;
-        grid-template-columns: 1fr 1fr auto;
+        grid-template-columns: minmax(150px, 1fr) 78px 78px auto auto;
         gap: var(--ata-space-2);
-        min-width: 220px;
+        min-width: 420px;
+        align-items: center;
+      }
+
+      .ata-score-grid .ata-small {
+        grid-column: 1 / -1;
       }
 
       .ata-small {
@@ -1212,6 +1943,7 @@
         border: 1px solid var(--ata-color-border);
         border-radius: var(--ata-radius-md);
         overflow: hidden;
+        background: rgba(255, 255, 255, 0.04);
       }
 
       .ata-bracket-frame {
@@ -1223,7 +1955,7 @@
 
       .ata-bracket-fallback {
         padding: var(--ata-space-3);
-        background: #0f1a23;
+        background: rgba(255, 255, 255, 0.05);
         border-top: 1px solid var(--ata-color-border);
       }
 
@@ -1240,10 +1972,11 @@
       }
 
       .ata-bracket-match {
-        border: 1px solid rgba(157, 180, 197, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.2);
         border-radius: 6px;
         padding: 6px;
         margin-top: 8px;
+        background: #ffffff0d;
       }
 
       .ata-toggle {
@@ -1255,11 +1988,13 @@
         border-radius: var(--ata-radius-sm);
         padding: 10px 12px;
         margin-bottom: var(--ata-space-2);
+        background: rgba(255, 255, 255, 0.06);
       }
 
       .ata-toggle input {
         width: 18px;
         height: 18px;
+        accent-color: var(--ata-color-accent);
       }
 
       @media (max-width: 820px) {
@@ -1320,7 +2055,7 @@
     const tournament = state.store.tournament;
     if (!tournament) {
       return `
-        <section class="ata-card">
+        <section class="ata-card tournamentCard">
           <h3>Neues Turnier erstellen</h3>
           <form id="ata-create-form">
             <div class="ata-grid-2">
@@ -1375,13 +2110,13 @@
     )).join("");
 
     return `
-      <section class="ata-card">
+      <section class="ata-card tournamentCard">
         <h3>Aktives Turnier</h3>
         <p><b>${escapeHtml(tournament.name)}</b> (${escapeHtml(modeLabel)})</p>
         <p class="ata-small">Best-of ${tournament.bestOfLegs} Legs, Startscore ${tournament.startScore}</p>
         <div>${participantsHtml}</div>
       </section>
-      <section class="ata-card">
+      <section class="ata-card tournamentCard">
         <h3>Turnier zurucksetzen</h3>
         <p class="ata-small">Dieser Schritt loescht alle Spielstaende. Bitte vorher exportieren.</p>
         <div class="ata-actions">
@@ -1394,8 +2129,10 @@
   function renderMatchesTab() {
     const tournament = state.store.tournament;
     if (!tournament) {
-      return `<section class="ata-card"><h3>Keine Turnierdaten</h3><p>Bitte zuerst ein Turnier erstellen.</p></section>`;
+      return `<section class="ata-card tournamentCard"><h3>Keine Turnierdaten</h3><p>Bitte zuerst ein Turnier erstellen.</p></section>`;
     }
+
+    const activeStartedMatch = findActiveStartedMatch(tournament);
 
     const matches = tournament.matches.slice().sort((left, right) => {
       const stageOrder = { group: 1, league: 2, ko: 3 };
@@ -1417,6 +2154,10 @@
         : match.stage === MATCH_STAGE_LEAGUE
           ? "Liga"
           : "KO";
+      const startUi = getApiMatchStartUi(match, activeStartedMatch);
+      const startDisabledAttr = startUi.disabled ? "disabled" : "";
+      const startTitleAttr = startUi.title ? `title="${escapeHtml(startUi.title)}"` : "";
+      const autoStatus = getApiMatchStatusText(match);
 
       const winnerOptions = editable
         ? `
@@ -1442,6 +2183,8 @@
               <input type="number" min="0" max="50" data-field="legs-p1" data-match-id="${escapeHtml(match.id)}" value="${match.legs.p1}" ${editable ? "" : "disabled"}>
               <input type="number" min="0" max="50" data-field="legs-p2" data-match-id="${escapeHtml(match.id)}" value="${match.legs.p2}" ${editable ? "" : "disabled"}>
               <button type="button" class="ata-btn" data-action="save-match" data-match-id="${escapeHtml(match.id)}" ${editable ? "" : "disabled"}>Speichern</button>
+              <button type="button" class="ata-btn ata-btn-primary" data-action="start-match" data-match-id="${escapeHtml(match.id)}" ${startDisabledAttr} ${startTitleAttr}>${escapeHtml(startUi.label)}</button>
+              <div class="ata-small">${escapeHtml(autoStatus)}</div>
             </div>
           </td>
         </tr>
@@ -1449,11 +2192,11 @@
     }).join("");
 
     return `
-      <section class="ata-card">
+      <section class="ata-card tournamentCard">
         <h3>Ergebnisfuehrung</h3>
-        <p class="ata-small">Auto-Erkennung versucht offene Matches zu schliessen. Bei Unsicherheit bleibt alles manuell.</p>
+        <p class="ata-small">API-Halbautomatik: Match per Klick starten, Ergebnis wird automatisch synchronisiert. Manuelle Eingabe bleibt als Fallback aktiv.</p>
         <div class="ata-table-wrap">
-          <table class="ata-table">
+          <table class="ata-table tournamentRanking">
             <thead>
               <tr>
                 <th>Stage</th>
@@ -1490,7 +2233,7 @@
       <div class="ata-card">
         <h3>${escapeHtml(headline)}</h3>
         <div class="ata-table-wrap">
-          <table class="ata-table">
+          <table class="ata-table tournamentRanking">
             <thead>
               <tr>
                 <th>#</th>
@@ -1529,7 +2272,7 @@
       <div class="ata-card">
         <h3>Liga-Spielplan</h3>
         <div class="ata-table-wrap">
-          <table class="ata-table">
+          <table class="ata-table tournamentRanking">
             <thead>
               <tr>
                 <th>Runde</th>
@@ -1587,7 +2330,7 @@
   function renderViewTab() {
     const tournament = state.store.tournament;
     if (!tournament) {
-      return `<section class="ata-card"><h3>Keine Turnierdaten</h3><p>Bitte zuerst ein Turnier erstellen.</p></section>`;
+      return `<section class="ata-card tournamentCard"><h3>Keine Turnierdaten</h3><p>Bitte zuerst ein Turnier erstellen.</p></section>`;
     }
 
     let html = "";
@@ -1607,7 +2350,7 @@
 
     if (tournament.mode === "ko" || tournament.mode === "groups_ko") {
       html += `
-        <section class="ata-card">
+        <section class="ata-card tournamentCard">
           <h3>KO-Bracket</h3>
           <div class="ata-bracket-shell">
             <iframe id="ata-bracket-frame" class="ata-bracket-frame" title="Turnierbaum" sandbox="allow-scripts allow-same-origin"></iframe>
@@ -1623,19 +2366,19 @@
       `;
     }
 
-    return html || `<section class="ata-card"><h3>Ansicht</h3><p>Keine Daten.</p></section>`;
+    return html || `<section class="ata-card tournamentCard"><h3>Ansicht</h3><p>Keine Daten.</p></section>`;
   }
 
   function renderIOTab() {
     return `
-      <section class="ata-card">
+      <section class="ata-card tournamentCard">
         <h3>Export</h3>
         <div class="ata-actions">
           <button type="button" class="ata-btn ata-btn-primary" data-action="export-file">JSON herunterladen</button>
           <button type="button" class="ata-btn" data-action="export-clipboard">JSON in Zwischenablage</button>
         </div>
       </section>
-      <section class="ata-card">
+      <section class="ata-card tournamentCard">
         <h3>Import</h3>
         <div class="ata-field">
           <label for="ata-import-file">Datei importieren</label>
@@ -1656,7 +2399,7 @@
     const debugEnabled = state.store.settings.debug ? "checked" : "";
     const autoLobbyEnabled = state.store.settings.featureFlags.autoLobbyStart ? "checked" : "";
     return `
-      <section class="ata-card">
+      <section class="ata-card tournamentCard">
         <h3>Debug und Feature-Flags</h3>
         <div class="ata-toggle">
           <div>
@@ -1667,13 +2410,13 @@
         </div>
         <div class="ata-toggle">
           <div>
-            <strong>Automatischer Lobby-Start (Experimentell)</strong>
-            <div class="ata-small">Default OFF. Im MVP nur als Feature-Flag vorbereitet.</div>
+            <strong>Automatischer Lobby-Start + API-Sync</strong>
+            <div class="ata-small">Default OFF. Aktiviert Matchstart per Klick und automatische Ergebnisuebernahme aus der Autodarts-API.</div>
           </div>
           <input type="checkbox" id="ata-setting-autolobby" data-action="toggle-autolobby" ${autoLobbyEnabled}>
         </div>
       </section>
-      <section class="ata-card">
+      <section class="ata-card tournamentCard">
         <h3>Storage</h3>
         <p class="ata-small"><code>${escapeHtml(STORAGE_KEY)}</code>, schemaVersion ${STORAGE_SCHEMA_VERSION}</p>
       </section>
@@ -1750,6 +2493,19 @@
       });
     });
 
+    shadow.querySelectorAll("[data-action='start-match']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const matchId = button.getAttribute("data-match-id");
+        if (!matchId) {
+          return;
+        }
+        handleStartMatch(matchId).catch((error) => {
+          logError("api", "Start-match handler failed unexpectedly.", error);
+          setNotice("error", "Matchstart ist unerwartet fehlgeschlagen.");
+        });
+      });
+    });
+
     const resetButton = shadow.querySelector("[data-action='reset-tournament']");
     if (resetButton) {
       resetButton.addEventListener("click", () => {
@@ -1790,8 +2546,16 @@
     if (autoLobbyToggle instanceof HTMLInputElement) {
       autoLobbyToggle.addEventListener("change", () => {
         state.store.settings.featureFlags.autoLobbyStart = autoLobbyToggle.checked;
+        if (!autoLobbyToggle.checked) {
+          state.apiAutomation.authBackoffUntil = 0;
+        }
         schedulePersist();
-        setNotice("info", `Feature-Flag Auto-Lobby: ${autoLobbyToggle.checked ? "ON" : "OFF"}.`, 2200);
+        setNotice("info", `Auto-Lobby + API-Sync: ${autoLobbyToggle.checked ? "ON" : "OFF"}.`, 2200);
+        if (autoLobbyToggle.checked) {
+          syncPendingApiMatches().catch((error) => {
+            logWarn("api", "Immediate sync after toggle failed.", error);
+          });
+        }
       });
     }
 
@@ -1938,6 +2702,8 @@
       return;
     }
     state.store.tournament = null;
+    state.apiAutomation.startingMatchId = "";
+    state.apiAutomation.authBackoffUntil = 0;
     schedulePersist();
     setNotice("success", "Turnier wurde geloescht.");
     state.activeTab = "tournament";
@@ -2574,6 +3340,11 @@
     installRouteHooks();
     startAutoDetectionObserver();
     setupRuntimeApi();
+    addInterval(() => {
+      syncPendingApiMatches().catch((error) => {
+        logWarn("api", "Background sync loop failed.", error);
+      });
+    }, API_SYNC_INTERVAL_MS);
 
     state.ready = true;
     window.dispatchEvent(new CustomEvent(READY_EVENT, {
@@ -2588,3 +3359,4 @@
     logError("runtime", "Initialization failed.", error);
   });
 })();
+

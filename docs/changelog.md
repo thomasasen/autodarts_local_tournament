@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0
+- API-Halbautomatik umgesetzt:
+  - Matchstart per Button im Tab `Spiele` (`Match starten` / `Zum Match`).
+  - Automatische Ergebnissynchronisierung ueber Autodarts-API fuer gestartete Matches.
+  - Single-active-match-Regel (ein aktives gestartetes Match gleichzeitig).
+- Persistenter Automationsstatus pro Match in `match.meta.auto` (abwaertskompatibel).
+- Userscript-Metadaten erweitert um `GM_xmlhttpRequest` und `@connect api.autodarts.io`.
+- Loader-Metadaten erweitert um `@connect api.autodarts.io` fuer API-Zugriffe im Loader-Kontext.
+- Settings-Text aktualisiert: `Automatischer Lobby-Start + API-Sync` ist jetzt funktional.
+
 ## 0.1.2
 - Alle Loader- und Script-Metadaten auf das korrekte Repo `thomasasen/autodarts_local_tournament` umgestellt (`namespace`, `downloadURL`, `updateURL`, RAW-Quelle).
 - Menuebezeichnung auf `xLokale Turniere` geaendert.

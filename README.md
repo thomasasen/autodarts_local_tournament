@@ -10,6 +10,7 @@ MVP-Userscript fuer lokale Turniere direkt in `https://play.autodarts.io`.
   - Liga (Round Robin)
   - Gruppenphase + KO (2 Gruppen, Top2, Kreuz-Halbfinale)
 - Ergebnisfuehrung:
+  - API-Halbautomatik (Start per Klick + Ergebnis-Sync) bei aktivem Feature-Flag
   - Auto-Erkennung aus DOM (striktes Matching)
   - Manuelle Winner-/Leg-Eingabe
 - Ansicht:
@@ -50,7 +51,7 @@ autodarts_local_tournament/
 
 ## Nutzung
 1. Tab `Turnier`: neues Turnier anlegen (Name, Modus, Teilnehmer, Best-of, Startscore).
-2. Tab `Spiele`: Winner/Legs pflegen oder Auto-Uebernahme abwarten.
+2. Tab `Spiele`: Match per `Match starten` starten oder manuell pflegen; API/DOM-Auto-Uebernahme aktualisiert Ergebnisse.
 3. Tab `Ansicht`: Tabellen und Bracket pruefen.
 4. Tab `Import/Export`: JSON sichern oder wieder einspielen.
 5. Tab `Einstellungen`: Debug und Feature-Flags.
@@ -61,6 +62,7 @@ autodarts_local_tournament/
   - `[ATA][storage]`
   - `[ATA][route]`
   - `[ATA][autodetect]`
+  - `[ATA][api]`
   - `[ATA][bracket]`
   - `[ATA][runtime]`
 
@@ -101,7 +103,7 @@ autodarts_local_tournament/
 ## Limitationen
 - Teilnehmerlimit im MVP: `2..8`.
 - Gruppenphase + KO im MVP: mindestens `5` Teilnehmer.
-- Auto-Lobby-Start nur Feature-Flag (default OFF, keine robuste Backend-Steuerung).
+- Auto-Lobby + API-Sync bleibt experimentell und basiert auf nicht offiziell dokumentierten API-Endpunkten (Inference).
 - Auto-Erkennung ist selektorabhaengig und daher best-effort.
 
 ## Quellen / Orientierung

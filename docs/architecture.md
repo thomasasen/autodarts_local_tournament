@@ -19,6 +19,8 @@
   - `mode`: `ko | league | groups_ko`
   - `participants` (2..8)
   - `matches` mit `status`, `winnerId`, `legs`, `source`.
+  - pro Match optionale API-Automationsmetadaten unter `match.meta.auto`:
+    - `provider`, `lobbyId`, `status`, `startedAt`, `finishedAt`, `lastSyncAt`, `lastError`.
 
 ## Turnierlogik
 - KO:
@@ -55,3 +57,15 @@
   - Polling-Fallback (1s).
 - Lifecycle:
   - zentrale Cleanup-Registry fuer Listener/Observer/Intervalle.
+
+## API-Halbautomatik
+- Aktiviert ueber `settings.featureFlags.autoLobbyStart`.
+- Matchstart per UI-Button im Tab `Spiele`:
+  - erstellt Lobby (`/gs/v0/lobbies`)
+  - fuegt Spieler hinzu (`/gs/v0/lobbies/{id}/players`)
+  - startet Lobby (`/gs/v0/lobbies/{id}/start`)
+- Ergebnis-Sync im Intervall:
+  - liest Match-Stats (`/as/v0/matches/{id}/stats`)
+  - uebernimmt Winner/Legs automatisch in das lokale Turnier.
+- Single-active-match-Regel:
+  - nur ein aktives gestartetes Match gleichzeitig.
