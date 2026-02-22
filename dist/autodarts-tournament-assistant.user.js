@@ -2437,6 +2437,49 @@
         background: #ffd9262b;
       }
 
+      .ata-table tr.ata-row-inactive {
+        background: rgba(17, 27, 49, 0.62) !important;
+      }
+
+      .ata-table tr.ata-row-inactive td {
+        color: rgba(211, 223, 250, 0.78);
+      }
+
+      .ata-table tr.ata-row-completed {
+        background: rgba(90, 210, 153, 0.12) !important;
+      }
+
+      .ata-table tr.ata-row-completed td {
+        border-bottom-color: rgba(90, 210, 153, 0.28);
+      }
+
+      .ata-pill-open-slot {
+        display: inline-block;
+        color: #ffd34f;
+        font-weight: 700;
+      }
+
+      .ata-match-status {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 2px 10px;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        background: rgba(255, 255, 255, 0.08);
+        font-weight: 700;
+      }
+
+      .ata-match-status-open {
+        border-color: rgba(188, 205, 245, 0.38);
+        color: #e8efff;
+      }
+
+      .ata-match-status-completed {
+        border-color: rgba(90, 210, 153, 0.5);
+        background: rgba(90, 210, 153, 0.18);
+        color: #72e5b0;
+      }
+
       .ata-score-grid {
         display: grid;
         grid-template-columns: minmax(180px, 1fr) minmax(170px, 210px) minmax(170px, 210px) auto auto;
@@ -2727,7 +2770,12 @@
       const player1 = participantNameById(tournament, match.player1Id);
       const player2 = participantNameById(tournament, match.player2Id);
       const winner = participantNameById(tournament, match.winnerId);
+      const isOpenSlot = (name) => name === "\u2205 offen";
+      const player1Display = isOpenSlot(player1) ? `<span class="ata-pill-open-slot">${escapeHtml(player1)}</span>` : escapeHtml(player1);
+      const player2Display = isOpenSlot(player2) ? `<span class="ata-pill-open-slot">${escapeHtml(player2)}</span>` : escapeHtml(player2);
+      const winnerDisplay = isOpenSlot(winner) ? `<span class="ata-pill-open-slot">${escapeHtml(winner)}</span>` : escapeHtml(winner);
       const editable = Boolean(match.player1Id && match.player2Id);
+      const isCompleted = match.status === STATUS_COMPLETED;
       const stageLabel = match.stage === MATCH_STAGE_GROUP
         ? `Gruppe ${match.groupId || "?"}`
         : match.stage === MATCH_STAGE_LEAGUE
@@ -2746,7 +2794,18 @@
       const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf).`;
       const legsP1Label = `Legs ${player1}`;
       const legsP2Label = `Legs ${player2}`;
+      const legsP1LabelHtml = isOpenSlot(player1)
+        ? `Legs <span class="ata-pill-open-slot">${escapeHtml(player1)}</span>`
+        : escapeHtml(legsP1Label);
+      const legsP2LabelHtml = isOpenSlot(player2)
+        ? `Legs <span class="ata-pill-open-slot">${escapeHtml(player2)}</span>`
+        : escapeHtml(legsP2Label);
       const saveHelpText = `Speichert Gewinner und Legs f\u00fcr ${player1} vs ${player2}.`;
+      const rowClasses = [
+        isCompleted ? "ata-row-completed" : "",
+        !editable ? "ata-row-inactive" : "",
+      ].filter(Boolean).join(" ");
+      const statusBadgeClass = isCompleted ? "ata-match-status ata-match-status-completed" : "ata-match-status ata-match-status-open";
       const winnerOptions = editable
         ? `
           <option value="">Gewinner</option>
@@ -2756,13 +2815,13 @@
         : `<option value="">\u2205 offen</option>`;
 
       return `
-        <tr>
+        <tr class="${escapeHtml(rowClasses)}">
           <td>${escapeHtml(stageLabel)}</td>
           <td title="${escapeHtml(matchCellHelpText)}">${escapeHtml(matchCellText)}</td>
-          <td>${escapeHtml(player1)} vs ${escapeHtml(player2)}</td>
-          <td>${match.status === STATUS_COMPLETED ? "Abgeschlossen" : "Offen"}</td>
-          <td>${match.status === STATUS_COMPLETED ? escapeHtml(winner) : "-"}</td>
-          <td>${match.status === STATUS_COMPLETED ? `${match.legs.p1}:${match.legs.p2}` : "-"}</td>
+          <td>${player1Display} vs ${player2Display}</td>
+          <td><span class="${statusBadgeClass}">${isCompleted ? "Abgeschlossen" : "Offen"}</span></td>
+          <td>${isCompleted ? winnerDisplay : "-"}</td>
+          <td>${isCompleted ? `${match.legs.p1}:${match.legs.p2}` : "-"}</td>
           <td>
             <div class="ata-score-grid">
               <select
@@ -2775,7 +2834,7 @@
                 ${winnerOptions}
               </select>
               <div class="ata-score-input-wrap" title="${escapeHtml(legsP1HelpText)}">
-                <span class="ata-score-input-label">${escapeHtml(legsP1Label)}</span>
+                <span class="ata-score-input-label">${legsP1LabelHtml}</span>
                 <input
                   type="number"
                   min="0"
@@ -2789,7 +2848,7 @@
                 >
               </div>
               <div class="ata-score-input-wrap" title="${escapeHtml(legsP2HelpText)}">
-                <span class="ata-score-input-label">${escapeHtml(legsP2Label)}</span>
+                <span class="ata-score-input-label">${legsP2LabelHtml}</span>
                 <input
                   type="number"
                   min="0"
