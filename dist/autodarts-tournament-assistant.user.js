@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.2.8
+// @version      0.2.9
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,7 +21,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.2.8";
+  const APP_VERSION = "0.2.9";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 1;
   const SAVE_DEBOUNCE_MS = 150;
@@ -969,11 +969,10 @@
       return false;
     }
     match[field] = nextValue;
-    if (match.status === STATUS_COMPLETED) {
-      const validWinner = match.winnerId && (match.winnerId === match.player1Id || match.winnerId === match.player2Id);
-      if (!validWinner) {
-        clearMatchResult(match);
-      }
+    const hasStoredResult = match.status === STATUS_COMPLETED
+      || Boolean(match.winnerId || match.source || match.legs?.p1 || match.legs?.p2);
+    if (hasStoredResult) {
+      clearMatchResult(match);
     }
     match.updatedAt = nowIso();
     return true;
@@ -1150,6 +1149,47 @@
     return changed;
   }
 
+  function isCompletedMatchResultValid(tournament, match) {
+    if (!match || match.status !== STATUS_COMPLETED) {
+      return true;
+    }
+    if (!match.player1Id || !match.player2Id) {
+      const availablePlayerId = match.player1Id || match.player2Id;
+      return Boolean(availablePlayerId && match.winnerId === availablePlayerId);
+    }
+    if (match.winnerId !== match.player1Id && match.winnerId !== match.player2Id) {
+      return false;
+    }
+
+    const legsToWin = getLegsToWin(tournament?.bestOfLegs);
+    const p1Legs = clampInt(match.legs?.p1, 0, 0, 99);
+    const p2Legs = clampInt(match.legs?.p2, 0, 0, 99);
+    if (p1Legs > legsToWin || p2Legs > legsToWin) {
+      return false;
+    }
+    if (p1Legs === p2Legs) {
+      return false;
+    }
+
+    const winnerLegs = match.winnerId === match.player1Id ? p1Legs : p2Legs;
+    const loserLegs = match.winnerId === match.player1Id ? p2Legs : p1Legs;
+    return winnerLegs === legsToWin && winnerLegs > loserLegs;
+  }
+
+  function normalizeCompletedMatchResults(tournament) {
+    if (!tournament) {
+      return false;
+    }
+    let changed = false;
+    tournament.matches.forEach((match) => {
+      if (match.status === STATUS_COMPLETED && !isCompletedMatchResultValid(tournament, match)) {
+        clearMatchResult(match);
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
   function refreshDerivedMatches(tournament) {
     if (!tournament) {
       return false;
@@ -1158,6 +1198,7 @@
     let changedAny = false;
     for (let i = 0; i < 8; i += 1) {
       let changed = false;
+      changed = normalizeCompletedMatchResults(tournament) || changed;
       changed = rebalanceLegacyKoSeeding(tournament) || changed;
       changed = resolveGroupsToKoAssignments(tournament) || changed;
       changed = autoCompleteByes(tournament) || changed;
@@ -1257,6 +1298,39 @@
     return { ok: true };
   }
 
+  function getKoBlockingRound(tournament, targetRound) {
+    if (!tournament || targetRound <= 1) {
+      return 0;
+    }
+    const unresolvedRounds = getMatchesByStage(tournament, MATCH_STAGE_KO)
+      .filter((item) => item.round < targetRound && item.status !== STATUS_COMPLETED)
+      .map((item) => item.round);
+    return unresolvedRounds.length ? Math.min(...unresolvedRounds) : 0;
+  }
+
+  function getMatchEditability(tournament, match) {
+    if (!tournament || !match) {
+      return { editable: false, reason: "Match nicht verf\u00fcgbar." };
+    }
+
+    if (match.status === STATUS_COMPLETED) {
+      return { editable: false, reason: "Match ist bereits abgeschlossen." };
+    }
+
+    if (!match.player1Id || !match.player2Id) {
+      return { editable: false, reason: "Paarung steht noch nicht fest." };
+    }
+
+    if (match.stage === MATCH_STAGE_KO) {
+      const blockingRound = getKoBlockingRound(tournament, match.round);
+      if (blockingRound) {
+        return { editable: false, reason: `Runde ${blockingRound} muss zuerst abgeschlossen werden.` };
+      }
+    }
+
+    return { editable: true, reason: "" };
+  }
+
   function shouldShowAuthNotice() {
     const now = Date.now();
     if (now - state.apiAutomation.lastAuthNoticeAt < API_AUTH_NOTICE_THROTTLE_MS) {
@@ -1342,7 +1416,7 @@
       boardLabel: hasBoard
         ? `Board aktiv (${boardPreview})`
         : hasBoardValue
-          ? `Board-ID ungültig (${boardPreview})`
+          ? `Board-ID ung\u00fcltig (${boardPreview})`
           : "Kein aktives Board",
       autoLabel: autoEnabled ? "Auto-Lobby ON" : "Auto-Lobby OFF",
     };
@@ -1354,7 +1428,7 @@
     const boardStateClass = status.hasBoard ? "ata-status-ok" : "ata-status-warn";
     const autoStateClass = status.autoEnabled ? "ata-status-info" : "ata-status-neutral";
     const hint = status.autoEnabled && (!status.hasToken || !status.hasBoard)
-      ? `<span class="ata-runtime-hint">Hinweis: Für API-Halbautomatik werden Auth-Token und aktives Board benötigt.</span>`
+      ? `<span class="ata-runtime-hint">Hinweis: F\u00fcr API-Halbautomatik werden Auth-Token und aktives Board ben\u00f6tigt.</span>`
       : "";
     return `
       <div class="ata-runtime-statusbar">
@@ -1629,13 +1703,13 @@
     };
   }
 
-  function getApiMatchStartUi(match, activeStartedMatch) {
+  function getApiMatchStartUi(tournament, match, activeStartedMatch) {
     const auto = ensureMatchAutoMeta(match);
     if (auto.lobbyId) {
       return {
         label: "Zum Match",
         disabled: false,
-        title: "Öffnet das bereits gestartete Match.",
+        title: "\u00d6ffnet das bereits gestartete Match.",
       };
     }
 
@@ -1647,19 +1721,12 @@
       };
     }
 
-    if (match.status !== STATUS_PENDING) {
+    const editability = getMatchEditability(tournament, match);
+    if (!editability.editable) {
       return {
         label: "Match starten",
         disabled: true,
-        title: "Match ist bereits abgeschlossen.",
-      };
-    }
-
-    if (!match.player1Id || !match.player2Id) {
-      return {
-        label: "Match starten",
-        disabled: true,
-        title: "Match ist noch nicht vollständig gesetzt.",
+        title: editability.reason || "Match kann aktuell nicht gestartet werden.",
       };
     }
 
@@ -1677,8 +1744,8 @@
         label: "Match starten",
         disabled: true,
         title: boardId
-          ? `Board-ID ungültig (${boardId}). Bitte Board in einer manuellen Lobby wählen.`
-          : "Kein Board aktiv. Bitte einmal manuell eine Lobby öffnen und Board wählen.",
+          ? `Board-ID ung\u00fcltig (${boardId}). Bitte Board in einer manuellen Lobby w\u00e4hlen.`
+          : "Kein Board aktiv. Bitte einmal manuell eine Lobby \u00f6ffnen und Board w\u00e4hlen.",
       };
     }
 
@@ -1686,7 +1753,7 @@
       return {
         label: "Match starten",
         disabled: true,
-        title: "Es läuft bereits ein aktives Match.",
+        title: "Es l\u00e4uft bereits ein aktives Match.",
       };
     }
 
@@ -1694,7 +1761,7 @@
       return {
         label: "Match starten",
         disabled: true,
-        title: "Ein anderer Matchstart läuft bereits.",
+        title: "Ein anderer Matchstart l\u00e4uft bereits.",
       };
     }
 
@@ -1709,7 +1776,7 @@
     return {
       label: "Match starten",
       disabled: false,
-      title: "Erstellt Lobby, fügt Spieler hinzu und startet automatisch.",
+      title: "Erstellt Lobby, f\u00fcgt Spieler hinzu und startet automatisch.",
     };
   }
 
@@ -1750,8 +1817,9 @@
       return;
     }
 
-    if (match.status !== STATUS_PENDING || !match.player1Id || !match.player2Id) {
-      setNotice("error", "Match kann aktuell nicht gestartet werden.");
+    const editability = getMatchEditability(tournament, match);
+    if (!editability.editable) {
+      setNotice("error", editability.reason || "Match kann aktuell nicht gestartet werden.");
       return;
     }
 
@@ -2807,22 +2875,26 @@
       const player1Display = isOpenSlot(player1) ? `<span class="ata-pill-open-slot">${escapeHtml(player1)}</span>` : escapeHtml(player1);
       const player2Display = isOpenSlot(player2) ? `<span class="ata-pill-open-slot">${escapeHtml(player2)}</span>` : escapeHtml(player2);
       const winnerDisplay = isOpenSlot(winner) ? `<span class="ata-pill-open-slot">${escapeHtml(winner)}</span>` : escapeHtml(winner);
-      const editable = Boolean(match.player1Id && match.player2Id);
+      const playability = getMatchEditability(tournament, match);
+      const editable = playability.editable;
       const isCompleted = match.status === STATUS_COMPLETED;
       const stageLabel = match.stage === MATCH_STAGE_GROUP
         ? `Gruppe ${match.groupId || "?"}`
         : match.stage === MATCH_STAGE_LEAGUE
           ? "Liga"
           : "KO";
-      const startUi = getApiMatchStartUi(match, activeStartedMatch);
+      const startUi = getApiMatchStartUi(tournament, match, activeStartedMatch);
       const startDisabledAttr = startUi.disabled ? "disabled" : "";
       const startTitleAttr = startUi.title ? `title="${escapeHtml(startUi.title)}"` : "";
       const autoStatus = getApiMatchStatusText(match);
+      const statusLine = !editable && playability.reason
+        ? `${playability.reason} - ${autoStatus}`
+        : autoStatus;
       const matchCellText = `Runde ${match.round} / Spiel ${match.number}`;
       const matchCellHelpText = "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
       const winnerHelpText = editable
         ? `W\u00e4hle den Gewinner des Matches (${player1} oder ${player2}).`
-        : "Gewinner kann erst gew\u00e4hlt werden, wenn beide Spieler feststehen.";
+        : (playability.reason || "Match ist nicht freigeschaltet.");
       const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
       const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
       const legsP1Label = `Legs ${player1}`;
@@ -2845,7 +2917,7 @@
           <option value="${escapeHtml(match.player1Id)}" ${match.winnerId === match.player1Id ? "selected" : ""}>${escapeHtml(player1)}</option>
           <option value="${escapeHtml(match.player2Id)}" ${match.winnerId === match.player2Id ? "selected" : ""}>${escapeHtml(player2)}</option>
         `
-        : `<option value="">\u2205 offen</option>`;
+        : `<option value="">${isCompleted ? escapeHtml(winner) : "\u2205 offen"}</option>`;
 
       return `
         <tr class="${escapeHtml(rowClasses)}">
@@ -2896,7 +2968,7 @@
               </div>
               <button type="button" class="ata-btn" data-action="save-match" data-match-id="${escapeHtml(match.id)}" title="${escapeHtml(saveHelpText)}" ${editable ? "" : "disabled"}>Speichern</button>
               <button type="button" class="ata-btn ata-btn-primary" data-action="start-match" data-match-id="${escapeHtml(match.id)}" ${startDisabledAttr} ${startTitleAttr}>${escapeHtml(startUi.label)}</button>
-              <div class="ata-small">${escapeHtml(autoStatus)}</div>
+              <div class="ata-small">${escapeHtml(statusLine)}</div>
             </div>
           </td>
         </tr>
@@ -3024,7 +3096,7 @@
             <div class="ata-bracket-match">
               <div>${escapeHtml(participantNameById(tournament, match.player1Id))}</div>
               <div>${escapeHtml(participantNameById(tournament, match.player2Id))}</div>
-              <div class="ata-small">${match.status === STATUS_COMPLETED ? `Gewinner: ${escapeHtml(participantNameById(tournament, match.winnerId))}` : "offen"}</div>
+              <div class="ata-small">${isCompletedMatchResultValid(tournament, match) ? `Gewinner: ${escapeHtml(participantNameById(tournament, match.winnerId))}` : "offen"}</div>
             </div>
           `).join("");
 
@@ -3398,6 +3470,20 @@
     if (!shadow) {
       return;
     }
+    const tournament = state.store.tournament;
+    if (!tournament) {
+      return;
+    }
+    const match = findMatch(tournament, matchId);
+    if (!match) {
+      setNotice("error", "Match nicht gefunden.");
+      return;
+    }
+    const editability = getMatchEditability(tournament, match);
+    if (!editability.editable) {
+      setNotice("error", editability.reason || "Match ist nicht freigeschaltet.");
+      return;
+    }
     const winnerSelect = getMatchFieldElement(shadow, "winner", matchId);
     const legsP1Input = getMatchFieldElement(shadow, "legs-p1", matchId);
     const legsP2Input = getMatchFieldElement(shadow, "legs-p2", matchId);
@@ -3588,19 +3674,20 @@
       const player1Id = resolveBracketParticipantId(match.player1Id);
       const player2Id = resolveBracketParticipantId(match.player2Id);
       const winnerId = resolveBracketParticipantId(match.winnerId);
-      const completed = match.status === STATUS_COMPLETED && Boolean(winnerId && (winnerId === player1Id || winnerId === player2Id));
+      const completed = isCompletedMatchResultValid(tournament, match)
+        && Boolean(winnerId && (winnerId === player1Id || winnerId === player2Id));
       const status = completed ? 4 : (player1Id && player2Id ? 2 : 1);
       const opponent1 = player1Id
         ? {
             id: player1Id,
-            score: clampInt(match.legs?.p1, 0, 0, 50),
+            score: completed ? clampInt(match.legs?.p1, 0, 0, 99) : undefined,
             result: completed && winnerId ? (winnerId === player1Id ? "win" : "loss") : undefined,
           }
         : null;
       const opponent2 = player2Id
         ? {
             id: player2Id,
-            score: clampInt(match.legs?.p2, 0, 0, 50),
+            score: completed ? clampInt(match.legs?.p2, 0, 0, 99) : undefined,
             result: completed && winnerId ? (winnerId === player2Id ? "win" : "loss") : undefined,
           }
         : null;
