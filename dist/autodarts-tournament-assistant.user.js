@@ -2785,7 +2785,7 @@
       const startDisabledAttr = startUi.disabled ? "disabled" : "";
       const startTitleAttr = startUi.title ? `title="${escapeHtml(startUi.title)}"` : "";
       const autoStatus = getApiMatchStatusText(match);
-      const matchCellText = `Runde ${match.round} · Spiel ${match.number}`;
+      const matchCellText = `Runde ${match.round} / Spiel ${match.number}`;
       const matchCellHelpText = "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
       const winnerHelpText = editable
         ? `W\u00e4hle den Gewinner des Matches (${player1} oder ${player2}).`
@@ -2991,7 +2991,7 @@
             <div class="ata-bracket-match">
               <div>${escapeHtml(participantNameById(tournament, match.player1Id))}</div>
               <div>${escapeHtml(participantNameById(tournament, match.player2Id))}</div>
-              <div class="ata-small">${match.status === STATUS_COMPLETED ? `Winner: ${escapeHtml(participantNameById(tournament, match.winnerId))}` : "offen"}</div>
+              <div class="ata-small">${match.status === STATUS_COMPLETED ? `Gewinner: ${escapeHtml(participantNameById(tournament, match.winnerId))}` : "offen"}</div>
             </div>
           `).join("");
 
@@ -3713,6 +3713,11 @@
       font-weight: 600;
     }
 
+    #ata-brackets-viewer .participant .name.ata-open-slot {
+      color: #ffd34f;
+      font-weight: 700;
+    }
+
     #ata-brackets-viewer .participant .result {
       width: 22%;
       font-weight: 700;
@@ -3757,6 +3762,20 @@
         return safePayload;
       }
 
+      function normalizeOpenSlotLabels() {
+        if (!viewerEl) {
+          return;
+        }
+        var nodes = viewerEl.querySelectorAll(".participant .name");
+        nodes.forEach(function (node) {
+          var value = String(node.textContent || "").trim();
+          if (/^(bye|tbd)$/i.test(value)) {
+            node.textContent = "\\u2205 offen";
+            node.classList.add("ata-open-slot");
+          }
+        });
+      }
+
       function render(payload) {
         if (!window.bracketsViewer || typeof window.bracketsViewer.render !== "function") {
           throw new Error("brackets-viewer not found");
@@ -3769,6 +3788,7 @@
           selector: "#ata-brackets-viewer",
           clear: true,
         });
+        normalizeOpenSlotLabels();
         if (msgEl) {
           msgEl.style.display = "none";
         }
