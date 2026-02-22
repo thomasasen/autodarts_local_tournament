@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.2.3
+// @version      0.2.4
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,7 +21,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.2.3";
+  const APP_VERSION = "0.2.4";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 1;
   const SAVE_DEBOUNCE_MS = 150;
@@ -35,9 +35,7 @@
   const API_AUTH_NOTICE_THROTTLE_MS = 15000;
   const API_REQUEST_TIMEOUT_MS = 12000;
 
-  const BRACKET_VIEWER_JS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.js";
-  const BRACKET_VIEWER_CSS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.css";
-  const I18NEXT_UMD_JS = "https://cdn.jsdelivr.net/npm/i18next@23.16.8/dist/umd/i18next.min.js";
+  const GOJS_JS = "https://cdn.jsdelivr.net/npm/gojs/release/go.js";
 
   const STATUS_COMPLETED = "completed";
   const STATUS_PENDING = "pending";
@@ -3360,7 +3358,6 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="${BRACKET_VIEWER_CSS}">
   <style>
     :root {
       --tb-bg-1: #2b356f;
@@ -3396,12 +3393,11 @@
     }
 
     #brackets-root {
-      padding: 16px 16px 22px;
+      padding: 14px 14px 20px;
       min-height: 360px;
       flex: 1 1 auto;
       width: 100%;
       overflow: auto;
-      cursor: auto;
       box-sizing: border-box;
       background:
         radial-gradient(circle at 14% 8%, rgba(90, 210, 153, 0.07), transparent 45%),
@@ -3409,123 +3405,11 @@
         linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
     }
 
-    #brackets-root.brackets-viewer,
-    #brackets-root .brackets-viewer {
-      color: var(--tb-text);
-      width: max-content;
+    #diagram-host {
       min-width: 100%;
-      margin: 0;
-      padding: 6px 26px 14px 12px;
+      min-height: 360px;
       background: transparent;
-      user-select: text;
-      --primary-background: transparent;
-      --secondary-background: rgba(255, 255, 255, 0.08);
-      --match-background: var(--tb-match);
-      --font-color: var(--tb-text);
-      --hint-color: var(--tb-muted);
-      --label-color: var(--tb-muted);
-      --connector-color: var(--tb-line);
-      --border-color: var(--tb-match-border);
-      --border-hover-color: rgba(255, 255, 255, 0.4);
-      --border-selected-color: rgba(255, 255, 255, 0.5);
-      --text-size: 14px;
-      --round-margin: 28px;
-      --match-width: 190px;
-      --match-horizontal-padding: 10px;
-      --match-vertical-padding: 4px;
-    }
-
-    #brackets-root .bracket h2 {
-      display: none !important;
-    }
-
-    #brackets-root .bracket .rounds {
-      align-items: flex-start !important;
-    }
-
-    #brackets-root .bracket .rounds .round {
-      justify-content: flex-start !important;
-      align-items: flex-start !important;
-      height: auto !important;
-    }
-
-    #brackets-root .round-title,
-    #brackets-root .round > h3,
-    #brackets-root [class*="round"] > [class*="title"] {
-      background: var(--tb-panel) !important;
-      border: 1px solid var(--tb-panel-border) !important;
-      color: var(--tb-text) !important;
-      border-radius: 8px !important;
-      font-size: 14px !important;
-      font-weight: 700 !important;
-      letter-spacing: 0.2px;
-    }
-
-    #brackets-root .match,
-    #brackets-root [class*="match"] {
-      background: var(--tb-match) !important;
-      border: 1px solid var(--tb-match-border) !important;
-      border-radius: 10px !important;
-      box-shadow: 0 6px 18px rgba(7, 12, 28, 0.25);
-      flex: 0 0 auto !important;
-      min-height: 0 !important;
-      align-items: flex-start !important;
-      margin: 6px 0 !important;
-      width: var(--match-width) !important;
-    }
-
-    #brackets-root .opponents,
-    #brackets-root [class*="opponents"] {
-      height: auto !important;
-    }
-
-    #brackets-root .participant,
-    #brackets-root .opponent,
-    #brackets-root [class*="participant"],
-    #brackets-root [class*="opponent"] {
-      background: transparent !important;
-      color: var(--tb-text) !important;
-      border-color: rgba(255, 255, 255, 0.18) !important;
-      min-height: 28px;
-    }
-
-    #brackets-root .participant + .participant,
-    #brackets-root .opponent + .opponent,
-    #brackets-root [class*="participant"] + [class*="participant"] {
-      border-top: 1px solid rgba(255, 255, 255, 0.16) !important;
-    }
-
-    #brackets-root .name,
-    #brackets-root [class*="name"] {
-      color: var(--tb-text) !important;
-      font-size: 14px !important;
-      font-weight: 600 !important;
-    }
-
-    #brackets-root .score,
-    #brackets-root [class*="score"] {
-      color: #0a281c !important;
-      background: var(--tb-score) !important;
-      border-radius: 999px !important;
-      padding: 1px 7px !important;
-      min-width: 22px;
-      text-align: center;
-      font-size: 12px !important;
-      font-weight: 700 !important;
-    }
-
-    #brackets-root .winner .name,
-    #brackets-root [class*="winner"] [class*="name"] {
-      color: #ffffff !important;
-      font-weight: 700 !important;
-    }
-
-    #brackets-root svg line,
-    #brackets-root svg path,
-    #brackets-root .connector,
-    #brackets-root [class*="line"] {
-      stroke: var(--tb-line) !important;
-      border-color: var(--tb-line) !important;
+      color: var(--tb-text);
     }
 
     #brackets-root::-webkit-scrollbar {
@@ -3546,21 +3430,339 @@
 </head>
 <body>
   <div id="msg">Turnierbaum wird geladen ...</div>
-  <div id="brackets-root" class="brackets-viewer"></div>
-  <script src="${I18NEXT_UMD_JS}"></script>
-  <script src="${BRACKET_VIEWER_JS}"></script>
+  <div id="brackets-root">
+    <div id="diagram-host"></div>
+  </div>
+  <script src="${GOJS_JS}"></script>
   <script>
     (function () {
       var msgEl = document.getElementById("msg");
+      var rootEl = document.getElementById("brackets-root");
+      var hostEl = document.getElementById("diagram-host");
+      var diagram = null;
+      var MATCH_WIDTH = 220;
+      var MATCH_HEIGHT = 88;
+      var ROUND_GAP = 124;
+      var SLOT_GAP = 102;
+      var TOP_PADDING = 76;
+
       function post(data) { window.parent.postMessage(data, "*"); }
+
+      function toNumber(value, fallback) {
+        var num = Number(value);
+        return Number.isFinite(num) ? num : fallback;
+      }
+
+      function toPointString(x, y) {
+        return String(x) + " " + String(y);
+      }
+
+      function roundLabel(round, maxRound) {
+        if (round >= maxRound) {
+          return "Final Round";
+        }
+        return "Round " + String(round);
+      }
+
+      function resolveOpponent(opponent, participantsById) {
+        if (!opponent || opponent.id === null || opponent.id === undefined || opponent.id === "") {
+          return { name: "BYE", score: "", winner: false, bye: true };
+        }
+        var key = String(opponent.id);
+        var name = participantsById[key];
+        if (!name) {
+          return { name: "BYE", score: "", winner: false, bye: true };
+        }
+        var scoreValue = opponent.score === null || opponent.score === undefined ? "" : String(opponent.score);
+        return { name: name, score: scoreValue, winner: opponent.result === "win", bye: false };
+      }
+
+      function ensureDiagram() {
+        if (diagram || !window.go || !hostEl) {
+          return;
+        }
+
+        var go = window.go;
+        var $ = go.GraphObject.make;
+
+        diagram = $(go.Diagram, "diagram-host", {
+          isReadOnly: true,
+          allowCopy: false,
+          allowDelete: false,
+          allowInsert: false,
+          allowMove: false,
+          allowSelect: false,
+          autoScale: go.AutoScale.None,
+          contentAlignment: go.Spot.TopLeft,
+          initialDocumentSpot: go.Spot.TopLeft,
+          initialViewportSpot: go.Spot.TopLeft,
+          padding: new go.Margin(8, 8, 16, 8),
+          "animationManager.isEnabled": false
+        });
+
+        diagram.nodeTemplate =
+          $(go.Node, "Auto",
+            {
+              locationSpot: go.Spot.TopLeft,
+              fromSpot: go.Spot.RightCenter,
+              toSpot: go.Spot.LeftCenter,
+              selectable: false
+            },
+            new go.Binding("location", "loc", go.Point.parse),
+            $(go.Shape, "RoundedRectangle",
+              {
+                stroke: "rgba(255, 255, 255, 0.30)",
+                strokeWidth: 1.2,
+                fill: "rgba(59, 84, 136, 0.92)",
+                parameter1: 8
+              }),
+            $(go.Panel, "Vertical",
+              { width: MATCH_WIDTH },
+              $(go.Panel, "Horizontal",
+                {
+                  width: MATCH_WIDTH,
+                  minSize: new go.Size(MATCH_WIDTH, MATCH_HEIGHT / 2),
+                  margin: new go.Margin(8, 10, 7, 10),
+                  defaultAlignment: go.Spot.Center
+                },
+                $(go.TextBlock,
+                  {
+                    width: 166,
+                    isMultiline: false,
+                    overflow: go.TextOverflow.Ellipsis,
+                    font: "600 16px 'Open Sans', 'Segoe UI', sans-serif"
+                  },
+                  new go.Binding("text", "p1Name"),
+                  new go.Binding("font", "p1Win", function (isWinner) {
+                    return isWinner ? "700 16px 'Open Sans', 'Segoe UI', sans-serif" : "600 16px 'Open Sans', 'Segoe UI', sans-serif";
+                  }),
+                  new go.Binding("stroke", "", function (data) {
+                    if (data && data.p1Win) { return "#ffffff"; }
+                    if (data && data.p1Bye) { return "rgba(232, 237, 255, 0.74)"; }
+                    return "#f4f7ff";
+                  })),
+                $(go.Panel, "Auto",
+                  { alignment: go.Spot.Right, minSize: new go.Size(30, 22) },
+                  $(go.Shape, "RoundedRectangle",
+                    { stroke: "transparent", fill: "rgba(255, 255, 255, 0.22)", parameter1: 11 },
+                    new go.Binding("fill", "p1Win", function (isWinner) {
+                      return isWinner ? "#5ad299" : "rgba(255, 255, 255, 0.22)";
+                    })),
+                  $(go.TextBlock,
+                    {
+                      margin: new go.Margin(2, 8, 2, 8),
+                      textAlign: "center",
+                      font: "700 13px 'Open Sans', 'Segoe UI', sans-serif",
+                      stroke: "#eef3ff"
+                    },
+                    new go.Binding("text", "p1Score"),
+                    new go.Binding("stroke", "p1Win", function (isWinner) {
+                      return isWinner ? "#0a281c" : "#eef3ff";
+                    })))
+              ),
+              $(go.Shape, "LineH", { stroke: "rgba(255, 255, 255, 0.18)", strokeWidth: 1, width: MATCH_WIDTH }),
+              $(go.Panel, "Horizontal",
+                {
+                  width: MATCH_WIDTH,
+                  minSize: new go.Size(MATCH_WIDTH, MATCH_HEIGHT / 2),
+                  margin: new go.Margin(7, 10, 8, 10),
+                  defaultAlignment: go.Spot.Center
+                },
+                $(go.TextBlock,
+                  {
+                    width: 166,
+                    isMultiline: false,
+                    overflow: go.TextOverflow.Ellipsis,
+                    font: "600 16px 'Open Sans', 'Segoe UI', sans-serif"
+                  },
+                  new go.Binding("text", "p2Name"),
+                  new go.Binding("font", "p2Win", function (isWinner) {
+                    return isWinner ? "700 16px 'Open Sans', 'Segoe UI', sans-serif" : "600 16px 'Open Sans', 'Segoe UI', sans-serif";
+                  }),
+                  new go.Binding("stroke", "", function (data) {
+                    if (data && data.p2Win) { return "#ffffff"; }
+                    if (data && data.p2Bye) { return "rgba(232, 237, 255, 0.74)"; }
+                    return "#f4f7ff";
+                  })),
+                $(go.Panel, "Auto",
+                  { alignment: go.Spot.Right, minSize: new go.Size(30, 22) },
+                  $(go.Shape, "RoundedRectangle",
+                    { stroke: "transparent", fill: "rgba(255, 255, 255, 0.22)", parameter1: 11 },
+                    new go.Binding("fill", "p2Win", function (isWinner) {
+                      return isWinner ? "#5ad299" : "rgba(255, 255, 255, 0.22)";
+                    })),
+                  $(go.TextBlock,
+                    {
+                      margin: new go.Margin(2, 8, 2, 8),
+                      textAlign: "center",
+                      font: "700 13px 'Open Sans', 'Segoe UI', sans-serif",
+                      stroke: "#eef3ff"
+                    },
+                    new go.Binding("text", "p2Score"),
+                    new go.Binding("stroke", "p2Win", function (isWinner) {
+                      return isWinner ? "#0a281c" : "#eef3ff";
+                    })))
+              )
+            ));
+
+        diagram.nodeTemplateMap.add("header",
+          $(go.Node, "Auto",
+            { locationSpot: go.Spot.TopLeft, selectable: false, layerName: "Foreground" },
+            new go.Binding("location", "loc", go.Point.parse),
+            $(go.Shape, "RoundedRectangle",
+              {
+                stroke: "rgba(255, 255, 255, 0.24)",
+                strokeWidth: 1,
+                fill: "rgba(255, 255, 255, 0.08)",
+                parameter1: 7
+              }),
+            $(go.TextBlock,
+              {
+                margin: new go.Margin(8, 16, 8, 16),
+                font: "700 14px 'Open Sans', 'Segoe UI', sans-serif",
+                stroke: "#f4f7ff"
+              },
+              new go.Binding("text", "label"))));
+
+        diagram.linkTemplate =
+          $(go.Link,
+            {
+              routing: go.Routing.Orthogonal,
+              corner: 8,
+              selectable: false
+            },
+            $(go.Shape, { stroke: "rgba(189, 203, 236, 0.56)", strokeWidth: 2 }));
+      }
+
+      function buildModel(payload) {
+        var participants = Array.isArray(payload && payload.participants) ? payload.participants : [];
+        var participantsById = Object.create(null);
+        participants.forEach(function (participant) {
+          if (!participant || participant.id === null || participant.id === undefined) {
+            return;
+          }
+          participantsById[String(participant.id)] = String(participant.name || "");
+        });
+
+        var matchesRaw = Array.isArray(payload && payload.matches) ? payload.matches : [];
+        var matches = matchesRaw
+          .map(function (match) {
+            var round = toNumber(match && match.round_id, 1);
+            var number = toNumber(match && match.number, 1);
+            if (round < 1 || number < 1) {
+              return null;
+            }
+            return {
+              round: Math.floor(round),
+              number: Math.floor(number),
+              opponent1: match ? match.opponent1 : null,
+              opponent2: match ? match.opponent2 : null
+            };
+          })
+          .filter(Boolean)
+          .sort(function (left, right) {
+            if (left.round !== right.round) {
+              return left.round - right.round;
+            }
+            return left.number - right.number;
+          });
+
+        var nodes = [];
+        var links = [];
+        var keySet = Object.create(null);
+        var maxRound = 1;
+        var maxBottom = TOP_PADDING + MATCH_HEIGHT;
+
+        matches.forEach(function (match) {
+          if (match.round > maxRound) {
+            maxRound = match.round;
+          }
+          var key = "m-" + String(match.round) + "-" + String(match.number);
+          keySet[key] = true;
+          var x = (match.round - 1) * (MATCH_WIDTH + ROUND_GAP);
+          var offset = ((Math.pow(2, match.round - 1) - 1) / 2) * SLOT_GAP;
+          var y = TOP_PADDING + offset + (match.number - 1) * Math.pow(2, match.round - 1) * SLOT_GAP;
+
+          var opponent1 = resolveOpponent(match.opponent1, participantsById);
+          var opponent2 = resolveOpponent(match.opponent2, participantsById);
+
+          nodes.push({
+            key: key,
+            loc: toPointString(x, y),
+            p1Name: opponent1.name,
+            p2Name: opponent2.name,
+            p1Score: opponent1.score,
+            p2Score: opponent2.score,
+            p1Win: opponent1.winner,
+            p2Win: opponent2.winner,
+            p1Bye: opponent1.bye,
+            p2Bye: opponent2.bye
+          });
+
+          var bottom = y + MATCH_HEIGHT + 12;
+          if (bottom > maxBottom) {
+            maxBottom = bottom;
+          }
+        });
+
+        for (var round = 1; round <= maxRound; round += 1) {
+          var headerX = (round - 1) * (MATCH_WIDTH + ROUND_GAP);
+          nodes.push({
+            key: "h-" + String(round),
+            category: "header",
+            loc: toPointString(headerX, 20),
+            label: roundLabel(round, maxRound)
+          });
+        }
+
+        matches.forEach(function (match) {
+          var from = "m-" + String(match.round) + "-" + String(match.number);
+          var toRound = match.round + 1;
+          var toNumber = Math.ceil(match.number / 2);
+          var to = "m-" + String(toRound) + "-" + String(toNumber);
+          if (!keySet[from] || !keySet[to]) {
+            return;
+          }
+          links.push({
+            key: "l-" + from + "-" + to,
+            from: from,
+            to: to
+          });
+        });
+
+        var canvasWidth = ((maxRound - 1) * (MATCH_WIDTH + ROUND_GAP)) + MATCH_WIDTH + 100;
+        var canvasHeight = maxBottom + 40;
+        return { nodes: nodes, links: links, width: canvasWidth, height: canvasHeight };
+      }
+
+      function applyCanvasSize(model) {
+        if (!hostEl) {
+          return;
+        }
+        var minWidth = rootEl ? Math.max(640, rootEl.clientWidth - 2) : 640;
+        var minHeight = rootEl ? Math.max(360, rootEl.clientHeight - 2) : 360;
+        hostEl.style.width = String(Math.max(minWidth, toNumber(model.width, minWidth))) + "px";
+        hostEl.style.height = String(Math.max(minHeight, toNumber(model.height, minHeight))) + "px";
+      }
+
       function render(payload) {
-        if (!window.bracketsViewer) {
-          throw new Error("bracketsViewer not found");
+        if (!window.go) {
+          throw new Error("gojs not found");
         }
-        if (window.i18next && !window.i18next.isInitialized) {
-          try { window.i18next.init({ lng: "de", resources: { de: { translation: { bye: "Freilos" } } } }); } catch (_) {}
+        ensureDiagram();
+        if (!diagram) {
+          throw new Error("gojs diagram not initialized");
         }
-        window.bracketsViewer.render(payload, { selector: "#brackets-root", clear: true });
+        var modelData = buildModel(payload || {});
+        applyCanvasSize(modelData);
+        var go = window.go;
+        var $ = go.GraphObject.make;
+        diagram.model = $(go.GraphLinksModel, {
+          linkKeyProperty: "key",
+          nodeDataArray: modelData.nodes,
+          linkDataArray: modelData.links
+        });
+        diagram.position = new go.Point(0, 0);
         if (msgEl) { msgEl.style.display = "none"; }
       }
       window.addEventListener("message", function (event) {
