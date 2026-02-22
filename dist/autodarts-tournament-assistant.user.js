@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.2.7
+// @version      0.2.8
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,7 +21,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.2.7";
+  const APP_VERSION = "0.2.8";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 1;
   const SAVE_DEBOUNCE_MS = 150;
@@ -270,6 +270,11 @@
     const allowed = new Set([101, 201, 301, 501, 701]);
     const score = clampInt(value, 501, 101, 701);
     return allowed.has(score) ? score : 501;
+  }
+
+  function getLegsToWin(bestOfLegs) {
+    const bestOf = sanitizeBestOf(bestOfLegs);
+    return Math.floor(bestOf / 2) + 1;
   }
 
   function normalizeAutomationStatus(value, fallback = "idle") {
@@ -1197,8 +1202,34 @@
       return { ok: false, message: "Gewinner passt nicht zum Match." };
     }
 
-    const p1Legs = clampInt(legs?.p1, 0, 0, 50);
-    const p2Legs = clampInt(legs?.p2, 0, 0, 50);
+    const legsToWin = getLegsToWin(tournament.bestOfLegs);
+    const p1Legs = clampInt(legs?.p1, 0, 0, 99);
+    const p2Legs = clampInt(legs?.p2, 0, 0, 99);
+    const winnerIsP1 = winnerId === match.player1Id;
+    const winnerLegs = winnerIsP1 ? p1Legs : p2Legs;
+    const loserLegs = winnerIsP1 ? p2Legs : p1Legs;
+
+    if (p1Legs > legsToWin || p2Legs > legsToWin) {
+      return {
+        ok: false,
+        message: `Ung\u00fcltiges Ergebnis: Pro Spieler sind maximal ${legsToWin} Legs m\u00f6glich (Best-of ${sanitizeBestOf(tournament.bestOfLegs)}).`,
+      };
+    }
+
+    if (p1Legs === p2Legs) {
+      return { ok: false, message: "Ung\u00fcltiges Ergebnis: Bei Best-of ist kein Gleichstand m\u00f6glich." };
+    }
+
+    if (winnerLegs <= loserLegs) {
+      return { ok: false, message: "Ung\u00fcltiges Ergebnis: Der gew\u00e4hlte Gewinner muss mehr Legs als der Gegner haben." };
+    }
+
+    if (winnerLegs !== legsToWin) {
+      return {
+        ok: false,
+        message: `Ung\u00fcltiges Ergebnis: Der Gewinner muss genau ${legsToWin} Legs erreichen (Best-of ${sanitizeBestOf(tournament.bestOfLegs)}).`,
+      };
+    }
 
     match.status = STATUS_COMPLETED;
     match.winnerId = winnerId;
@@ -1546,7 +1577,7 @@
   }
 
   function buildLobbyCreatePayload(tournament) {
-    const legsToWin = Math.floor(sanitizeBestOf(tournament.bestOfLegs) / 2) + 1;
+    const legsToWin = getLegsToWin(tournament.bestOfLegs);
     return {
       variant: "X01",
       isPrivate: true,
@@ -2766,6 +2797,8 @@
       return left.round - right.round || left.number - right.number;
     });
 
+    const legsToWin = getLegsToWin(tournament.bestOfLegs);
+
     const rows = matches.map((match) => {
       const player1 = participantNameById(tournament, match.player1Id);
       const player2 = participantNameById(tournament, match.player2Id);
@@ -2790,8 +2823,8 @@
       const winnerHelpText = editable
         ? `W\u00e4hle den Gewinner des Matches (${player1} oder ${player2}).`
         : "Gewinner kann erst gew\u00e4hlt werden, wenn beide Spieler feststehen.";
-      const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf).`;
-      const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf).`;
+      const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
+      const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
       const legsP1Label = `Legs ${player1}`;
       const legsP2Label = `Legs ${player2}`;
       const legsP1LabelHtml = isOpenSlot(player1)
@@ -2800,7 +2833,7 @@
       const legsP2LabelHtml = isOpenSlot(player2)
         ? `Legs <span class="ata-pill-open-slot">${escapeHtml(player2)}</span>`
         : escapeHtml(legsP2Label);
-      const saveHelpText = `Speichert Gewinner und Legs f\u00fcr ${player1} vs ${player2}.`;
+      const saveHelpText = `Speichert Gewinner und Legs f\u00fcr ${player1} vs ${player2}. Der Gewinner muss ${legsToWin} Legs erreichen.`;
       const rowClasses = [
         isCompleted ? "ata-row-completed" : "",
         !editable ? "ata-row-inactive" : "",
@@ -2838,7 +2871,7 @@
                 <input
                   type="number"
                   min="0"
-                  max="50"
+                  max="${legsToWin}"
                   data-field="legs-p1"
                   data-match-id="${escapeHtml(match.id)}"
                   value="${match.legs.p1}"
@@ -2852,7 +2885,7 @@
                 <input
                   type="number"
                   min="0"
-                  max="50"
+                  max="${legsToWin}"
                   data-field="legs-p2"
                   data-match-id="${escapeHtml(match.id)}"
                   value="${match.legs.p2}"
@@ -3987,7 +4020,7 @@
   }
 
   function extractLegScoreFromDom(bestOfLegs) {
-    const neededWins = Math.floor(bestOfLegs / 2) + 1;
+    const neededWins = getLegsToWin(bestOfLegs);
     const selectors = ['[class*="legs"]', '[data-testid*="legs"]', '[class*="score"]', '[class*="result"]'];
     let fallback = { p1: 0, p2: 0 };
 
