@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.2.1
+// @version      0.2.2
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,7 +21,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.2.1";
+  const APP_VERSION = "0.2.2";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 1;
   const SAVE_DEBOUNCE_MS = 150;
@@ -551,12 +551,57 @@
     return matches;
   }
 
-  function buildKoMatches(participantIds) {
+  function applyInnerOuterOrdering(array) {
+    if (!Array.isArray(array)) {
+      return [];
+    }
+    if (array.length <= 2) {
+      return array.slice();
+    }
+    if (array.length % 4 !== 0) {
+      return array.slice();
+    }
+
+    // Source adapted from brackets-manager.js `ordering.inner_outer`:
+    // https://cdn.jsdelivr.net/npm/brackets-manager@1.6.4/dist/ordering.js
+    const quarter = array.length / 4;
+    const innerPart = [array.slice(quarter, 2 * quarter), array.slice(2 * quarter, 3 * quarter)];
+    const outerPart = [array.slice(0, quarter), array.slice(3 * quarter, 4 * quarter)];
+    const result = [];
+
+    function add(part, mode) {
+      if (part[0].length <= 0 || part[1].length <= 0) {
+        return;
+      }
+      if (mode === "inner") {
+        result.push(part[0].pop(), part[1].shift());
+      } else {
+        result.push(part[0].shift(), part[1].pop());
+      }
+    }
+
+    for (let i = 0; i < quarter / 2; i += 1) {
+      add(outerPart, "outer");
+      add(innerPart, "inner");
+      add(outerPart, "inner");
+      add(innerPart, "outer");
+    }
+
+    return result.length === array.length ? result : array.slice();
+  }
+
+  function buildBalancedKoSeeding(participantIds) {
     const size = nextPowerOfTwo(participantIds.length);
     const seeded = participantIds.slice();
     while (seeded.length < size) {
       seeded.push(null);
     }
+    return applyInnerOuterOrdering(seeded);
+  }
+
+  function buildKoMatches(participantIds) {
+    const size = nextPowerOfTwo(participantIds.length);
+    const seeded = buildBalancedKoSeeding(participantIds);
 
     const matches = [];
     const rounds = Math.log2(size);
@@ -890,6 +935,77 @@
     return changed;
   }
 
+  function rebalanceLegacyKoSeeding(tournament) {
+    if (!tournament || tournament.mode !== "ko") {
+      return false;
+    }
+
+    const size = nextPowerOfTwo(tournament.participants.length);
+    if (size === tournament.participants.length) {
+      return false;
+    }
+
+    const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
+    if (!koMatches.length) {
+      return false;
+    }
+
+    const roundOneMatches = koMatches.filter((match) => match.round === 1);
+    if (!roundOneMatches.length) {
+      return false;
+    }
+
+    const hasDoubleBye = roundOneMatches.some((match) => !match.player1Id && !match.player2Id);
+    if (!hasDoubleBye) {
+      return false;
+    }
+
+    const hasLockedProgress = koMatches.some((match) => {
+      const hasLegs = clampInt(match.legs?.p1, 0, 0, 50) > 0 || clampInt(match.legs?.p2, 0, 0, 50) > 0;
+      const auto = match.meta?.auto;
+      const hasAutoRun = Boolean(auto?.lobbyId || auto?.status === "started" || auto?.status === "completed");
+      return match.source === "manual" || hasLegs || hasAutoRun;
+    });
+
+    if (hasLockedProgress) {
+      return false;
+    }
+
+    const orderedIds = buildBalancedKoSeeding(tournament.participants.map((participant) => participant.id));
+    let changed = false;
+
+    roundOneMatches
+      .slice()
+      .sort((left, right) => left.number - right.number)
+      .forEach((match, index) => {
+        const player1Id = orderedIds[index * 2] || null;
+        const player2Id = orderedIds[index * 2 + 1] || null;
+        changed = assignPlayerSlot(match, 1, player1Id) || changed;
+        changed = assignPlayerSlot(match, 2, player2Id) || changed;
+        if (match.status !== STATUS_PENDING || match.winnerId || match.source || match.legs.p1 !== 0 || match.legs.p2 !== 0) {
+          clearMatchResult(match);
+          changed = true;
+        }
+      });
+
+    koMatches
+      .filter((match) => match.round > 1)
+      .forEach((match) => {
+        changed = assignPlayerSlot(match, 1, null) || changed;
+        changed = assignPlayerSlot(match, 2, null) || changed;
+        if (match.status !== STATUS_PENDING || match.winnerId || match.source || match.legs.p1 !== 0 || match.legs.p2 !== 0) {
+          clearMatchResult(match);
+          changed = true;
+        }
+      });
+
+    if (changed) {
+      logDebug("ko", "Legacy KO-Seeding wurde auf inner_outer + Bye-Balancing umgestellt.");
+    }
+
+    return changed;
+  }
+
   function autoCompleteByes(tournament) {
     let changed = false;
     const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
@@ -923,6 +1039,7 @@
 
     for (let i = 0; i < 8; i += 1) {
       let changed = false;
+      changed = rebalanceLegacyKoSeeding(tournament) || changed;
       changed = resolveGroupsToKoAssignments(tournament) || changed;
       changed = autoCompleteByes(tournament) || changed;
       changed = advanceKoWinners(tournament) || changed;
