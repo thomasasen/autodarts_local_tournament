@@ -1770,7 +1770,7 @@
         --ata-z-overlay: 2147483000;
         color: var(--ata-color-text);
         font-family: var(--ata-font-body);
-        font-size: 18px;
+        font-size: 19px;
         line-height: 1.4;
         color-scheme: dark;
       }
@@ -1781,7 +1781,7 @@
         z-index: var(--ata-z-overlay);
         display: grid;
         place-items: center;
-        padding: clamp(10px, 2vw, 24px);
+        padding: 4px;
         box-sizing: border-box;
         pointer-events: none;
       }
@@ -1800,12 +1800,12 @@
       .ata-drawer {
         position: relative;
         z-index: 1;
-        width: min(1080px, 96vw);
-        height: min(900px, 94vh);
-        max-height: 94vh;
+        width: calc(100vw - 8px);
+        height: calc(100vh - 8px);
+        max-height: calc(100vh - 8px);
         display: grid;
         grid-template-rows: auto auto auto 1fr;
-        border-radius: 16px;
+        border-radius: 10px;
         overflow: hidden;
         opacity: 0;
         visibility: hidden;
@@ -1846,7 +1846,7 @@
         margin: 0;
         font-family: var(--ata-font-head);
         letter-spacing: 0.6px;
-        font-size: 34px;
+        font-size: 38px;
         line-height: 1;
         text-transform: uppercase;
       }
@@ -1854,7 +1854,7 @@
       .ata-title-wrap p {
         margin: var(--ata-space-2) 0 0 0;
         color: var(--ata-color-muted);
-        font-size: 18px;
+        font-size: 20px;
       }
 
       .ata-version {
@@ -1891,7 +1891,7 @@
         color: var(--ata-color-text);
         border-radius: 999px;
         padding: 9px 16px;
-        font-size: 16px;
+        font-size: 18px;
         cursor: pointer;
         white-space: nowrap;
         transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
@@ -1932,7 +1932,7 @@
         background: rgba(255, 255, 255, 0.1);
         color: var(--ata-color-text);
         padding: 4px 10px;
-        font-size: 14px;
+        font-size: 15px;
         line-height: 1.2;
         white-space: nowrap;
       }
@@ -1959,7 +1959,7 @@
 
       .ata-runtime-hint {
         color: var(--ata-color-muted);
-        font-size: 14px;
+        font-size: 15px;
       }
 
       .ata-content::-webkit-scrollbar {
@@ -2011,7 +2011,7 @@
 
       .ata-card h3 {
         margin: 0 0 var(--ata-space-3) 0;
-        font-size: 24px;
+        font-size: 26px;
         font-family: var(--ata-font-body);
         font-weight: 700;
       }
@@ -2029,7 +2029,7 @@
 
       .ata-field label {
         color: var(--ata-color-muted);
-        font-size: 14px;
+        font-size: 15px;
         letter-spacing: 0.5px;
         text-transform: uppercase;
       }
@@ -2043,7 +2043,7 @@
         background: rgba(255, 255, 255, 0.1);
         color: var(--ata-color-text);
         padding: 11px 13px;
-        font-size: 17px;
+        font-size: 18px;
         box-sizing: border-box;
         transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
       }
@@ -2074,7 +2074,7 @@
         color: var(--ata-color-text);
         border-radius: var(--ata-radius-sm);
         padding: 11px 15px;
-        font-size: 16px;
+        font-size: 17px;
         cursor: pointer;
         transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
       }
@@ -2132,14 +2132,14 @@
       table.tournamentRanking {
         width: 100%;
         border-collapse: collapse;
-        font-size: 16px;
+        font-size: 17px;
       }
 
       .ata-table th,
       .ata-table td {
         text-align: left;
         border-bottom: 1px solid rgba(157, 180, 197, 0.16);
-        padding: 8px 10px;
+        padding: 10px 12px;
         vertical-align: middle;
       }
 
@@ -2147,7 +2147,7 @@
         color: var(--ata-color-muted);
         font-weight: 600;
         text-transform: uppercase;
-        font-size: 14px;
+        font-size: 15px;
         letter-spacing: 0.4px;
       }
 
@@ -2172,7 +2172,7 @@
       }
 
       .ata-small {
-        font-size: 15px;
+        font-size: 16px;
         color: var(--ata-color-muted);
       }
 
@@ -2277,14 +2277,14 @@
 
       @media (max-width: 820px) {
         .ata-root {
-          padding: 8px;
+          padding: 2px;
         }
 
         .ata-drawer {
-          width: min(1080px, 98vw);
-          height: min(900px, 96vh);
-          max-height: 96vh;
-          border-radius: 12px;
+          width: calc(100vw - 4px);
+          height: calc(100vh - 4px);
+          max-height: calc(100vh - 4px);
+          border-radius: 8px;
         }
 
         .ata-grid-2 {
