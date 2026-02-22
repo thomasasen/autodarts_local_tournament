@@ -34,8 +34,8 @@
   const API_SYNC_INTERVAL_MS = 2500;
   const API_AUTH_NOTICE_THROTTLE_MS = 15000;
   const API_REQUEST_TIMEOUT_MS = 12000;
-  const BRACKET_OFFSET_LIMIT_X = 360;
-  const BRACKET_OFFSET_LIMIT_Y = 420;
+  const BRACKET_OFFSET_LIMIT_X = 3000;
+  const BRACKET_OFFSET_LIMIT_Y = 1800;
 
   const BRACKET_VIEWER_JS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.js";
   const BRACKET_VIEWER_CSS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.css";
@@ -113,6 +113,7 @@
       ui: {
         activeTab: "tournament",
         bracketOffset: { x: 0, y: 0 },
+        bracketPan: { x: 0, y: 0 },
       },
       tournament: null,
     };
@@ -166,12 +167,26 @@
     return { x, y };
   }
 
+  function normalizeBracketPan(rawPan) {
+    const x = clampInt(rawPan?.x, 0, 0, BRACKET_OFFSET_LIMIT_X);
+    const y = clampInt(rawPan?.y, 0, 0, BRACKET_OFFSET_LIMIT_Y);
+    return { x, y };
+  }
+
   function getBracketOffset() {
     if (!state.store || !state.store.ui) {
       return { x: 0, y: 0 };
     }
     state.store.ui.bracketOffset = normalizeBracketOffset(state.store.ui.bracketOffset);
     return state.store.ui.bracketOffset;
+  }
+
+  function getBracketPan() {
+    if (!state.store || !state.store.ui) {
+      return { x: 0, y: 0 };
+    }
+    state.store.ui.bracketPan = normalizeBracketPan(state.store.ui.bracketPan);
+    return state.store.ui.bracketPan;
   }
 
   function uuid(prefix) {
@@ -389,6 +404,7 @@
       ui: {
         activeTab: TAB_IDS.includes(input?.ui?.activeTab) ? input.ui.activeTab : defaults.ui.activeTab,
         bracketOffset: normalizeBracketOffset(input?.ui?.bracketOffset || defaults.ui.bracketOffset),
+        bracketPan: normalizeBracketPan(input?.ui?.bracketPan || defaults.ui.bracketPan),
       },
       tournament: normalizeTournament(input?.tournament),
     };
@@ -1042,14 +1058,17 @@
 
   function getBoardId() {
     try {
-      let boardId = localStorage.getItem("autodarts-board");
-      if (!boardId) {
+      const rawBoardValue = localStorage.getItem("autodarts-board");
+      if (!rawBoardValue) {
         return "";
       }
+      let boardId = rawBoardValue;
       try {
-        const parsed = JSON.parse(boardId);
+        const parsed = JSON.parse(rawBoardValue);
         if (typeof parsed === "string") {
           boardId = parsed;
+        } else if (parsed && typeof parsed === "object") {
+          boardId = normalizeText(parsed.id || parsed.boardId || parsed.uuid || parsed.value || "");
         }
       } catch (_) {
         // Keep raw value when localStorage entry is not JSON encoded.
@@ -1060,6 +1079,20 @@
     }
   }
 
+  function isValidBoardId(boardId) {
+    const value = normalizeText(boardId || "");
+    if (!value) {
+      return false;
+    }
+    if (value === "[object Object]" || value.toLowerCase() === "manual") {
+      return false;
+    }
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+      return true;
+    }
+    return /^[a-z0-9][a-z0-9-]{7,}$/i.test(value);
+  }
+
   function collectRuntimeStatus() {
     const token = getAuthTokenFromCookie();
     const boardId = getBoardId();
@@ -1067,7 +1100,8 @@
     const autoEnabled = Boolean(state.store?.settings?.featureFlags?.autoLobbyStart);
     const authBlocked = Number(state.apiAutomation?.authBackoffUntil || 0) > Date.now();
     const hasToken = Boolean(token);
-    const hasBoard = Boolean(boardId);
+    const hasBoard = isValidBoardId(boardId);
+    const hasBoardValue = Boolean(boardId);
     return {
       hasToken,
       hasBoard,
@@ -1075,7 +1109,11 @@
       autoEnabled,
       authBlocked,
       apiLabel: hasToken ? (authBlocked ? "API Auth abgelaufen" : "API Auth bereit") : "API Auth fehlt",
-      boardLabel: hasBoard ? `Board aktiv (${boardPreview})` : "Kein aktives Board",
+      boardLabel: hasBoard
+        ? `Board aktiv (${boardPreview})`
+        : hasBoardValue
+          ? `Board-ID ungueltig (${boardPreview})`
+          : "Kein aktives Board",
       autoLabel: autoEnabled ? "Auto-Lobby ON" : "Auto-Lobby OFF",
     };
   }
@@ -1126,15 +1164,56 @@
     return error;
   }
 
-  function extractApiErrorMessage(status, body) {
-    if (typeof body === "string" && normalizeText(body)) {
-      return `HTTP ${status}: ${normalizeText(body)}`;
+  function apiBodyToErrorText(value, depth = 0) {
+    if (value == null || depth > 3) {
+      return "";
     }
-    if (body && typeof body === "object") {
-      const candidate = normalizeText(body.message || body.error || body.detail || body.title || "");
-      if (candidate) {
-        return `HTTP ${status}: ${candidate}`;
+    if (typeof value === "string") {
+      return normalizeText(value);
+    }
+    if (Array.isArray(value)) {
+      const parts = value.map((entry) => apiBodyToErrorText(entry, depth + 1)).filter(Boolean);
+      return normalizeText(parts.join(" | "));
+    }
+    if (typeof value === "object") {
+      const parts = [];
+      ["message", "error", "detail", "title", "reason", "description"].forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(value, key)) {
+          const text = apiBodyToErrorText(value[key], depth + 1);
+          if (text) {
+            parts.push(text);
+          }
+        }
+      });
+      if (value.errors && typeof value.errors === "object") {
+        Object.entries(value.errors).forEach(([key, entry]) => {
+          const text = apiBodyToErrorText(entry, depth + 1);
+          if (text) {
+            parts.push(`${key}: ${text}`);
+          }
+        });
       }
+      const deduped = [...new Set(parts.map((entry) => normalizeText(entry)).filter(Boolean))];
+      if (deduped.length) {
+        return normalizeText(deduped.join(" | "));
+      }
+      try {
+        const json = JSON.stringify(value);
+        if (json && json !== "{}") {
+          return normalizeText(json);
+        }
+      } catch (_) {
+        return "";
+      }
+      return "";
+    }
+    return normalizeText(String(value));
+  }
+
+  function extractApiErrorMessage(status, body) {
+    const detail = apiBodyToErrorText(body);
+    if (detail) {
+      return `HTTP ${status}: ${detail}`;
     }
     return `HTTP ${status}`;
   }
@@ -1354,6 +1433,25 @@
       };
     }
 
+    if (!getAuthTokenFromCookie()) {
+      return {
+        label: "Match starten",
+        disabled: true,
+        title: "Kein Auth-Token vorhanden. Bitte einloggen.",
+      };
+    }
+
+    const boardId = getBoardId();
+    if (!isValidBoardId(boardId)) {
+      return {
+        label: "Match starten",
+        disabled: true,
+        title: boardId
+          ? `Board-ID ungueltig (${boardId}). Bitte Board in einer manuellen Lobby waehlen.`
+          : "Kein Board aktiv. Bitte einmal manuell eine Lobby oeffnen und Board waehlen.",
+      };
+    }
+
     if (activeStartedMatch && activeStartedMatch.id !== match.id) {
       return {
         label: "Match starten",
@@ -1454,6 +1552,10 @@
       setNotice("error", "Board-ID fehlt. Bitte einmal manuell eine Lobby oeffnen und Board auswaehlen.");
       return;
     }
+    if (!isValidBoardId(boardId)) {
+      setNotice("error", `Board-ID ist ungueltig (${boardId}). Bitte in einer manuellen Lobby ein echtes Board auswaehlen.`);
+      return;
+    }
 
     const participant1 = participantById(tournament, match.player1Id);
     const participant2 = participantById(tournament, match.player2Id);
@@ -1493,7 +1595,7 @@
       setNotice("success", "Match gestartet. Weiterleitung ins Match.");
       openMatchPage(createdLobbyId);
     } catch (error) {
-      const message = normalizeText(error?.message || "Unbekannter API-Fehler.") || "Unbekannter API-Fehler.";
+      const message = normalizeText(error?.message || apiBodyToErrorText(error?.body) || "Unbekannter API-Fehler.") || "Unbekannter API-Fehler.";
       const now = nowIso();
       auto.provider = API_PROVIDER;
       auto.lobbyId = createdLobbyId || auto.lobbyId || null;
@@ -1668,7 +1770,7 @@
         --ata-z-overlay: 2147483000;
         color: var(--ata-color-text);
         font-family: var(--ata-font-body);
-        font-size: 16px;
+        font-size: 18px;
         line-height: 1.4;
         color-scheme: dark;
       }
@@ -1696,7 +1798,7 @@
         top: 0;
         right: 0;
         height: 100%;
-        width: min(760px, 94vw);
+        width: min(920px, 96vw);
         display: grid;
         grid-template-rows: auto auto 1fr;
         transform: translateX(100%);
@@ -1733,7 +1835,7 @@
         margin: 0;
         font-family: var(--ata-font-head);
         letter-spacing: 0.6px;
-        font-size: 28px;
+        font-size: 34px;
         line-height: 1;
         text-transform: uppercase;
       }
@@ -1741,6 +1843,7 @@
       .ata-title-wrap p {
         margin: var(--ata-space-2) 0 0 0;
         color: var(--ata-color-muted);
+        font-size: 18px;
       }
 
       .ata-version {
@@ -1776,7 +1879,8 @@
         background: rgba(255, 255, 255, 0.06);
         color: var(--ata-color-text);
         border-radius: 999px;
-        padding: 7px 14px;
+        padding: 9px 16px;
+        font-size: 16px;
         cursor: pointer;
         white-space: nowrap;
         transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
@@ -1817,7 +1921,7 @@
         background: rgba(255, 255, 255, 0.1);
         color: var(--ata-color-text);
         padding: 4px 10px;
-        font-size: 12px;
+        font-size: 14px;
         line-height: 1.2;
         white-space: nowrap;
       }
@@ -1844,7 +1948,7 @@
 
       .ata-runtime-hint {
         color: var(--ata-color-muted);
-        font-size: 12px;
+        font-size: 14px;
       }
 
       .ata-content::-webkit-scrollbar {
@@ -1896,7 +2000,7 @@
 
       .ata-card h3 {
         margin: 0 0 var(--ata-space-3) 0;
-        font-size: 21px;
+        font-size: 24px;
         font-family: var(--ata-font-body);
         font-weight: 700;
       }
@@ -1914,7 +2018,7 @@
 
       .ata-field label {
         color: var(--ata-color-muted);
-        font-size: 13px;
+        font-size: 14px;
         letter-spacing: 0.5px;
         text-transform: uppercase;
       }
@@ -1927,8 +2031,8 @@
         border: 1px solid var(--ata-color-border);
         background: rgba(255, 255, 255, 0.1);
         color: var(--ata-color-text);
-        padding: 10px 12px;
-        font-size: 15px;
+        padding: 11px 13px;
+        font-size: 17px;
         box-sizing: border-box;
         transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
       }
@@ -1958,8 +2062,8 @@
         background: rgba(255, 255, 255, 0.12);
         color: var(--ata-color-text);
         border-radius: var(--ata-radius-sm);
-        padding: 10px 14px;
-        font-size: 14px;
+        padding: 11px 15px;
+        font-size: 16px;
         cursor: pointer;
         transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
       }
@@ -2003,7 +2107,7 @@
         padding: 3px 10px;
         margin-right: 8px;
         margin-bottom: 8px;
-        font-size: 13px;
+        font-size: 14px;
       }
 
       .ata-table-wrap {
@@ -2017,7 +2121,7 @@
       table.tournamentRanking {
         width: 100%;
         border-collapse: collapse;
-        font-size: 14px;
+        font-size: 16px;
       }
 
       .ata-table th,
@@ -2032,7 +2136,7 @@
         color: var(--ata-color-muted);
         font-weight: 600;
         text-transform: uppercase;
-        font-size: 13px;
+        font-size: 14px;
         letter-spacing: 0.4px;
       }
 
@@ -2046,9 +2150,9 @@
 
       .ata-score-grid {
         display: grid;
-        grid-template-columns: minmax(150px, 1fr) 78px 78px auto auto;
+        grid-template-columns: minmax(180px, 1fr) 100px 100px auto auto;
         gap: var(--ata-space-2);
-        min-width: 420px;
+        min-width: 560px;
         align-items: center;
       }
 
@@ -2057,7 +2161,7 @@
       }
 
       .ata-small {
-        font-size: 13px;
+        font-size: 15px;
         color: var(--ata-color-muted);
       }
 
@@ -2750,6 +2854,7 @@
     if (resetBracketOffsetButton) {
       resetBracketOffsetButton.addEventListener("click", () => {
         state.store.ui.bracketOffset = { x: 0, y: 0 };
+        state.store.ui.bracketPan = { x: 0, y: 0 };
         schedulePersist();
         renderShell();
       });
@@ -3146,8 +3251,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="${BRACKET_VIEWER_CSS}">
   <style>
-    html, body { margin: 0; padding: 0; background: #f6f8fa; font-family: Arial, sans-serif; }
-    #brackets-root { padding: 12px; min-height: 380px; }
+    html, body { margin: 0; padding: 0; background: #f6f8fa; font-family: Arial, sans-serif; height: 100%; overflow: hidden; }
+    #brackets-root { padding: 12px; min-height: 380px; width: 100%; height: calc(100% - 8px); overflow: auto; cursor: grab; box-sizing: border-box; }
+    #brackets-root[data-dragging="1"] { cursor: grabbing; user-select: none; }
     #msg { padding: 12px; font-size: 13px; color: #444; }
   </style>
 </head>
@@ -3159,7 +3265,26 @@
   <script>
     (function () {
       var msgEl = document.getElementById("msg");
+      var rootEl = document.getElementById("brackets-root");
+      var dragActive = false;
+      var dragStartX = 0;
+      var dragStartY = 0;
+      var dragStartLeft = 0;
+      var dragStartTop = 0;
       function post(data) { window.parent.postMessage(data, "*"); }
+      function clampNum(value) {
+        var num = parseInt(value, 10);
+        return Number.isFinite(num) && num >= 0 ? num : 0;
+      }
+      function applyPan(pan) {
+        if (!rootEl || !pan) { return; }
+        rootEl.scrollLeft = clampNum(pan.x);
+        rootEl.scrollTop = clampNum(pan.y);
+      }
+      function emitPan() {
+        if (!rootEl) { return; }
+        post({ type: "ata:bracket-pan-changed", x: rootEl.scrollLeft || 0, y: rootEl.scrollTop || 0 });
+      }
       function render(payload) {
         if (!window.bracketsViewer) {
           throw new Error("bracketsViewer not found");
@@ -3170,11 +3295,42 @@
         window.bracketsViewer.render(payload, { selector: "#brackets-root", clear: true });
         if (msgEl) { msgEl.style.display = "none"; }
       }
+      if (rootEl) {
+        rootEl.addEventListener("mousedown", function (event) {
+          if (event.button !== 0) { return; }
+          dragActive = true;
+          dragStartX = event.clientX;
+          dragStartY = event.clientY;
+          dragStartLeft = rootEl.scrollLeft || 0;
+          dragStartTop = rootEl.scrollTop || 0;
+          rootEl.setAttribute("data-dragging", "1");
+          event.preventDefault();
+        });
+        window.addEventListener("mousemove", function (event) {
+          if (!dragActive) { return; }
+          var deltaX = event.clientX - dragStartX;
+          var deltaY = event.clientY - dragStartY;
+          rootEl.scrollLeft = dragStartLeft - deltaX;
+          rootEl.scrollTop = dragStartTop - deltaY;
+        });
+        window.addEventListener("mouseup", function () {
+          if (!dragActive) { return; }
+          dragActive = false;
+          rootEl.setAttribute("data-dragging", "0");
+          emitPan();
+        });
+      }
       window.addEventListener("message", function (event) {
         var data = event.data;
-        if (!data || data.type !== "ata:render-bracket") { return; }
+        if (!data || !data.type) { return; }
+        if (data.type === "ata:set-bracket-pan") {
+          applyPan(data.pan || data);
+          return;
+        }
+        if (data.type !== "ata:render-bracket") { return; }
         try {
           render(data.payload || {});
+          applyPan(data.pan || {});
           post({ type: "ata:bracket-rendered" });
         } catch (err) {
           post({ type: "ata:bracket-error", message: err && err.message ? err.message : String(err) });
@@ -3228,7 +3384,7 @@
     }, 7000);
 
     if (state.bracket.ready && frame.contentWindow) {
-      frame.contentWindow.postMessage({ type: "ata:render-bracket", payload }, "*");
+      frame.contentWindow.postMessage({ type: "ata:render-bracket", payload, pan: getBracketPan() }, "*");
     }
   }
 
@@ -3247,7 +3403,7 @@
       state.bracket.ready = true;
       const payload = buildBracketPayload(state.store.tournament);
       if (payload && frame.contentWindow) {
-        frame.contentWindow.postMessage({ type: "ata:render-bracket", payload }, "*");
+        frame.contentWindow.postMessage({ type: "ata:render-bracket", payload, pan: getBracketPan() }, "*");
       }
       return;
     }
@@ -3259,7 +3415,21 @@
       }
       state.bracket.failed = false;
       state.bracket.lastError = "";
+      if (frame.contentWindow) {
+        frame.contentWindow.postMessage({ type: "ata:set-bracket-pan", pan: getBracketPan() }, "*");
+      }
       logDebug("bracket", "Bracket rendered successfully.");
+      return;
+    }
+
+    if (data.type === "ata:bracket-pan-changed") {
+      const current = getBracketPan();
+      const next = normalizeBracketPan({ x: data.x, y: data.y });
+      if (current.x === next.x && current.y === next.y) {
+        return;
+      }
+      state.store.ui.bracketPan = next;
+      schedulePersist();
       return;
     }
 
