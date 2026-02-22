@@ -467,10 +467,10 @@
 
   function participantNameById(tournament, participantId) {
     if (!participantId) {
-      return "TBD";
+      return "\u2205 offen";
     }
     const participant = participantById(tournament, participantId);
-    return participant ? participant.name : "TBD";
+    return participant ? participant.name : "\u2205 offen";
   }
 
   function buildParticipantIndexes(tournament) {
@@ -2451,21 +2451,22 @@
 
       .ata-score-input-wrap {
         display: flex;
-        align-items: center;
-        gap: 8px;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        gap: 4px;
         min-width: 0;
       }
 
       .ata-score-input-wrap input[type="number"] {
-        flex: 0 0 78px;
+        width: 92px;
       }
 
-      .ata-score-input-name {
-        font-size: 14px;
+      .ata-score-input-label {
+        font-size: 13px;
+        line-height: 1.2;
         color: var(--ata-color-muted);
         white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
       }
 
       .ata-small {
@@ -2736,25 +2737,28 @@
       const startDisabledAttr = startUi.disabled ? "disabled" : "";
       const startTitleAttr = startUi.title ? `title="${escapeHtml(startUi.title)}"` : "";
       const autoStatus = getApiMatchStatusText(match);
+      const matchCellText = `Runde ${match.round} · Spiel ${match.number}`;
+      const matchCellHelpText = "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
       const winnerHelpText = editable
-        ? `Wähle den Gewinner des Matches (${player1} oder ${player2}).`
-        : "Gewinner kann erst gewählt werden, wenn beide Spieler feststehen.";
-      const legsP1HelpText = `Trage hier die gewonnenen Legs von ${player1} ein (nicht Punkte pro Wurf).`;
-      const legsP2HelpText = `Trage hier die gewonnenen Legs von ${player2} ein (nicht Punkte pro Wurf).`;
-      const saveHelpText = `Speichert Gewinner und Legs für ${player1} vs ${player2}.`;
-
+        ? `W\u00e4hle den Gewinner des Matches (${player1} oder ${player2}).`
+        : "Gewinner kann erst gew\u00e4hlt werden, wenn beide Spieler feststehen.";
+      const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf).`;
+      const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf).`;
+      const legsP1Label = `Legs ${player1}`;
+      const legsP2Label = `Legs ${player2}`;
+      const saveHelpText = `Speichert Gewinner und Legs f\u00fcr ${player1} vs ${player2}.`;
       const winnerOptions = editable
         ? `
           <option value="">Gewinner</option>
           <option value="${escapeHtml(match.player1Id)}" ${match.winnerId === match.player1Id ? "selected" : ""}>${escapeHtml(player1)}</option>
           <option value="${escapeHtml(match.player2Id)}" ${match.winnerId === match.player2Id ? "selected" : ""}>${escapeHtml(player2)}</option>
         `
-        : `<option value="">TBD</option>`;
+        : `<option value="">\u2205 offen</option>`;
 
       return `
         <tr>
           <td>${escapeHtml(stageLabel)}</td>
-          <td>R${match.round} M${match.number}</td>
+          <td title="${escapeHtml(matchCellHelpText)}">${escapeHtml(matchCellText)}</td>
           <td>${escapeHtml(player1)} vs ${escapeHtml(player2)}</td>
           <td>${match.status === STATUS_COMPLETED ? "Abgeschlossen" : "Offen"}</td>
           <td>${match.status === STATUS_COMPLETED ? escapeHtml(winner) : "-"}</td>
@@ -2771,6 +2775,7 @@
                 ${winnerOptions}
               </select>
               <div class="ata-score-input-wrap" title="${escapeHtml(legsP1HelpText)}">
+                <span class="ata-score-input-label">${escapeHtml(legsP1Label)}</span>
                 <input
                   type="number"
                   min="0"
@@ -2782,9 +2787,9 @@
                   title="${escapeHtml(legsP1HelpText)}"
                   ${editable ? "" : "disabled"}
                 >
-                <span class="ata-score-input-name">${escapeHtml(player1)}</span>
               </div>
               <div class="ata-score-input-wrap" title="${escapeHtml(legsP2HelpText)}">
+                <span class="ata-score-input-label">${escapeHtml(legsP2Label)}</span>
                 <input
                   type="number"
                   min="0"
@@ -2796,7 +2801,6 @@
                   title="${escapeHtml(legsP2HelpText)}"
                   ${editable ? "" : "disabled"}
                 >
-                <span class="ata-score-input-name">${escapeHtml(player2)}</span>
               </div>
               <button type="button" class="ata-btn" data-action="save-match" data-match-id="${escapeHtml(match.id)}" title="${escapeHtml(saveHelpText)}" ${editable ? "" : "disabled"}>Speichern</button>
               <button type="button" class="ata-btn ata-btn-primary" data-action="start-match" data-match-id="${escapeHtml(match.id)}" ${startDisabledAttr} ${startTitleAttr}>${escapeHtml(startUi.label)}</button>
@@ -2816,7 +2820,7 @@
             <thead>
               <tr>
                 <th>Stage</th>
-                <th>Match</th>
+                <th title="Runde = Turnierrunde, Spiel = Paarung innerhalb der Runde.">Runde/Spiel</th>
                 <th>Paarung</th>
                 <th>Status</th>
                 <th>Winner</th>
