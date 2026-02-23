@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.2.13
+// @version      0.2.14
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,7 +21,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.2.13";
+  const APP_VERSION = "0.2.14";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 2;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
@@ -114,6 +114,10 @@
       startingMatchId: "",
       authBackoffUntil: 0,
       lastAuthNoticeAt: 0,
+    },
+    matchReturnShortcut: {
+      root: null,
+      syncing: false,
     },
     runtimeStatusSignature: "",
     cleanupStack: [],
@@ -1791,6 +1795,233 @@
     return apiRequestJson("GET", `${API_AS_BASE}/matches/${encodeURIComponent(lobbyId)}/stats`, null, token);
   }
 
+  function getRouteLobbyId(pathname = location.pathname) {
+    const route = normalizeText(pathname || "");
+    if (!route) {
+      return "";
+    }
+    const match = route.match(/^\/(?:matches|lobbies)\/([^/?#]+)/i);
+    if (!match || !match[1]) {
+      return "";
+    }
+    try {
+      return normalizeText(decodeURIComponent(match[1]));
+    } catch (_) {
+      return normalizeText(match[1]);
+    }
+  }
+
+  function isApiSyncCandidateMatch(match, includeErrored = false) {
+    if (!match || match.status !== STATUS_PENDING) {
+      return false;
+    }
+    const auto = ensureMatchAutoMeta(match);
+    if (!auto.lobbyId) {
+      return false;
+    }
+    if (auto.status === "started") {
+      return true;
+    }
+    return includeErrored && auto.status === "error";
+  }
+
+  function findTournamentMatchByLobbyId(tournament, lobbyId, includeCompleted = false) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    if (!tournament || !targetLobbyId) {
+      return null;
+    }
+    return tournament.matches.find((match) => {
+      if (!includeCompleted && match.status !== STATUS_PENDING) {
+        return false;
+      }
+      const auto = ensureMatchAutoMeta(match);
+      return normalizeText(auto.lobbyId || "") === targetLobbyId;
+    }) || null;
+  }
+
+  async function syncApiMatchResult(tournament, match, token, options = {}) {
+    const notifyErrors = Boolean(options.notifyErrors);
+    const notifyNotReady = Boolean(options.notifyNotReady);
+    const includeErrorRetry = options.includeErrorRetry !== false;
+    const auto = ensureMatchAutoMeta(match);
+    const lobbyId = normalizeText(auto.lobbyId || "");
+    if (!lobbyId) {
+      return { ok: false, updated: false, completed: false, pending: true, message: "Keine Lobby-ID vorhanden." };
+    }
+    if (!includeErrorRetry && auto.status === "error") {
+      return { ok: false, updated: false, completed: false, pending: true, message: "Match ist im Fehlerstatus." };
+    }
+
+    let updated = false;
+    if (auto.status === "error") {
+      auto.status = "started";
+      auto.lastSyncAt = nowIso();
+      match.updatedAt = nowIso();
+      updated = true;
+    }
+
+    try {
+      const stats = await fetchMatchStats(lobbyId, token);
+      const syncTimestamp = nowIso();
+      if (auto.lastError) {
+        auto.lastError = null;
+        auto.lastSyncAt = syncTimestamp;
+        match.updatedAt = syncTimestamp;
+        updated = true;
+      } else if (!auto.lastSyncAt) {
+        auto.lastSyncAt = syncTimestamp;
+        match.updatedAt = syncTimestamp;
+        updated = true;
+      }
+
+      const winnerIndex = Number(stats?.winner);
+      if (!Number.isInteger(winnerIndex) || winnerIndex < 0) {
+        auto.status = "started";
+        if (!auto.lastSyncAt) {
+          auto.lastSyncAt = syncTimestamp;
+        }
+        if (notifyNotReady) {
+          setNotice("info", "API-Ergebnis ist noch nicht final verfuegbar.", 2200);
+        }
+        return {
+          ok: true,
+          updated,
+          completed: false,
+          pending: true,
+          recoverable: true,
+          message: "API-Ergebnis ist noch nicht final verfuegbar.",
+        };
+      }
+
+      const winnerName = normalizeText(stats?.players?.[winnerIndex]?.name || "");
+      const winnerId = resolveWinnerIdFromApiName(tournament, match, winnerName);
+      if (!winnerId) {
+        const mappingError = "Gewinner konnte nicht eindeutig zugeordnet werden.";
+        const changedError = auto.lastError !== mappingError || auto.status !== "error";
+        auto.status = "error";
+        auto.lastError = mappingError;
+        auto.lastSyncAt = syncTimestamp;
+        match.updatedAt = syncTimestamp;
+        updated = true;
+        if (notifyErrors && changedError) {
+          setNotice("error", `Auto-Sync Fehler bei ${match.id}: Gewinner nicht zuordenbar.`);
+        }
+        return { ok: false, updated, completed: false, pending: true, recoverable: false, message: mappingError };
+      }
+
+      const legs = getApiMatchLegsFromStats(stats);
+      const result = updateMatchResult(match.id, winnerId, legs, "auto");
+      if (!result.ok) {
+        const saveError = result.message || "Auto-Sync konnte Ergebnis nicht speichern.";
+        const changedError = auto.lastError !== saveError || auto.status !== "error";
+        auto.status = "error";
+        auto.lastError = saveError;
+        auto.lastSyncAt = syncTimestamp;
+        match.updatedAt = syncTimestamp;
+        updated = true;
+        if (notifyErrors && changedError) {
+          setNotice("error", `Auto-Sync Fehler bei ${match.id}: ${saveError}`);
+        }
+        return { ok: false, updated, completed: false, pending: true, recoverable: false, message: saveError };
+      }
+
+      const updatedMatch = findMatch(tournament, match.id);
+      if (updatedMatch) {
+        const updatedAuto = ensureMatchAutoMeta(updatedMatch);
+        const finishedAt = nowIso();
+        updatedAuto.provider = API_PROVIDER;
+        updatedAuto.status = "completed";
+        updatedAuto.finishedAt = finishedAt;
+        updatedAuto.lastSyncAt = finishedAt;
+        updatedAuto.lastError = null;
+        updatedMatch.updatedAt = finishedAt;
+      }
+
+      return { ok: true, updated: true, completed: true, pending: false, message: "Ergebnis uebernommen." };
+    } catch (error) {
+      const status = Number(error?.status || 0);
+      if (status === 401 || status === 403) {
+        return { ok: false, updated, completed: false, pending: true, authError: true, message: "Auth abgelaufen." };
+      }
+      if (status === 404) {
+        return {
+          ok: false,
+          updated,
+          completed: false,
+          pending: true,
+          recoverable: true,
+          message: "Match-Stats noch nicht verfuegbar.",
+        };
+      }
+
+      const errorMessage = normalizeText(error?.message || "API-Sync fehlgeschlagen.") || "API-Sync fehlgeschlagen.";
+      const lastSyncAtMs = auto.lastSyncAt ? Date.parse(auto.lastSyncAt) : 0;
+      const shouldPersistError = auto.lastError !== errorMessage
+        || !Number.isFinite(lastSyncAtMs)
+        || (Date.now() - lastSyncAtMs > API_AUTH_NOTICE_THROTTLE_MS);
+      if (shouldPersistError) {
+        auto.status = "error";
+        auto.lastError = errorMessage;
+        auto.lastSyncAt = nowIso();
+        match.updatedAt = nowIso();
+        updated = true;
+      }
+      if (notifyErrors && shouldPersistError) {
+        setNotice("error", `Auto-Sync Fehler bei ${match.id}: ${errorMessage}`);
+      }
+      return { ok: false, updated, completed: false, pending: true, recoverable: false, message: errorMessage };
+    }
+  }
+
+  async function syncResultForLobbyId(lobbyId, options = {}) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    const tournament = state.store.tournament;
+    if (!targetLobbyId) {
+      return { ok: false, message: "Keine Lobby-ID erkannt." };
+    }
+    if (!tournament) {
+      return { ok: false, message: "Kein aktives Turnier vorhanden." };
+    }
+    if (!state.store.settings.featureFlags.autoLobbyStart) {
+      return { ok: false, message: "Auto-Lobby ist deaktiviert." };
+    }
+
+    const openMatch = findTournamentMatchByLobbyId(tournament, targetLobbyId, false);
+    const completedMatch = openMatch ? null : findTournamentMatchByLobbyId(tournament, targetLobbyId, true);
+    if (!openMatch && completedMatch?.status === STATUS_COMPLETED) {
+      return { ok: true, completed: true, message: "Ergebnis war bereits uebernommen." };
+    }
+    if (!openMatch) {
+      return { ok: false, message: "Kein offenes Turnier-Match fuer diese Lobby gefunden." };
+    }
+
+    const token = getAuthTokenFromCookie();
+    if (!token) {
+      return { ok: false, message: "Kein Auth-Token gefunden. Bitte neu einloggen." };
+    }
+
+    const syncOutcome = await syncApiMatchResult(tournament, openMatch, token, {
+      notifyErrors: Boolean(options.notifyErrors),
+      notifyNotReady: Boolean(options.notifyNotReady),
+      includeErrorRetry: true,
+    });
+
+    if (syncOutcome.authError) {
+      state.apiAutomation.authBackoffUntil = Date.now() + API_AUTH_NOTICE_THROTTLE_MS;
+      return { ok: false, message: "Auth abgelaufen. Bitte neu einloggen." };
+    }
+
+    if (syncOutcome.updated) {
+      if (state.store.tournament) {
+        state.store.tournament.updatedAt = nowIso();
+      }
+      schedulePersist();
+      renderShell();
+    }
+
+    return syncOutcome;
+  }
+
   function getDuplicateParticipantNames(tournament) {
     const seen = new Map();
     const duplicates = [];
@@ -2106,11 +2337,7 @@
     }
 
     const syncTargets = tournament.matches.filter((match) => {
-      if (match.status !== STATUS_PENDING) {
-        return false;
-      }
-      const auto = ensureMatchAutoMeta(match);
-      return Boolean(auto.lobbyId && auto.status === "started");
+      return isApiSyncCandidateMatch(match, true);
     });
 
     if (!syncTargets.length) {
@@ -2131,78 +2358,27 @@
 
     try {
       for (const match of syncTargets) {
-        const auto = ensureMatchAutoMeta(match);
-        if (!auto.lobbyId) {
-          continue;
+        const syncOutcome = await syncApiMatchResult(tournament, match, token, {
+          notifyErrors: false,
+          notifyNotReady: false,
+          includeErrorRetry: true,
+        });
+
+        if (syncOutcome.authError) {
+          state.apiAutomation.authBackoffUntil = Date.now() + API_AUTH_NOTICE_THROTTLE_MS;
+          if (shouldShowAuthNotice()) {
+            setNotice("error", "Auto-Sync pausiert: Auth abgelaufen. Bitte neu einloggen.");
+          }
+          logWarn("api", "Auto-sync auth error.");
+          return;
         }
 
-        try {
-          const stats = await fetchMatchStats(auto.lobbyId, token);
-          if (auto.lastError) {
-            auto.lastSyncAt = nowIso();
-            auto.lastError = null;
-            hasMetaUpdates = true;
-          }
+        if (syncOutcome.updated) {
+          hasMetaUpdates = true;
+        }
 
-          const winnerIndex = Number(stats?.winner);
-          if (!Number.isInteger(winnerIndex) || winnerIndex < 0) {
-            continue;
-          }
-
-          const winnerName = normalizeText(stats?.players?.[winnerIndex]?.name || "");
-          const winnerId = resolveWinnerIdFromApiName(tournament, match, winnerName);
-          if (!winnerId) {
-            auto.status = "error";
-            auto.lastError = "Gewinner konnte nicht eindeutig zugeordnet werden.";
-            match.updatedAt = nowIso();
-            hasMetaUpdates = true;
-            setNotice("error", `Auto-Sync Fehler bei ${match.id}: Gewinner nicht zuordenbar.`);
-            continue;
-          }
-
-          const legs = getApiMatchLegsFromStats(stats);
-          const result = updateMatchResult(match.id, winnerId, legs, "auto");
-          if (!result.ok) {
-            auto.lastError = result.message || "Auto-Sync konnte Ergebnis nicht speichern.";
-            match.updatedAt = nowIso();
-            hasMetaUpdates = true;
-            continue;
-          }
-
-          const updatedMatch = findMatch(tournament, match.id);
-          if (updatedMatch) {
-            const updatedAuto = ensureMatchAutoMeta(updatedMatch);
-            updatedAuto.provider = API_PROVIDER;
-            updatedAuto.status = "completed";
-            updatedAuto.finishedAt = nowIso();
-            updatedAuto.lastSyncAt = nowIso();
-            updatedAuto.lastError = null;
-            updatedMatch.updatedAt = nowIso();
-            hasMetaUpdates = true;
-          }
-        } catch (error) {
-          const status = Number(error?.status || 0);
-          if (status === 401 || status === 403) {
-            state.apiAutomation.authBackoffUntil = Date.now() + API_AUTH_NOTICE_THROTTLE_MS;
-            if (shouldShowAuthNotice()) {
-              setNotice("error", "Auto-Sync pausiert: Auth abgelaufen. Bitte neu einloggen.");
-            }
-            logWarn("api", "Auto-sync auth error.", error);
-            return;
-          }
-          if (status === 404) {
-            continue;
-          }
-          const errorMessage = normalizeText(error?.message || "API-Sync fehlgeschlagen.") || "API-Sync fehlgeschlagen.";
-          const lastSyncAtMs = auto.lastSyncAt ? Date.parse(auto.lastSyncAt) : 0;
-          const shouldPersistError = auto.lastError !== errorMessage || !Number.isFinite(lastSyncAtMs) || (Date.now() - lastSyncAtMs > API_AUTH_NOTICE_THROTTLE_MS);
-          if (shouldPersistError) {
-            auto.lastError = errorMessage;
-            auto.lastSyncAt = nowIso();
-            match.updatedAt = nowIso();
-            hasMetaUpdates = true;
-          }
-          logWarn("api", `Auto-sync failed for ${match.id}.`, error);
+        if (!syncOutcome.ok && syncOutcome.message && !syncOutcome.recoverable) {
+          logWarn("api", `Auto-sync failed for ${match.id}: ${syncOutcome.message}`);
         }
       }
     } finally {
@@ -4557,6 +4733,151 @@
     addObserver(observer);
   }
 
+  function removeMatchReturnShortcut() {
+    if (state.matchReturnShortcut.root instanceof HTMLElement) {
+      state.matchReturnShortcut.root.remove();
+    }
+    state.matchReturnShortcut.root = null;
+    state.matchReturnShortcut.syncing = false;
+  }
+
+  function ensureMatchReturnShortcutRoot() {
+    if (state.matchReturnShortcut.root instanceof HTMLElement && document.body?.contains(state.matchReturnShortcut.root)) {
+      return state.matchReturnShortcut.root;
+    }
+    const root = document.createElement("div");
+    root.id = "ata-match-return-shortcut";
+    root.style.position = "fixed";
+    root.style.right = "18px";
+    root.style.bottom = "18px";
+    root.style.zIndex = "2147482990";
+    root.style.minWidth = "280px";
+    root.style.maxWidth = "340px";
+    root.style.borderRadius = "10px";
+    root.style.border = "1px solid rgba(255,255,255,0.25)";
+    root.style.background = "linear-gradient(180deg, rgba(44,50,109,0.94), rgba(31,63,113,0.94))";
+    root.style.color = "#f4f7ff";
+    root.style.padding = "10px";
+    root.style.boxShadow = "0 12px 24px rgba(7,11,25,0.45)";
+    root.style.fontFamily = "\"Open Sans\", \"Segoe UI\", Tahoma, sans-serif";
+    document.body.appendChild(root);
+    state.matchReturnShortcut.root = root;
+    return root;
+  }
+
+  function openAssistantMatchesTab() {
+    state.activeTab = "matches";
+    state.store.ui.activeTab = "matches";
+    schedulePersist();
+    if (state.drawerOpen) {
+      renderShell();
+      return;
+    }
+    openDrawer();
+  }
+
+  async function handleMatchShortcutSyncAndOpen(lobbyId) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    if (!targetLobbyId || state.matchReturnShortcut.syncing) {
+      return;
+    }
+    state.matchReturnShortcut.syncing = true;
+    renderMatchReturnShortcut();
+    try {
+      const syncOutcome = await syncResultForLobbyId(targetLobbyId, {
+        notifyErrors: true,
+        notifyNotReady: true,
+      });
+      openAssistantMatchesTab();
+      if (syncOutcome.completed) {
+        setNotice("success", "Ergebnis wurde in xLokale Turniere uebernommen.", 2400);
+      } else if (!syncOutcome.ok && syncOutcome.message) {
+        setNotice("info", syncOutcome.message, 3200);
+      } else if (syncOutcome.ok && !syncOutcome.completed) {
+        setNotice("info", "Noch kein finales Ergebnis verfuegbar. Match laeuft ggf. noch.", 2600);
+      }
+    } catch (error) {
+      logWarn("api", "Manual shortcut sync failed.", error);
+      setNotice("error", "Ergebnisuebernahme fehlgeschlagen. Bitte spaeter erneut versuchen.");
+    } finally {
+      state.matchReturnShortcut.syncing = false;
+      renderMatchReturnShortcut();
+    }
+  }
+
+  function renderMatchReturnShortcut() {
+    const lobbyId = getRouteLobbyId();
+    if (!lobbyId) {
+      removeMatchReturnShortcut();
+      return;
+    }
+
+    const tournament = state.store.tournament;
+    if (!tournament) {
+      removeMatchReturnShortcut();
+      return;
+    }
+
+    const linkedMatchAny = findTournamentMatchByLobbyId(tournament, lobbyId, true);
+    if (!linkedMatchAny) {
+      removeMatchReturnShortcut();
+      return;
+    }
+
+    const linkedMatchOpen = linkedMatchAny.status === STATUS_PENDING ? linkedMatchAny : null;
+    const auto = ensureMatchAutoMeta(linkedMatchAny);
+    const root = ensureMatchReturnShortcutRoot();
+    const isSyncing = state.matchReturnShortcut.syncing;
+    const hasOpenMatch = Boolean(linkedMatchOpen);
+
+    const statusText = linkedMatchAny.status === STATUS_COMPLETED
+      ? "Ergebnis bereits im Turnier gespeichert."
+      : auto.status === "error"
+        ? `Letzter Sync-Fehler: ${normalizeText(auto.lastError || "Unbekannt") || "Unbekannt"}`
+        : auto.status === "started"
+          ? "Match verknuepft. Ergebnis kann uebernommen werden."
+          : "API-Sync wartet auf Match-Start.";
+
+    const primaryLabel = hasOpenMatch
+      ? (isSyncing ? "Uebernehme..." : "Ergebnis uebernehmen & Turnier oeffnen")
+      : "Turnierassistent oeffnen";
+
+    const secondaryButtonHtml = hasOpenMatch
+      ? `<button type="button" data-action="open-assistant" style="flex:1 1 auto;border:1px solid rgba(255,255,255,0.28);background:rgba(255,255,255,0.1);color:#f4f7ff;border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer;">Nur Turnierassistent</button>`
+      : "";
+
+    root.innerHTML = `
+      <div style="font-size:13px;font-weight:700;letter-spacing:0.3px;margin-bottom:6px;">xLokale Turniere</div>
+      <div style="font-size:12px;line-height:1.35;color:rgba(232,237,255,0.86);margin-bottom:8px;">${escapeHtml(statusText)}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" data-action="sync-open" style="flex:1 1 auto;border:1px solid rgba(90,210,153,0.55);background:rgba(90,210,153,0.24);color:#dcffe8;border-radius:8px;padding:8px 10px;font-size:13px;font-weight:700;cursor:pointer;" ${isSyncing ? "disabled" : ""}>${escapeHtml(primaryLabel)}</button>
+        ${secondaryButtonHtml}
+      </div>
+    `;
+
+    const syncButton = root.querySelector("[data-action='sync-open']");
+    if (syncButton instanceof HTMLButtonElement) {
+      if (hasOpenMatch) {
+        syncButton.onclick = () => {
+          handleMatchShortcutSyncAndOpen(lobbyId).catch((error) => {
+            logWarn("api", "Shortcut action failed.", error);
+          });
+        };
+      } else {
+        syncButton.onclick = () => {
+          openAssistantMatchesTab();
+        };
+      }
+    }
+
+    const openAssistantButton = root.querySelector("[data-action='open-assistant']");
+    if (openAssistantButton instanceof HTMLButtonElement) {
+      openAssistantButton.onclick = () => {
+        openAssistantMatchesTab();
+      };
+    }
+  }
+
   function onRouteChange() {
     const current = routeKey();
     if (current === state.routeKey) {
@@ -4566,6 +4887,7 @@
     logDebug("route", `Route changed to ${current}`);
     ensureHost();
     renderShell();
+    renderMatchReturnShortcut();
   }
 
   function installRouteHooks() {
@@ -4639,6 +4961,7 @@
       clearTimeout(state.bracket.timeoutHandle);
       state.bracket.timeoutHandle = null;
     }
+    removeMatchReturnShortcut();
     while (state.cleanupStack.length) {
       const cleanup = state.cleanupStack.pop();
       try {
@@ -4663,6 +4986,7 @@
     state.runtimeStatusSignature = runtimeStatusSignature();
     ensureHost();
     renderShell();
+    renderMatchReturnShortcut();
 
     initEventBridge();
     installRouteHooks();
@@ -4675,6 +4999,7 @@
     }, API_SYNC_INTERVAL_MS);
     addInterval(() => {
       refreshRuntimeStatusUi();
+      renderMatchReturnShortcut();
     }, 1200);
 
     state.ready = true;

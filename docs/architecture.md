@@ -62,6 +62,8 @@
   - `Turnier`, `Spiele`, `Ansicht`, `Import/Export`, `Einstellungen`.
 - Spiele-Tab:
   - Freilose werden als eigener Status `Freilos` angezeigt (nicht als regulaeres `0:0` Match).
+- Match-Seite:
+  - Floating-Shortcut fuer `Ergebnis uebernehmen & Turnier oeffnen` auf verknuepften Lobby-/Match-Routen.
 - Accessibility:
   - ESC schliesst Drawer.
   - Fokusfalle im offenen Drawer.

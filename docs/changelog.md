@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.14
+- Match-Seiten-Shortcut hinzugefuegt:
+  - Auf `/lobbies/{id}` und `/matches/{id}` erscheint ein Button fuer `Ergebnis uebernehmen & Turnier oeffnen`.
+  - Shortcut oeffnet direkt den Tab `Spiele` im Turnierassistenten.
+- Gezielte manuelle Ergebnisuebernahme pro Lobby-ID:
+  - Sync kann fuer genau ein Lobby-Match aktiv ausgelost werden (statt nur passiv im Background-Polling).
+- API-Sync robuster gemacht:
+  - Pending-Matches mit `auto.status=error` werden nun ebenfalls erneut versucht.
+  - Dadurch koennen temporaere Fehler ohne manuelles Zuruecksetzen wieder in `started/completed` uebergehen.
+- Fehler-/Hinweislogik beim Sync entprellt:
+  - Weniger wiederholte Fehlermeldungen bei gleicher Ursache.
+
 ## 0.2.13
 - KO-Engine v2 eingefuehrt:
   - Hybrid-Draw fuer neue KO-Turniere:

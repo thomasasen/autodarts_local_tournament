@@ -38,6 +38,7 @@ Der Assistent erweitert die Autodarts-Oberflaeche um einen eigenen Bereich fuer:
   - manuelles Speichern pro Match
   - API-Matchstart per Klick
   - API-Sync fuer Ergebnisse
+  - Match-Seiten-Shortcut: `Ergebnis uebernehmen & Turnier oeffnen`
 - KO-Ansicht:
   - Bracket via `brackets-viewer` (primar)
   - HTML-Fallback bei CDN-Fehler/Timeout
