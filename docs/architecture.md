@@ -10,25 +10,45 @@
   - Public API: `window.__ATA_RUNTIME` (`openDrawer`, `closeDrawer`, `toggleDrawer`, `isReady`, `version`).
   - Event-Bruecke: `ata:toggle-request`, `ata:ready`.
 
+## Schichtenmodell (inkrementell)
+- Datenhaltungsschicht:
+  - Storage-Zugriff (`GM_*`, `localStorage`), Normalisierung, Migrationen, Backup-Write.
+- Logikschicht:
+  - KO-/Liga-/Gruppen-Berechnung, Freilos-Autoverarbeitung, Gewinner-Propagation.
+- Praesentationsschicht:
+  - Rendering im Shadow DOM, Tab-Inhalte, Event-Binding.
+
 ## Datenmodell
-- Storage-Key: `ata:tournament:v1` (`schemaVersion: 1`).
+- Storage-Key: `ata:tournament:v1` (`schemaVersion: 2`).
+- KO-Migrations-Backups: `ata:tournament:ko-migration-backups:v2` (Ringpuffer, max. 5 Eintraege).
 - Einstellungen:
   - `settings.debug`
   - `settings.featureFlags.autoLobbyStart` (default `false`)
 - Turnier:
   - `mode`: `ko | league | groups_ko`
+  - fuer `ko` zusaetzlich `tournament.ko`:
+    - `drawMode`: `seeded | open_draw`
+    - `engineVersion`: `2`
   - `participants` (modusabhaengig):
     - `ko`: `2..128`
     - `league`: `2..16`
     - `groups_ko`: `4..16`
   - `matches` mit `status`, `winnerId`, `legs`, `source`.
+  - pro Match optionale Ergebnis-Semantik unter `match.meta.resultKind`:
+    - `bye` fuer automatisch weitergeleitete Freilose.
   - pro Match optionale API-Automationsmetadaten unter `match.meta.auto`:
     - `provider`, `lobbyId`, `status`, `startedAt`, `finishedAt`, `lastSyncAt`, `lastError`.
 
 ## Turnierlogik
 - KO:
-  - Baum auf naechste 2er-Potenz, automatische BYEs.
+  - KO-Engine v2 mit Hybrid-Draw:
+    - `seeded`: Eingabereihenfolge = Seed 1..n.
+    - `open_draw`: zufaellige Seed-Reihenfolge.
+  - Standard-Seed-Placement fuer 2er-Potenz-Baeume.
+  - Bei unvollstaendigem Feld werden BYEs als fehlende Seeds verteilt (Top-Seeds erhalten Freilose).
   - Gewinner-Propagation in naechste Runde.
+  - Nur Runde-1-Freilose werden automatisch abgeschlossen (`resultKind = bye`).
+  - Legacy-KO-Turniere werden beim Laden auf Engine v2 migriert; davor wird Backup geschrieben.
 - Liga:
   - Round-Robin via Circle-Method.
   - Tabelle: Punkte > LegDiff > Legs+.
@@ -40,6 +60,8 @@
 - Vollstaendig in Shadow DOM (`#ata-ui-host`).
 - Drawer-Rechtslayout mit Tabs:
   - `Turnier`, `Spiele`, `Ansicht`, `Import/Export`, `Einstellungen`.
+- Spiele-Tab:
+  - Freilose werden als eigener Status `Freilos` angezeigt (nicht als regulaeres `0:0` Match).
 - Accessibility:
   - ESC schliesst Drawer.
   - Fokusfalle im offenen Drawer.

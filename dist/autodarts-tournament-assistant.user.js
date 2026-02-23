@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.2.12
+// @version      0.2.13
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,9 +21,10 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.2.12";
+  const APP_VERSION = "0.2.13";
   const STORAGE_KEY = "ata:tournament:v1";
-  const STORAGE_SCHEMA_VERSION = 1;
+  const STORAGE_SCHEMA_VERSION = 2;
+  const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
   const SAVE_DEBOUNCE_MS = 150;
   const UI_HOST_ID = "ata-ui-host";
   const TOGGLE_EVENT = "ata:toggle-request";
@@ -46,6 +47,9 @@
   const MATCH_STAGE_KO = "ko";
   const MATCH_STAGE_GROUP = "group";
   const MATCH_STAGE_LEAGUE = "league";
+  const KO_ENGINE_VERSION = 2;
+  const KO_DRAW_MODE_SEEDED = "seeded";
+  const KO_DRAW_MODE_OPEN_DRAW = "open_draw";
 
   const TAB_IDS = Object.freeze(["tournament", "matches", "view", "io", "settings"]);
   const TAB_META = Object.freeze([
@@ -187,6 +191,32 @@
     return normalizeLookup(value).replace(/[^a-z0-9]+/g, "");
   }
 
+  function cloneSerializable(value) {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function normalizeKoDrawMode(value, fallback = KO_DRAW_MODE_SEEDED) {
+    const mode = normalizeText(value || "").toLowerCase();
+    if (mode === KO_DRAW_MODE_OPEN_DRAW || mode === KO_DRAW_MODE_SEEDED) {
+      return mode;
+    }
+    return fallback;
+  }
+
+  function normalizeKoEngineVersion(value, fallback = 0) {
+    const parsed = clampInt(value, fallback, 0, KO_ENGINE_VERSION);
+    return parsed > KO_ENGINE_VERSION ? KO_ENGINE_VERSION : parsed;
+  }
+
+  function normalizeMatchResultKind(value) {
+    const normalized = normalizeText(value || "").toLowerCase();
+    return normalized === "bye" ? "bye" : null;
+  }
+
   function isByePlaceholderValue(value) {
     const token = normalizeToken(value);
     return Boolean(token) && BYE_PLACEHOLDER_TOKENS.has(token);
@@ -255,6 +285,7 @@
     console.error(`[ATA][${category}] ${message}`, ...args);
   }
 
+  // Data layer: persistence, migration and normalization.
   async function readStoreValue(key, fallbackValue) {
     try {
       if (typeof GM_getValue === "function") {
@@ -335,23 +366,86 @@
     };
   }
 
+  function resetMatchAutomationMeta(match) {
+    const auto = ensureMatchAutoMeta(match);
+    auto.lobbyId = null;
+    auto.status = "idle";
+    auto.startedAt = null;
+    auto.finishedAt = null;
+    auto.lastSyncAt = null;
+    auto.lastError = null;
+    return auto;
+  }
+
   function normalizeMatchMeta(rawMeta) {
     const meta = rawMeta && typeof rawMeta === "object" ? rawMeta : {};
+    const resultKind = normalizeMatchResultKind(meta.resultKind);
     return {
       ...meta,
+      resultKind,
       auto: normalizeAutomationMeta(meta.auto),
     };
   }
 
-  function ensureMatchAutoMeta(match) {
+  function ensureMatchMeta(match) {
     if (!match || typeof match !== "object") {
-      return normalizeAutomationMeta(null);
+      return normalizeMatchMeta(null);
     }
     if (!match.meta || typeof match.meta !== "object") {
       match.meta = {};
     }
-    match.meta.auto = normalizeAutomationMeta(match.meta.auto);
-    return match.meta.auto;
+    match.meta = normalizeMatchMeta(match.meta);
+    return match.meta;
+  }
+
+  function setMatchResultKind(match, resultKind) {
+    const meta = ensureMatchMeta(match);
+    const nextKind = normalizeMatchResultKind(resultKind);
+    if (meta.resultKind === nextKind) {
+      return false;
+    }
+    meta.resultKind = nextKind;
+    return true;
+  }
+
+  function isByeMatchResult(match) {
+    return normalizeMatchResultKind(match?.meta?.resultKind) === "bye";
+  }
+
+  function ensureMatchAutoMeta(match) {
+    const meta = ensureMatchMeta(match);
+    meta.auto = normalizeAutomationMeta(meta.auto);
+    return meta.auto;
+  }
+
+  function normalizeTournamentKoMeta(rawKo, fallbackDrawMode = KO_DRAW_MODE_SEEDED) {
+    const ko = rawKo && typeof rawKo === "object" ? rawKo : {};
+    const drawMode = normalizeKoDrawMode(ko.drawMode, fallbackDrawMode);
+    const engineVersion = normalizeKoEngineVersion(ko.engineVersion, 0);
+    return {
+      drawMode,
+      engineVersion,
+    };
+  }
+
+  async function persistKoMigrationBackup(tournamentSnapshot, reason = "ko-engine-v2-migration") {
+    const snapshot = cloneSerializable(tournamentSnapshot);
+    if (!snapshot) {
+      return false;
+    }
+
+    const backupsRaw = await readStoreValue(STORAGE_KO_MIGRATION_BACKUPS_KEY, []);
+    const backups = Array.isArray(backupsRaw) ? backupsRaw : [];
+    backups.unshift({
+      id: uuid("ko-backup"),
+      reason: normalizeText(reason) || "ko-engine-v2-migration",
+      createdAt: nowIso(),
+      schemaVersion: STORAGE_SCHEMA_VERSION,
+      tournament: snapshot,
+    });
+    const limitedBackups = backups.slice(0, 5);
+    await writeStoreValue(STORAGE_KO_MIGRATION_BACKUPS_KEY, limitedBackups);
+    return true;
   }
 
   function normalizeTournament(rawTournament) {
@@ -411,6 +505,9 @@
       id: normalizeText(rawTournament.id || uuid("tournament")),
       name: normalizeText(rawTournament.name || "Lokales Turnier"),
       mode,
+      ko: mode === "ko"
+        ? normalizeTournamentKoMeta(rawTournament.ko, KO_DRAW_MODE_SEEDED)
+        : null,
       bestOfLegs: sanitizeBestOf(rawTournament.bestOfLegs),
       startScore: sanitizeStartScore(rawTournament.startScore),
       participants,
@@ -448,9 +545,13 @@
 
     const version = Number(rawValue.schemaVersion || 0);
     switch (version) {
+      case 2:
       case 1:
         return normalizeStoreShape(rawValue);
       default:
+        if (rawValue.mode && rawValue.participants) {
+          return normalizeStoreShape({ tournament: rawValue });
+        }
         return createDefaultStore();
     }
   }
@@ -459,12 +560,15 @@
     const raw = await readStoreValue(STORAGE_KEY, createDefaultStore());
     state.store = migrateStorage(raw);
     state.activeTab = state.store.ui.activeTab;
+    const needsSchemaWriteback = Number(raw?.schemaVersion || 0) !== STORAGE_SCHEMA_VERSION;
     if (state.store.tournament) {
       const changed = refreshDerivedMatches(state.store.tournament);
-      if (changed) {
+      if (changed || needsSchemaWriteback) {
         state.store.tournament.updatedAt = nowIso();
         schedulePersist();
       }
+    } else if (needsSchemaWriteback) {
+      schedulePersist();
     }
     logDebug("storage", "Store loaded", state.store);
   }
@@ -550,6 +654,7 @@
     return mappedByName || null;
   }
 
+  // Logic layer: deterministic tournament and bracket calculations.
   function nextPowerOfTwo(value) {
     let size = 1;
     while (size < value) {
@@ -704,94 +809,41 @@
     return matches;
   }
 
-  function applyInnerOuterOrdering(array) {
-    if (!Array.isArray(array)) {
+  function buildSeedPlacement(size) {
+    if (!Number.isFinite(size) || size < 2 || size % 2 !== 0) {
       return [];
     }
-    if (array.length <= 2) {
-      return array.slice();
+    let placement = [1];
+    while (placement.length < size) {
+      const mirrorBase = (placement.length * 2) + 1;
+      const next = [];
+      placement.forEach((seedNumber) => {
+        next.push(seedNumber, mirrorBase - seedNumber);
+      });
+      placement = next;
     }
-    if (array.length % 4 !== 0) {
-      return array.slice();
-    }
-
-    // Source adapted from brackets-manager.js `ordering.inner_outer`:
-    // https://cdn.jsdelivr.net/npm/brackets-manager@1.6.4/dist/ordering.js
-    const quarter = array.length / 4;
-    const innerPart = [array.slice(quarter, 2 * quarter), array.slice(2 * quarter, 3 * quarter)];
-    const outerPart = [array.slice(0, quarter), array.slice(3 * quarter, 4 * quarter)];
-    const result = [];
-
-    function add(part, mode) {
-      if (part[0].length <= 0 || part[1].length <= 0) {
-        return;
-      }
-      if (mode === "inner") {
-        result.push(part[0].pop(), part[1].shift());
-      } else {
-        result.push(part[0].shift(), part[1].pop());
-      }
-    }
-
-    for (let i = 0; i < quarter / 2; i += 1) {
-      add(outerPart, "outer");
-      add(innerPart, "inner");
-      add(outerPart, "inner");
-      add(innerPart, "outer");
-    }
-
-    return result.length === array.length ? result : array.slice();
+    return placement;
   }
 
-  function setArraySize(array, size, fillValue = null) {
-    const values = Array.isArray(array) ? array.slice(0, size) : [];
-    while (values.length < size) {
-      values.push(fillValue);
-    }
-    return values;
-  }
-
-  function balanceByes(seeding, participantCount) {
-    const values = Array.isArray(seeding) ? seeding.filter((value) => value !== null && value !== undefined) : [];
-    const targetSize = participantCount || nextPowerOfTwo(Math.max(values.length, 1));
-    if (!targetSize) {
+  function buildKoRound1Slots(participantIds, drawMode) {
+    const ids = Array.isArray(participantIds) ? participantIds.slice() : [];
+    if (!ids.length) {
       return [];
     }
-
-    // Source adapted from brackets-manager.js `helpers.balanceByes`:
-    // https://cdn.jsdelivr.net/npm/brackets-manager@1.6.4/dist/helpers.js
-    if (values.length < targetSize / 2) {
-      const flat = values.flatMap((value) => [value, null]);
-      return setArraySize(flat, targetSize, null);
-    }
-
-    const nonNullCount = values.length;
-    const nullCount = Math.max(0, targetSize - nonNullCount);
-    const splitIndex = Math.max(0, nonNullCount - nullCount);
-    const flat = [];
-
-    for (let i = 0; i < splitIndex; i += 2) {
-      flat.push(values[i] || null, values[i + 1] || null);
-    }
-    for (let i = splitIndex; i < nonNullCount; i += 1) {
-      flat.push(values[i], null);
-    }
-
-    return setArraySize(flat, targetSize, null);
+    const size = nextPowerOfTwo(ids.length);
+    const mode = normalizeKoDrawMode(drawMode, KO_DRAW_MODE_SEEDED);
+    const seedOrderedParticipants = mode === KO_DRAW_MODE_OPEN_DRAW ? shuffleArray(ids) : ids;
+    const placement = buildSeedPlacement(size);
+    const seedToParticipant = new Map();
+    seedOrderedParticipants.forEach((participantId, index) => {
+      seedToParticipant.set(index + 1, participantId);
+    });
+    return placement.map((seedNumber) => seedToParticipant.get(seedNumber) || null);
   }
 
-  function buildBalancedKoSeeding(participantIds) {
-    const size = nextPowerOfTwo(participantIds.length);
-    const seeded = participantIds.slice();
-    while (seeded.length < size) {
-      seeded.push(null);
-    }
-    return balanceByes(applyInnerOuterOrdering(seeded), size);
-  }
-
-  function buildKoMatches(participantIds) {
-    const size = nextPowerOfTwo(participantIds.length);
-    const seeded = buildBalancedKoSeeding(participantIds);
+  function buildKoMatchesV2(participantIds, drawMode = KO_DRAW_MODE_SEEDED) {
+    const roundOneSlots = buildKoRound1Slots(participantIds, drawMode);
+    const size = roundOneSlots.length || nextPowerOfTwo(participantIds.length);
 
     const matches = [];
     const rounds = Math.log2(size);
@@ -800,8 +852,8 @@
       const matchesInRound = size / (2 ** round);
       for (let number = 1; number <= matchesInRound; number += 1) {
         const idx = (number - 1) * 2;
-        const player1Id = round === 1 ? seeded[idx] : null;
-        const player2Id = round === 1 ? seeded[idx + 1] : null;
+        const player1Id = round === 1 ? roundOneSlots[idx] || null : null;
+        const player2Id = round === 1 ? roundOneSlots[idx + 1] || null : null;
         matches.push(createMatch({
           id: `ko-r${round}-m${number}`,
           stage: MATCH_STAGE_KO,
@@ -903,11 +955,11 @@
 
   function createTournament(config) {
     const modeLimits = getModeParticipantLimits(config.mode);
-    let participants = config.participants.slice(0, modeLimits.max);
-    if (config.mode === "ko" && config.randomizeKoRound1) {
-      participants = shuffleArray(participants);
-    }
+    const participants = config.participants.slice(0, modeLimits.max);
     const participantIds = participants.map((participant) => participant.id);
+    const koDrawMode = config.mode === "ko" && config.randomizeKoRound1
+      ? KO_DRAW_MODE_OPEN_DRAW
+      : KO_DRAW_MODE_SEEDED;
 
     let groups = [];
     let matches = [];
@@ -918,13 +970,17 @@
       groups = buildGroups(participantIds);
       matches = buildGroupMatches(groups).concat(buildGroupsKoMatches());
     } else {
-      matches = buildKoMatches(participantIds);
+      matches = buildKoMatchesV2(participantIds, koDrawMode);
     }
 
     const tournament = {
       id: uuid("tournament"),
       name: normalizeText(config.name),
       mode: config.mode,
+      ko: config.mode === "ko" ? {
+        drawMode: koDrawMode,
+        engineVersion: KO_ENGINE_VERSION,
+      } : null,
       bestOfLegs: sanitizeBestOf(config.bestOfLegs),
       startScore: sanitizeStartScore(config.startScore),
       participants,
@@ -1042,13 +1098,8 @@
     match.winnerId = null;
     match.source = null;
     match.legs = { p1: 0, p2: 0 };
-    const auto = ensureMatchAutoMeta(match);
-    auto.lobbyId = null;
-    auto.status = "idle";
-    auto.startedAt = null;
-    auto.finishedAt = null;
-    auto.lastSyncAt = null;
-    auto.lastError = null;
+    setMatchResultKind(match, null);
+    resetMatchAutomationMeta(match);
     match.updatedAt = nowIso();
   }
 
@@ -1126,120 +1177,125 @@
     return changed;
   }
 
-  function rebalanceLegacyKoSeeding(tournament) {
+  function migrateKoTournamentToV2(tournament, defaultDrawMode = KO_DRAW_MODE_SEEDED) {
     if (!tournament || tournament.mode !== "ko") {
       return false;
     }
 
-    const size = nextPowerOfTwo(tournament.participants.length);
-    if (size === tournament.participants.length) {
+    const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, defaultDrawMode);
+    const engineVersion = normalizeKoEngineVersion(tournament?.ko?.engineVersion, 0);
+
+    if (engineVersion >= KO_ENGINE_VERSION) {
+      if (!tournament.ko || tournament.ko.drawMode !== drawMode || tournament.ko.engineVersion !== KO_ENGINE_VERSION) {
+        tournament.ko = { drawMode, engineVersion: KO_ENGINE_VERSION };
+        return true;
+      }
       return false;
     }
 
-    const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
-    if (!koMatches.length) {
-      return false;
+    const backupSnapshot = cloneSerializable(tournament);
+    if (backupSnapshot) {
+      persistKoMigrationBackup(backupSnapshot, "ko-engine-v2-migration").catch((error) => {
+        logWarn("storage", "KO migration backup write failed.", error);
+      });
     }
 
-    const roundOneMatches = koMatches.filter((match) => match.round === 1);
-    if (!roundOneMatches.length) {
-      return false;
-    }
+    const participantIds = (tournament.participants || [])
+      .map((participant) => normalizeText(participant?.id || ""))
+      .filter(Boolean);
 
-    const participantIndexes = buildParticipantIndexes(tournament);
-    const hasDoubleBye = roundOneMatches.some((match) => {
-      const p1 = resolveParticipantSlotId(tournament, match.player1Id, participantIndexes);
-      const p2 = resolveParticipantSlotId(tournament, match.player2Id, participantIndexes);
-      return !p1 && !p2;
-    });
-    if (!hasDoubleBye) {
-      return false;
-    }
+    const nonKoMatches = (tournament.matches || []).filter((match) => match.stage !== MATCH_STAGE_KO);
+    const migratedKoMatches = buildKoMatchesV2(participantIds, drawMode);
+    tournament.matches = nonKoMatches.concat(migratedKoMatches);
+    tournament.ko = { drawMode, engineVersion: KO_ENGINE_VERSION };
+    tournament.updatedAt = nowIso();
 
-    const hasLockedProgress = koMatches.some((match) => {
-      const hasLegs = clampInt(match.legs?.p1, 0, 0, 50) > 0 || clampInt(match.legs?.p2, 0, 0, 50) > 0;
-      const auto = match.meta?.auto;
-      const hasAutoRun = Boolean(auto?.lobbyId || auto?.status === "started" || auto?.status === "completed");
-      const hasCompletedWinner = Boolean(
-        match.status === STATUS_COMPLETED
-        && match.source !== "auto"
-        && resolveParticipantSlotId(tournament, match.winnerId, participantIndexes),
-      );
-      return match.source === "manual" || hasLegs || hasAutoRun || hasCompletedWinner;
+    logDebug("ko", "KO tournament migrated to engine v2.", {
+      drawMode,
+      participantCount: participantIds.length,
     });
 
-    if (hasLockedProgress) {
-      return false;
-    }
-
-    const orderedIds = buildBalancedKoSeeding(
-      tournament.participants
-        .map((participant) => resolveParticipantSlotId(tournament, participant.id, participantIndexes))
-        .filter(Boolean),
-    );
-    let changed = false;
-
-    roundOneMatches
-      .slice()
-      .sort((left, right) => left.number - right.number)
-      .forEach((match, index) => {
-        const player1Id = orderedIds[index * 2] || null;
-        const player2Id = orderedIds[index * 2 + 1] || null;
-        changed = assignPlayerSlot(match, 1, player1Id) || changed;
-        changed = assignPlayerSlot(match, 2, player2Id) || changed;
-        if (match.status !== STATUS_PENDING || match.winnerId || match.source || match.legs.p1 !== 0 || match.legs.p2 !== 0) {
-          clearMatchResult(match);
-          changed = true;
-        }
-      });
-
-    koMatches
-      .filter((match) => match.round > 1)
-      .forEach((match) => {
-        changed = assignPlayerSlot(match, 1, null) || changed;
-        changed = assignPlayerSlot(match, 2, null) || changed;
-        if (match.status !== STATUS_PENDING || match.winnerId || match.source || match.legs.p1 !== 0 || match.legs.p2 !== 0) {
-          clearMatchResult(match);
-          changed = true;
-        }
-      });
-
-    if (changed) {
-      logDebug("ko", "Legacy KO-Seeding wurde auf inner_outer + Bye-Balancing umgestellt.");
-    }
-
-    return changed;
+    return true;
   }
 
   function autoCompleteByes(tournament) {
+    if (!tournament || tournament.mode !== "ko") {
+      return false;
+    }
+
     let changed = false;
     const participantIndexes = buildParticipantIndexes(tournament);
     const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
+
+    function applyByeCompletion(match, winnerId) {
+      let localChanged = false;
+      if (match.status !== STATUS_COMPLETED) {
+        match.status = STATUS_COMPLETED;
+        localChanged = true;
+      }
+      if (match.winnerId !== winnerId) {
+        match.winnerId = winnerId;
+        localChanged = true;
+      }
+      if (match.source !== "auto") {
+        match.source = "auto";
+        localChanged = true;
+      }
+      if (clampInt(match.legs?.p1, 0, 0, 99) !== 0 || clampInt(match.legs?.p2, 0, 0, 99) !== 0) {
+        match.legs = { p1: 0, p2: 0 };
+        localChanged = true;
+      }
+      localChanged = setMatchResultKind(match, "bye") || localChanged;
+      const auto = ensureMatchAutoMeta(match);
+      if (auto.lobbyId || auto.status !== "idle" || auto.startedAt || auto.finishedAt || auto.lastSyncAt || auto.lastError) {
+        resetMatchAutomationMeta(match);
+        localChanged = true;
+      }
+      if (localChanged) {
+        match.updatedAt = nowIso();
+      }
+      return localChanged;
+    }
+
     koMatches.forEach((match) => {
       // Byes are only legitimate in round 1 seeding; later rounds with one empty slot
       // mean "winner not known yet", not an automatic win.
       if (match.round !== 1) {
-        return;
-      }
-      if (match.status !== STATUS_PENDING) {
+        if (isByeMatchResult(match)) {
+          const localChanged = setMatchResultKind(match, null);
+          if (localChanged) {
+            match.updatedAt = nowIso();
+          }
+          changed = localChanged || changed;
+        }
         return;
       }
       const p1 = resolveParticipantSlotId(tournament, match.player1Id, participantIndexes);
       const p2 = resolveParticipantSlotId(tournament, match.player2Id, participantIndexes);
       changed = assignPlayerSlot(match, 1, p1) || changed;
       changed = assignPlayerSlot(match, 2, p2) || changed;
+
+      if (p1 && p2) {
+        if (isByeMatchResult(match)) {
+          const localChanged = setMatchResultKind(match, null);
+          if (localChanged) {
+            match.updatedAt = nowIso();
+          }
+          changed = localChanged || changed;
+        }
+        return;
+      }
+
       if (p1 && !p2) {
-        match.status = STATUS_COMPLETED;
-        match.winnerId = p1;
-        match.source = "auto";
-        match.updatedAt = nowIso();
-        changed = true;
+        changed = applyByeCompletion(match, p1) || changed;
       } else if (p2 && !p1) {
-        match.status = STATUS_COMPLETED;
-        match.winnerId = p2;
-        match.source = "auto";
-        match.updatedAt = nowIso();
-        changed = true;
+        changed = applyByeCompletion(match, p2) || changed;
+      } else if (isByeMatchResult(match)) {
+        const localChanged = setMatchResultKind(match, null);
+        if (localChanged) {
+          match.updatedAt = nowIso();
+        }
+        changed = localChanged || changed;
       }
     });
     return changed;
@@ -1297,8 +1353,8 @@
     let changedAny = false;
     for (let i = 0; i < 8; i += 1) {
       let changed = false;
+      changed = migrateKoTournamentToV2(tournament, KO_DRAW_MODE_SEEDED) || changed;
       changed = normalizeCompletedMatchResults(tournament) || changed;
-      changed = rebalanceLegacyKoSeeding(tournament) || changed;
       changed = resolveGroupsToKoAssignments(tournament) || changed;
       changed = autoCompleteByes(tournament) || changed;
       changed = advanceKoWinners(tournament) || changed;
@@ -1375,6 +1431,7 @@
     match.winnerId = winnerId;
     match.source = source === "auto" ? "auto" : "manual";
     match.legs = { p1: p1Legs, p2: p2Legs };
+    setMatchResultKind(match, null);
     const now = nowIso();
     const auto = ensureMatchAutoMeta(match);
     if (source === "auto") {
@@ -1425,6 +1482,9 @@
     }
 
     if (match.status === STATUS_COMPLETED) {
+      if (isByeMatchResult(match)) {
+        return { editable: false, reason: "Freilos wurde automatisch weitergeleitet." };
+      }
       return { editable: false, reason: "Match ist bereits abgeschlossen." };
     }
 
@@ -1895,6 +1955,9 @@
   }
 
   function getApiMatchStatusText(match) {
+    if (isByeMatchResult(match)) {
+      return "Freilos: kein API-Sync erforderlich";
+    }
     const auto = ensureMatchAutoMeta(match);
     if (auto.status === "completed") {
       return "API-Sync: abgeschlossen";
@@ -2154,6 +2217,7 @@
     }
   }
 
+  // Presentation layer: UI rendering and interaction wiring.
   function buildStyles() {
     return `
       :host {
@@ -2693,6 +2757,12 @@
         color: #72e5b0;
       }
 
+      .ata-match-status-bye {
+        border-color: rgba(255, 211, 79, 0.55);
+        background: rgba(255, 211, 79, 0.16);
+        color: #ffd34f;
+      }
+
       .ata-score-grid {
         display: grid;
         grid-template-columns: minmax(180px, 1fr) minmax(170px, 210px) minmax(170px, 210px) auto auto;
@@ -2927,7 +2997,7 @@
             <div class="ata-toggle" style="margin-top: 12px;">
               <div>
                 <strong>KO-Erstrunde zufaellig mischen</strong>
-                <div class="ata-small">Wenn aktiv, wird die erste KO-Runde beim Erstellen fair per Zufall gesetzt.</div>
+                <div class="ata-small">Wenn aktiv, wird ein Open Draw erzeugt (zufaellige Reihenfolge bei PDC-konformer Bye-Verteilung).</div>
               </div>
               <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
             </div>
@@ -3004,6 +3074,7 @@
       const playability = getMatchEditability(tournament, match);
       const editable = playability.editable;
       const isCompleted = match.status === STATUS_COMPLETED;
+      const isByeCompletion = isCompleted && isByeMatchResult(match);
       const stageLabel = match.stage === MATCH_STAGE_GROUP
         ? `Gruppe ${match.groupId || "?"}`
         : match.stage === MATCH_STAGE_LEAGUE
@@ -3013,9 +3084,9 @@
       const startDisabledAttr = startUi.disabled ? "disabled" : "";
       const startTitleAttr = startUi.title ? `title="${escapeHtml(startUi.title)}"` : "";
       const autoStatus = getApiMatchStatusText(match);
-      const statusLine = !editable && playability.reason
-        ? `${playability.reason} - ${autoStatus}`
-        : autoStatus;
+      const statusLine = isByeCompletion
+        ? "Freilos wurde automatisch in die naechste Runde weitergeleitet."
+        : (!editable && playability.reason ? `${playability.reason} - ${autoStatus}` : autoStatus);
       const matchCellText = `Runde ${match.round} / Spiel ${match.number}`;
       const matchCellHelpText = "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
       const winnerHelpText = editable
@@ -3036,7 +3107,13 @@
         isCompleted ? "ata-row-completed" : "",
         !editable ? "ata-row-inactive" : "",
       ].filter(Boolean).join(" ");
-      const statusBadgeClass = isCompleted ? "ata-match-status ata-match-status-completed" : "ata-match-status ata-match-status-open";
+      const statusBadgeClass = isByeCompletion
+        ? "ata-match-status ata-match-status-bye"
+        : (isCompleted ? "ata-match-status ata-match-status-completed" : "ata-match-status ata-match-status-open");
+      const statusBadgeText = isByeCompletion ? "Freilos" : (isCompleted ? "Abgeschlossen" : "Offen");
+      const legsDisplay = isCompleted
+        ? (isByeCompletion ? "Freilos" : `${match.legs.p1}:${match.legs.p2}`)
+        : "-";
       const winnerOptions = editable
         ? `
           <option value="">Gewinner</option>
@@ -3050,9 +3127,9 @@
           <td>${escapeHtml(stageLabel)}</td>
           <td title="${escapeHtml(matchCellHelpText)}">${escapeHtml(matchCellText)}</td>
           <td>${player1Display} vs ${player2Display}</td>
-          <td><span class="${statusBadgeClass}">${isCompleted ? "Abgeschlossen" : "Offen"}</span></td>
+          <td><span class="${statusBadgeClass}">${statusBadgeText}</span></td>
           <td>${isCompleted ? winnerDisplay : "-"}</td>
-          <td>${isCompleted ? `${match.legs.p1}:${match.legs.p2}` : "-"}</td>
+          <td>${legsDisplay}</td>
           <td>
             <div class="ata-score-grid">
               <select
@@ -3218,13 +3295,20 @@
       .map(([roundNumber, matches]) => {
         const matchesHtml = matches
           .sort((a, b) => a.number - b.number)
-          .map((match) => `
-            <div class="ata-bracket-match">
-              <div>${escapeHtml(participantNameById(tournament, match.player1Id))}</div>
-              <div>${escapeHtml(participantNameById(tournament, match.player2Id))}</div>
-              <div class="ata-small">${isCompletedMatchResultValid(tournament, match) ? `Gewinner: ${escapeHtml(participantNameById(tournament, match.winnerId))}` : "offen"}</div>
-            </div>
-          `).join("");
+          .map((match) => {
+            const statusText = !isCompletedMatchResultValid(tournament, match)
+              ? "offen"
+              : isByeMatchResult(match)
+                ? `Freilos: ${escapeHtml(participantNameById(tournament, match.winnerId))}`
+                : `Gewinner: ${escapeHtml(participantNameById(tournament, match.winnerId))}`;
+            return `
+              <div class="ata-bracket-match">
+                <div>${escapeHtml(participantNameById(tournament, match.player1Id))}</div>
+                <div>${escapeHtml(participantNameById(tournament, match.player2Id))}</div>
+                <div class="ata-small">${statusText}</div>
+              </div>
+            `;
+          }).join("");
 
         return `
           <div class="ata-bracket-round">
@@ -3345,7 +3429,7 @@
         <div class="ata-toggle">
           <div>
             <strong>KO-Erstrunde zufaellig mischen (Standard)</strong>
-            <div class="ata-small">Default ON. Neue KO-Turniere werden bei der Erstellung fair per Zufall gesetzt.</div>
+            <div class="ata-small">Default ON. Neue KO-Turniere nutzen damit Open Draw (zufaellige Reihenfolge, PDC-konforme Freilose).</div>
           </div>
           <input type="checkbox" id="ata-setting-randomize-ko" data-action="toggle-randomize-ko" ${randomizeKoEnabled}>
         </div>
@@ -3880,20 +3964,21 @@
       const player1Id = resolveBracketParticipantId(match.player1Id);
       const player2Id = resolveBracketParticipantId(match.player2Id);
       const winnerId = resolveBracketParticipantId(match.winnerId);
+      const byeResult = isByeMatchResult(match);
       const completed = isCompletedMatchResultValid(tournament, match)
         && Boolean(winnerId && (winnerId === player1Id || winnerId === player2Id));
       const status = completed ? 4 : (player1Id && player2Id ? 2 : 1);
       const opponent1 = player1Id
         ? {
             id: player1Id,
-            score: completed ? clampInt(match.legs?.p1, 0, 0, 99) : undefined,
+            score: completed && !byeResult ? clampInt(match.legs?.p1, 0, 0, 99) : undefined,
             result: completed && winnerId ? (winnerId === player1Id ? "win" : "loss") : undefined,
           }
         : null;
       const opponent2 = player2Id
         ? {
             id: player2Id,
-            score: completed ? clampInt(match.legs?.p2, 0, 0, 99) : undefined,
+            score: completed && !byeResult ? clampInt(match.legs?.p2, 0, 0, 99) : undefined,
             result: completed && winnerId ? (winnerId === player2Id ? "win" : "loss") : undefined,
           }
         : null;

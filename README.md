@@ -42,7 +42,7 @@ Der Assistent erweitert die Autodarts-Oberflaeche um einen eigenen Bereich fuer:
   - Bracket via `brackets-viewer` (primar)
   - HTML-Fallback bei CDN-Fehler/Timeout
 - Turnieranlage:
-  - KO-Erstrunde kann zufaellig gesetzt werden
+  - KO-Erstrunde als Hybrid-Draw (`seeded` oder `open_draw`)
   - Teilnehmerliste kann per Button gemischt werden
   - Formularentwurf bleibt erhalten (z. B. beim Moduswechsel)
 - Import/Export:
@@ -58,11 +58,17 @@ Der Assistent erweitert die Autodarts-Oberflaeche um einen eigenen Bereich fuer:
 | `groups_ko` | 2 Gruppen, danach KO-Phase | Kombination aus Gruppenphase und Finalrunde |
 
 ### KO (`ko`)
-- Seedings werden intern balanciert (inkl. Bye-Handling).
+- Hybrid-Draw:
+  - `KO-Erstrunde zufaellig mischen = OFF` -> `seeded` (Eingabereihenfolge als Seed 1..n).
+  - `KO-Erstrunde zufaellig mischen = ON` -> `open_draw` (zufaellige Seed-Reihenfolge).
+- Bye-Verteilung ist PDC/DRA-konform fuer gesetzte Draws:
+  - Bei nicht voller 2er-Potenz erhalten Top-Seeds Freilose.
+  - Beispiel 9 Spieler im 16er-Baum: nur Seed 8 vs Seed 9 spielt in Runde 1.
 - KO-Matches werden pro Turnierast freigeschaltet:
   - Match ist spielbar, sobald beide Teilnehmer feststehen.
   - Bei Runde > 1 muessen die direkten Vorgaenger-Matches abgeschlossen sein.
 - Nur Runde-1-Byes duerfen automatisch als abgeschlossen gesetzt werden.
+- Freilose werden im Spiele-Tab explizit als `Freilos` markiert.
 
 ### Liga (`league`)
 - Vollstaendiger Round-Robin-Spielplan.
@@ -87,6 +93,7 @@ Priorisierung fuer Limits in diesem Projekt:
 3. Technische Machbarkeit im Userscript
 
 ### Was sagen die offiziellen Regeln?
+- DRA 6.6.7 / 6.6.8: In gesetzten Draws werden Byes den gesetzten Spielern zugeordnet.
 - DRA 6.8.1: KO (straight knockout) ist der Standardmodus.
 - DRA 6.8.2: Round-Robin ist zulaessig, wenn vorab bekanntgegeben.
 - DRA 6.10.1 / 6.10.5.2: Kein fixes globales Teilnehmermaximum, Einlass/Cap liegt beim Veranstalter.
@@ -116,7 +123,8 @@ Tab: `Einstellungen`
 
 ### KO-Erstrunde zufaellig mischen (Standard)
 - Gilt fuer neu erstellte KO-Turniere.
-- Bei aktivem Schalter werden Teilnehmer fuer Runde 1 per Zufall gesetzt.
+- Bei aktivem Schalter wird ein `open_draw` erzeugt (zufaellige Seed-Reihenfolge).
+- Bei deaktiviertem Schalter wird `seeded` verwendet (Eingabereihenfolge als Seed-Rang).
 - Zusaetzlich gibt es im Turnier-Formular den Button `Teilnehmer mischen`.
 
 ## Turnier anlegen
@@ -169,8 +177,10 @@ Tab: `Import/Export`
 - JSON direkt in Textfeld einfuegen
 
 ### Hinweise
-- Das Persistenzschema bleibt `schemaVersion: 1`.
+- Das Persistenzschema ist `schemaVersion: 2`.
 - Beim Import werden Daten defensiv normalisiert.
+- Legacy-KO-Turniere werden auf KO-Engine v2 migriert.
+- Vor KO-Migration wird ein Backup unter `ata:tournament:ko-migration-backups:v2` abgelegt.
 
 ## Troubleshooting
 ### "Match ist abgeschlossen", obwohl neu
@@ -178,7 +188,7 @@ Tab: `Import/Export`
 - Loesung:
   1. Seite neu laden.
   2. Falls noetig Turnier neu anlegen.
-  3. Pruefen, ob nur Runde-1-Bye-Match ggf. auto-abgeschlossen ist (das ist korrekt).
+  3. Pruefen, ob `Freilos` in Runde 1 automatisch weitergeleitet wurde (das ist korrekt).
 
 ### "Board-ID ungueltig (manual)"
 - Einmal in Autodarts manuell eine Lobby oeffnen und Board setzen.
@@ -232,6 +242,8 @@ autodarts_local_tournament/
 - DRA (offizielle Regelbasis):
   - https://www.thedra.co.uk/rules
   - https://www.thedra.co.uk/_files/ugd/298855_5df36f5f7b5449f8af7f1606f153b8f2.pdf
+- PDC (Open Draw Kontext, Eventregeln):
+  - https://www.pdc.tv/news/2013/01/16/rules-challenge-youth-tours
 - Referenz-Extension:
   - https://chromewebstore.google.com/detail/autodarts-local-tournamen/algfbicoennnolleogigbefngpkkmcng
 - Bracket Viewer:

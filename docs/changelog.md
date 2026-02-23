@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.13
+- KO-Engine v2 eingefuehrt:
+  - Hybrid-Draw fuer neue KO-Turniere:
+    - `randomize ON` -> `open_draw`
+    - `randomize OFF` -> `seeded`
+  - PDC/DRA-konforme Bye-Verteilung ueber Standard-Seed-Placement.
+  - Fehlerfall bei 9 Teilnehmern behoben (kein `Seed 1 vs Seed 2` in Runde 1 mehr).
+- Legacy-KO-Turniere werden beim Laden auf Engine v2 migriert.
+  - Vor Migration wird automatisch ein Backup geschrieben (`ata:tournament:ko-migration-backups:v2`).
+- Match-Metadaten erweitert um `match.meta.resultKind`:
+  - `bye` kennzeichnet automatisch weitergeleitete Freilose.
+- Spiele-Tab verbessert:
+  - Freilose werden als eigener Status `Freilos` angezeigt.
+  - Legs-Spalte zeigt bei Freilos nicht mehr ein regulaeres `0:0`.
+- Persistenzschema auf `schemaVersion: 2` angehoben (Storage-Key bleibt kompatibel: `ata:tournament:v1`).
+- Interne Struktur klarer getrennt in Datenhaltung, Turnierlogik und Praesentation (inkrementell in `dist`).
+
 ## 0.2.12
 - Teilnehmer-Limits auf regelbasierte, modusabhaengige Grenzen umgestellt:
   - `ko`: `2..128`
