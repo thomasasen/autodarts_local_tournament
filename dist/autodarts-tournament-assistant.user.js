@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.2.15
+// @version      0.2.16
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,7 +21,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.2.15";
+  const APP_VERSION = "0.2.16";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 2;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
@@ -58,7 +58,7 @@
   const X01_BULL_MODES = Object.freeze(["25/50", "50/50"]);
   const X01_BULL_OFF_MODES = Object.freeze(["Off", "Normal", "Official"]);
   const X01_MAX_ROUNDS_OPTIONS = Object.freeze([15, 20, 50, 80]);
-  const X01_START_SCORE_OPTIONS = Object.freeze([121, 170, 301, 501, 701, 901, 101, 201]);
+  const X01_START_SCORE_OPTIONS = Object.freeze([121, 170, 301, 501, 701, 901]);
 
   const TAB_IDS = Object.freeze(["tournament", "matches", "view", "io", "settings"]);
   const TAB_META = Object.freeze([
@@ -381,7 +381,7 @@
 
   function sanitizeStartScore(value) {
     const allowed = new Set(X01_START_SCORE_OPTIONS);
-    const score = clampInt(value, 501, 101, 901);
+    const score = clampInt(value, 501, 121, 901);
     return allowed.has(score) ? score : 501;
   }
 
@@ -2192,18 +2192,21 @@
   function buildLobbyCreatePayload(tournament) {
     const legsToWin = getLegsToWin(tournament.bestOfLegs);
     const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
+    const settings = {
+      baseScore: x01Settings.baseScore,
+      inMode: x01Settings.inMode,
+      outMode: x01Settings.outMode,
+      maxRounds: x01Settings.maxRounds,
+      bullOffMode: x01Settings.bullOffMode,
+    };
+    if (x01Settings.bullOffMode !== "Off") {
+      settings.bullMode = x01Settings.bullMode;
+    }
     return {
       variant: x01Settings.variant,
       isPrivate: x01Settings.lobbyVisibility !== "public",
       legs: legsToWin,
-      settings: {
-        baseScore: x01Settings.baseScore,
-        inMode: x01Settings.inMode,
-        outMode: x01Settings.outMode,
-        bullMode: x01Settings.bullMode,
-        maxRounds: x01Settings.maxRounds,
-        bullOffMode: x01Settings.bullOffMode,
-      },
+      settings,
     };
   }
 
@@ -2814,6 +2817,12 @@
         gap: var(--ata-space-3);
       }
 
+      .ata-grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--ata-space-3);
+      }
+
       .ata-field {
         display: grid;
         gap: var(--ata-space-1);
@@ -2851,8 +2860,27 @@
       }
 
       .ata-field textarea {
-        min-height: 130px;
+        min-height: 92px;
         resize: vertical;
+      }
+
+      .ata-form-inline-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--ata-space-2);
+      }
+
+      .ata-preset-pill {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid rgba(255, 211, 79, 0.48);
+        border-radius: 999px;
+        padding: 5px 11px;
+        background: rgba(255, 211, 79, 0.14);
+        color: #ffe39a;
+        font-size: 14px;
+        line-height: 1.1;
+        white-space: nowrap;
       }
 
       .ata-score-grid select,
@@ -3186,6 +3214,12 @@
         accent-color: var(--ata-color-accent);
       }
 
+      @media (max-width: 1250px) {
+        .ata-grid-3 {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
       @media (max-width: 820px) {
         .ata-root {
           padding: 2px;
@@ -3199,6 +3233,10 @@
         }
 
         .ata-grid-2 {
+          grid-template-columns: 1fr;
+        }
+
+        .ata-grid-3 {
           grid-template-columns: 1fr;
         }
 
@@ -3273,20 +3311,23 @@
       const draft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store?.settings);
       const randomizeChecked = draft.randomizeKoRound1 ? "checked" : "";
       const modeLimitSummary = buildModeParticipantLimitSummary();
-      const startScoreOptions = X01_START_SCORE_OPTIONS.map((score) => {
-        const isLegacy = score === 101 || score === 201;
-        const label = isLegacy ? `${score} (Legacy)` : String(score);
-        return `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${label}</option>`;
-      }).join("");
-      const pdcPresetHint = draft.x01Preset === X01_PRESET_PDC_STANDARD
-        ? "PDC-Standard ist aktiv (501, Straight In, Double Out, Bull 25/50, Bull-off Normal, Max Rounds 50, Lobby privat)."
-        : "Custom ist aktiv: Werte aus den X01-Feldern werden fuer die Lobby-Erstellung verwendet.";
-      const x01PresetLockedAttr = draft.x01Preset === X01_PRESET_PDC_STANDARD ? "disabled" : "";
+      const startScoreOptions = X01_START_SCORE_OPTIONS.map((score) => (
+        `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${score}</option>`
+      )).join("");
+      const pdcPresetActive = draft.x01Preset === X01_PRESET_PDC_STANDARD;
+      const presetStatusLabel = pdcPresetActive ? "Preset aktiv: PDC Standard" : "Preset aktiv: Custom";
+      const pdcPresetHint = "PDC-Button setzt 501, Straight In, Double Out, Bull 25/50, Bull-off Normal, Max Runden 50, Lobby privat.";
+      const bullModeDisabled = draft.x01BullOffMode === "Off";
+      const bullModeDisabledAttr = bullModeDisabled ? "disabled" : "";
+      const bullModeHiddenInput = bullModeDisabled
+        ? `<input type="hidden" id="ata-x01-bullmode-hidden" name="x01BullMode" value="${escapeHtml(draft.x01BullMode)}">`
+        : "";
       return `
         <section class="ata-card tournamentCard">
           <h3>Neues Turnier erstellen</h3>
           <form id="ata-create-form">
-            <div class="ata-grid-2">
+            <input type="hidden" id="ata-x01-preset" name="x01Preset" value="${escapeHtml(draft.x01Preset)}">
+            <div class="ata-grid-3">
               <div class="ata-field">
                 <label for="ata-name">Turniername</label>
                 <input id="ata-name" name="name" type="text" placeholder="z. B. Freitagsturnier" value="${escapeHtml(draft.name)}" required>
@@ -3304,11 +3345,11 @@
                 <input id="ata-bestof" name="bestOfLegs" type="number" min="1" max="21" step="2" value="${draft.bestOfLegs}">
               </div>
               <div class="ata-field">
-                <label for="ata-x01-preset">X01 Preset</label>
-                <select id="ata-x01-preset" name="x01Preset">
-                  <option value="${X01_PRESET_PDC_STANDARD}" ${draft.x01Preset === X01_PRESET_PDC_STANDARD ? "selected" : ""}>PDC Standard</option>
-                  <option value="${X01_PRESET_CUSTOM}" ${draft.x01Preset === X01_PRESET_CUSTOM ? "selected" : ""}>Custom</option>
-                </select>
+                <label for="ata-apply-pdc-preset">Preset</label>
+                <div class="ata-form-inline-actions">
+                  <button id="ata-apply-pdc-preset" type="button" class="ata-btn" data-action="apply-pdc-preset">PDC Preset anwenden</button>
+                  <span class="ata-preset-pill">${escapeHtml(presetStatusLabel)}</span>
+                </div>
               </div>
               <div class="ata-field">
                 <label for="ata-match-mode">Spielmodus</label>
@@ -3316,13 +3357,13 @@
               </div>
               <div class="ata-field">
                 <label for="ata-startscore">Startscore</label>
-                <select id="ata-startscore" name="startScore" ${x01PresetLockedAttr}>
+                <select id="ata-startscore" name="startScore">
                   ${startScoreOptions}
                 </select>
               </div>
               <div class="ata-field">
                 <label for="ata-x01-inmode">In mode</label>
-                <select id="ata-x01-inmode" name="x01InMode" ${x01PresetLockedAttr}>
+                <select id="ata-x01-inmode" name="x01InMode">
                   <option value="Straight" ${draft.x01InMode === "Straight" ? "selected" : ""}>Straight</option>
                   <option value="Double" ${draft.x01InMode === "Double" ? "selected" : ""}>Double</option>
                   <option value="Master" ${draft.x01InMode === "Master" ? "selected" : ""}>Master</option>
@@ -3330,7 +3371,7 @@
               </div>
               <div class="ata-field">
                 <label for="ata-x01-outmode">Out mode</label>
-                <select id="ata-x01-outmode" name="x01OutMode" ${x01PresetLockedAttr}>
+                <select id="ata-x01-outmode" name="x01OutMode">
                   <option value="Straight" ${draft.x01OutMode === "Straight" ? "selected" : ""}>Straight</option>
                   <option value="Double" ${draft.x01OutMode === "Double" ? "selected" : ""}>Double</option>
                   <option value="Master" ${draft.x01OutMode === "Master" ? "selected" : ""}>Master</option>
@@ -3338,14 +3379,15 @@
               </div>
               <div class="ata-field">
                 <label for="ata-x01-bullmode">Bull mode</label>
-                <select id="ata-x01-bullmode" name="x01BullMode" ${x01PresetLockedAttr}>
+                <select id="ata-x01-bullmode" name="x01BullMode" ${bullModeDisabledAttr}>
                   <option value="25/50" ${draft.x01BullMode === "25/50" ? "selected" : ""}>25/50</option>
                   <option value="50/50" ${draft.x01BullMode === "50/50" ? "selected" : ""}>50/50</option>
                 </select>
+                ${bullModeHiddenInput}
               </div>
               <div class="ata-field">
                 <label for="ata-x01-bulloff">Bull-off</label>
-                <select id="ata-x01-bulloff" name="x01BullOffMode" ${x01PresetLockedAttr}>
+                <select id="ata-x01-bulloff" name="x01BullOffMode">
                   <option value="Off" ${draft.x01BullOffMode === "Off" ? "selected" : ""}>Off</option>
                   <option value="Normal" ${draft.x01BullOffMode === "Normal" ? "selected" : ""}>Normal</option>
                   <option value="Official" ${draft.x01BullOffMode === "Official" ? "selected" : ""}>Official</option>
@@ -3353,7 +3395,7 @@
               </div>
               <div class="ata-field">
                 <label for="ata-x01-maxrounds">Max Runden</label>
-                <select id="ata-x01-maxrounds" name="x01MaxRounds" ${x01PresetLockedAttr}>
+                <select id="ata-x01-maxrounds" name="x01MaxRounds">
                   <option value="15" ${draft.x01MaxRounds === 15 ? "selected" : ""}>15</option>
                   <option value="20" ${draft.x01MaxRounds === 20 ? "selected" : ""}>20</option>
                   <option value="50" ${draft.x01MaxRounds === 50 ? "selected" : ""}>50</option>
@@ -3362,7 +3404,7 @@
               </div>
               <div class="ata-field">
                 <label for="ata-lobby-visibility">Lobby</label>
-                <select id="ata-lobby-visibility" name="lobbyVisibility" ${x01PresetLockedAttr}>
+                <select id="ata-lobby-visibility" name="lobbyVisibility">
                   <option value="private" ${draft.lobbyVisibility === "private" ? "selected" : ""}>Privat</option>
                   <option value="public" ${draft.lobbyVisibility === "public" ? "selected" : ""}>Oeffentlich</option>
                 </select>
@@ -3375,7 +3417,8 @@
               </div>
               <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
             </div>
-            <p class="ata-small" style="margin-top: 10px;">${escapeHtml(pdcPresetHint)}</p>
+            <p class="ata-small" style="margin-top: 8px;">${escapeHtml(pdcPresetHint)}</p>
+            <p class="ata-small" style="margin-top: 2px;">Bull-off = Off deaktiviert Bull mode automatisch (read-only).</p>
             <div class="ata-field" style="margin-top: 12px;">
               <label for="ata-participants">Teilnehmer (eine Zeile pro Person)</label>
               <textarea id="ata-participants" name="participants" placeholder="Max Mustermann&#10;Erika Musterfrau">${escapeHtml(draft.participantsText)}</textarea>
@@ -3403,13 +3446,14 @@
     const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
     const x01PresetLabel = x01Settings.presetId === X01_PRESET_PDC_STANDARD ? "PDC Standard" : "Custom";
     const x01LobbyLabel = x01Settings.lobbyVisibility === "public" ? "Oeffentlich" : "Privat";
+    const x01BullModeLabel = x01Settings.bullOffMode === "Off" ? "-" : x01Settings.bullMode;
 
     return `
       <section class="ata-card tournamentCard">
         <h3>Aktives Turnier</h3>
         <p><b>${escapeHtml(tournament.name)}</b> (${escapeHtml(modeLabel)})</p>
         <p class="ata-small">Best-of ${tournament.bestOfLegs} Legs, Startscore ${tournament.startScore}</p>
-        <p class="ata-small">X01 ${escapeHtml(x01PresetLabel)}: ${x01Settings.baseScore}, In ${escapeHtml(x01Settings.inMode)}, Out ${escapeHtml(x01Settings.outMode)}, Bull ${escapeHtml(x01Settings.bullMode)}, Bull-off ${escapeHtml(x01Settings.bullOffMode)}, Max Runden ${x01Settings.maxRounds}, Lobby ${escapeHtml(x01LobbyLabel)}</p>
+        <p class="ata-small">X01 ${escapeHtml(x01PresetLabel)}: ${x01Settings.baseScore}, In ${escapeHtml(x01Settings.inMode)}, Out ${escapeHtml(x01Settings.outMode)}, Bull ${escapeHtml(x01BullModeLabel)}, Bull-off ${escapeHtml(x01Settings.bullOffMode)}, Max Runden ${x01Settings.maxRounds}, Lobby ${escapeHtml(x01LobbyLabel)}</p>
         <div>${participantsHtml}</div>
       </section>
       <section class="ata-card tournamentCard">
@@ -3877,18 +3921,29 @@
 
     const createForm = shadow.getElementById("ata-create-form");
     if (createForm instanceof HTMLFormElement) {
-      createForm.addEventListener("input", () => updateCreateDraftFromForm(createForm, true));
-      createForm.addEventListener("change", () => updateCreateDraftFromForm(createForm, true));
+      syncCreateFormDependencies(createForm);
+      const handleDraftInputChange = (event) => {
+        const target = event?.target;
+        const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
+          ? normalizeText(target.name || "")
+          : "";
+        if (isCreateDraftX01Field(fieldName)) {
+          setCreateFormPresetValue(createForm, X01_PRESET_CUSTOM);
+        }
+        syncCreateFormDependencies(createForm);
+        updateCreateDraftFromForm(createForm, true);
+      };
+      createForm.addEventListener("input", handleDraftInputChange);
+      createForm.addEventListener("change", handleDraftInputChange);
       createForm.addEventListener("submit", (event) => {
         event.preventDefault();
         handleCreateTournament(createForm);
       });
 
-      const presetSelect = createForm.querySelector("#ata-x01-preset");
-      if (presetSelect instanceof HTMLSelectElement) {
-        presetSelect.addEventListener("change", () => {
-          updateCreateDraftFromForm(createForm, true);
-          renderShell();
+      const applyPresetButton = createForm.querySelector("[data-action='apply-pdc-preset']");
+      if (applyPresetButton instanceof HTMLButtonElement) {
+        applyPresetButton.addEventListener("click", () => {
+          applyPdcPresetToCreateForm(createForm);
         });
       }
     }
@@ -4070,6 +4125,107 @@
     }
   }
 
+  function isCreateDraftX01Field(fieldName) {
+    return [
+      "startScore",
+      "x01InMode",
+      "x01OutMode",
+      "x01BullMode",
+      "x01BullOffMode",
+      "x01MaxRounds",
+      "lobbyVisibility",
+    ].includes(normalizeText(fieldName || ""));
+  }
+
+  function setCreateFormPresetValue(form, presetId) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const presetInput = form.querySelector("#ata-x01-preset");
+    if (!(presetInput instanceof HTMLInputElement)) {
+      return;
+    }
+    const normalizedPreset = sanitizeX01Preset(presetId, X01_PRESET_CUSTOM);
+    presetInput.value = normalizedPreset;
+  }
+
+  function refreshCreateFormPresetBadge(form) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const presetInput = form.querySelector("#ata-x01-preset");
+    const presetBadge = form.querySelector(".ata-preset-pill");
+    if (!(presetInput instanceof HTMLInputElement) || !(presetBadge instanceof HTMLElement)) {
+      return;
+    }
+    const presetId = sanitizeX01Preset(presetInput.value, X01_PRESET_CUSTOM);
+    presetBadge.textContent = presetId === X01_PRESET_PDC_STANDARD
+      ? "Preset aktiv: PDC Standard"
+      : "Preset aktiv: Custom";
+  }
+
+  function syncCreateFormDependencies(form) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const bullOffSelect = form.querySelector("#ata-x01-bulloff");
+    const bullModeSelect = form.querySelector("#ata-x01-bullmode");
+    if (!(bullOffSelect instanceof HTMLSelectElement) || !(bullModeSelect instanceof HTMLSelectElement)) {
+      refreshCreateFormPresetBadge(form);
+      return;
+    }
+
+    const disableBullMode = normalizeText(bullOffSelect.value) === "Off";
+    bullModeSelect.disabled = disableBullMode;
+    bullModeSelect.title = disableBullMode
+      ? "Bull mode ist bei Bull-off = Off ohne Wirkung und daher read-only."
+      : "";
+
+    let hiddenBullMode = form.querySelector("#ata-x01-bullmode-hidden");
+    if (disableBullMode) {
+      if (!(hiddenBullMode instanceof HTMLInputElement)) {
+        hiddenBullMode = document.createElement("input");
+        hiddenBullMode.type = "hidden";
+        hiddenBullMode.id = "ata-x01-bullmode-hidden";
+        hiddenBullMode.name = "x01BullMode";
+        bullModeSelect.insertAdjacentElement("afterend", hiddenBullMode);
+      }
+      hiddenBullMode.value = sanitizeX01BullMode(bullModeSelect.value);
+    } else if (hiddenBullMode instanceof HTMLElement) {
+      hiddenBullMode.remove();
+    }
+
+    refreshCreateFormPresetBadge(form);
+  }
+
+  function applyPdcPresetToCreateForm(form) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const pdcSettings = buildPdcX01Settings();
+    const assignments = [
+      ["#ata-startscore", String(pdcSettings.baseScore)],
+      ["#ata-x01-inmode", pdcSettings.inMode],
+      ["#ata-x01-outmode", pdcSettings.outMode],
+      ["#ata-x01-bullmode", pdcSettings.bullMode],
+      ["#ata-x01-bulloff", pdcSettings.bullOffMode],
+      ["#ata-x01-maxrounds", String(pdcSettings.maxRounds)],
+      ["#ata-lobby-visibility", pdcSettings.lobbyVisibility],
+    ];
+
+    assignments.forEach(([selector, value]) => {
+      const field = form.querySelector(selector);
+      if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement) {
+        field.value = value;
+      }
+    });
+
+    setCreateFormPresetValue(form, X01_PRESET_PDC_STANDARD);
+    syncCreateFormDependencies(form);
+    updateCreateDraftFromForm(form, true);
+    setNotice("info", "PDC Preset wurde auf die X01-Felder angewendet.", 2200);
+  }
+
   function readCreateDraftInput(formData) {
     return {
       name: formData.get("name"),
@@ -4125,6 +4281,7 @@
   }
 
   function handleCreateTournament(form) {
+    syncCreateFormDependencies(form);
     const formData = new FormData(form);
     const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
     state.store.ui.createDraft = draft;

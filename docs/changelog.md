@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.16
+- Turnierformular im Tab `Turnier` auf 3-Spalten-Layout umgestellt, damit die X01-Einstellungen auf normalen Monitoren kompakter sichtbar sind.
+- X01-Preset-Handling umgebaut:
+  - Preset-Auswahlfeld entfernt.
+  - Neuer Button `PDC Preset anwenden` setzt die PDC-Defaults direkt in die Formularfelder.
+  - Manuelle X01-Aenderungen markieren den Preset-Status automatisch als `Custom`.
+- Formularabhaengigkeiten erweitert:
+  - Bei `Bull-off = Off` wird `Bull mode` read-only deaktiviert.
+  - Persistenz bleibt stabil durch Hidden-Fallback fuer deaktivierte Felder.
+- Match-Create-Payload verfeinert:
+  - Wenn `Bull-off = Off`, wird `bullMode` nicht mehr in den API-Settings gesendet.
+- Legacy-Startscores (`101`, `201`) aus der X01-Auswahl und Sanitization entfernt.
+
 ## 0.2.15
 - X01-Matchanlage fuer API-Start erweitert:
   - Turnier-Neuanlage hat jetzt X01-Parameter aus der Autodarts-Lobbyoberflaeche:

@@ -17,6 +17,7 @@
   - KO-/Liga-/Gruppen-Berechnung, Freilos-Autoverarbeitung, Gewinner-Propagation.
 - Praesentationsschicht:
   - Rendering im Shadow DOM, Tab-Inhalte, Event-Binding.
+  - Formularabhaengigkeiten in der Turnieranlage (z. B. `Bull-off = Off` -> `Bull mode` read-only).
 
 ## Datenmodell
 - Storage-Key: `ata:tournament:v1` (`schemaVersion: 2`).
@@ -65,6 +66,9 @@
 - Vollstaendig in Shadow DOM (`#ata-ui-host`).
 - Drawer-Rechtslayout mit Tabs:
   - `Turnier`, `Spiele`, `Ansicht`, `Import/Export`, `Einstellungen`.
+- Turnierformular:
+  - 3-Spalten-Grid (responsiv auf 2/1 Spalten bei kleineren Viewports).
+  - PDC-Preset ueber Button (`PDC Preset anwenden`) statt Select.
 - Spiele-Tab:
   - Freilose werden als eigener Status `Freilos` angezeigt (nicht als regulaeres `0:0` Match).
 - Match-Seite:
@@ -93,10 +97,11 @@
 
 ## API-Halbautomatik
 - Aktiviert ueber `settings.featureFlags.autoLobbyStart`.
-  - Matchstart per UI-Button im Tab `Spiele`:
+- Matchstart per UI-Button im Tab `Spiele`:
   - erstellt Lobby (`/gs/v0/lobbies`)
     - nutzt `tournament.x01` fuer `settings` (plus `legs` aus `bestOfLegs`)
     - Spielmodus bleibt `Legs` (`First to N` aus `bestOfLegs`)
+    - bei `bullOffMode = Off` wird `bullMode` nicht gesendet
   - fuegt Spieler hinzu (`/gs/v0/lobbies/{id}/players`)
   - startet Lobby (`/gs/v0/lobbies/{id}/start`)
 - Ergebnis-Sync im Intervall:
