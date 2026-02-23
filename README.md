@@ -45,6 +45,7 @@ Der Assistent erweitert die Autodarts-Oberflaeche um einen eigenen Bereich fuer:
 - Turnieranlage:
   - KO-Erstrunde als Hybrid-Draw (`seeded` oder `open_draw`)
   - X01-Preset-Button fuer Matchanlage (PDC-Defaults + Custom-Status)
+  - Kompaktes Formular-Layout (Konfiguration + Teilnehmerbereich)
   - Teilnehmerliste kann per Button gemischt werden
   - Formularentwurf bleibt erhalten (z. B. beim Moduswechsel)
 - Import/Export:
@@ -144,7 +145,7 @@ Weitere Felder:
 - In mode / Out mode
 - Bull mode / Bull-off
 - Max Runden
-- Lobby (`Privat`/`Oeffentlich`)
+- Lobby ist immer `Privat` (lokal fest verdrahtet)
 - KO-Erstrunde zufaellig mischen
 - Limits je Modus siehe: [Regelbasis und Limits](#regelbasis-und-limits)
 
@@ -159,7 +160,7 @@ Weitere Felder:
   - Bull mode `25/50`
   - Bull-off `Normal`
   - Max Runden `50`
-  - Lobby `Privat`
+  - Lobby `Privat` (fix)
 - Spielmodus bleibt `Legs`; `Best-of Legs` ist fuehrend fuer die Matchlaenge und wird API-seitig als `First to N Legs` umgesetzt.
 - Formularlogik:
   - Wenn `Bull-off = Off`, wird `Bull mode` read-only ausgegraut.
@@ -170,6 +171,9 @@ Weitere Felder:
 - Dadurch bleiben Eingaben erhalten, auch wenn:
   - der Modus gewechselt wird
   - die UI neu gerendert wird
+- Das Formular ist fuer Desktop als kompakte Zwei-Zonen-Ansicht aufgebaut:
+  - links Match-/Turnierkonfiguration
+  - rechts Teilnehmerliste + Aktionen
 
 ## API-Halbautomatik
 Tab: `Spiele`
@@ -181,7 +185,7 @@ Tab: `Spiele`
 
 ### Ablauf
 1. Match per `Match starten` ausloesen.
-2. Lobby wird mit den Turnier-Settings erstellt (X01-Preset/Felder + Legs aus `Best-of Legs`), Spieler werden hinzugefuegt und das Match wird gestartet.
+2. Lobby wird mit den Turnier-Settings erstellt (X01-Preset/Felder + Legs aus `Best-of Legs`), immer als private Lobby, Spieler werden hinzugefuegt und das Match wird gestartet.
 3. Match-Ergebnis wird per API geholt und gespeichert.
 
 ### Schutzmechanismen

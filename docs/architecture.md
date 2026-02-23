@@ -34,7 +34,7 @@
     - `presetId`: `pdc_standard | custom`
     - `variant`: `X01`
     - `baseScore`, `inMode`, `outMode`, `bullMode`, `maxRounds`, `bullOffMode`
-    - `lobbyVisibility`: `private | public`
+    - `lobbyVisibility`: intern immer `private` (lokale Turniere)
   - `participants` (modusabhaengig):
     - `ko`: `2..128`
     - `league`: `2..16`
@@ -67,7 +67,9 @@
 - Drawer-Rechtslayout mit Tabs:
   - `Turnier`, `Spiele`, `Ansicht`, `Import/Export`, `Einstellungen`.
 - Turnierformular:
-  - 3-Spalten-Grid (responsiv auf 2/1 Spalten bei kleineren Viewports).
+  - kompakte Zwei-Zonen-Ansicht:
+    - links 3-Spalten-Grid fuer Konfiguration
+    - rechts Teilnehmerliste + Aktionen
   - PDC-Preset ueber Button (`PDC Preset anwenden`) statt Select.
 - Spiele-Tab:
   - Freilose werden als eigener Status `Freilos` angezeigt (nicht als regulaeres `0:0` Match).
@@ -102,6 +104,7 @@
     - nutzt `tournament.x01` fuer `settings` (plus `legs` aus `bestOfLegs`)
     - Spielmodus bleibt `Legs` (`First to N` aus `bestOfLegs`)
     - bei `bullOffMode = Off` wird `bullMode` nicht gesendet
+    - `isPrivate` ist immer `true`
   - fuegt Spieler hinzu (`/gs/v0/lobbies/{id}/players`)
   - startet Lobby (`/gs/v0/lobbies/{id}/start`)
 - Ergebnis-Sync im Intervall:

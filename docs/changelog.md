@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.17
+- Turnierformular (`Neues Turnier erstellen`) visuell und strukturell optimiert:
+  - kompakte Zwei-Zonen-Ansicht (Konfiguration links, Teilnehmer + Aktionen rechts), damit die Inhalte auf Desktop besser auf eine Bildschirmansicht passen.
+  - Preset-Button verkleinert (`PDC Preset anwenden`) und besser in die Formularlogik integriert.
+  - Feldreihenfolge angepasst (`Bull-off` vor `Bull mode`).
+- Lokale Lobby-Haertung:
+  - Lobby ist nicht mehr waehlbar im Formular.
+  - API-Create setzt `isPrivate` nun hart auf `true`.
+  - interne Normalisierung erzwingt `lobbyVisibility = private`.
+
 ## 0.2.16
 - Turnierformular im Tab `Turnier` auf 3-Spalten-Layout umgestellt, damit die X01-Einstellungen auf normalen Monitoren kompakter sichtbar sind.
 - X01-Preset-Handling umgebaut:
