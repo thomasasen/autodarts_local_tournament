@@ -3099,6 +3099,39 @@
         font-size: 14px;
       }
 
+      .ata-info-tag-cloud {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 8px 0 0 0;
+      }
+
+      .ata-info-tag {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(236, 242, 255, 0.92);
+        font-size: 13px;
+        line-height: 1.2;
+        padding: 3px 9px;
+        white-space: nowrap;
+      }
+
+      .ata-info-tag.ata-info-tag-key {
+        background: rgba(114, 121, 224, 0.22);
+        border-color: rgba(153, 160, 245, 0.52);
+        color: #dce2ff;
+        font-weight: 700;
+      }
+
+      .ata-info-tag.ata-info-tag-warn {
+        background: rgba(255, 211, 79, 0.14);
+        border-color: rgba(255, 211, 79, 0.48);
+        color: #ffe39a;
+      }
+
       .ata-table-wrap {
         overflow-x: auto;
         border: 1px solid var(--ata-color-border);
@@ -3734,13 +3767,30 @@
     const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
     const x01PresetLabel = x01Settings.presetId === X01_PRESET_PDC_STANDARD ? "PDC Standard" : "Custom";
     const x01BullModeLabel = x01Settings.bullOffMode === "Off" ? "-" : x01Settings.bullMode;
+    const primaryTags = [
+      { text: `Best-of ${tournament.bestOfLegs} Legs`, cls: "ata-info-tag ata-info-tag-key" },
+      { text: `Startscore ${tournament.startScore}`, cls: "ata-info-tag" },
+    ];
+    const x01Tags = [
+      { text: `X01 ${x01PresetLabel}`, cls: "ata-info-tag ata-info-tag-key" },
+      { text: `${x01Settings.baseScore}`, cls: "ata-info-tag" },
+      { text: `In ${x01Settings.inMode}`, cls: "ata-info-tag" },
+      { text: `Out ${x01Settings.outMode}`, cls: "ata-info-tag" },
+      { text: `Bull ${x01BullModeLabel}`, cls: "ata-info-tag" },
+      { text: `Bull-off ${x01Settings.bullOffMode}`, cls: "ata-info-tag" },
+      { text: `Max Runden ${x01Settings.maxRounds}`, cls: "ata-info-tag" },
+      { text: "Lobby Privat", cls: "ata-info-tag ata-info-tag-warn" },
+      { text: "(lokal fix)", cls: "ata-info-tag" },
+    ];
+    const primaryTagsHtml = primaryTags.map((tag) => `<span class="${tag.cls}">${escapeHtml(tag.text)}</span>`).join("");
+    const x01TagsHtml = x01Tags.map((tag) => `<span class="${tag.cls}">${escapeHtml(tag.text)}</span>`).join("");
 
     return `
       <section class="ata-card tournamentCard">
         <h3>Aktives Turnier</h3>
         <p><b>${escapeHtml(tournament.name)}</b> (${escapeHtml(modeLabel)})</p>
-        <p class="ata-small">Best-of ${tournament.bestOfLegs} Legs, Startscore ${tournament.startScore}</p>
-        <p class="ata-small">X01 ${escapeHtml(x01PresetLabel)}: ${x01Settings.baseScore}, In ${escapeHtml(x01Settings.inMode)}, Out ${escapeHtml(x01Settings.outMode)}, Bull ${escapeHtml(x01BullModeLabel)}, Bull-off ${escapeHtml(x01Settings.bullOffMode)}, Max Runden ${x01Settings.maxRounds}, Lobby Privat (lokal fix)</p>
+        <div class="ata-info-tag-cloud">${primaryTagsHtml}</div>
+        <div class="ata-info-tag-cloud">${x01TagsHtml}</div>
         <div>${participantsHtml}</div>
       </section>
       <section class="ata-card tournamentCard">
