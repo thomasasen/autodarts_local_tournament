@@ -59,6 +59,14 @@
   const X01_BULL_OFF_MODES = Object.freeze(["Off", "Normal", "Official"]);
   const X01_MAX_ROUNDS_OPTIONS = Object.freeze([15, 20, 50, 80]);
   const X01_START_SCORE_OPTIONS = Object.freeze([121, 170, 301, 501, 701, 901]);
+  const MATCH_SORT_MODE_READY_FIRST = "ready_first";
+  const MATCH_SORT_MODE_ROUND = "round";
+  const MATCH_SORT_MODE_STATUS = "status";
+  const MATCH_SORT_MODES = Object.freeze([
+    MATCH_SORT_MODE_READY_FIRST,
+    MATCH_SORT_MODE_ROUND,
+    MATCH_SORT_MODE_STATUS,
+  ]);
 
   const TAB_IDS = Object.freeze(["tournament", "matches", "view", "io", "settings"]);
   const TAB_META = Object.freeze([
@@ -206,6 +214,7 @@
       settings,
       ui: {
         activeTab: "tournament",
+        matchesSortMode: MATCH_SORT_MODE_READY_FIRST,
         createDraft: createDefaultCreateDraft(settings),
       },
       tournament: null,
@@ -422,6 +431,11 @@
   function sanitizeX01MaxRounds(value) {
     const rounds = clampInt(value, 50, 15, 80);
     return X01_MAX_ROUNDS_OPTIONS.includes(rounds) ? rounds : 50;
+  }
+
+  function sanitizeMatchesSortMode(value, fallback = MATCH_SORT_MODE_READY_FIRST) {
+    const mode = normalizeText(value || "").toLowerCase();
+    return MATCH_SORT_MODES.includes(mode) ? mode : fallback;
   }
 
   function sanitizeLobbyVisibility(value) {
@@ -659,6 +673,7 @@
       settings,
       ui: {
         activeTab: TAB_IDS.includes(input?.ui?.activeTab) ? input.ui.activeTab : defaults.ui.activeTab,
+        matchesSortMode: sanitizeMatchesSortMode(input?.ui?.matchesSortMode, defaults.ui.matchesSortMode),
         createDraft: normalizeCreateDraft(input?.ui?.createDraft, settings),
       },
       tournament: normalizeTournament(input?.tournament),
@@ -1070,7 +1085,7 @@
       errors.push("Bitte einen Turniernamen eingeben.");
     }
     if (!["ko", "league", "groups_ko"].includes(config.mode)) {
-      errors.push("Ungültiger Modus.");
+      errors.push("Ung\u00fcltiger Modus.");
     }
     const participantCountError = getParticipantCountError(config.mode, config.participants.length);
     if (participantCountError) {
@@ -2370,14 +2385,14 @@
 
     const duplicates = getDuplicateParticipantNames(tournament);
     if (duplicates.length) {
-      setNotice("error", "Für Auto-Sync müssen Teilnehmernamen eindeutig sein.");
+      setNotice("error", "F\u00fcr Auto-Sync m\u00fcssen Teilnehmernamen eindeutig sein.");
       return;
     }
 
     const activeMatch = findActiveStartedMatch(tournament, match.id);
     if (activeMatch) {
       const activeAuto = ensureMatchAutoMeta(activeMatch);
-      setNotice("info", "Es läuft bereits ein aktives Match. Weiterleitung dorthin.");
+      setNotice("info", "Es l\u00e4uft bereits ein aktives Match. Weiterleitung dorthin.");
       if (activeAuto.lobbyId) {
         openMatchPage(activeAuto.lobbyId);
       }
@@ -2392,18 +2407,18 @@
 
     const boardId = getBoardId();
     if (!boardId) {
-      setNotice("error", "Board-ID fehlt. Bitte einmal manuell eine Lobby öffnen und Board auswählen.");
+      setNotice("error", "Board-ID fehlt. Bitte einmal manuell eine Lobby \u00f6ffnen und Board ausw\u00e4hlen.");
       return;
     }
     if (!isValidBoardId(boardId)) {
-      setNotice("error", `Board-ID ist ungültig (${boardId}). Bitte in einer manuellen Lobby ein echtes Board auswählen.`);
+      setNotice("error", `Board-ID ist ung\u00fcltig (${boardId}). Bitte in einer manuellen Lobby ein echtes Board ausw\u00e4hlen.`);
       return;
     }
 
     const participant1 = participantById(tournament, match.player1Id);
     const participant2 = participantById(tournament, match.player2Id);
     if (!participant1 || !participant2) {
-      setNotice("error", "Teilnehmerzuordnung im Match ist unvollständig.");
+      setNotice("error", "Teilnehmerzuordnung im Match ist unvollst\u00e4ndig.");
       return;
     }
 
@@ -3149,6 +3164,46 @@
         gap: 8px;
       }
 
+      .ata-matches-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 8px;
+      }
+
+      .ata-segmented {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        padding: 2px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .ata-segmented-btn {
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: rgba(232, 237, 255, 0.86);
+        font-size: 12px;
+        line-height: 1.2;
+        padding: 5px 10px;
+        cursor: pointer;
+      }
+
+      .ata-segmented-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .ata-segmented-btn[data-active="1"] {
+        background: rgba(255, 255, 255, 0.95);
+        color: #1e2d56;
+        font-weight: 700;
+      }
+
       .ata-match-card {
         border: 1px solid rgba(255, 255, 255, 0.2);
         border-radius: var(--ata-radius-md);
@@ -3171,6 +3226,26 @@
       .ata-match-card.ata-row-completed {
         background: rgba(90, 210, 153, 0.12);
         border-color: rgba(90, 210, 153, 0.35);
+      }
+
+      .ata-match-card.ata-row-live {
+        background: rgba(90, 210, 153, 0.15);
+        border-color: rgba(110, 231, 183, 0.62);
+      }
+
+      .ata-match-card.ata-row-ready {
+        background: rgba(106, 146, 237, 0.14);
+        border-color: rgba(153, 184, 245, 0.52);
+      }
+
+      .ata-match-card.ata-row-blocked {
+        background: rgba(20, 31, 57, 0.7);
+        border-color: rgba(126, 145, 196, 0.34);
+      }
+
+      .ata-match-card.ata-row-bye {
+        background: rgba(255, 211, 79, 0.09);
+        border-color: rgba(255, 211, 79, 0.42);
       }
 
       .ata-match-card-head {
@@ -3487,9 +3562,9 @@
           <header class="ata-header">
             <div class="ata-title-wrap">
               <h2>Turnier Assistent</h2>
-              <p>Lokales Management für KO, Liga und Gruppenphase <span class="ata-version">v${escapeHtml(APP_VERSION)}</span></p>
+              <p>Lokales Management f\u00fcr KO, Liga und Gruppenphase <span class="ata-version">v${escapeHtml(APP_VERSION)}</span></p>
             </div>
-            <button type="button" class="ata-close-btn" data-action="close-drawer" aria-label="Schließen">Schließen</button>
+            <button type="button" class="ata-close-btn" data-action="close-drawer" aria-label="Schlie\u00dfen">Schlie\u00dfen</button>
           </header>
           <nav class="ata-tabs">${tabs}</nav>
           ${runtimeStatusHtml}
@@ -3669,13 +3744,81 @@
         <div>${participantsHtml}</div>
       </section>
       <section class="ata-card tournamentCard">
-        <h3>Turnier zurücksetzen</h3>
-        <p class="ata-small">Dieser Schritt löscht alle Spielstände. Bitte vorher exportieren.</p>
+        <h3>Turnier zur\u00fccksetzen</h3>
+        <p class="ata-small">Dieser Schritt l\u00f6scht alle Spielst\u00e4nde. Bitte vorher exportieren.</p>
         <div class="ata-actions">
-          <button type="button" class="ata-btn ata-btn-danger" data-action="reset-tournament">Turnier löschen</button>
+          <button type="button" class="ata-btn ata-btn-danger" data-action="reset-tournament">Turnier l\u00f6schen</button>
         </div>
       </section>
     `;
+  }
+
+  function compareMatchesByRound(left, right) {
+    const stageOrder = { group: 1, league: 2, ko: 3 };
+    const leftOrder = stageOrder[left.stage] || 99;
+    const rightOrder = stageOrder[right.stage] || 99;
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+    return left.round - right.round || left.number - right.number;
+  }
+
+  function getMatchPriorityReadyFirst(tournament, match) {
+    const auto = ensureMatchAutoMeta(match);
+    const playability = getMatchEditability(tournament, match);
+    if (match.status === STATUS_PENDING && auto.status === "started" && auto.lobbyId) {
+      return 0;
+    }
+    if (match.status === STATUS_PENDING && playability.editable) {
+      return 1;
+    }
+    if (match.status === STATUS_COMPLETED && !isByeMatchResult(match)) {
+      return 2;
+    }
+    if (match.status === STATUS_COMPLETED && isByeMatchResult(match)) {
+      return 3;
+    }
+    return 4;
+  }
+
+  function getMatchPriorityStatus(tournament, match) {
+    const playability = getMatchEditability(tournament, match);
+    if (match.status === STATUS_PENDING && playability.editable) {
+      return 0;
+    }
+    if (match.status === STATUS_PENDING) {
+      return 1;
+    }
+    if (isByeMatchResult(match)) {
+      return 3;
+    }
+    return 2;
+  }
+
+  function sortMatchesForDisplay(tournament, sortMode) {
+    const mode = sanitizeMatchesSortMode(sortMode, MATCH_SORT_MODE_READY_FIRST);
+    const source = Array.isArray(tournament?.matches) ? tournament.matches.slice() : [];
+    if (mode === MATCH_SORT_MODE_ROUND) {
+      return source.sort(compareMatchesByRound);
+    }
+    if (mode === MATCH_SORT_MODE_STATUS) {
+      return source.sort((left, right) => {
+        const leftPriority = getMatchPriorityStatus(tournament, left);
+        const rightPriority = getMatchPriorityStatus(tournament, right);
+        if (leftPriority !== rightPriority) {
+          return leftPriority - rightPriority;
+        }
+        return compareMatchesByRound(left, right);
+      });
+    }
+    return source.sort((left, right) => {
+      const leftPriority = getMatchPriorityReadyFirst(tournament, left);
+      const rightPriority = getMatchPriorityReadyFirst(tournament, right);
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority;
+      }
+      return compareMatchesByRound(left, right);
+    });
   }
 
   function renderMatchesTab() {
@@ -3685,17 +3828,19 @@
     }
 
     const activeStartedMatch = findActiveStartedMatch(tournament);
+    const sortMode = sanitizeMatchesSortMode(state.store?.ui?.matchesSortMode, MATCH_SORT_MODE_READY_FIRST);
+    const sortLabels = {
+      [MATCH_SORT_MODE_READY_FIRST]: "Spielbar zuerst",
+      [MATCH_SORT_MODE_ROUND]: "Runde/Spiel",
+      [MATCH_SORT_MODE_STATUS]: "Status",
+    };
+    const sortOptions = [
+      { id: MATCH_SORT_MODE_READY_FIRST, label: "Spielbar zuerst" },
+      { id: MATCH_SORT_MODE_ROUND, label: "Runde/Spiel" },
+      { id: MATCH_SORT_MODE_STATUS, label: "Status" },
+    ];
 
-    const matches = tournament.matches.slice().sort((left, right) => {
-      const stageOrder = { group: 1, league: 2, ko: 3 };
-      const leftOrder = stageOrder[left.stage] || 99;
-      const rightOrder = stageOrder[right.stage] || 99;
-      if (leftOrder !== rightOrder) {
-        return leftOrder - rightOrder;
-      }
-      return left.round - right.round || left.number - right.number;
-    });
-
+    const matches = sortMatchesForDisplay(tournament, sortMode);
     const legsToWin = getLegsToWin(tournament.bestOfLegs);
 
     const cards = matches.map((match) => {
@@ -3705,8 +3850,12 @@
       const isOpenSlot = (name) => name === "\u2205 offen";
       const playability = getMatchEditability(tournament, match);
       const editable = playability.editable;
+      const auto = ensureMatchAutoMeta(match);
       const isCompleted = match.status === STATUS_COMPLETED;
       const isByeCompletion = isCompleted && isByeMatchResult(match);
+      const isAutoStarted = match.status === STATUS_PENDING && auto.status === "started" && Boolean(auto.lobbyId);
+      const isBlockedPending = match.status === STATUS_PENDING && !editable;
+      const isReadyPending = match.status === STATUS_PENDING && editable;
       const stageLabel = match.stage === MATCH_STAGE_GROUP
         ? `Gruppe ${match.groupId || "?"}`
         : match.stage === MATCH_STAGE_LEAGUE
@@ -3721,30 +3870,31 @@
         : (!editable && playability.reason ? `${playability.reason} - ${autoStatus}` : autoStatus);
       const matchCellText = `Runde ${match.round} / Spiel ${match.number}`;
       const matchCellHelpText = "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
-      const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs für den Matchgewinn.`;
-      const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs für den Matchgewinn.`;
+      const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs fuer den Matchgewinn.`;
+      const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs fuer den Matchgewinn.`;
       const legsP1LabelHtml = isOpenSlot(player1)
         ? `<span class="ata-pill-open-slot">${escapeHtml(player1)}</span>`
         : escapeHtml(player1);
       const legsP2LabelHtml = isOpenSlot(player2)
         ? `<span class="ata-pill-open-slot">${escapeHtml(player2)}</span>`
         : escapeHtml(player2);
-      const saveHelpText = `Speichert Legs für ${player1} vs ${player2}. Gewinner wird automatisch aus den Legs bestimmt. Gewinner muss ${legsToWin} Legs erreichen.`;
+      const saveHelpText = `Speichert Legs fuer ${player1} vs ${player2}. Gewinner wird automatisch aus den Legs bestimmt. Gewinner muss ${legsToWin} Legs erreichen.`;
       const rowClasses = [
         "ata-match-card",
         isCompleted ? "ata-row-completed" : "",
+        isByeCompletion ? "ata-row-bye" : "",
+        isAutoStarted ? "ata-row-live" : "",
+        isReadyPending ? "ata-row-ready" : "",
+        isBlockedPending ? "ata-row-blocked" : "",
         !editable ? "ata-row-inactive" : "",
       ].filter(Boolean).join(" ");
       const statusBadgeClass = isByeCompletion
         ? "ata-match-status ata-match-status-bye"
         : (isCompleted ? "ata-match-status ata-match-status-completed" : "ata-match-status ata-match-status-open");
       const statusBadgeText = isByeCompletion ? "Freilos" : (isCompleted ? "Abgeschlossen" : "Offen");
-      const legsDisplay = isCompleted
-        ? (isByeCompletion ? "Freilos" : `${match.legs.p1}:${match.legs.p2}`)
-        : "-";
-      const resultSummary = isCompleted
-        ? (isByeCompletion ? "Freilos" : `${winner} ${match.legs.p1}:${match.legs.p2}`)
-        : "Offen";
+      const summaryText = isCompleted
+        ? (isByeCompletion ? `Weiter: ${winner}` : `${winner} ${match.legs.p1}:${match.legs.p2}`)
+        : "";
 
       const buildPairingPlayerHtml = (name, participantId) => {
         const classes = ["ata-pairing-player"];
@@ -3800,6 +3950,10 @@
         `
         : "";
 
+      const summaryHtml = summaryText
+        ? `<div class="ata-match-meta"><span class="ata-match-summary-pill">${escapeHtml(summaryText)}</span></div>`
+        : "";
+
       return `
         <article class="${escapeHtml(rowClasses)}" data-match-id="${escapeHtml(match.id)}">
           <div class="ata-match-card-head">
@@ -3808,9 +3962,7 @@
               <span class="ata-match-round-pill" title="${escapeHtml(matchCellHelpText)}">${escapeHtml(matchCellText)}</span>
               <span class="${statusBadgeClass}">${statusBadgeText}</span>
             </div>
-            <div class="ata-match-meta">
-              <span class="ata-match-summary-pill">${escapeHtml(resultSummary)}</span>
-            </div>
+            ${summaryHtml}
           </div>
           <div class="ata-match-pairing">${player1PairingHtml} <span class="ata-vs">vs</span> ${player2PairingHtml}</div>
           ${editorHtml}
@@ -3820,11 +3972,18 @@
     }).join("");
 
     const cardsHtml = cards || `<p class="ata-small">Keine Matches vorhanden.</p>`;
+    const sortButtonsHtml = sortOptions.map((option) => `
+      <button type="button" class="ata-segmented-btn" data-action="set-matches-sort" data-sort-mode="${option.id}" data-active="${sortMode === option.id ? "1" : "0"}">${escapeHtml(option.label)}</button>
+    `).join("");
 
     return `
       <section class="ata-card tournamentCard">
-        <h3>Ergebnisführung</h3>
+        <h3>Ergebnisf\u00fchrung</h3>
         <p class="ata-small">API-Halbautomatik: Match per Klick starten, Ergebnis wird automatisch synchronisiert. Manuelle Eingabe bleibt als Fallback aktiv.</p>
+        <div class="ata-matches-toolbar">
+          <div class="ata-segmented" role="group" aria-label="Match-Sortierung">${sortButtonsHtml}</div>
+          <span class="ata-small">Sortierung: ${escapeHtml(sortLabels[sortMode] || sortLabels[MATCH_SORT_MODE_READY_FIRST])}</span>
+        </div>
         <div class="ata-match-list">${cardsHtml}</div>
       </section>
     `;
@@ -4029,11 +4188,11 @@
           <input id="ata-import-file" type="file" accept=".json,application/json">
         </div>
         <div class="ata-field" style="margin-top: 10px;">
-          <label for="ata-import-text">JSON einfügen</label>
+          <label for="ata-import-text">JSON einf\u00fcgen</label>
           <textarea id="ata-import-text" placeholder="{ ... }"></textarea>
         </div>
         <div class="ata-actions" style="margin-top: 10px;">
-          <button type="button" class="ata-btn" data-action="import-text">Eingefügtes JSON importieren</button>
+          <button type="button" class="ata-btn" data-action="import-text">Eingef\u00fcgtes JSON importieren</button>
         </div>
       </section>
     `;
@@ -4057,7 +4216,7 @@
         <div class="ata-toggle">
           <div>
             <strong>Automatischer Lobby-Start + API-Sync</strong>
-            <div class="ata-small">Default OFF. Aktiviert Matchstart per Klick und automatische Ergebnisübernahme aus der Autodarts-API.</div>
+            <div class="ata-small">Default OFF. Aktiviert Matchstart per Klick und automatische Ergebnis\u00fcbernahme aus der Autodarts-API.</div>
           </div>
           <input type="checkbox" id="ata-setting-autolobby" data-action="toggle-autolobby" ${autoLobbyEnabled}>
         </div>
@@ -4126,6 +4285,18 @@
         }
         state.activeTab = tabId;
         state.store.ui.activeTab = tabId;
+        schedulePersist();
+        renderShell();
+      });
+    });
+
+    shadow.querySelectorAll("[data-action='set-matches-sort']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const sortMode = sanitizeMatchesSortMode(button.getAttribute("data-sort-mode"), MATCH_SORT_MODE_READY_FIRST);
+        if (state.store.ui.matchesSortMode === sortMode) {
+          return;
+        }
+        state.store.ui.matchesSortMode = sortMode;
         schedulePersist();
         renderShell();
       });
@@ -4558,7 +4729,7 @@
     const p1Legs = clampInt(legsP1Input.value, 0, 0, 99);
     const p2Legs = clampInt(legsP2Input.value, 0, 0, 99);
     if (p1Legs === p2Legs) {
-      setNotice("error", "Ungültiges Ergebnis: Bei Best-of ist kein Gleichstand möglich.");
+      setNotice("error", "Ung\u00fcltiges Ergebnis: Bei Best-of ist kein Gleichstand m\u00f6glich.");
       return;
     }
 
@@ -4577,7 +4748,7 @@
   }
 
   function handleResetTournament() {
-    const confirmed = window.confirm("Soll das Turnier wirklich gelöscht werden? Dieser Schritt kann nicht rückgängig gemacht werden.");
+    const confirmed = window.confirm("Soll das Turnier wirklich gel\u00f6scht werden? Dieser Schritt kann nicht r\u00fcckg\u00e4ngig gemacht werden.");
     if (!confirmed) {
       return;
     }
@@ -4585,7 +4756,7 @@
     state.apiAutomation.startingMatchId = "";
     state.apiAutomation.authBackoffUntil = 0;
     schedulePersist();
-    setNotice("success", "Turnier wurde gelöscht.");
+    setNotice("success", "Turnier wurde gel\u00f6scht.");
     state.activeTab = "tournament";
     renderShell();
   }
@@ -4627,7 +4798,7 @@
 
   function importPayload(rawObject) {
     if (!rawObject || typeof rawObject !== "object") {
-      return { ok: false, message: "JSON ist leer oder ungültig." };
+      return { ok: false, message: "JSON ist leer oder ung\u00fcltig." };
     }
 
     let tournament = rawObject.tournament || null;
@@ -4693,7 +4864,7 @@
           setNotice("error", result.message || "Datei konnte nicht importiert werden.");
         }
       } catch (error) {
-        setNotice("error", "Datei enthält kein gültiges JSON.");
+        setNotice("error", "Datei enth\u00e4lt kein g\u00fcltiges JSON.");
         logWarn("io", "File import parse failed.", error);
       }
     };
@@ -5656,3 +5827,4 @@
     logError("runtime", "Initialization failed.", error);
   });
 })();
+
