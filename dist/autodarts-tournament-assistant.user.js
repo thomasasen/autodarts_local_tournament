@@ -1397,14 +1397,26 @@
     return { ok: true };
   }
 
-  function getKoBlockingRound(tournament, targetRound) {
-    if (!tournament || targetRound <= 1) {
-      return 0;
+  function getKoBlockingSourceMatch(tournament, match) {
+    if (!tournament || !match || match.stage !== MATCH_STAGE_KO || match.round <= 1) {
+      return null;
     }
-    const unresolvedRounds = getMatchesByStage(tournament, MATCH_STAGE_KO)
-      .filter((item) => item.round < targetRound && item.status !== STATUS_COMPLETED)
-      .map((item) => item.round);
-    return unresolvedRounds.length ? Math.min(...unresolvedRounds) : 0;
+
+    const previousRound = match.round - 1;
+    const sourceNumberA = ((match.number - 1) * 2) + 1;
+    const sourceNumberB = sourceNumberA + 1;
+    const sourceMatches = getMatchesByStage(tournament, MATCH_STAGE_KO)
+      .filter((item) => (
+        item.round === previousRound
+        && (item.number === sourceNumberA || item.number === sourceNumberB)
+      ))
+      .sort((left, right) => left.number - right.number);
+
+    if (!sourceMatches.length) {
+      return null;
+    }
+
+    return sourceMatches.find((item) => item.status !== STATUS_COMPLETED) || null;
   }
 
   function getMatchEditability(tournament, match) {
@@ -1421,9 +1433,12 @@
     }
 
     if (match.stage === MATCH_STAGE_KO) {
-      const blockingRound = getKoBlockingRound(tournament, match.round);
-      if (blockingRound) {
-        return { editable: false, reason: `Runde ${blockingRound} muss zuerst abgeschlossen werden.` };
+      const blockingMatch = getKoBlockingSourceMatch(tournament, match);
+      if (blockingMatch) {
+        return {
+          editable: false,
+          reason: `Vorgaenger-Match Runde ${blockingMatch.round} / Spiel ${blockingMatch.number} muss zuerst abgeschlossen werden.`,
+        };
       }
     }
 

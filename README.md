@@ -59,9 +59,9 @@ Der Assistent erweitert die Autodarts-Oberflaeche um einen eigenen Bereich fuer:
 
 ### KO (`ko`)
 - Seedings werden intern balanciert (inkl. Bye-Handling).
-- KO-Runden werden der Reihe nach freigeschaltet:
-  - Runde 2 erst nach Abschluss von Runde 1
-  - Finale erst nach Abschluss von Runde 2
+- KO-Matches werden pro Turnierast freigeschaltet:
+  - Match ist spielbar, sobald beide Teilnehmer feststehen.
+  - Bei Runde > 1 muessen die direkten Vorgaenger-Matches abgeschlossen sein.
 - Nur Runde-1-Byes duerfen automatisch als abgeschlossen gesetzt werden.
 
 ### Liga (`league`)
