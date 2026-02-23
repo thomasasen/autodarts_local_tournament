@@ -3146,16 +3146,16 @@
 
       .ata-match-list {
         display: grid;
-        gap: 10px;
+        gap: 8px;
       }
 
       .ata-match-card {
         border: 1px solid rgba(255, 255, 255, 0.2);
         border-radius: var(--ata-radius-md);
-        padding: 10px;
+        padding: 8px;
         background: rgba(255, 255, 255, 0.05);
         display: grid;
-        gap: 8px;
+        gap: 6px;
         transition: background 120ms ease, border-color 120ms ease;
       }
 
@@ -3175,9 +3175,9 @@
 
       .ata-match-card-head {
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        gap: 6px;
         flex-wrap: wrap;
       }
 
@@ -3185,7 +3185,7 @@
         display: inline-flex;
         align-items: center;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 6px;
       }
 
       .ata-match-stage-pill,
@@ -3195,8 +3195,8 @@
         align-items: center;
         border-radius: 999px;
         border: 1px solid rgba(255, 255, 255, 0.24);
-        padding: 2px 10px;
-        font-size: 13px;
+        padding: 1px 8px;
+        font-size: 12px;
         line-height: 1.2;
       }
 
@@ -3220,26 +3220,44 @@
         align-items: center;
         flex-wrap: wrap;
         gap: 6px;
-        font-size: 21px;
-        line-height: 1.25;
-        font-weight: 700;
+        font-size: 16px;
+        line-height: 1.2;
       }
 
       .ata-match-pairing .ata-vs {
         color: var(--ata-color-muted);
-        font-size: 14px;
+        font-size: 12px;
         text-transform: uppercase;
         letter-spacing: 0.35px;
+      }
+
+      .ata-pairing-player {
+        font-weight: 700;
+        color: #edf3ff;
+      }
+
+      .ata-pairing-player.is-winner {
+        color: #72e5b0;
+      }
+
+      .ata-pairing-player.is-loser {
+        color: rgba(229, 237, 255, 0.72);
+      }
+
+      .ata-pairing-player.ata-open-slot {
+        color: #ffd34f;
       }
 
       .ata-match-status {
         display: inline-flex;
         align-items: center;
         border-radius: 999px;
-        padding: 2px 10px;
+        padding: 1px 8px;
         border: 1px solid rgba(255, 255, 255, 0.25);
         background: rgba(255, 255, 255, 0.08);
+        font-size: 12px;
         font-weight: 700;
+        line-height: 1.2;
       }
 
       .ata-match-status-open {
@@ -3261,26 +3279,16 @@
 
       .ata-score-grid {
         display: grid;
-        grid-template-columns: minmax(180px, 1fr) minmax(132px, 170px) minmax(132px, 170px) auto auto;
-        gap: var(--ata-space-2);
+        grid-template-columns: minmax(112px, 140px) minmax(112px, 140px) auto auto;
+        gap: 8px;
         min-width: 0;
         align-items: end;
       }
 
-      .ata-score-grid .ata-small {
-        grid-column: 1 / -1;
-      }
-
-      .ata-score-grid .ata-field {
-        gap: 4px;
-      }
-
-      .ata-score-grid .ata-field label {
-        font-size: 12px;
-      }
-
       .ata-score-grid .ata-btn {
-        min-height: 40px;
+        min-height: 36px;
+        padding: 8px 12px;
+        font-size: 16px;
       }
 
       .ata-score-input-wrap {
@@ -3294,19 +3302,23 @@
 
       .ata-score-input-wrap input[type="number"] {
         width: 100%;
-        max-width: 96px;
+        max-width: 84px;
+        min-height: 34px;
+        padding: 5px 8px;
+        font-size: 16px;
       }
 
       .ata-score-input-label {
-        font-size: 13px;
+        font-size: 12px;
         line-height: 1.2;
         color: var(--ata-color-muted);
         white-space: nowrap;
       }
 
       .ata-small {
-        font-size: 16px;
+        font-size: 14px;
         color: var(--ata-color-muted);
+        line-height: 1.3;
       }
 
       .ata-group-grid {
@@ -3406,11 +3418,7 @@
         }
 
         .ata-score-grid {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-        }
-
-        .ata-score-grid .ata-field {
-          grid-column: 1 / -1;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
       }
 
@@ -3448,11 +3456,11 @@
         }
 
         .ata-match-pairing {
-          font-size: 18px;
+          font-size: 15px;
         }
 
         .ata-score-grid {
-          grid-template-columns: 1fr;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
       }
@@ -3695,9 +3703,6 @@
       const player2 = participantNameById(tournament, match.player2Id);
       const winner = participantNameById(tournament, match.winnerId);
       const isOpenSlot = (name) => name === "\u2205 offen";
-      const player1Display = isOpenSlot(player1) ? `<span class="ata-pill-open-slot">${escapeHtml(player1)}</span>` : escapeHtml(player1);
-      const player2Display = isOpenSlot(player2) ? `<span class="ata-pill-open-slot">${escapeHtml(player2)}</span>` : escapeHtml(player2);
-      const winnerDisplay = isOpenSlot(winner) ? `<span class="ata-pill-open-slot">${escapeHtml(winner)}</span>` : escapeHtml(winner);
       const playability = getMatchEditability(tournament, match);
       const editable = playability.editable;
       const isCompleted = match.status === STATUS_COMPLETED;
@@ -3716,20 +3721,15 @@
         : (!editable && playability.reason ? `${playability.reason} - ${autoStatus}` : autoStatus);
       const matchCellText = `Runde ${match.round} / Spiel ${match.number}`;
       const matchCellHelpText = "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
-      const winnerHelpText = editable
-        ? `W\u00e4hle den Gewinner des Matches (${player1} oder ${player2}).`
-        : (playability.reason || "Match ist nicht freigeschaltet.");
-      const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
-      const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
-      const legsP1Label = `Legs ${player1}`;
-      const legsP2Label = `Legs ${player2}`;
+      const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs für den Matchgewinn.`;
+      const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs für den Matchgewinn.`;
       const legsP1LabelHtml = isOpenSlot(player1)
-        ? `Legs <span class="ata-pill-open-slot">${escapeHtml(player1)}</span>`
-        : escapeHtml(legsP1Label);
+        ? `<span class="ata-pill-open-slot">${escapeHtml(player1)}</span>`
+        : escapeHtml(player1);
       const legsP2LabelHtml = isOpenSlot(player2)
-        ? `Legs <span class="ata-pill-open-slot">${escapeHtml(player2)}</span>`
-        : escapeHtml(legsP2Label);
-      const saveHelpText = `Speichert Gewinner und Legs f\u00fcr ${player1} vs ${player2}. Der Gewinner muss ${legsToWin} Legs erreichen.`;
+        ? `<span class="ata-pill-open-slot">${escapeHtml(player2)}</span>`
+        : escapeHtml(player2);
+      const saveHelpText = `Speichert Legs für ${player1} vs ${player2}. Gewinner wird automatisch aus den Legs bestimmt. Gewinner muss ${legsToWin} Legs erreichen.`;
       const rowClasses = [
         "ata-match-card",
         isCompleted ? "ata-row-completed" : "",
@@ -3742,14 +3742,63 @@
       const legsDisplay = isCompleted
         ? (isByeCompletion ? "Freilos" : `${match.legs.p1}:${match.legs.p2}`)
         : "-";
-      const winnerSummary = isCompleted ? winnerDisplay : "-";
-      const winnerOptions = editable
+      const resultSummary = isCompleted
+        ? (isByeCompletion ? "Freilos" : `${winner} ${match.legs.p1}:${match.legs.p2}`)
+        : "Offen";
+
+      const buildPairingPlayerHtml = (name, participantId) => {
+        const classes = ["ata-pairing-player"];
+        if (isOpenSlot(name)) {
+          classes.push("ata-open-slot");
+          return `<span class="${classes.join(" ")}">${escapeHtml(name)}</span>`;
+        }
+        if (isCompleted && match.winnerId) {
+          if (participantId === match.winnerId) {
+            classes.push("is-winner");
+          } else if (participantId === match.player1Id || participantId === match.player2Id) {
+            classes.push("is-loser");
+          }
+        }
+        return `<span class="${classes.join(" ")}">${escapeHtml(name)}</span>`;
+      };
+
+      const player1PairingHtml = buildPairingPlayerHtml(player1, match.player1Id);
+      const player2PairingHtml = buildPairingPlayerHtml(player2, match.player2Id);
+
+      const editorHtml = editable
         ? `
-          <option value="">Gewinner</option>
-          <option value="${escapeHtml(match.player1Id)}" ${match.winnerId === match.player1Id ? "selected" : ""}>${escapeHtml(player1)}</option>
-          <option value="${escapeHtml(match.player2Id)}" ${match.winnerId === match.player2Id ? "selected" : ""}>${escapeHtml(player2)}</option>
+          <div class="ata-score-grid">
+            <div class="ata-score-input-wrap" title="${escapeHtml(legsP1HelpText)}">
+              <span class="ata-score-input-label">${legsP1LabelHtml}</span>
+              <input
+                type="number"
+                min="0"
+                max="${legsToWin}"
+                data-field="legs-p1"
+                data-match-id="${escapeHtml(match.id)}"
+                value="${match.legs.p1}"
+                aria-label="${escapeHtml(legsP1HelpText)}"
+                title="${escapeHtml(legsP1HelpText)}"
+              >
+            </div>
+            <div class="ata-score-input-wrap" title="${escapeHtml(legsP2HelpText)}">
+              <span class="ata-score-input-label">${legsP2LabelHtml}</span>
+              <input
+                type="number"
+                min="0"
+                max="${legsToWin}"
+                data-field="legs-p2"
+                data-match-id="${escapeHtml(match.id)}"
+                value="${match.legs.p2}"
+                aria-label="${escapeHtml(legsP2HelpText)}"
+                title="${escapeHtml(legsP2HelpText)}"
+              >
+            </div>
+            <button type="button" class="ata-btn" data-action="save-match" data-match-id="${escapeHtml(match.id)}" title="${escapeHtml(saveHelpText)}">Speichern</button>
+            <button type="button" class="ata-btn ata-btn-primary" data-action="start-match" data-match-id="${escapeHtml(match.id)}" ${startDisabledAttr} ${startTitleAttr}>${escapeHtml(startUi.label)}</button>
+          </div>
         `
-        : `<option value="">${isCompleted ? escapeHtml(winner) : "\u2205 offen"}</option>`;
+        : "";
 
       return `
         <article class="${escapeHtml(rowClasses)}" data-match-id="${escapeHtml(match.id)}">
@@ -3760,59 +3809,12 @@
               <span class="${statusBadgeClass}">${statusBadgeText}</span>
             </div>
             <div class="ata-match-meta">
-              <span class="ata-match-summary-pill">Winner: ${winnerSummary}</span>
-              <span class="ata-match-summary-pill">Legs: ${escapeHtml(legsDisplay)}</span>
+              <span class="ata-match-summary-pill">${escapeHtml(resultSummary)}</span>
             </div>
           </div>
-          <div class="ata-match-pairing">${player1Display} <span class="ata-vs">vs</span> ${player2Display}</div>
-          <div>
-            <div class="ata-score-grid">
-              <div class="ata-field">
-                <label for="ata-match-winner-${escapeHtml(match.id)}">Gewinner</label>
-                <select
-                  id="ata-match-winner-${escapeHtml(match.id)}"
-                  data-field="winner"
-                  data-match-id="${escapeHtml(match.id)}"
-                  title="${escapeHtml(winnerHelpText)}"
-                  aria-label="${escapeHtml(winnerHelpText)}"
-                  ${editable ? "" : "disabled"}
-                >
-                  ${winnerOptions}
-                </select>
-              </div>
-              <div class="ata-score-input-wrap" title="${escapeHtml(legsP1HelpText)}">
-                <span class="ata-score-input-label">${legsP1LabelHtml}</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="${legsToWin}"
-                  data-field="legs-p1"
-                  data-match-id="${escapeHtml(match.id)}"
-                  value="${match.legs.p1}"
-                  aria-label="${escapeHtml(legsP1HelpText)}"
-                  title="${escapeHtml(legsP1HelpText)}"
-                  ${editable ? "" : "disabled"}
-                >
-              </div>
-              <div class="ata-score-input-wrap" title="${escapeHtml(legsP2HelpText)}">
-                <span class="ata-score-input-label">${legsP2LabelHtml}</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="${legsToWin}"
-                  data-field="legs-p2"
-                  data-match-id="${escapeHtml(match.id)}"
-                  value="${match.legs.p2}"
-                  aria-label="${escapeHtml(legsP2HelpText)}"
-                  title="${escapeHtml(legsP2HelpText)}"
-                  ${editable ? "" : "disabled"}
-                >
-              </div>
-              <button type="button" class="ata-btn" data-action="save-match" data-match-id="${escapeHtml(match.id)}" title="${escapeHtml(saveHelpText)}" ${editable ? "" : "disabled"}>Speichern</button>
-              <button type="button" class="ata-btn ata-btn-primary" data-action="start-match" data-match-id="${escapeHtml(match.id)}" ${startDisabledAttr} ${startTitleAttr}>${escapeHtml(startUi.label)}</button>
-              <div class="ata-small">${escapeHtml(statusLine)}</div>
-            </div>
-          </div>
+          <div class="ata-match-pairing">${player1PairingHtml} <span class="ata-vs">vs</span> ${player2PairingHtml}</div>
+          ${editorHtml}
+          <div class="ata-small">${escapeHtml(statusLine)}</div>
         </article>
       `;
     }).join("");
@@ -4546,23 +4548,25 @@
       setNotice("error", editability.reason || "Match ist nicht freigeschaltet.");
       return;
     }
-    const winnerSelect = getMatchFieldElement(shadow, "winner", matchId);
     const legsP1Input = getMatchFieldElement(shadow, "legs-p1", matchId);
     const legsP2Input = getMatchFieldElement(shadow, "legs-p2", matchId);
 
-    if (!(winnerSelect instanceof HTMLSelectElement) || !(legsP1Input instanceof HTMLInputElement) || !(legsP2Input instanceof HTMLInputElement)) {
+    if (!(legsP1Input instanceof HTMLInputElement) || !(legsP2Input instanceof HTMLInputElement)) {
       return;
     }
 
-    const winnerId = normalizeText(winnerSelect.value);
-    if (!winnerId) {
-      setNotice("error", "Bitte Gewinner auswählen.");
+    const p1Legs = clampInt(legsP1Input.value, 0, 0, 99);
+    const p2Legs = clampInt(legsP2Input.value, 0, 0, 99);
+    if (p1Legs === p2Legs) {
+      setNotice("error", "Ungültiges Ergebnis: Bei Best-of ist kein Gleichstand möglich.");
       return;
     }
+
+    const winnerId = p1Legs > p2Legs ? match.player1Id : match.player2Id;
 
     const result = updateMatchResult(matchId, winnerId, {
-      p1: legsP1Input.value,
-      p2: legsP2Input.value,
+      p1: p1Legs,
+      p2: p2Legs,
     }, "manual");
 
     if (result.ok) {
