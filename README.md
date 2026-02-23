@@ -1,120 +1,210 @@
-# autodarts_local_tournament
+# Autodarts Tournament Assistant
 
-MVP-Userscript fuer lokale Turniere direkt in `https://play.autodarts.io`.
+Lokales Turniermanagement direkt in `https://play.autodarts.io` als Userscript.
 
-## Features (MVP)
-- Ein-Klick Installation ueber Loader:
-  - `installer/Autodarts Tournament Assistant Loader.user.js`
-- Turniermodi:
-  - KO
-  - Liga (Round Robin)
-  - Gruppenphase + KO (2 Gruppen, Top2, Kreuz-Halbfinale)
-- Ergebnisfuehrung:
-  - API-Halbautomatik (Start per Klick + Ergebnis-Sync) bei aktivem Feature-Flag
-  - Auto-Erkennung aus DOM (striktes Matching)
-  - Manuelle Winner-/Leg-Eingabe
-- Ansicht:
-  - Liga-/Gruppentabellen
-  - KO-Bracket via `brackets-viewer@1.9.0` (iframe) + HTML-Fallback (nur bei Fehler/Timeout sichtbar)
-- JSON:
-  - Export als Datei
-  - Export in Zwischenablage
-  - Import via Datei oder Copy/Paste
-- Stabilitaet:
-  - Shadow DOM
-  - SPA-Routing Hooks
-  - MutationObserver + Cleanup
-- Storage-Versionierung:
-  - `ata:tournament:v1` (schemaVersion `1`)
+Der Assistent erweitert die Autodarts-Oberflaeche um einen eigenen Bereich fuer:
+- Turnieranlage (KO, Liga, Gruppenphase + KO)
+- Ergebnisfuehrung
+- Turnieransicht (Tabelle + Bracket)
+- Import/Export
+- API-Halbautomatik (Start per Klick + Ergebnis-Sync)
 
-## Repo-Struktur
-```text
-autodarts_local_tournament/
-├─ installer/
-│  └─ Autodarts Tournament Assistant Loader.user.js
-├─ dist/
-│  └─ autodarts-tournament-assistant.user.js
-├─ docs/
-│  ├─ architecture.md
-│  ├─ selector-strategy.md
-│  └─ changelog.md
-├─ README.md
-└─ LICENSE
-```
+## Inhalt
+1. [Schnellstart](#schnellstart)
+2. [Funktionen](#funktionen)
+3. [Turniermodi](#turniermodi)
+4. [Einstellungen](#einstellungen)
+5. [Turnier anlegen](#turnier-anlegen)
+6. [API-Halbautomatik](#api-halbautomatik)
+7. [Import und Export](#import-und-export)
+8. [Troubleshooting](#troubleshooting)
+9. [Entwicklung](#entwicklung)
+10. [Limitationen](#limitationen)
 
-## Installation
+## Schnellstart
 1. Tampermonkey im Browser installieren.
 2. Loader installieren:
    - `https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js`
 3. `https://play.autodarts.io` neu laden.
-4. Im Hauptmenue auf **xLokale Turniere** klicken.
+4. Im linken Menue auf **xLokale Turniere** klicken.
 
-## Nutzung
-1. Tab `Turnier`: neues Turnier anlegen (Name, Modus, Teilnehmer, Best-of, Startscore).
-2. Tab `Spiele`: Match per `Match starten` starten oder manuell pflegen; API/DOM-Auto-Uebernahme aktualisiert Ergebnisse.
-3. Tab `Ansicht`: Tabellen und Bracket pruefen.
-4. Tab `Import/Export`: JSON sichern oder wieder einspielen.
-5. Tab `Einstellungen`: Debug und Feature-Flags.
+## Funktionen
+- Turniermodi:
+  - KO
+  - Liga (Round Robin)
+  - Gruppenphase + KO
+- Ergebnisfuehrung:
+  - manuelles Speichern pro Match
+  - API-Matchstart per Klick
+  - API-Sync fuer Ergebnisse
+- KO-Ansicht:
+  - Bracket via `brackets-viewer` (primar)
+  - HTML-Fallback bei CDN-Fehler/Timeout
+- Turnieranlage:
+  - KO-Erstrunde kann zufaellig gesetzt werden
+  - Teilnehmerliste kann per Button gemischt werden
+  - Formularentwurf bleibt erhalten (z. B. beim Moduswechsel)
+- Import/Export:
+  - JSON-Datei exportieren
+  - JSON in Zwischenablage kopieren
+  - JSON per Datei oder Text importieren
 
-## Debug
-- Debug aktivieren in Tab `Einstellungen`.
-- Konsole-Logs erscheinen mit Prefix:
-  - `[ATA][storage]`
-  - `[ATA][route]`
-  - `[ATA][autodetect]`
-  - `[ATA][api]`
-  - `[ATA][bracket]`
-  - `[ATA][runtime]`
+## Turniermodi
+| Modus | Beschreibung | Typischer Einsatz |
+|---|---|---|
+| `ko` | Klassischer Single-Elimination-Baum | Schnelles Turnier mit Finalrunde |
+| `league` | Jeder gegen jeden (Round Robin) | Kleine Gruppe mit kompletter Tabelle |
+| `groups_ko` | 2 Gruppen, danach KO-Phase | Kombination aus Gruppenphase und Finalrunde |
 
-## Testen (manuell)
-1. Loader mit Internet:
-   - Seite laden, Script wird remote gezogen und im Cache gespeichert.
-2. Loader ohne Internet:
-   - Seite laden, Cache-Fallback pruefen.
-3. Mehrfaches SPA-Navigieren:
-   - Button **Turnier** bleibt einmalig.
-4. KO mit 5/6/7 Spielern:
-   - BYEs werden automatisch gesetzt.
-5. Liga mit 4 Spielern:
-   - kompletter Round-Robin Spielplan.
-6. Gruppen + KO mit 8 Spielern:
-   - Gruppen A/B + Top2 -> Halbfinale Kreuzpaarung.
-7. Import/Export:
-   - Datei + Copy/Paste roundtrip.
+### KO (`ko`)
+- Seedings werden intern balanciert (inkl. Bye-Handling).
+- KO-Runden werden der Reihe nach freigeschaltet:
+  - Runde 2 erst nach Abschluss von Runde 1
+  - Finale erst nach Abschluss von Runde 2
+- Nur Runde-1-Byes duerfen automatisch als abgeschlossen gesetzt werden.
 
-## Bekannte Risiken und Gegenmassnahmen
-1. DOM-Aenderungen in Autodarts:
-   - Gegenmassnahme: Selektor-Kaskade + defensive Parser + manueller Fallback.
-2. SPA-Routing bricht UI:
-   - Gegenmassnahme: `pushState/replaceState` Hook + `popstate/hashchange` + Polling.
-3. Doppelte Injektion:
-   - Gegenmassnahme: harte IDs + Runtime-Guards + idempotente `ensure*`-Funktionen.
-4. Memory-Leaks:
-   - Gegenmassnahme: zentrale Cleanup-Registry fuer Observer/Listener/Intervalle.
-5. Falsche Auto-Erkennung:
-   - Gegenmassnahme: striktes eindeutiges Match-Matching, sonst kein Auto-Abschluss.
-6. CDN-Bracket faellt aus:
-   - Gegenmassnahme: Timeout + statischer HTML-Bracket-Fallback.
-7. 8-Spieler-Limit:
-   - Gegenmassnahme: harte Validierung beim Erstellen und Import.
-8. Cache-Korruption im Loader:
-   - Gegenmassnahme: Marker-Validierung vor Ausfuehrung.
-9. GoJS-Evaluierungsartefakte:
-   - Gegenmassnahme: Einsatz von `brackets-viewer` (MIT) statt GoJS.
+### Liga (`league`)
+- Vollstaendiger Round-Robin-Spielplan.
+- Tabelle basiert auf:
+  - Punkte
+  - Leg-Differenz
+  - Legs For
+  - Name (als letzter Tiebreak)
+
+### Gruppenphase + KO (`groups_ko`)
+- Zwei Gruppen (`A`, `B`).
+- Top-2 jeder Gruppe qualifizieren sich fuer KO.
+- Kreuz-Halbfinale:
+  - `A1 vs B2`
+  - `B1 vs A2`
+- Finale folgt nach den Halbfinals.
+
+## Einstellungen
+Tab: `Einstellungen`
+
+### Debug-Mode
+- Aktiviert ausfuehrliche Logs in der Browser-Konsole.
+- Prefix z. B. `[ATA][api]`, `[ATA][bracket]`, `[ATA][storage]`.
+
+### Automatischer Lobby-Start + API-Sync
+- Wenn aktiv:
+  - `Match starten` erstellt Lobby, fuegt Spieler hinzu und startet.
+  - Ergebnis wird per API synchronisiert.
+
+### KO-Erstrunde zufaellig mischen (Standard)
+- Gilt fuer neu erstellte KO-Turniere.
+- Bei aktivem Schalter werden Teilnehmer fuer Runde 1 per Zufall gesetzt.
+- Zusaetzlich gibt es im Turnier-Formular den Button `Teilnehmer mischen`.
+
+## Turnier anlegen
+Tab: `Turnier`
+
+Pflichtfelder:
+- Turniername
+- Modus
+- Teilnehmer (eine Zeile pro Person)
+
+Weitere Felder:
+- Best-of Legs
+- Startscore
+- KO-Erstrunde zufaellig mischen
+
+### Verhalten beim Formular
+- Das Eingabeformular speichert einen Entwurf.
+- Dadurch bleiben Eingaben erhalten, auch wenn:
+  - der Modus gewechselt wird
+  - die UI neu gerendert wird
+
+## API-Halbautomatik
+Tab: `Spiele`
+
+### Voraussetzungen
+- Gueltiger Autodarts-Login (Auth-Token)
+- Aktives Board in Autodarts
+- Feature-Flag `Automatischer Lobby-Start + API-Sync` aktiv
+
+### Ablauf
+1. Match per `Match starten` ausloesen.
+2. Lobby wird erstellt und gestartet.
+3. Match-Ergebnis wird per API geholt und gespeichert.
+
+### Schutzmechanismen
+- Nur ein aktives API-Match gleichzeitig (Single-Board-Flow).
+- Duplikatnamen werden fuer API-Sync blockiert.
+- Ungueltige Ergebnisse werden abgewiesen.
+
+## Import und Export
+Tab: `Import/Export`
+
+### Export
+- JSON als Datei herunterladen
+- JSON in die Zwischenablage kopieren
+
+### Import
+- JSON-Datei auswaehlen
+- JSON direkt in Textfeld einfuegen
+
+### Hinweise
+- Das Persistenzschema bleibt `schemaVersion: 1`.
+- Beim Import werden Daten defensiv normalisiert.
+
+## Troubleshooting
+### "Match ist abgeschlossen", obwohl neu
+- Ursache ist meist ein inkonsistenter Altzustand.
+- Loesung:
+  1. Seite neu laden.
+  2. Falls noetig Turnier neu anlegen.
+  3. Pruefen, ob nur Runde-1-Bye-Match ggf. auto-abgeschlossen ist (das ist korrekt).
+
+### "Board-ID ungueltig (manual)"
+- Einmal in Autodarts manuell eine Lobby oeffnen und Board setzen.
+- Danach Seite neu laden.
+
+### API-Start/Sync funktioniert nicht
+- Login pruefen (Token vorhanden?).
+- Feature-Flag aktiv?
+- Eindeutige Teilnehmernamen verwenden.
+
+### Bracket wird nicht gerendert
+- CDN kann temporaer nicht erreichbar sein.
+- Der HTML-Fallback wird dann angezeigt.
+
+## Entwicklung
+### Repo-Struktur
+```text
+autodarts_local_tournament/
+|- installer/
+|  |- Autodarts Tournament Assistant Loader.user.js
+|- dist/
+|  |- autodarts-tournament-assistant.user.js
+|- docs/
+|  |- architecture.md
+|  |- selector-strategy.md
+|  |- changelog.md
+|- README.md
+|- LICENSE
+```
+
+### Hauptdateien
+- Runtime-Script: `dist/autodarts-tournament-assistant.user.js`
+- Loader-Script: `installer/Autodarts Tournament Assistant Loader.user.js`
+
+### Architektur
+- Shadow DOM fuer gekapselte UI
+- SPA-Routing-Hooks fuer stabile Einbindung in Autodarts
+- Defensive Persistenz-Normalisierung
+- Bracket-Rendering in sandboxed iframe
 
 ## Limitationen
-- Teilnehmerlimit im MVP: `2..8`.
-- Gruppenphase + KO im MVP: mindestens `5` Teilnehmer.
-- Auto-Lobby + API-Sync bleibt experimentell und basiert auf nicht offiziell dokumentierten API-Endpunkten (Inference).
-- Auto-Erkennung ist selektorabhaengig und daher best-effort.
+- Teilnehmerlimit: `2..8`
+- `groups_ko` ab mindestens `5` Teilnehmern
+- API-Halbautomatik basiert auf in der Praxis verwendeten Endpunkten (Inference)
+- DOM-Autodetect bleibt best-effort
 
-## Quellen / Orientierung
-- Chrome Web Store Feature-Referenz:
+## Quellen
+- Referenz-Extension:
   - https://chromewebstore.google.com/detail/autodarts-local-tournamen/algfbicoennnolleogigbefngpkkmcng
-- Autodarts Plus (Exclusive Tournaments, 8-Spieler-Limit):
-  - https://autodarts.diy/Autodarts-Plus/Exclusive-tournaments/
-- Turnier-Regelbegriffe:
-  - https://www.pdc-europe.tv/wiki/rules/
-  - https://www.darts-theworld.com/en/rules-wsda.html
-- Loader/SPA-Muster nur als Inspiration (kein Import):
+- Bracket Viewer:
+  - https://github.com/Drarig29/brackets-viewer.js
+- Autodarts Themes/Pattern Inspiration:
   - https://github.com/thomasasen/autodarts-tampermonkey-themes

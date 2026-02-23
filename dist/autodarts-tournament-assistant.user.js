@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.2.9
+// @version      0.2.11
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,7 +21,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.2.9";
+  const APP_VERSION = "0.2.11";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 1;
   const SAVE_DEBOUNCE_MS = 150;
@@ -110,17 +110,48 @@
     cleanupStack: [],
   };
 
+  function createDefaultCreateDraft(settings = null) {
+    const defaultRandomize = settings?.featureFlags?.randomizeKoRound1 !== false;
+    return {
+      name: "",
+      mode: "ko",
+      bestOfLegs: 5,
+      startScore: 501,
+      participantsText: "",
+      randomizeKoRound1: Boolean(defaultRandomize),
+    };
+  }
+
+  function normalizeCreateDraft(rawDraft, settings = null) {
+    const base = createDefaultCreateDraft(settings);
+    const modeRaw = normalizeText(rawDraft?.mode || base.mode);
+    const mode = ["ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : base.mode;
+    return {
+      name: normalizeText(rawDraft?.name || base.name),
+      mode,
+      bestOfLegs: sanitizeBestOf(rawDraft?.bestOfLegs ?? base.bestOfLegs),
+      startScore: sanitizeStartScore(rawDraft?.startScore ?? base.startScore),
+      participantsText: String(rawDraft?.participantsText ?? base.participantsText),
+      randomizeKoRound1: typeof rawDraft?.randomizeKoRound1 === "boolean"
+        ? rawDraft.randomizeKoRound1
+        : base.randomizeKoRound1,
+    };
+  }
+
   function createDefaultStore() {
+    const settings = {
+      debug: false,
+      featureFlags: {
+        autoLobbyStart: false,
+        randomizeKoRound1: true,
+      },
+    };
     return {
       schemaVersion: STORAGE_SCHEMA_VERSION,
-      settings: {
-        debug: false,
-        featureFlags: {
-          autoLobbyStart: false,
-        },
-      },
+      settings,
       ui: {
         activeTab: "tournament",
+        createDraft: createDefaultCreateDraft(settings),
       },
       tournament: null,
     };
@@ -386,16 +417,19 @@
 
   function normalizeStoreShape(input) {
     const defaults = createDefaultStore();
+    const settings = {
+      debug: Boolean(input?.settings?.debug),
+      featureFlags: {
+        autoLobbyStart: Boolean(input?.settings?.featureFlags?.autoLobbyStart),
+        randomizeKoRound1: input?.settings?.featureFlags?.randomizeKoRound1 !== false,
+      },
+    };
     return {
       schemaVersion: STORAGE_SCHEMA_VERSION,
-      settings: {
-        debug: Boolean(input?.settings?.debug),
-        featureFlags: {
-          autoLobbyStart: Boolean(input?.settings?.featureFlags?.autoLobbyStart),
-        },
-      },
+      settings,
       ui: {
         activeTab: TAB_IDS.includes(input?.ui?.activeTab) ? input.ui.activeTab : defaults.ui.activeTab,
+        createDraft: normalizeCreateDraft(input?.ui?.createDraft, settings),
       },
       tournament: normalizeTournament(input?.tournament),
     };
@@ -537,6 +571,36 @@
     });
 
     return participants;
+  }
+
+  function randomInt(maxExclusive) {
+    const max = Number(maxExclusive);
+    if (!Number.isFinite(max) || max <= 0) {
+      return 0;
+    }
+    const cryptoApi = window.crypto || window.msCrypto;
+    if (cryptoApi && typeof cryptoApi.getRandomValues === "function") {
+      const buffer = new Uint32Array(1);
+      const maxUnbiased = Math.floor(0x100000000 / max) * max;
+      let value = 0;
+      do {
+        cryptoApi.getRandomValues(buffer);
+        value = buffer[0];
+      } while (value >= maxUnbiased);
+      return value % max;
+    }
+    return Math.floor(Math.random() * max);
+  }
+
+  function shuffleArray(values) {
+    const shuffled = Array.isArray(values) ? values.slice() : [];
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+      const swapIndex = randomInt(index + 1);
+      const current = shuffled[index];
+      shuffled[index] = shuffled[swapIndex];
+      shuffled[swapIndex] = current;
+    }
+    return shuffled;
   }
 
   function createMatch({
@@ -815,7 +879,10 @@
   }
 
   function createTournament(config) {
-    const participants = config.participants.slice(0, PLAYER_LIMIT_MAX);
+    let participants = config.participants.slice(0, PLAYER_LIMIT_MAX);
+    if (config.mode === "ko" && config.randomizeKoRound1) {
+      participants = shuffleArray(participants);
+    }
     const participantIds = participants.map((participant) => participant.id);
 
     let groups = [];
@@ -1125,6 +1192,11 @@
     const participantIndexes = buildParticipantIndexes(tournament);
     const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
     koMatches.forEach((match) => {
+      // Byes are only legitimate in round 1 seeding; later rounds with one empty slot
+      // mean "winner not known yet", not an automatic win.
+      if (match.round !== 1) {
+        return;
+      }
       if (match.status !== STATUS_PENDING) {
         return;
       }
@@ -1155,6 +1227,9 @@
     }
     if (!match.player1Id || !match.player2Id) {
       const availablePlayerId = match.player1Id || match.player2Id;
+      if (match.stage !== MATCH_STAGE_KO || match.round !== 1) {
+        return false;
+      }
       return Boolean(availablePlayerId && match.winnerId === availablePlayerId);
     }
     if (match.winnerId !== match.player1Id && match.winnerId !== match.player2Id) {
@@ -2775,6 +2850,8 @@
   function renderTournamentTab() {
     const tournament = state.store.tournament;
     if (!tournament) {
+      const draft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store?.settings);
+      const randomizeChecked = draft.randomizeKoRound1 ? "checked" : "";
       return `
         <section class="ata-card tournamentCard">
           <h3>Neues Turnier erstellen</h3>
@@ -2782,36 +2859,44 @@
             <div class="ata-grid-2">
               <div class="ata-field">
                 <label for="ata-name">Turniername</label>
-                <input id="ata-name" name="name" type="text" placeholder="z. B. Freitagsturnier" required>
+                <input id="ata-name" name="name" type="text" placeholder="z. B. Freitagsturnier" value="${escapeHtml(draft.name)}" required>
               </div>
               <div class="ata-field">
                 <label for="ata-mode">Modus</label>
                 <select id="ata-mode" name="mode">
-                  <option value="ko">KO</option>
-                  <option value="league">Liga</option>
-                  <option value="groups_ko">Gruppenphase + KO</option>
+                  <option value="ko" ${draft.mode === "ko" ? "selected" : ""}>KO</option>
+                  <option value="league" ${draft.mode === "league" ? "selected" : ""}>Liga</option>
+                  <option value="groups_ko" ${draft.mode === "groups_ko" ? "selected" : ""}>Gruppenphase + KO</option>
                 </select>
               </div>
               <div class="ata-field">
                 <label for="ata-bestof">Best-of Legs</label>
-                <input id="ata-bestof" name="bestOfLegs" type="number" min="1" max="21" step="2" value="5">
+                <input id="ata-bestof" name="bestOfLegs" type="number" min="1" max="21" step="2" value="${draft.bestOfLegs}">
               </div>
               <div class="ata-field">
                 <label for="ata-startscore">Startscore</label>
                 <select id="ata-startscore" name="startScore">
-                  <option value="101">101</option>
-                  <option value="201">201</option>
-                  <option value="301">301</option>
-                  <option value="501" selected>501</option>
-                  <option value="701">701</option>
+                  <option value="101" ${draft.startScore === 101 ? "selected" : ""}>101</option>
+                  <option value="201" ${draft.startScore === 201 ? "selected" : ""}>201</option>
+                  <option value="301" ${draft.startScore === 301 ? "selected" : ""}>301</option>
+                  <option value="501" ${draft.startScore === 501 ? "selected" : ""}>501</option>
+                  <option value="701" ${draft.startScore === 701 ? "selected" : ""}>701</option>
                 </select>
               </div>
             </div>
+            <div class="ata-toggle" style="margin-top: 12px;">
+              <div>
+                <strong>KO-Erstrunde zufaellig mischen</strong>
+                <div class="ata-small">Wenn aktiv, wird die erste KO-Runde beim Erstellen fair per Zufall gesetzt.</div>
+              </div>
+              <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
+            </div>
             <div class="ata-field" style="margin-top: 12px;">
               <label for="ata-participants">Teilnehmer (eine Zeile pro Person)</label>
-              <textarea id="ata-participants" name="participants" placeholder="Max Mustermann&#10;Erika Musterfrau"></textarea>
+              <textarea id="ata-participants" name="participants" placeholder="Max Mustermann&#10;Erika Musterfrau">${escapeHtml(draft.participantsText)}</textarea>
             </div>
             <div class="ata-actions" style="margin-top: 14px;">
+              <button type="button" class="ata-btn" data-action="shuffle-participants">Teilnehmer mischen</button>
               <button type="submit" class="ata-btn ata-btn-primary">Turnier anlegen</button>
             </div>
             <p class="ata-small" style="margin-top: 10px;">Limit: 2-8 Teilnehmer. Gruppen + KO ab 5 Teilnehmern.</p>
@@ -3197,6 +3282,7 @@
   function renderSettingsTab() {
     const debugEnabled = state.store.settings.debug ? "checked" : "";
     const autoLobbyEnabled = state.store.settings.featureFlags.autoLobbyStart ? "checked" : "";
+    const randomizeKoEnabled = state.store.settings.featureFlags.randomizeKoRound1 ? "checked" : "";
     return `
       <section class="ata-card tournamentCard">
         <h3>Debug und Feature-Flags</h3>
@@ -3213,6 +3299,13 @@
             <div class="ata-small">Default OFF. Aktiviert Matchstart per Klick und automatische Ergebnisübernahme aus der Autodarts-API.</div>
           </div>
           <input type="checkbox" id="ata-setting-autolobby" data-action="toggle-autolobby" ${autoLobbyEnabled}>
+        </div>
+        <div class="ata-toggle">
+          <div>
+            <strong>KO-Erstrunde zufaellig mischen (Standard)</strong>
+            <div class="ata-small">Default ON. Neue KO-Turniere werden bei der Erstellung fair per Zufall gesetzt.</div>
+          </div>
+          <input type="checkbox" id="ata-setting-randomize-ko" data-action="toggle-randomize-ko" ${randomizeKoEnabled}>
         </div>
       </section>
       <section class="ata-card tournamentCard">
@@ -3274,10 +3367,17 @@
 
     const createForm = shadow.getElementById("ata-create-form");
     if (createForm instanceof HTMLFormElement) {
+      createForm.addEventListener("input", () => updateCreateDraftFromForm(createForm, true));
+      createForm.addEventListener("change", () => updateCreateDraftFromForm(createForm, true));
       createForm.addEventListener("submit", (event) => {
         event.preventDefault();
         handleCreateTournament(createForm);
       });
+    }
+
+    const shuffleParticipantsButton = shadow.querySelector("[data-action='shuffle-participants']");
+    if (shuffleParticipantsButton && createForm instanceof HTMLFormElement) {
+      shuffleParticipantsButton.addEventListener("click", () => handleShuffleParticipants(createForm));
     }
 
     shadow.querySelectorAll("[data-action='close-drawer']").forEach((button) => {
@@ -3359,6 +3459,22 @@
       });
     }
 
+    const randomizeKoToggle = shadow.getElementById("ata-setting-randomize-ko");
+    if (randomizeKoToggle instanceof HTMLInputElement) {
+      randomizeKoToggle.addEventListener("change", () => {
+        state.store.settings.featureFlags.randomizeKoRound1 = randomizeKoToggle.checked;
+        state.store.ui.createDraft = normalizeCreateDraft({
+          ...state.store.ui.createDraft,
+          randomizeKoRound1: randomizeKoToggle.checked,
+        }, state.store.settings);
+        schedulePersist();
+        setNotice("info", `KO-Erstrunden-Mix: ${randomizeKoToggle.checked ? "ON" : "OFF"}.`, 2200);
+        if (state.activeTab === "tournament" && !state.store.tournament) {
+          renderShell();
+        }
+      });
+    }
+
     const retryBracketButton = shadow.querySelector("[data-action='retry-bracket']");
     if (retryBracketButton) {
       retryBracketButton.addEventListener("click", () => queueBracketRender(true));
@@ -3436,7 +3552,51 @@
     }
   }
 
+  function updateCreateDraftFromForm(form, persist = true) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const formData = new FormData(form);
+    const nextDraft = normalizeCreateDraft({
+      name: formData.get("name"),
+      mode: formData.get("mode"),
+      bestOfLegs: formData.get("bestOfLegs"),
+      startScore: formData.get("startScore"),
+      participantsText: String(formData.get("participants") || ""),
+      randomizeKoRound1: formData.get("randomizeKoRound1") !== null,
+    }, state.store.settings);
+    const currentDraft = state.store.ui.createDraft || {};
+    const changed = JSON.stringify(nextDraft) !== JSON.stringify(currentDraft);
+    if (!changed) {
+      return;
+    }
+    state.store.ui.createDraft = nextDraft;
+    if (persist) {
+      schedulePersist();
+    }
+  }
+
+  function handleShuffleParticipants(form) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const participantField = form.querySelector("#ata-participants");
+    if (!(participantField instanceof HTMLTextAreaElement)) {
+      return;
+    }
+    const participants = parseParticipantLines(participantField.value);
+    if (participants.length < 2) {
+      setNotice("info", "Mindestens zwei Teilnehmer zum Mischen eingeben.", 2200);
+      return;
+    }
+    const shuffledNames = shuffleArray(participants.map((participant) => participant.name));
+    participantField.value = shuffledNames.join("\n");
+    updateCreateDraftFromForm(form, true);
+    setNotice("success", "Teilnehmer wurden zufaellig gemischt.", 1800);
+  }
+
   function handleCreateTournament(form) {
+    updateCreateDraftFromForm(form, false);
     const formData = new FormData(form);
     const participants = parseParticipantLines(formData.get("participants"));
     const config = {
@@ -3444,6 +3604,7 @@
       mode: normalizeText(formData.get("mode")),
       bestOfLegs: sanitizeBestOf(formData.get("bestOfLegs")),
       startScore: sanitizeStartScore(formData.get("startScore")),
+      randomizeKoRound1: formData.get("randomizeKoRound1") !== null,
       participants,
     };
 
