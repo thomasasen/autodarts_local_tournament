@@ -64,7 +64,7 @@
   const TAB_META = Object.freeze([
     { id: "tournament", label: "Turnier" },
     { id: "matches", label: "Spiele" },
-    { id: "view", label: "Ansicht" },
+    { id: "view", label: "Turnierbaum" },
     { id: "io", label: "Import/Export" },
     { id: "settings", label: "Einstellungen" },
   ]);
@@ -2198,10 +2198,9 @@
       outMode: x01Settings.outMode,
       maxRounds: x01Settings.maxRounds,
       bullOffMode: x01Settings.bullOffMode,
+      // API expects a valid bullMode even when bull-off is "Off".
+      bullMode: sanitizeX01BullMode(x01Settings.bullMode),
     };
-    if (x01Settings.bullOffMode !== "Off") {
-      settings.bullMode = x01Settings.bullMode;
-    }
     return {
       variant: x01Settings.variant,
       isPrivate: true,
@@ -3145,6 +3144,94 @@
         font-weight: 700;
       }
 
+      .ata-match-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .ata-match-card {
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: var(--ata-radius-md);
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.05);
+        display: grid;
+        gap: 8px;
+        transition: background 120ms ease, border-color 120ms ease;
+      }
+
+      .ata-match-card:hover {
+        background: rgba(255, 255, 255, 0.09);
+        border-color: rgba(255, 255, 255, 0.32);
+      }
+
+      .ata-match-card.ata-row-inactive {
+        background: rgba(17, 27, 49, 0.62);
+      }
+
+      .ata-match-card.ata-row-completed {
+        background: rgba(90, 210, 153, 0.12);
+        border-color: rgba(90, 210, 153, 0.35);
+      }
+
+      .ata-match-card-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .ata-match-meta {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .ata-match-stage-pill,
+      .ata-match-round-pill,
+      .ata-match-summary-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        padding: 2px 10px;
+        font-size: 13px;
+        line-height: 1.2;
+      }
+
+      .ata-match-stage-pill {
+        background: rgba(114, 121, 224, 0.2);
+        border-color: rgba(153, 160, 245, 0.5);
+        color: #d9dfff;
+        font-weight: 700;
+      }
+
+      .ata-match-round-pill {
+        color: rgba(226, 234, 255, 0.9);
+      }
+
+      .ata-match-summary-pill {
+        color: rgba(226, 234, 255, 0.86);
+      }
+
+      .ata-match-pairing {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        font-size: 21px;
+        line-height: 1.25;
+        font-weight: 700;
+      }
+
+      .ata-match-pairing .ata-vs {
+        color: var(--ata-color-muted);
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.35px;
+      }
+
       .ata-match-status {
         display: inline-flex;
         align-items: center;
@@ -3174,14 +3261,26 @@
 
       .ata-score-grid {
         display: grid;
-        grid-template-columns: minmax(180px, 1fr) minmax(170px, 210px) minmax(170px, 210px) auto auto;
+        grid-template-columns: minmax(180px, 1fr) minmax(132px, 170px) minmax(132px, 170px) auto auto;
         gap: var(--ata-space-2);
-        min-width: 760px;
-        align-items: center;
+        min-width: 0;
+        align-items: end;
       }
 
       .ata-score-grid .ata-small {
         grid-column: 1 / -1;
+      }
+
+      .ata-score-grid .ata-field {
+        gap: 4px;
+      }
+
+      .ata-score-grid .ata-field label {
+        font-size: 12px;
+      }
+
+      .ata-score-grid .ata-btn {
+        min-height: 40px;
       }
 
       .ata-score-input-wrap {
@@ -3194,7 +3293,8 @@
       }
 
       .ata-score-input-wrap input[type="number"] {
-        width: 92px;
+        width: 100%;
+        max-width: 96px;
       }
 
       .ata-score-input-label {
@@ -3264,6 +3364,8 @@
         padding: 6px;
         margin-top: 8px;
         background: #ffffff0d;
+        display: grid;
+        gap: 4px;
       }
 
       .ata-toggle {
@@ -3302,6 +3404,14 @@
         .ata-create-layout {
           grid-template-columns: 1fr;
         }
+
+        .ata-score-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .ata-score-grid .ata-field {
+          grid-column: 1 / -1;
+        }
       }
 
       @media (max-width: 820px) {
@@ -3335,6 +3445,14 @@
         .ata-bracket-frame {
           min-height: 420px;
           height: clamp(420px, 66vh, 760px);
+        }
+
+        .ata-match-pairing {
+          font-size: 18px;
+        }
+
+        .ata-score-grid {
+          grid-template-columns: 1fr;
         }
 
       }
@@ -3572,7 +3690,7 @@
 
     const legsToWin = getLegsToWin(tournament.bestOfLegs);
 
-    const rows = matches.map((match) => {
+    const cards = matches.map((match) => {
       const player1 = participantNameById(tournament, match.player1Id);
       const player2 = participantNameById(tournament, match.player2Id);
       const winner = participantNameById(tournament, match.winnerId);
@@ -3613,6 +3731,7 @@
         : escapeHtml(legsP2Label);
       const saveHelpText = `Speichert Gewinner und Legs f\u00fcr ${player1} vs ${player2}. Der Gewinner muss ${legsToWin} Legs erreichen.`;
       const rowClasses = [
+        "ata-match-card",
         isCompleted ? "ata-row-completed" : "",
         !editable ? "ata-row-inactive" : "",
       ].filter(Boolean).join(" ");
@@ -3623,6 +3742,7 @@
       const legsDisplay = isCompleted
         ? (isByeCompletion ? "Freilos" : `${match.legs.p1}:${match.legs.p2}`)
         : "-";
+      const winnerSummary = isCompleted ? winnerDisplay : "-";
       const winnerOptions = editable
         ? `
           <option value="">Gewinner</option>
@@ -3632,24 +3752,34 @@
         : `<option value="">${isCompleted ? escapeHtml(winner) : "\u2205 offen"}</option>`;
 
       return `
-        <tr class="${escapeHtml(rowClasses)}">
-          <td>${escapeHtml(stageLabel)}</td>
-          <td title="${escapeHtml(matchCellHelpText)}">${escapeHtml(matchCellText)}</td>
-          <td>${player1Display} vs ${player2Display}</td>
-          <td><span class="${statusBadgeClass}">${statusBadgeText}</span></td>
-          <td>${isCompleted ? winnerDisplay : "-"}</td>
-          <td>${legsDisplay}</td>
-          <td>
+        <article class="${escapeHtml(rowClasses)}" data-match-id="${escapeHtml(match.id)}">
+          <div class="ata-match-card-head">
+            <div class="ata-match-meta">
+              <span class="ata-match-stage-pill">${escapeHtml(stageLabel)}</span>
+              <span class="ata-match-round-pill" title="${escapeHtml(matchCellHelpText)}">${escapeHtml(matchCellText)}</span>
+              <span class="${statusBadgeClass}">${statusBadgeText}</span>
+            </div>
+            <div class="ata-match-meta">
+              <span class="ata-match-summary-pill">Winner: ${winnerSummary}</span>
+              <span class="ata-match-summary-pill">Legs: ${escapeHtml(legsDisplay)}</span>
+            </div>
+          </div>
+          <div class="ata-match-pairing">${player1Display} <span class="ata-vs">vs</span> ${player2Display}</div>
+          <div>
             <div class="ata-score-grid">
-              <select
-                data-field="winner"
-                data-match-id="${escapeHtml(match.id)}"
-                title="${escapeHtml(winnerHelpText)}"
-                aria-label="${escapeHtml(winnerHelpText)}"
-                ${editable ? "" : "disabled"}
-              >
-                ${winnerOptions}
-              </select>
+              <div class="ata-field">
+                <label for="ata-match-winner-${escapeHtml(match.id)}">Gewinner</label>
+                <select
+                  id="ata-match-winner-${escapeHtml(match.id)}"
+                  data-field="winner"
+                  data-match-id="${escapeHtml(match.id)}"
+                  title="${escapeHtml(winnerHelpText)}"
+                  aria-label="${escapeHtml(winnerHelpText)}"
+                  ${editable ? "" : "disabled"}
+                >
+                  ${winnerOptions}
+                </select>
+              </div>
               <div class="ata-score-input-wrap" title="${escapeHtml(legsP1HelpText)}">
                 <span class="ata-score-input-label">${legsP1LabelHtml}</span>
                 <input
@@ -3682,31 +3812,18 @@
               <button type="button" class="ata-btn ata-btn-primary" data-action="start-match" data-match-id="${escapeHtml(match.id)}" ${startDisabledAttr} ${startTitleAttr}>${escapeHtml(startUi.label)}</button>
               <div class="ata-small">${escapeHtml(statusLine)}</div>
             </div>
-          </td>
-        </tr>
+          </div>
+        </article>
       `;
     }).join("");
+
+    const cardsHtml = cards || `<p class="ata-small">Keine Matches vorhanden.</p>`;
 
     return `
       <section class="ata-card tournamentCard">
         <h3>Ergebnisführung</h3>
         <p class="ata-small">API-Halbautomatik: Match per Klick starten, Ergebnis wird automatisch synchronisiert. Manuelle Eingabe bleibt als Fallback aktiv.</p>
-        <div class="ata-table-wrap">
-          <table class="ata-table tournamentRanking">
-            <thead>
-              <tr>
-                <th>Stage</th>
-                <th title="Runde = Turnierrunde, Spiel = Paarung innerhalb der Runde.">Runde/Spiel</th>
-                <th>Paarung</th>
-                <th>Status</th>
-                <th>Winner</th>
-                <th>Legs</th>
-                <th>Eingabe</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
+        <div class="ata-match-list">${cardsHtml}</div>
       </section>
     `;
   }
@@ -3805,15 +3922,22 @@
         const matchesHtml = matches
           .sort((a, b) => a.number - b.number)
           .map((match) => {
-            const statusText = !isCompletedMatchResultValid(tournament, match)
-              ? "offen"
-              : isByeMatchResult(match)
+            const isCompleted = isCompletedMatchResultValid(tournament, match);
+            const isBye = isCompleted && isByeMatchResult(match);
+            const statusBadgeClass = isBye
+              ? "ata-match-status ata-match-status-bye"
+              : (isCompleted ? "ata-match-status ata-match-status-completed" : "ata-match-status ata-match-status-open");
+            const statusBadgeText = isBye ? "Freilos" : (isCompleted ? "Abgeschlossen" : "Offen");
+            const statusText = !isCompleted
+              ? "Noch nicht abgeschlossen."
+              : isBye
                 ? `Freilos: ${escapeHtml(participantNameById(tournament, match.winnerId))}`
                 : `Gewinner: ${escapeHtml(participantNameById(tournament, match.winnerId))}`;
             return `
               <div class="ata-bracket-match">
                 <div>${escapeHtml(participantNameById(tournament, match.player1Id))}</div>
                 <div>${escapeHtml(participantNameById(tournament, match.player2Id))}</div>
+                <div><span class="${statusBadgeClass}">${statusBadgeText}</span></div>
                 <div class="ata-small">${statusText}</div>
               </div>
             `;
@@ -3872,7 +3996,7 @@
       `;
     }
 
-    return html || `<section class="ata-card tournamentCard"><h3>Ansicht</h3><p>Keine Daten.</p></section>`;
+    return html || `<section class="ata-card tournamentCard"><h3>Turnierbaum</h3><p>Keine Daten.</p></section>`;
   }
 
   function syncBracketFallbackVisibility() {
@@ -4783,6 +4907,19 @@
       text-transform: uppercase;
     }
 
+    #ata-brackets-viewer .match[data-match-status="4"].ata-bye .opponents {
+      border-color: rgba(255, 211, 79, 0.9);
+      box-shadow: 0 0 0 1px rgba(255, 211, 79, 0.38), 0 6px 16px rgba(56, 36, 8, 0.35);
+      background: linear-gradient(180deg, rgba(255, 211, 79, 0.16), rgba(59, 84, 136, 0.94));
+    }
+
+    #ata-brackets-viewer .match[data-match-status="4"].ata-bye .opponents::after {
+      content: "Freilos";
+      color: #ffe39a;
+      background: rgba(89, 68, 16, 0.95);
+      border-color: rgba(255, 224, 140, 0.72);
+    }
+
     #ata-brackets-viewer .match[data-match-status="4"] .participant .name:not(.ata-open-slot) {
       font-weight: 700;
     }
@@ -4861,6 +4998,35 @@
         });
       }
 
+      function decorateCompletedMatchBadges(payload) {
+        if (!viewerEl || !payload || !Array.isArray(payload.matches)) {
+          return;
+        }
+
+        var byeMatchById = {};
+        payload.matches.forEach(function (match) {
+          if (!match || Number(match.status) !== 4) {
+            return;
+          }
+          var matchId = String(match.id || "");
+          if (!matchId) {
+            return;
+          }
+          byeMatchById[matchId] = !match.opponent1 || !match.opponent2;
+        });
+
+        var matchNodes = viewerEl.querySelectorAll(".match[data-match-status='4']");
+        matchNodes.forEach(function (node) {
+          var matchId = String(node.getAttribute("data-match-id") || "");
+          var isByeByPayload = matchId && Object.prototype.hasOwnProperty.call(byeMatchById, matchId)
+            ? byeMatchById[matchId]
+            : false;
+          var isByeByDom = Boolean(node.querySelector(".participant .name.ata-open-slot"));
+          var isBye = isByeByPayload || isByeByDom;
+          node.classList.toggle("ata-bye", isBye);
+        });
+      }
+
       function render(payload) {
         if (!window.bracketsViewer || typeof window.bracketsViewer.render !== "function") {
           throw new Error("brackets-viewer not found");
@@ -4874,6 +5040,7 @@
           clear: true,
         });
         normalizeOpenSlotLabels();
+        decorateCompletedMatchBadges(safePayload);
         if (msgEl) {
           msgEl.style.display = "none";
         }
@@ -5485,4 +5652,3 @@
     logError("runtime", "Initialization failed.", error);
   });
 })();
-
