@@ -44,6 +44,7 @@ Der Assistent erweitert die Autodarts-Oberflaeche um einen eigenen Bereich fuer:
   - HTML-Fallback bei CDN-Fehler/Timeout
 - Turnieranlage:
   - KO-Erstrunde als Hybrid-Draw (`seeded` oder `open_draw`)
+  - X01-Presets fuer Matchanlage (`PDC Standard` oder `Custom`)
   - Teilnehmerliste kann per Button gemischt werden
   - Formularentwurf bleibt erhalten (z. B. beim Moduswechsel)
 - Import/Export:
@@ -139,8 +140,27 @@ Pflichtfelder:
 Weitere Felder:
 - Best-of Legs
 - Startscore
+- X01 Preset (`PDC Standard` oder `Custom`)
+- In mode / Out mode
+- Bull mode / Bull-off
+- Max Runden
+- Lobby (`Privat`/`Oeffentlich`)
 - KO-Erstrunde zufaellig mischen
 - Limits je Modus siehe: [Regelbasis und Limits](#regelbasis-und-limits)
+
+### PDC-Standard-Preset
+- Bei Neuanlage ist standardmaessig `PDC Standard` aktiv.
+- Solange `PDC Standard` aktiv ist, sind die X01-Detailfelder im Formular gesperrt.
+- Das Preset setzt:
+  - Matchart `X01`
+  - X01 501
+  - Straight In
+  - Double Out
+  - Bull mode `25/50`
+  - Bull-off `Normal`
+  - Max Runden `50`
+  - Lobby `Privat`
+- Spielmodus bleibt `Legs`; `Best-of Legs` ist fuehrend fuer die Matchlaenge und wird API-seitig als `First to N Legs` umgesetzt.
 
 ### Verhalten beim Formular
 - Das Eingabeformular speichert einen Entwurf.
@@ -158,7 +178,7 @@ Tab: `Spiele`
 
 ### Ablauf
 1. Match per `Match starten` ausloesen.
-2. Lobby wird erstellt und gestartet.
+2. Lobby wird mit den Turnier-Settings erstellt (X01-Preset/Felder + Legs aus `Best-of Legs`), Spieler werden hinzugefuegt und das Match wird gestartet.
 3. Match-Ergebnis wird per API geholt und gespeichert.
 
 ### Schutzmechanismen

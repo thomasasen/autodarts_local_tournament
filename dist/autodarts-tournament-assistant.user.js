@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.2.14
+// @version      0.2.15
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,7 +21,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.2.14";
+  const APP_VERSION = "0.2.15";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 2;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
@@ -50,6 +50,15 @@
   const KO_ENGINE_VERSION = 2;
   const KO_DRAW_MODE_SEEDED = "seeded";
   const KO_DRAW_MODE_OPEN_DRAW = "open_draw";
+  const X01_VARIANT = "X01";
+  const X01_PRESET_PDC_STANDARD = "pdc_standard";
+  const X01_PRESET_CUSTOM = "custom";
+  const X01_IN_MODES = Object.freeze(["Straight", "Double", "Master"]);
+  const X01_OUT_MODES = Object.freeze(["Straight", "Double", "Master"]);
+  const X01_BULL_MODES = Object.freeze(["25/50", "50/50"]);
+  const X01_BULL_OFF_MODES = Object.freeze(["Off", "Normal", "Official"]);
+  const X01_MAX_ROUNDS_OPTIONS = Object.freeze([15, 20, 50, 80]);
+  const X01_START_SCORE_OPTIONS = Object.freeze([121, 170, 301, 501, 701, 901, 101, 201]);
 
   const TAB_IDS = Object.freeze(["tournament", "matches", "view", "io", "settings"]);
   const TAB_META = Object.freeze([
@@ -125,11 +134,19 @@
 
   function createDefaultCreateDraft(settings = null) {
     const defaultRandomize = settings?.featureFlags?.randomizeKoRound1 !== false;
+    const pdcSettings = buildPdcX01Settings();
     return {
       name: "",
       mode: "ko",
       bestOfLegs: 5,
-      startScore: 501,
+      startScore: pdcSettings.baseScore,
+      x01Preset: pdcSettings.presetId,
+      x01InMode: pdcSettings.inMode,
+      x01OutMode: pdcSettings.outMode,
+      x01BullMode: pdcSettings.bullMode,
+      x01MaxRounds: pdcSettings.maxRounds,
+      x01BullOffMode: pdcSettings.bullOffMode,
+      lobbyVisibility: pdcSettings.lobbyVisibility,
       participantsText: "",
       randomizeKoRound1: Boolean(defaultRandomize),
     };
@@ -139,11 +156,36 @@
     const base = createDefaultCreateDraft(settings);
     const modeRaw = normalizeText(rawDraft?.mode || base.mode);
     const mode = ["ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : base.mode;
+    const hasDraftObject = rawDraft && typeof rawDraft === "object";
+    const hasExplicitPreset = hasDraftObject && Object.prototype.hasOwnProperty.call(rawDraft, "x01Preset");
+    const rawPreset = hasExplicitPreset
+      ? sanitizeX01Preset(rawDraft?.x01Preset, base.x01Preset)
+      : (hasDraftObject ? X01_PRESET_CUSTOM : base.x01Preset);
+    let x01Settings = normalizeTournamentX01Settings({
+      presetId: rawPreset,
+      baseScore: rawDraft?.startScore ?? base.startScore,
+      inMode: rawDraft?.x01InMode ?? base.x01InMode,
+      outMode: rawDraft?.x01OutMode ?? base.x01OutMode,
+      bullMode: rawDraft?.x01BullMode ?? base.x01BullMode,
+      maxRounds: rawDraft?.x01MaxRounds ?? base.x01MaxRounds,
+      bullOffMode: rawDraft?.x01BullOffMode ?? base.x01BullOffMode,
+      lobbyVisibility: rawDraft?.lobbyVisibility ?? base.lobbyVisibility,
+    }, rawDraft?.startScore ?? base.startScore);
+    if (rawPreset === X01_PRESET_PDC_STANDARD) {
+      x01Settings = buildPdcX01Settings();
+    }
     return {
       name: normalizeText(rawDraft?.name || base.name),
       mode,
       bestOfLegs: sanitizeBestOf(rawDraft?.bestOfLegs ?? base.bestOfLegs),
-      startScore: sanitizeStartScore(rawDraft?.startScore ?? base.startScore),
+      startScore: x01Settings.baseScore,
+      x01Preset: x01Settings.presetId,
+      x01InMode: x01Settings.inMode,
+      x01OutMode: x01Settings.outMode,
+      x01BullMode: x01Settings.bullMode,
+      x01MaxRounds: x01Settings.maxRounds,
+      x01BullOffMode: x01Settings.bullOffMode,
+      lobbyVisibility: x01Settings.lobbyVisibility,
       participantsText: String(rawDraft?.participantsText ?? base.participantsText),
       randomizeKoRound1: typeof rawDraft?.randomizeKoRound1 === "boolean"
         ? rawDraft.randomizeKoRound1
@@ -338,14 +380,91 @@
   }
 
   function sanitizeStartScore(value) {
-    const allowed = new Set([101, 201, 301, 501, 701]);
-    const score = clampInt(value, 501, 101, 701);
+    const allowed = new Set(X01_START_SCORE_OPTIONS);
+    const score = clampInt(value, 501, 101, 901);
     return allowed.has(score) ? score : 501;
   }
 
   function getLegsToWin(bestOfLegs) {
     const bestOf = sanitizeBestOf(bestOfLegs);
     return Math.floor(bestOf / 2) + 1;
+  }
+
+  function sanitizeX01Preset(value, fallback = X01_PRESET_PDC_STANDARD) {
+    const preset = normalizeText(value || "").toLowerCase();
+    if (preset === X01_PRESET_CUSTOM || preset === X01_PRESET_PDC_STANDARD) {
+      return preset;
+    }
+    return fallback;
+  }
+
+  function sanitizeX01Mode(value, allowedModes, fallback) {
+    const mode = normalizeText(value || "");
+    return allowedModes.includes(mode) ? mode : fallback;
+  }
+
+  function sanitizeX01InMode(value) {
+    return sanitizeX01Mode(value, X01_IN_MODES, "Straight");
+  }
+
+  function sanitizeX01OutMode(value) {
+    return sanitizeX01Mode(value, X01_OUT_MODES, "Double");
+  }
+
+  function sanitizeX01BullMode(value) {
+    return sanitizeX01Mode(value, X01_BULL_MODES, "25/50");
+  }
+
+  function sanitizeX01BullOffMode(value) {
+    return sanitizeX01Mode(value, X01_BULL_OFF_MODES, "Normal");
+  }
+
+  function sanitizeX01MaxRounds(value) {
+    const rounds = clampInt(value, 50, 15, 80);
+    return X01_MAX_ROUNDS_OPTIONS.includes(rounds) ? rounds : 50;
+  }
+
+  function sanitizeLobbyVisibility(value) {
+    const visibility = normalizeText(value || "").toLowerCase();
+    return visibility === "public" ? "public" : "private";
+  }
+
+  function buildPdcX01Settings() {
+    return {
+      presetId: X01_PRESET_PDC_STANDARD,
+      variant: X01_VARIANT,
+      baseScore: 501,
+      inMode: "Straight",
+      outMode: "Double",
+      bullMode: "25/50",
+      maxRounds: 50,
+      bullOffMode: "Normal",
+      lobbyVisibility: "private",
+    };
+  }
+
+  function normalizeTournamentX01Settings(rawX01, fallbackStartScore = 501) {
+    const hasRawObject = rawX01 && typeof rawX01 === "object";
+    const input = hasRawObject ? rawX01 : {};
+    const rawPreset = normalizeText(input.presetId || input.preset || "").toLowerCase();
+    const hasExplicitPreset = Boolean(rawPreset);
+    const presetId = hasExplicitPreset ? sanitizeX01Preset(rawPreset, X01_PRESET_CUSTOM) : X01_PRESET_CUSTOM;
+
+    if (presetId === X01_PRESET_PDC_STANDARD) {
+      return buildPdcX01Settings();
+    }
+
+    return {
+      presetId: X01_PRESET_CUSTOM,
+      variant: X01_VARIANT,
+      baseScore: sanitizeStartScore(input.baseScore ?? fallbackStartScore),
+      inMode: sanitizeX01InMode(input.inMode),
+      outMode: sanitizeX01OutMode(input.outMode),
+      bullMode: sanitizeX01BullMode(input.bullMode),
+      maxRounds: sanitizeX01MaxRounds(input.maxRounds),
+      bullOffMode: sanitizeX01BullOffMode(input.bullOffMode || input.bullOff),
+      lobbyVisibility: sanitizeLobbyVisibility(input.lobbyVisibility ?? (input.isPrivate === false ? "public" : "private")),
+    };
   }
 
   function normalizeAutomationStatus(value, fallback = "idle") {
@@ -505,6 +624,9 @@
       meta: normalizeMatchMeta(match?.meta),
     }));
 
+    const fallbackStartScore = sanitizeStartScore(rawTournament.startScore);
+    const x01 = normalizeTournamentX01Settings(rawTournament.x01, fallbackStartScore);
+
     return {
       id: normalizeText(rawTournament.id || uuid("tournament")),
       name: normalizeText(rawTournament.name || "Lokales Turnier"),
@@ -513,7 +635,8 @@
         ? normalizeTournamentKoMeta(rawTournament.ko, KO_DRAW_MODE_SEEDED)
         : null,
       bestOfLegs: sanitizeBestOf(rawTournament.bestOfLegs),
-      startScore: sanitizeStartScore(rawTournament.startScore),
+      startScore: x01.baseScore,
+      x01,
       participants,
       groups,
       matches,
@@ -964,6 +1087,16 @@
     const koDrawMode = config.mode === "ko" && config.randomizeKoRound1
       ? KO_DRAW_MODE_OPEN_DRAW
       : KO_DRAW_MODE_SEEDED;
+    const x01 = normalizeTournamentX01Settings({
+      presetId: config.x01Preset,
+      baseScore: config.startScore,
+      inMode: config.x01InMode,
+      outMode: config.x01OutMode,
+      bullMode: config.x01BullMode,
+      maxRounds: config.x01MaxRounds,
+      bullOffMode: config.x01BullOffMode,
+      lobbyVisibility: config.lobbyVisibility,
+    }, config.startScore);
 
     let groups = [];
     let matches = [];
@@ -986,7 +1119,8 @@
         engineVersion: KO_ENGINE_VERSION,
       } : null,
       bestOfLegs: sanitizeBestOf(config.bestOfLegs),
-      startScore: sanitizeStartScore(config.startScore),
+      startScore: x01.baseScore,
+      x01,
       participants,
       groups,
       matches,
@@ -2057,17 +2191,18 @@
 
   function buildLobbyCreatePayload(tournament) {
     const legsToWin = getLegsToWin(tournament.bestOfLegs);
+    const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
     return {
-      variant: "X01",
-      isPrivate: true,
+      variant: x01Settings.variant,
+      isPrivate: x01Settings.lobbyVisibility !== "public",
       legs: legsToWin,
       settings: {
-        baseScore: sanitizeStartScore(tournament.startScore),
-        inMode: "Straight",
-        outMode: "Double",
-        bullMode: "25/50",
-        maxRounds: 50,
-        bullOffMode: "Normal",
+        baseScore: x01Settings.baseScore,
+        inMode: x01Settings.inMode,
+        outMode: x01Settings.outMode,
+        bullMode: x01Settings.bullMode,
+        maxRounds: x01Settings.maxRounds,
+        bullOffMode: x01Settings.bullOffMode,
       },
     };
   }
@@ -3138,6 +3273,15 @@
       const draft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store?.settings);
       const randomizeChecked = draft.randomizeKoRound1 ? "checked" : "";
       const modeLimitSummary = buildModeParticipantLimitSummary();
+      const startScoreOptions = X01_START_SCORE_OPTIONS.map((score) => {
+        const isLegacy = score === 101 || score === 201;
+        const label = isLegacy ? `${score} (Legacy)` : String(score);
+        return `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${label}</option>`;
+      }).join("");
+      const pdcPresetHint = draft.x01Preset === X01_PRESET_PDC_STANDARD
+        ? "PDC-Standard ist aktiv (501, Straight In, Double Out, Bull 25/50, Bull-off Normal, Max Rounds 50, Lobby privat)."
+        : "Custom ist aktiv: Werte aus den X01-Feldern werden fuer die Lobby-Erstellung verwendet.";
+      const x01PresetLockedAttr = draft.x01Preset === X01_PRESET_PDC_STANDARD ? "disabled" : "";
       return `
         <section class="ata-card tournamentCard">
           <h3>Neues Turnier erstellen</h3>
@@ -3160,13 +3304,67 @@
                 <input id="ata-bestof" name="bestOfLegs" type="number" min="1" max="21" step="2" value="${draft.bestOfLegs}">
               </div>
               <div class="ata-field">
+                <label for="ata-x01-preset">X01 Preset</label>
+                <select id="ata-x01-preset" name="x01Preset">
+                  <option value="${X01_PRESET_PDC_STANDARD}" ${draft.x01Preset === X01_PRESET_PDC_STANDARD ? "selected" : ""}>PDC Standard</option>
+                  <option value="${X01_PRESET_CUSTOM}" ${draft.x01Preset === X01_PRESET_CUSTOM ? "selected" : ""}>Custom</option>
+                </select>
+              </div>
+              <div class="ata-field">
+                <label for="ata-match-mode">Spielmodus</label>
+                <input id="ata-match-mode" type="text" value="Legs (First to N aus Best-of)" disabled>
+              </div>
+              <div class="ata-field">
                 <label for="ata-startscore">Startscore</label>
-                <select id="ata-startscore" name="startScore">
-                  <option value="101" ${draft.startScore === 101 ? "selected" : ""}>101</option>
-                  <option value="201" ${draft.startScore === 201 ? "selected" : ""}>201</option>
-                  <option value="301" ${draft.startScore === 301 ? "selected" : ""}>301</option>
-                  <option value="501" ${draft.startScore === 501 ? "selected" : ""}>501</option>
-                  <option value="701" ${draft.startScore === 701 ? "selected" : ""}>701</option>
+                <select id="ata-startscore" name="startScore" ${x01PresetLockedAttr}>
+                  ${startScoreOptions}
+                </select>
+              </div>
+              <div class="ata-field">
+                <label for="ata-x01-inmode">In mode</label>
+                <select id="ata-x01-inmode" name="x01InMode" ${x01PresetLockedAttr}>
+                  <option value="Straight" ${draft.x01InMode === "Straight" ? "selected" : ""}>Straight</option>
+                  <option value="Double" ${draft.x01InMode === "Double" ? "selected" : ""}>Double</option>
+                  <option value="Master" ${draft.x01InMode === "Master" ? "selected" : ""}>Master</option>
+                </select>
+              </div>
+              <div class="ata-field">
+                <label for="ata-x01-outmode">Out mode</label>
+                <select id="ata-x01-outmode" name="x01OutMode" ${x01PresetLockedAttr}>
+                  <option value="Straight" ${draft.x01OutMode === "Straight" ? "selected" : ""}>Straight</option>
+                  <option value="Double" ${draft.x01OutMode === "Double" ? "selected" : ""}>Double</option>
+                  <option value="Master" ${draft.x01OutMode === "Master" ? "selected" : ""}>Master</option>
+                </select>
+              </div>
+              <div class="ata-field">
+                <label for="ata-x01-bullmode">Bull mode</label>
+                <select id="ata-x01-bullmode" name="x01BullMode" ${x01PresetLockedAttr}>
+                  <option value="25/50" ${draft.x01BullMode === "25/50" ? "selected" : ""}>25/50</option>
+                  <option value="50/50" ${draft.x01BullMode === "50/50" ? "selected" : ""}>50/50</option>
+                </select>
+              </div>
+              <div class="ata-field">
+                <label for="ata-x01-bulloff">Bull-off</label>
+                <select id="ata-x01-bulloff" name="x01BullOffMode" ${x01PresetLockedAttr}>
+                  <option value="Off" ${draft.x01BullOffMode === "Off" ? "selected" : ""}>Off</option>
+                  <option value="Normal" ${draft.x01BullOffMode === "Normal" ? "selected" : ""}>Normal</option>
+                  <option value="Official" ${draft.x01BullOffMode === "Official" ? "selected" : ""}>Official</option>
+                </select>
+              </div>
+              <div class="ata-field">
+                <label for="ata-x01-maxrounds">Max Runden</label>
+                <select id="ata-x01-maxrounds" name="x01MaxRounds" ${x01PresetLockedAttr}>
+                  <option value="15" ${draft.x01MaxRounds === 15 ? "selected" : ""}>15</option>
+                  <option value="20" ${draft.x01MaxRounds === 20 ? "selected" : ""}>20</option>
+                  <option value="50" ${draft.x01MaxRounds === 50 ? "selected" : ""}>50</option>
+                  <option value="80" ${draft.x01MaxRounds === 80 ? "selected" : ""}>80</option>
+                </select>
+              </div>
+              <div class="ata-field">
+                <label for="ata-lobby-visibility">Lobby</label>
+                <select id="ata-lobby-visibility" name="lobbyVisibility" ${x01PresetLockedAttr}>
+                  <option value="private" ${draft.lobbyVisibility === "private" ? "selected" : ""}>Privat</option>
+                  <option value="public" ${draft.lobbyVisibility === "public" ? "selected" : ""}>Oeffentlich</option>
                 </select>
               </div>
             </div>
@@ -3177,6 +3375,7 @@
               </div>
               <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
             </div>
+            <p class="ata-small" style="margin-top: 10px;">${escapeHtml(pdcPresetHint)}</p>
             <div class="ata-field" style="margin-top: 12px;">
               <label for="ata-participants">Teilnehmer (eine Zeile pro Person)</label>
               <textarea id="ata-participants" name="participants" placeholder="Max Mustermann&#10;Erika Musterfrau">${escapeHtml(draft.participantsText)}</textarea>
@@ -3201,12 +3400,16 @@
     const participantsHtml = tournament.participants.map((participant) => (
       `<span class="ata-pill">${escapeHtml(participant.name)}</span>`
     )).join("");
+    const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
+    const x01PresetLabel = x01Settings.presetId === X01_PRESET_PDC_STANDARD ? "PDC Standard" : "Custom";
+    const x01LobbyLabel = x01Settings.lobbyVisibility === "public" ? "Oeffentlich" : "Privat";
 
     return `
       <section class="ata-card tournamentCard">
         <h3>Aktives Turnier</h3>
         <p><b>${escapeHtml(tournament.name)}</b> (${escapeHtml(modeLabel)})</p>
         <p class="ata-small">Best-of ${tournament.bestOfLegs} Legs, Startscore ${tournament.startScore}</p>
+        <p class="ata-small">X01 ${escapeHtml(x01PresetLabel)}: ${x01Settings.baseScore}, In ${escapeHtml(x01Settings.inMode)}, Out ${escapeHtml(x01Settings.outMode)}, Bull ${escapeHtml(x01Settings.bullMode)}, Bull-off ${escapeHtml(x01Settings.bullOffMode)}, Max Runden ${x01Settings.maxRounds}, Lobby ${escapeHtml(x01LobbyLabel)}</p>
         <div>${participantsHtml}</div>
       </section>
       <section class="ata-card tournamentCard">
@@ -3680,6 +3883,14 @@
         event.preventDefault();
         handleCreateTournament(createForm);
       });
+
+      const presetSelect = createForm.querySelector("#ata-x01-preset");
+      if (presetSelect instanceof HTMLSelectElement) {
+        presetSelect.addEventListener("change", () => {
+          updateCreateDraftFromForm(createForm, true);
+          renderShell();
+        });
+      }
     }
 
     const shuffleParticipantsButton = shadow.querySelector("[data-action='shuffle-participants']");
@@ -3859,19 +4070,30 @@
     }
   }
 
+  function readCreateDraftInput(formData) {
+    return {
+      name: formData.get("name"),
+      mode: formData.get("mode"),
+      bestOfLegs: formData.get("bestOfLegs"),
+      startScore: formData.get("startScore"),
+      x01Preset: formData.get("x01Preset"),
+      x01InMode: formData.get("x01InMode"),
+      x01OutMode: formData.get("x01OutMode"),
+      x01BullMode: formData.get("x01BullMode"),
+      x01MaxRounds: formData.get("x01MaxRounds"),
+      x01BullOffMode: formData.get("x01BullOffMode"),
+      lobbyVisibility: formData.get("lobbyVisibility"),
+      participantsText: String(formData.get("participants") || ""),
+      randomizeKoRound1: formData.get("randomizeKoRound1") !== null,
+    };
+  }
+
   function updateCreateDraftFromForm(form, persist = true) {
     if (!(form instanceof HTMLFormElement)) {
       return;
     }
     const formData = new FormData(form);
-    const nextDraft = normalizeCreateDraft({
-      name: formData.get("name"),
-      mode: formData.get("mode"),
-      bestOfLegs: formData.get("bestOfLegs"),
-      startScore: formData.get("startScore"),
-      participantsText: String(formData.get("participants") || ""),
-      randomizeKoRound1: formData.get("randomizeKoRound1") !== null,
-    }, state.store.settings);
+    const nextDraft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
     const currentDraft = state.store.ui.createDraft || {};
     const changed = JSON.stringify(nextDraft) !== JSON.stringify(currentDraft);
     if (!changed) {
@@ -3903,15 +4125,23 @@
   }
 
   function handleCreateTournament(form) {
-    updateCreateDraftFromForm(form, false);
     const formData = new FormData(form);
+    const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
+    state.store.ui.createDraft = draft;
     const participants = parseParticipantLines(formData.get("participants"));
     const config = {
-      name: normalizeText(formData.get("name")),
-      mode: normalizeText(formData.get("mode")),
-      bestOfLegs: sanitizeBestOf(formData.get("bestOfLegs")),
-      startScore: sanitizeStartScore(formData.get("startScore")),
-      randomizeKoRound1: formData.get("randomizeKoRound1") !== null,
+      name: draft.name,
+      mode: draft.mode,
+      bestOfLegs: draft.bestOfLegs,
+      startScore: draft.startScore,
+      x01Preset: draft.x01Preset,
+      x01InMode: draft.x01InMode,
+      x01OutMode: draft.x01OutMode,
+      x01BullMode: draft.x01BullMode,
+      x01MaxRounds: draft.x01MaxRounds,
+      x01BullOffMode: draft.x01BullOffMode,
+      lobbyVisibility: draft.lobbyVisibility,
+      randomizeKoRound1: draft.randomizeKoRound1,
       participants,
     };
 

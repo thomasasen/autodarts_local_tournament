@@ -29,6 +29,11 @@
   - fuer `ko` zusaetzlich `tournament.ko`:
     - `drawMode`: `seeded | open_draw`
     - `engineVersion`: `2`
+  - `tournament.x01` fuer die API-Matchanlage:
+    - `presetId`: `pdc_standard | custom`
+    - `variant`: `X01`
+    - `baseScore`, `inMode`, `outMode`, `bullMode`, `maxRounds`, `bullOffMode`
+    - `lobbyVisibility`: `private | public`
   - `participants` (modusabhaengig):
     - `ko`: `2..128`
     - `league`: `2..16`
@@ -88,8 +93,10 @@
 
 ## API-Halbautomatik
 - Aktiviert ueber `settings.featureFlags.autoLobbyStart`.
-- Matchstart per UI-Button im Tab `Spiele`:
+  - Matchstart per UI-Button im Tab `Spiele`:
   - erstellt Lobby (`/gs/v0/lobbies`)
+    - nutzt `tournament.x01` fuer `settings` (plus `legs` aus `bestOfLegs`)
+    - Spielmodus bleibt `Legs` (`First to N` aus `bestOfLegs`)
   - fuegt Spieler hinzu (`/gs/v0/lobbies/{id}/players`)
   - startet Lobby (`/gs/v0/lobbies/{id}/start`)
 - Ergebnis-Sync im Intervall:

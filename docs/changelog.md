@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.15
+- X01-Matchanlage fuer API-Start erweitert:
+  - Turnier-Neuanlage hat jetzt X01-Parameter aus der Autodarts-Lobbyoberflaeche:
+    - Startscore, In mode, Out mode, Bull mode, Bull-off, Max Runden, Lobby-Sichtbarkeit.
+  - Spielmodus bleibt bewusst `Legs` und wird aus `Best-of Legs` als `First to N` abgeleitet.
+  - `Match starten` uebernimmt diese Werte kongruent in den Lobby-Create-Payload.
+- PDC-Preset fuer Neuanlage eingefuehrt:
+  - Standard ist `PDC Standard` (501, Straight In, Double Out, 25/50, Bull-off Normal, Max Rounds 50, Lobby privat).
+  - Optionaler `Custom`-Modus fuer abweichende X01-Einstellungen.
+- Startscore-Optionen um die X01-Lobbywerte erweitert (`121, 170, 301, 501, 701, 901`; Legacy `101, 201` bleibt import-/kompatibel).
+- UI-Transparenz verbessert:
+  - Aktives Turnier zeigt die hinterlegten X01-Settings kompakt an.
+
 ## 0.2.14
 - Match-Seiten-Shortcut hinzugefuegt:
   - Auf `/lobbies/{id}` und `/matches/{id}` erscheint ein Button fuer `Ergebnis uebernehmen & Turnier oeffnen`.
