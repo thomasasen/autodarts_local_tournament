@@ -1800,7 +1800,7 @@
     if (!route) {
       return "";
     }
-    const match = route.match(/^\/(?:matches|lobbies)\/([^/?#]+)/i);
+    const match = route.match(/^\/(?:(?:history\/)?(?:matches|lobbies))\/([^/?#]+)/i);
     if (!match || !match[1]) {
       return "";
     }
