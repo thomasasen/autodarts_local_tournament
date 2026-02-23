@@ -3983,6 +3983,34 @@
       margin: 12px 0;
     }
 
+    #ata-brackets-viewer .match[data-match-status="4"] .opponents {
+      border-color: rgba(90, 210, 153, 0.9);
+      box-shadow: 0 0 0 1px rgba(90, 210, 153, 0.35), 0 6px 16px rgba(8, 30, 24, 0.35);
+      background: linear-gradient(180deg, rgba(90, 210, 153, 0.16), rgba(59, 84, 136, 0.94));
+    }
+
+    #ata-brackets-viewer .match[data-match-status="4"] .opponents::after {
+      content: "Abgeschlossen";
+      position: absolute;
+      top: -11px;
+      right: 8px;
+      font-size: 0.69em;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #aef4ce;
+      background: rgba(32, 88, 68, 0.94);
+      border: 1px solid rgba(110, 231, 183, 0.66);
+      border-radius: 999px;
+      padding: 2px 7px;
+      line-height: 1.2;
+      pointer-events: none;
+      text-transform: uppercase;
+    }
+
+    #ata-brackets-viewer .match[data-match-status="4"] .participant .name:not(.ata-open-slot) {
+      font-weight: 700;
+    }
+
     #ata-brackets-viewer .participant {
       align-items: center;
       min-height: 42px;
