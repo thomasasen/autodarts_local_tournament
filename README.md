@@ -13,13 +13,14 @@ Der Assistent erweitert die Autodarts-Oberflaeche um einen eigenen Bereich fuer:
 1. [Schnellstart](#schnellstart)
 2. [Funktionen](#funktionen)
 3. [Turniermodi](#turniermodi)
-4. [Einstellungen](#einstellungen)
-5. [Turnier anlegen](#turnier-anlegen)
-6. [API-Halbautomatik](#api-halbautomatik)
-7. [Import und Export](#import-und-export)
-8. [Troubleshooting](#troubleshooting)
-9. [Entwicklung](#entwicklung)
-10. [Limitationen](#limitationen)
+4. [Regelbasis und Limits](#regelbasis-und-limits)
+5. [Einstellungen](#einstellungen)
+6. [Turnier anlegen](#turnier-anlegen)
+7. [API-Halbautomatik](#api-halbautomatik)
+8. [Import und Export](#import-und-export)
+9. [Troubleshooting](#troubleshooting)
+10. [Entwicklung](#entwicklung)
+11. [Limitationen](#limitationen)
 
 ## Schnellstart
 1. Tampermonkey im Browser installieren.
@@ -79,6 +80,28 @@ Der Assistent erweitert die Autodarts-Oberflaeche um einen eigenen Bereich fuer:
   - `B1 vs A2`
 - Finale folgt nach den Halbfinals.
 
+## Regelbasis und Limits
+Priorisierung fuer Limits in diesem Projekt:
+1. Offizielle Darts-Regeln
+2. Mathematische Turnierlogik
+3. Technische Machbarkeit im Userscript
+
+### Was sagen die offiziellen Regeln?
+- DRA 6.8.1: KO (straight knockout) ist der Standardmodus.
+- DRA 6.8.2: Round-Robin ist zulaessig, wenn vorab bekanntgegeben.
+- DRA 6.10.1 / 6.10.5.2: Kein fixes globales Teilnehmermaximum, Einlass/Cap liegt beim Veranstalter.
+
+### Umgesetzte Limits (begruendet)
+| Modus | Limit | Begruendung |
+|---|---|---|
+| `ko` | `2..128` | Regelkonform ohne kleines Kunstlimit; technisch auf 128 gedeckelt, damit Bracket/Rendering stabil bleiben. |
+| `league` | `2..16` | Round-Robin waechst quadratisch (`n*(n-1)/2` Matches); ab groesseren Feldern wird es fuer lokale Turniere unpraktisch. |
+| `groups_ko` | `4..16` | Mindestens 4 fuer zwei Gruppen mit anschliessender KO-Phase (A1/B2, B1/A2); Obergrenze aus Spielanzahl/Bedienbarkeit. |
+
+Hinweis:
+- Es gibt zusaetzlich ein technisches Hard-Cap bei `128` Teilnehmern, um Browser-Last und UI-Stabilitaet zu schuetzen.
+- Die GUI verweist direkt auf diesen Abschnitt.
+
 ## Einstellungen
 Tab: `Einstellungen`
 
@@ -108,6 +131,7 @@ Weitere Felder:
 - Best-of Legs
 - Startscore
 - KO-Erstrunde zufaellig mischen
+- Limits je Modus siehe: [Regelbasis und Limits](#regelbasis-und-limits)
 
 ### Verhalten beim Formular
 - Das Eingabeformular speichert einen Entwurf.
@@ -196,12 +220,18 @@ autodarts_local_tournament/
 - Bracket-Rendering in sandboxed iframe
 
 ## Limitationen
-- Teilnehmerlimit: `2..8`
-- `groups_ko` ab mindestens `5` Teilnehmern
+- Modus-Limits:
+  - `ko`: `2..128`
+  - `league`: `2..16`
+  - `groups_ko`: `4..16`
+- Technisches Hard-Cap: `128` Teilnehmer
 - API-Halbautomatik basiert auf in der Praxis verwendeten Endpunkten (Inference)
 - DOM-Autodetect bleibt best-effort
 
 ## Quellen
+- DRA (offizielle Regelbasis):
+  - https://www.thedra.co.uk/rules
+  - https://www.thedra.co.uk/_files/ugd/298855_5df36f5f7b5449f8af7f1606f153b8f2.pdf
 - Referenz-Extension:
   - https://chromewebstore.google.com/detail/autodarts-local-tournamen/algfbicoennnolleogigbefngpkkmcng
 - Bracket Viewer:

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.2.11
+// @version      0.2.12
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,7 +21,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.2.11";
+  const APP_VERSION = "0.2.12";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 1;
   const SAVE_DEBOUNCE_MS = 150;
@@ -34,6 +34,8 @@
   const API_SYNC_INTERVAL_MS = 2500;
   const API_AUTH_NOTICE_THROTTLE_MS = 15000;
   const API_REQUEST_TIMEOUT_MS = 12000;
+  const README_BASE_URL = "https://github.com/thomasasen/autodarts_local_tournament/blob/main/README.md";
+  const README_RULES_URL = `${README_BASE_URL}#regelbasis-und-limits`;
 
   const BRACKETS_VIEWER_CSS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.css";
   const BRACKETS_VIEWER_JS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.js";
@@ -54,9 +56,12 @@
     { id: "settings", label: "Einstellungen" },
   ]);
 
-  const PLAYER_LIMIT_MIN = 2;
-  const PLAYER_LIMIT_MAX = 8;
-  const GROUP_MODE_MIN = 5;
+  const TECHNICAL_PARTICIPANT_HARD_MAX = 128;
+  const MODE_PARTICIPANT_LIMITS = Object.freeze({
+    ko: Object.freeze({ label: "KO", min: 2, max: 128 }),
+    league: Object.freeze({ label: "Liga", min: 2, max: 16 }),
+    groups_ko: Object.freeze({ label: "Gruppenphase + KO", min: 4, max: 16 }),
+  });
   const BYE_PLACEHOLDER_TOKENS = new Set([
     "bye",
     "freilos",
@@ -355,6 +360,7 @@
     }
 
     const mode = ["ko", "league", "groups_ko"].includes(rawTournament.mode) ? rawTournament.mode : "ko";
+    const modeLimits = getModeParticipantLimits(mode);
     const participantsRaw = Array.isArray(rawTournament.participants) ? rawTournament.participants : [];
     const participants = participantsRaw
       .map((entry, index) => {
@@ -366,9 +372,9 @@
         return { id, name };
       })
       .filter(Boolean)
-      .slice(0, PLAYER_LIMIT_MAX);
+      .slice(0, TECHNICAL_PARTICIPANT_HARD_MAX);
 
-    if (participants.length < PLAYER_LIMIT_MIN) {
+    if (participants.length < modeLimits.min) {
       return null;
     }
 
@@ -550,6 +556,25 @@
       size *= 2;
     }
     return size;
+  }
+
+  function getModeParticipantLimits(mode) {
+    return MODE_PARTICIPANT_LIMITS[mode] || MODE_PARTICIPANT_LIMITS.ko;
+  }
+
+  function buildModeParticipantLimitSummary() {
+    return Object.entries(MODE_PARTICIPANT_LIMITS)
+      .map(([, limits]) => `${limits.label}: ${limits.min}-${limits.max}`)
+      .join(", ");
+  }
+
+  function getParticipantCountError(mode, count) {
+    const limits = getModeParticipantLimits(mode);
+    const participantCount = Number(count || 0);
+    if (participantCount < limits.min || participantCount > limits.max) {
+      return `${limits.label} erfordert ${limits.min}-${limits.max} Teilnehmer.`;
+    }
+    return "";
   }
 
   function parseParticipantLines(rawLines) {
@@ -868,18 +893,17 @@
     if (!["ko", "league", "groups_ko"].includes(config.mode)) {
       errors.push("Ungültiger Modus.");
     }
-    if (config.participants.length < PLAYER_LIMIT_MIN || config.participants.length > PLAYER_LIMIT_MAX) {
-      errors.push(`Teilnehmerzahl muss zwischen ${PLAYER_LIMIT_MIN} und ${PLAYER_LIMIT_MAX} liegen.`);
-    }
-    if (config.mode === "groups_ko" && config.participants.length < GROUP_MODE_MIN) {
-      errors.push("Gruppenphase + KO benotigt mindestens 5 Teilnehmer.");
+    const participantCountError = getParticipantCountError(config.mode, config.participants.length);
+    if (participantCountError) {
+      errors.push(participantCountError);
     }
 
     return errors;
   }
 
   function createTournament(config) {
-    let participants = config.participants.slice(0, PLAYER_LIMIT_MAX);
+    const modeLimits = getModeParticipantLimits(config.mode);
+    let participants = config.participants.slice(0, modeLimits.max);
     if (config.mode === "ko" && config.randomizeKoRound1) {
       participants = shuffleArray(participants);
     }
@@ -2852,6 +2876,7 @@
     if (!tournament) {
       const draft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store?.settings);
       const randomizeChecked = draft.randomizeKoRound1 ? "checked" : "";
+      const modeLimitSummary = buildModeParticipantLimitSummary();
       return `
         <section class="ata-card tournamentCard">
           <h3>Neues Turnier erstellen</h3>
@@ -2899,7 +2924,8 @@
               <button type="button" class="ata-btn" data-action="shuffle-participants">Teilnehmer mischen</button>
               <button type="submit" class="ata-btn ata-btn-primary">Turnier anlegen</button>
             </div>
-            <p class="ata-small" style="margin-top: 10px;">Limit: 2-8 Teilnehmer. Gruppen + KO ab 5 Teilnehmern.</p>
+            <p class="ata-small" style="margin-top: 10px;">Modus-Limits: ${escapeHtml(modeLimitSummary)}.</p>
+            <p class="ata-small">Bei Moduswechsel gelten die jeweiligen Grenzen sofort. Regelbasis und Begruendung: <a href="${README_RULES_URL}" target="_blank" rel="noopener noreferrer">README - Regelbasis und Limits</a>.</p>
           </form>
         </section>
       `;
@@ -3283,6 +3309,7 @@
     const debugEnabled = state.store.settings.debug ? "checked" : "";
     const autoLobbyEnabled = state.store.settings.featureFlags.autoLobbyStart ? "checked" : "";
     const randomizeKoEnabled = state.store.settings.featureFlags.randomizeKoRound1 ? "checked" : "";
+    const modeLimitSummary = buildModeParticipantLimitSummary();
     return `
       <section class="ata-card tournamentCard">
         <h3>Debug und Feature-Flags</h3>
@@ -3307,6 +3334,11 @@
           </div>
           <input type="checkbox" id="ata-setting-randomize-ko" data-action="toggle-randomize-ko" ${randomizeKoEnabled}>
         </div>
+      </section>
+      <section class="ata-card tournamentCard">
+        <h3>Regelbasis und Limits</h3>
+        <p class="ata-small">Aktive Modus-Limits: ${escapeHtml(modeLimitSummary)}.</p>
+        <p class="ata-small">Die DRA-Regeln setzen kein fixes globales Teilnehmermaximum. Die Grenzen oben sind bewusst fuer faire Turnierdauer und stabile Darstellung gesetzt. Details: <a href="${README_RULES_URL}" target="_blank" rel="noopener noreferrer">README - Regelbasis und Limits</a>.</p>
       </section>
       <section class="ata-card tournamentCard">
         <h3>Storage</h3>
@@ -3735,11 +3767,9 @@
       return { ok: false, message: "Turnierdaten konnten nicht validiert werden." };
     }
 
-    if (normalizedTournament.participants.length < PLAYER_LIMIT_MIN || normalizedTournament.participants.length > PLAYER_LIMIT_MAX) {
-      return { ok: false, message: `Teilnehmerzahl muss zwischen ${PLAYER_LIMIT_MIN} und ${PLAYER_LIMIT_MAX} liegen.` };
-    }
-    if (normalizedTournament.mode === "groups_ko" && normalizedTournament.participants.length < GROUP_MODE_MIN) {
-      return { ok: false, message: "Gruppenphase + KO erfordert mindestens 5 Teilnehmer." };
+    const participantCountError = getParticipantCountError(normalizedTournament.mode, normalizedTournament.participants.length);
+    if (participantCountError) {
+      return { ok: false, message: participantCountError };
     }
 
     refreshDerivedMatches(normalizedTournament);

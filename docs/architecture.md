@@ -17,7 +17,10 @@
   - `settings.featureFlags.autoLobbyStart` (default `false`)
 - Turnier:
   - `mode`: `ko | league | groups_ko`
-  - `participants` (2..8)
+  - `participants` (modusabhaengig):
+    - `ko`: `2..128`
+    - `league`: `2..16`
+    - `groups_ko`: `4..16`
   - `matches` mit `status`, `winnerId`, `legs`, `source`.
   - pro Match optionale API-Automationsmetadaten unter `match.meta.auto`:
     - `provider`, `lobbyId`, `status`, `startedAt`, `finishedAt`, `lastSyncAt`, `lastError`.

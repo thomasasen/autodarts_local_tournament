@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.12
+- Teilnehmer-Limits auf regelbasierte, modusabhaengige Grenzen umgestellt:
+  - `ko`: `2..128`
+  - `league`: `2..16`
+  - `groups_ko`: `4..16`
+- Validierung fuer Turniererstellung und Import auf die neuen Modus-Limits umgestellt.
+- GUI-Hinweise im Tab `Turnier` und `Einstellungen` erweitert, inkl. Link auf `README.md#regelbasis-und-limits`.
+- Dokumentation aktualisiert (`README.md`, `docs/architecture.md`) mit Regelbasis und Begruendung.
+
 ## 0.2.7
 - Bracket-Renderer auf `brackets-viewer@1.9.0` vereinheitlicht; GoJS-Anteil entfernt.
 - Bracket-iframe visuell auf Autodarts-Look angepasst (groessere Schrift, bessere Proportionen, volle Breiten-/Scrollnutzung).
