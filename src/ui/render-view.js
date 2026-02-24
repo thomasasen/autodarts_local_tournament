@@ -144,8 +144,8 @@
     if (tournament.mode === "league") {
       const standings = standingsForMatches(tournament, getMatchesByStage(tournament, MATCH_STAGE_LEAGUE));
       html += renderStandingsTable(standings, "Liga-Tabelle", [
-        { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
-        { href: README_TIE_BREAK_URL, label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
+        { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
+        { href: README_TIE_BREAK_URL, kind: "tech", label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
       ]);
       html += renderLeagueSchedule(tournament);
     } else if (tournament.mode === "groups_ko") {
@@ -154,8 +154,8 @@
       const blockedGroups = [];
       standingsMap.forEach((entry) => {
         groupCards.push(renderStandingsTable(entry.rows, `Tabelle ${entry.group.name}`, [
-          { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
-          { href: README_TIE_BREAK_URL, label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
+          { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
+          { href: README_TIE_BREAK_URL, kind: "tech", label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
         ]));
         if (entry.groupResolution?.status === "playoff_required") {
           blockedGroups.push(`${entry.group.name}: ${entry.groupResolution.reason}`);
@@ -166,8 +166,8 @@
         html += `
           <section class="ata-card tournamentCard">
             ${renderSectionHeading("Gruppenentscheidung offen", [
-              { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
-              { href: README_TIE_BREAK_URL, label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
+              { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
+              { href: README_TIE_BREAK_URL, kind: "tech", label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
             ])}
             <p class="ata-small">KO-Qualifikation ist blockiert, bis folgende DRA-Entscheidungen geklärt sind:</p>
             <ul class="ata-small">

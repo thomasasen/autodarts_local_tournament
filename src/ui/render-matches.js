@@ -254,12 +254,13 @@
 
     const cardsHtml = cards || `<p class="ata-small">Keine Matches vorhanden.</p>`;
     const resultHeadingLinks = [
-      { href: README_API_AUTOMATION_URL, label: "Erklärung zur API-Halbautomatik öffnen", title: "README: API-Halbautomatik" },
-      { href: README_TIE_BREAK_URL, label: "Erklärung zum Tie-Break und Playoff öffnen", title: "README: DRA Tie-Break" },
+      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Erklärung zur API-Halbautomatik öffnen", title: "README: API-Halbautomatik" },
+      { href: README_TIE_BREAK_URL, kind: "tech", label: "Erklärung zum Tie-Break und Playoff öffnen", title: "README: DRA Tie-Break" },
+      { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
     ];
     const nextMatchHelpLinks = renderInfoLinks([
-      { href: README_API_AUTOMATION_URL, label: "Ablauf der Ergebnisführung öffnen", title: "README: API-Halbautomatik und Ergebnisführung" },
-      { href: README_TOURNAMENT_MODES_URL, label: "Turniermodus-Kontext öffnen", title: "README: Turniermodi" },
+      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Ablauf der Ergebnisführung öffnen", title: "README: API-Halbautomatik und Ergebnisführung" },
+      { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Turniermodus-Kontext öffnen", title: "README: Turniermodi" },
     ]);
     const nextHintHtml = suggestedNextMatchId
       ? `<p class="ata-small ata-next-hint">Hinweis: Die Markierung "Nächstes Match" zeigt die empfohlene nächste Paarung (PDC: Next Match) ${nextMatchHelpLinks}.</p>`
@@ -272,7 +273,7 @@
       <section class="ata-card tournamentCard ata-matches-card">
         ${renderSectionHeading("Ergebnisführung", resultHeadingLinks)}
         <p class="ata-small">API-Halbautomatik: Match per Klick starten, Ergebnis wird automatisch synchronisiert. Manuelle Eingabe bleibt als Fallback aktiv. ${renderInfoLinks([
-          { href: README_API_AUTOMATION_URL, label: "Voraussetzungen und Ablauf öffnen", title: "README: API-Halbautomatik" },
+          { href: README_API_AUTOMATION_URL, kind: "tech", label: "Voraussetzungen und Ablauf öffnen", title: "README: API-Halbautomatik" },
         ])}</p>
         <div class="ata-matches-toolbar">
           <div class="ata-segmented" role="group" aria-label="Match-Sortierung">${sortButtonsHtml}</div>

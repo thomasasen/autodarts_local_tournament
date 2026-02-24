@@ -322,6 +322,18 @@
         transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
       }
 
+      .ata-help-link-tech {
+        border-color: rgba(153, 184, 245, 0.62);
+        background: rgba(153, 184, 245, 0.2);
+        color: #e8efff;
+      }
+
+      .ata-help-link-rule {
+        border-color: rgba(90, 210, 153, 0.62);
+        background: rgba(90, 210, 153, 0.18);
+        color: #baf5da;
+      }
+
       .ata-help-link:hover {
         background: rgba(255, 255, 255, 0.2);
         border-color: rgba(255, 255, 255, 0.62);

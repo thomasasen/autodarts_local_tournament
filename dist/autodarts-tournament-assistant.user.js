@@ -38,12 +38,12 @@
   const README_BASE_URL = "https://github.com/thomasasen/autodarts_local_tournament/blob/main/README.md";
   const README_RULES_URL = `${README_BASE_URL}#regelbasis-und-limits`;
   const README_SETTINGS_URL = `${README_BASE_URL}#einstellungen`;
+  const README_INFO_SYMBOLS_URL = `${README_BASE_URL}#info-symbole`;
   const README_TIE_BREAK_URL = `${README_BASE_URL}#dra-tie-break`;
   const README_TOURNAMENT_MODES_URL = `${README_BASE_URL}#turniermodi`;
   const README_TOURNAMENT_CREATE_URL = `${README_BASE_URL}#turnier-anlegen`;
   const README_API_AUTOMATION_URL = `${README_BASE_URL}#api-halbautomatik`;
-  const DRA_RULES_URL = "https://www.thedra.co.uk/rules";
-  const DRA_RULES_PDF_URL = "https://static.wixstatic.com/ugd/298855_0050acb8726842f7b7ca13ec829f5ebf.pdf";
+  const DRA_RULES_URL = "https://www.thedra.co.uk/dra-rulebook";
   const PDC_OPEN_DRAW_CONTEXT_URL = "https://www.pdc.tv/news/2013/01/16/rules-challenge-youth-tours";
 
   const BRACKETS_VIEWER_CSS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.css";
@@ -370,6 +370,18 @@
         font-weight: 700;
         line-height: 1;
         transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+      }
+
+      .ata-help-link-tech {
+        border-color: rgba(153, 184, 245, 0.62);
+        background: rgba(153, 184, 245, 0.2);
+        color: #e8efff;
+      }
+
+      .ata-help-link-rule {
+        border-color: rgba(90, 210, 153, 0.62);
+        background: rgba(90, 210, 153, 0.18);
+        color: #baf5da;
       }
 
       .ata-help-link:hover {
@@ -1489,17 +1501,23 @@
         if (!href) {
           return "";
         }
+        const kind = normalizeToken(entry?.kind || "tech");
+        const isRuleLink = kind === "rule" || kind === "rules" || kind === "regel";
+        const symbol = isRuleLink ? "§" : "ⓘ";
+        const className = isRuleLink
+          ? "ata-help-link ata-help-link-rule"
+          : "ata-help-link ata-help-link-tech";
         const label = normalizeText(entry?.label) || "Mehr Informationen";
         const title = normalizeText(entry?.title) || label;
         return `
           <a
-            class="ata-help-link"
+            class="${className}"
             href="${escapeHtml(href)}"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="${escapeHtml(label)}"
             title="${escapeHtml(title)}"
-          >ⓘ</a>
+          >${symbol}</a>
         `;
       })
       .filter(Boolean)
@@ -4293,20 +4311,24 @@
         ? `<input type="hidden" id="ata-x01-bullmode-hidden" name="x01BullMode" value="${escapeHtml(draft.x01BullMode)}">`
         : "";
       const createHeadingLinks = [
-        { href: README_TOURNAMENT_CREATE_URL, label: "Erklärung zur Turniererstellung öffnen", title: "README: Turnier anlegen" },
-        { href: README_RULES_URL, label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+        { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erklärung zur Turniererstellung öffnen", title: "README: Turnier anlegen" },
+        { href: README_RULES_URL, kind: "tech", label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+        { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole öffnen", title: "README: Info-Symbole" },
       ];
       const modeHelpLinks = renderInfoLinks([
-        { href: README_TOURNAMENT_MODES_URL, label: "Erklärung der Modi öffnen", title: "README: Turniermodi" },
-        { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
+        { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Erklärung der Modi öffnen", title: "README: Turniermodi" },
+        { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zu Turnierformaten öffnen", title: "DRA Rulebook (offiziell)" },
+        { href: README_RULES_URL, kind: "tech", label: "Regelstellen mit Seiten-/Punktangaben öffnen", title: "README: Regelbasis und Limits" },
       ]);
       const drawHelpLinks = renderInfoLinks([
-        { href: README_TOURNAMENT_MODES_URL, label: "Open Draw und gesetzter Draw erklärt", title: "README: KO-Modus" },
-        { href: PDC_OPEN_DRAW_CONTEXT_URL, label: "PDC-Kontext zu Open Draw öffnen", title: "PDC: Open Draw Kontext" },
+        { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Open Draw und gesetzter Draw erklärt", title: "README: KO-Modus" },
+        { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zur Draw-Stabilität öffnen", title: "DRA Rulebook (offiziell)" },
+        { href: README_RULES_URL, kind: "tech", label: "Regelstellen mit Seiten-/Punktangaben öffnen", title: "README: Regelbasis und Limits" },
+        { href: PDC_OPEN_DRAW_CONTEXT_URL, kind: "rule", label: "PDC-Kontext zu Open Draw öffnen", title: "PDC: Open Draw Kontext" },
       ]);
       const modeLimitHelpLinks = renderInfoLinks([
-        { href: README_RULES_URL, label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
-        { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
+        { href: README_RULES_URL, kind: "tech", label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+        { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zu Limits und Draw öffnen", title: "DRA Rulebook (offiziell)" },
       ]);
       return `
         <section class="ata-card tournamentCard">
@@ -4458,8 +4480,9 @@
     const primaryTagsHtml = primaryTags.map((tag) => `<span class="${tag.cls}">${escapeHtml(tag.text)}</span>`).join("");
     const x01TagsHtml = x01Tags.map((tag) => `<span class="${tag.cls}">${escapeHtml(tag.text)}</span>`).join("");
     const activeTournamentHeadingLinks = [
-      { href: README_TOURNAMENT_MODES_URL, label: "Turniermodus-Erklärung öffnen", title: "README: Turniermodi" },
-      { href: README_RULES_URL, label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+      { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Turniermodus-Erklärung öffnen", title: "README: Turniermodi" },
+      { href: README_RULES_URL, kind: "tech", label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+      { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zu Turnierformaten öffnen", title: "DRA Rulebook (offiziell)" },
     ];
 
     return `
@@ -4749,12 +4772,13 @@
 
     const cardsHtml = cards || `<p class="ata-small">Keine Matches vorhanden.</p>`;
     const resultHeadingLinks = [
-      { href: README_API_AUTOMATION_URL, label: "Erklärung zur API-Halbautomatik öffnen", title: "README: API-Halbautomatik" },
-      { href: README_TIE_BREAK_URL, label: "Erklärung zum Tie-Break und Playoff öffnen", title: "README: DRA Tie-Break" },
+      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Erklärung zur API-Halbautomatik öffnen", title: "README: API-Halbautomatik" },
+      { href: README_TIE_BREAK_URL, kind: "tech", label: "Erklärung zum Tie-Break und Playoff öffnen", title: "README: DRA Tie-Break" },
+      { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
     ];
     const nextMatchHelpLinks = renderInfoLinks([
-      { href: README_API_AUTOMATION_URL, label: "Ablauf der Ergebnisführung öffnen", title: "README: API-Halbautomatik und Ergebnisführung" },
-      { href: README_TOURNAMENT_MODES_URL, label: "Turniermodus-Kontext öffnen", title: "README: Turniermodi" },
+      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Ablauf der Ergebnisführung öffnen", title: "README: API-Halbautomatik und Ergebnisführung" },
+      { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Turniermodus-Kontext öffnen", title: "README: Turniermodi" },
     ]);
     const nextHintHtml = suggestedNextMatchId
       ? `<p class="ata-small ata-next-hint">Hinweis: Die Markierung "Nächstes Match" zeigt die empfohlene nächste Paarung (PDC: Next Match) ${nextMatchHelpLinks}.</p>`
@@ -4767,7 +4791,7 @@
       <section class="ata-card tournamentCard ata-matches-card">
         ${renderSectionHeading("Ergebnisführung", resultHeadingLinks)}
         <p class="ata-small">API-Halbautomatik: Match per Klick starten, Ergebnis wird automatisch synchronisiert. Manuelle Eingabe bleibt als Fallback aktiv. ${renderInfoLinks([
-          { href: README_API_AUTOMATION_URL, label: "Voraussetzungen und Ablauf öffnen", title: "README: API-Halbautomatik" },
+          { href: README_API_AUTOMATION_URL, kind: "tech", label: "Voraussetzungen und Ablauf öffnen", title: "README: API-Halbautomatik" },
         ])}</p>
         <div class="ata-matches-toolbar">
           <div class="ata-segmented" role="group" aria-label="Match-Sortierung">${sortButtonsHtml}</div>
@@ -4923,8 +4947,8 @@
     if (tournament.mode === "league") {
       const standings = standingsForMatches(tournament, getMatchesByStage(tournament, MATCH_STAGE_LEAGUE));
       html += renderStandingsTable(standings, "Liga-Tabelle", [
-        { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
-        { href: README_TIE_BREAK_URL, label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
+        { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
+        { href: README_TIE_BREAK_URL, kind: "tech", label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
       ]);
       html += renderLeagueSchedule(tournament);
     } else if (tournament.mode === "groups_ko") {
@@ -4933,8 +4957,8 @@
       const blockedGroups = [];
       standingsMap.forEach((entry) => {
         groupCards.push(renderStandingsTable(entry.rows, `Tabelle ${entry.group.name}`, [
-          { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
-          { href: README_TIE_BREAK_URL, label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
+          { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
+          { href: README_TIE_BREAK_URL, kind: "tech", label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
         ]));
         if (entry.groupResolution?.status === "playoff_required") {
           blockedGroups.push(`${entry.group.name}: ${entry.groupResolution.reason}`);
@@ -4945,8 +4969,8 @@
         html += `
           <section class="ata-card tournamentCard">
             ${renderSectionHeading("Gruppenentscheidung offen", [
-              { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
-              { href: README_TIE_BREAK_URL, label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
+              { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
+              { href: README_TIE_BREAK_URL, kind: "tech", label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
             ])}
             <p class="ata-small">KO-Qualifikation ist blockiert, bis folgende DRA-Entscheidungen geklärt sind:</p>
             <ul class="ata-small">
@@ -5027,17 +5051,19 @@
     const tieBreakMode = normalizeTieBreakMode(state.store?.tournament?.rules?.tieBreakMode, TIE_BREAK_MODE_DRA_STRICT);
     const tieBreakDisabledAttr = state.store?.tournament ? "" : "disabled";
     const apiSyncHelpLinks = renderInfoLinks([
-      { href: README_API_AUTOMATION_URL, label: "Erklärung zur API-Halbautomatik öffnen", title: "README: API-Halbautomatik" },
+      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Erklärung zur API-Halbautomatik öffnen", title: "README: API-Halbautomatik" },
+      { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole öffnen", title: "README: Info-Symbole" },
     ]);
     const koDrawHelpLinks = renderInfoLinks([
-      { href: README_TOURNAMENT_MODES_URL, label: "Erklärung zu Turniermodi öffnen", title: "README: Turniermodi und Open Draw" },
-      { href: PDC_OPEN_DRAW_CONTEXT_URL, label: "PDC-Kontext zu Open Draw öffnen", title: "PDC: Open Draw Kontext" },
+      { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Erklärung zu Turniermodi öffnen", title: "README: Turniermodi und Open Draw" },
+      { href: PDC_OPEN_DRAW_CONTEXT_URL, kind: "rule", label: "PDC-Kontext zu Open Draw öffnen", title: "PDC: Open Draw Kontext" },
     ]);
 
     return `
       <section class="ata-card tournamentCard">
         ${renderSectionHeading("Debug und Feature-Flags", [
-          { href: README_SETTINGS_URL, label: "Einstellungen-Dokumentation öffnen", title: "README: Einstellungen" },
+          { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen-Dokumentation öffnen", title: "README: Einstellungen" },
+          { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole öffnen", title: "README: Info-Symbole" },
         ])}
         <div class="ata-toggle">
           <div>
@@ -5063,13 +5089,13 @@
       </section>
       <section class="ata-card tournamentCard">
         ${renderSectionHeading("DRA Tie-Break", [
-          { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
-          { href: DRA_RULES_PDF_URL, label: "DRA-Regel-PDF öffnen", title: "DRA Rules PDF (offizieller Regeltext)" },
-          { href: README_TIE_BREAK_URL, label: "Erklärung DRA Strict und Legacy öffnen", title: "README: DRA Tie-Break" },
+          { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Rulebook-Seite öffnen", title: "DRA Rulebook (offiziell)" },
+          { href: README_TIE_BREAK_URL, kind: "tech", label: "Erklärung DRA Strict und Legacy öffnen", title: "README: DRA Tie-Break" },
         ])}
         <div class="ata-field">
           <label for="ata-setting-tiebreak">Regelmodus pro Turnier ${renderInfoLinks([
-            { href: DRA_RULES_URL, label: "Offizielle Regelquelle öffnen", title: "DRA Rules: Tie-Break-Basis" },
+            { href: DRA_RULES_URL, kind: "rule", label: "Offizielle Regelstelle öffnen", title: "DRA Rulebook (offiziell)" },
+            { href: README_TIE_BREAK_URL, kind: "tech", label: "Regelstelle im Projektkontext öffnen", title: "README: DRA Tie-Break (mit Seiten-/Punktreferenzen)" },
           ])}</label>
           <select id="ata-setting-tiebreak" data-action="set-tiebreak-mode" ${tieBreakDisabledAttr}>
             <option value="${TIE_BREAK_MODE_DRA_STRICT}" ${tieBreakMode === TIE_BREAK_MODE_DRA_STRICT ? "selected" : ""}>DRA Strict (empfohlen)</option>
@@ -5081,15 +5107,15 @@
       </section>
       <section class="ata-card tournamentCard">
         ${renderSectionHeading("Regelbasis und Limits", [
-          { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
-          { href: README_RULES_URL, label: "Projekt-Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+          { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Rulebook-Seite öffnen", title: "DRA Rulebook (offiziell)" },
+          { href: README_RULES_URL, kind: "tech", label: "Regelstellen mit Seiten-/Punktangaben öffnen", title: "README: Regelbasis und Limits" },
         ])}
         <p class="ata-small">Aktive Modus-Limits: ${escapeHtml(modeLimitSummary)}.</p>
         <p class="ata-small">Die DRA-Regeln setzen kein fixes globales Teilnehmermaximum. Die Grenzen oben sind bewusst für faire Turnierdauer und stabile Darstellung gesetzt.</p>
       </section>
       <section class="ata-card tournamentCard">
         ${renderSectionHeading("Storage", [
-          { href: README_BASE_URL, label: "Hinweise zu Storage und Import öffnen", title: "README: Import, Migration und Persistenz" },
+          { href: README_BASE_URL, kind: "tech", label: "Hinweise zu Storage und Import öffnen", title: "README: Import, Migration und Persistenz" },
         ])}
         <p class="ata-small"><code>${escapeHtml(STORAGE_KEY)}</code>, schemaVersion ${STORAGE_SCHEMA_VERSION}</p>
       </section>

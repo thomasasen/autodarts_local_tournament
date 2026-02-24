@@ -17,20 +17,24 @@
         ? `<input type="hidden" id="ata-x01-bullmode-hidden" name="x01BullMode" value="${escapeHtml(draft.x01BullMode)}">`
         : "";
       const createHeadingLinks = [
-        { href: README_TOURNAMENT_CREATE_URL, label: "Erklärung zur Turniererstellung öffnen", title: "README: Turnier anlegen" },
-        { href: README_RULES_URL, label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+        { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erklärung zur Turniererstellung öffnen", title: "README: Turnier anlegen" },
+        { href: README_RULES_URL, kind: "tech", label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+        { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole öffnen", title: "README: Info-Symbole" },
       ];
       const modeHelpLinks = renderInfoLinks([
-        { href: README_TOURNAMENT_MODES_URL, label: "Erklärung der Modi öffnen", title: "README: Turniermodi" },
-        { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
+        { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Erklärung der Modi öffnen", title: "README: Turniermodi" },
+        { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zu Turnierformaten öffnen", title: "DRA Rulebook (offiziell)" },
+        { href: README_RULES_URL, kind: "tech", label: "Regelstellen mit Seiten-/Punktangaben öffnen", title: "README: Regelbasis und Limits" },
       ]);
       const drawHelpLinks = renderInfoLinks([
-        { href: README_TOURNAMENT_MODES_URL, label: "Open Draw und gesetzter Draw erklärt", title: "README: KO-Modus" },
-        { href: PDC_OPEN_DRAW_CONTEXT_URL, label: "PDC-Kontext zu Open Draw öffnen", title: "PDC: Open Draw Kontext" },
+        { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Open Draw und gesetzter Draw erklärt", title: "README: KO-Modus" },
+        { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zur Draw-Stabilität öffnen", title: "DRA Rulebook (offiziell)" },
+        { href: README_RULES_URL, kind: "tech", label: "Regelstellen mit Seiten-/Punktangaben öffnen", title: "README: Regelbasis und Limits" },
+        { href: PDC_OPEN_DRAW_CONTEXT_URL, kind: "rule", label: "PDC-Kontext zu Open Draw öffnen", title: "PDC: Open Draw Kontext" },
       ]);
       const modeLimitHelpLinks = renderInfoLinks([
-        { href: README_RULES_URL, label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
-        { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
+        { href: README_RULES_URL, kind: "tech", label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+        { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zu Limits und Draw öffnen", title: "DRA Rulebook (offiziell)" },
       ]);
       return `
         <section class="ata-card tournamentCard">
@@ -182,8 +186,9 @@
     const primaryTagsHtml = primaryTags.map((tag) => `<span class="${tag.cls}">${escapeHtml(tag.text)}</span>`).join("");
     const x01TagsHtml = x01Tags.map((tag) => `<span class="${tag.cls}">${escapeHtml(tag.text)}</span>`).join("");
     const activeTournamentHeadingLinks = [
-      { href: README_TOURNAMENT_MODES_URL, label: "Turniermodus-Erklärung öffnen", title: "README: Turniermodi" },
-      { href: README_RULES_URL, label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+      { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Turniermodus-Erklärung öffnen", title: "README: Turniermodi" },
+      { href: README_RULES_URL, kind: "tech", label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+      { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zu Turnierformaten öffnen", title: "DRA Rulebook (offiziell)" },
     ];
 
     return `

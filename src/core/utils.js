@@ -59,17 +59,23 @@
         if (!href) {
           return "";
         }
+        const kind = normalizeToken(entry?.kind || "tech");
+        const isRuleLink = kind === "rule" || kind === "rules" || kind === "regel";
+        const symbol = isRuleLink ? "§" : "ⓘ";
+        const className = isRuleLink
+          ? "ata-help-link ata-help-link-rule"
+          : "ata-help-link ata-help-link-tech";
         const label = normalizeText(entry?.label) || "Mehr Informationen";
         const title = normalizeText(entry?.title) || label;
         return `
           <a
-            class="ata-help-link"
+            class="${className}"
             href="${escapeHtml(href)}"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="${escapeHtml(label)}"
             title="${escapeHtml(title)}"
-          >ⓘ</a>
+          >${symbol}</a>
         `;
       })
       .filter(Boolean)

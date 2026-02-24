@@ -98,12 +98,17 @@ Priorisierung für Limits in diesem Projekt:
 3. Technische Machbarkeit im Userscript
 
 ### Was sagen die offiziellen Regeln?
-- Offizielle DRA-Regeln: https://www.thedra.co.uk/rules
-- DRA-Regeltext (PDF): https://static.wixstatic.com/ugd/298855_0050acb8726842f7b7ca13ec829f5ebf.pdf
-- DRA 6.6.7 / 6.6.8: In gesetzten Draws werden Byes den gesetzten Spielern zugeordnet.
-- DRA 6.8.1: KO (Straight Knockout) ist der Standardmodus.
-- DRA 6.8.2: Round Robin ist zulässig, wenn vorab bekanntgegeben.
-- DRA 6.10.1 / 6.10.5.2: Kein fixes globales Teilnehmermaximum; Einlass/Cap liegt beim Veranstalter.
+- Offizielle DRA-Rulebook-Seite: https://www.thedra.co.uk/dra-rulebook
+- DRA-Rulebook-PDF (Projektkopie): [docs/DRA-RULE_BOOK.pdf](docs/DRA-RULE_BOOK.pdf)
+- DRA-Referenzen (Punkt + Seite im PDF):
+  - **Definition Bye**: Abschnitt `2`, „Bye“ (Seite 4): [DRA-RULE_BOOK.pdf#page=4](docs/DRA-RULE_BOOK.pdf#page=4)
+  - **Turnierformat KO / Round Robin**: `6.8.1` und `6.8.2` (Seite 17): [DRA-RULE_BOOK.pdf#page=17](docs/DRA-RULE_BOOK.pdf#page=17)
+  - **Teilnehmer und Veranstalter-Ermessen**: `6.10.1` und `6.10.5.2` (Seiten 17-18): [DRA-RULE_BOOK.pdf#page=18](docs/DRA-RULE_BOOK.pdf#page=18)
+  - **Draw bleibt bestehen (auch bei Bye durch Nichtantritt)**: `6.12.1` (Seite 18): [DRA-RULE_BOOK.pdf#page=18](docs/DRA-RULE_BOOK.pdf#page=18)
+  - **Tie-Break im Ermessen des Veranstalters**: `6.16.1` (Seite 20): [DRA-RULE_BOOK.pdf#page=20](docs/DRA-RULE_BOOK.pdf#page=20)
+- Kurzzitate aus dem Rulebook:
+  - `6.8.1`: „The basic principle of Darts Tournaments ... is a knockout format.“
+  - `6.16.1`: „Tie breaks may be employed at the discretion of the Promoter ...“
 
 ### Umgesetzte Limits (begründet)
 | Modus | Limit | Begründung |
@@ -118,6 +123,12 @@ Hinweis:
 
 ## Einstellungen
 Tab: `Einstellungen`
+
+### Info-Symbole
+- `ⓘ` = **Technische Information**
+  - Verweist auf Bedienung, Implementierung und interne Projektdokumentation (README).
+- `§` = **Regelwerk**
+  - Verweist auf offizielle Regelstellen (DRA/PDC) oder konkrete DRA-PDF-Seiten.
 
 ### Debug-Mode
 - Aktiviert ausführliche Logs in der Browser-Konsole.
@@ -145,8 +156,9 @@ Tab: `Einstellungen`
   - Bisheriges ATA-Verhalten mit vereinfachter Sortierung
   - Reihenfolge: Punkte -> Gesamt-Leg-Differenz -> Legs gewonnen
   - Dient nur der Rückwärtskompatibilität alter Daten
-- Offizielle Regelbasis (DRA): https://www.thedra.co.uk/rules
-- Direkter Regeltext (PDF): https://static.wixstatic.com/ugd/298855_0050acb8726842f7b7ca13ec829f5ebf.pdf
+- Offizielle Regelbasis (DRA): https://www.thedra.co.uk/dra-rulebook
+- Relevante Regelstelle: `6.16.1` (Seite 20) im DRA-Rulebook-PDF
+  - [DRA-RULE_BOOK.pdf#page=20](docs/DRA-RULE_BOOK.pdf#page=20)
 
 ## Turnier anlegen
 Tab: `Turnier`
@@ -317,8 +329,8 @@ powershell -ExecutionPolicy Bypass -File scripts/qa.ps1
 
 ## Quellen
 - DRA (offizielle Regelbasis):
-  - https://www.thedra.co.uk/rules
-  - https://static.wixstatic.com/ugd/298855_0050acb8726842f7b7ca13ec829f5ebf.pdf
+  - https://www.thedra.co.uk/dra-rulebook
+  - [docs/DRA-RULE_BOOK.pdf](docs/DRA-RULE_BOOK.pdf)
 - PDC (Open Draw Kontext, Eventregeln):
   - https://www.pdc.tv/news/2013/01/16/rules-challenge-youth-tours
 - JS-Modularisierung:

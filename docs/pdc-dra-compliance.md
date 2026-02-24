@@ -1,12 +1,12 @@
 ﻿# PDC/DRA Compliance-Mapping
 
 ## Quellen
-- DRA Rules: https://www.thedra.co.uk/rules
-- DRA PDF: https://static.wixstatic.com/ugd/298855_0050acb8726842f7b7ca13ec829f5ebf.pdf
+- DRA Rulebook (offiziell): https://www.thedra.co.uk/dra-rulebook
+- DRA PDF (Projektkopie): [DRA-RULE_BOOK.pdf](DRA-RULE_BOOK.pdf)
 
 ## Umgesetzte Punkte
 
-1. **Round Robin Tie-Break (DRA 6.8.2 Kontext)**
+1. **Round Robin Tie-Break (DRA 6.16.1, im Round-Robin-Kontext)**
 - Implementiert in `standingsForMatches`.
 - Reihenfolge:
   - Punkte
@@ -15,6 +15,7 @@
   - Gesamt-Leg-Differenz
   - Gesamt-Legs gewonnen
   - danach `playoff_required`
+- Referenz: DRA Rulebook `6.16.1` (Seite 20), PDF-Link: [DRA-RULE_BOOK.pdf#page=20](DRA-RULE_BOOK.pdf#page=20)
 
 2. **Gruppenauflösung**
 - `groupResolution.status` wird auf `playoff_required` gesetzt, wenn Gleichstände nicht auflösbar sind.
@@ -24,6 +25,7 @@
 - KO-Bracket bleibt Single Elimination.
 - Seeded/Open Draw bleiben verfügbar.
 - Freilose (Bye) werden nur in Runde 1 automatisch abgeschlossen.
+- Referenz: DRA Rulebook `6.8.1` (Seite 17), `6.12.1` (Seite 18), PDF-Link: [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
 
 4. **Terminologie (PDC-konform)**
 - Die UI nutzt deutsche Begriffe mit PDC-Bezug, z. B.:
