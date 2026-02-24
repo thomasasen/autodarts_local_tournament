@@ -118,6 +118,7 @@
       ready: false,
       failed: false,
       timeoutHandle: null,
+      frameHeight: 0,
       lastError: "",
     },
     autoDetect: {
@@ -3553,7 +3554,7 @@
       .ata-bracket-frame {
         width: 100%;
         min-height: 620px;
-        height: clamp(620px, 72vh, 940px);
+        height: 620px;
         border: 0;
         background: transparent;
       }
@@ -3675,7 +3676,7 @@
 
         .ata-bracket-frame {
           min-height: 420px;
-          height: clamp(420px, 66vh, 760px);
+          height: 420px;
         }
 
         .ata-match-pairing {
@@ -5179,7 +5180,8 @@
     #brackets-root {
       width: 100%;
       flex: 1 1 auto;
-      overflow: auto;
+      overflow-x: auto;
+      overflow-y: hidden;
       min-height: 420px;
       box-sizing: border-box;
       padding: 10px;
@@ -5331,6 +5333,7 @@
   <script>
     (function () {
       var msgEl = document.getElementById("msg");
+      var rootEl = document.getElementById("brackets-root");
       var viewerEl = document.getElementById("ata-brackets-viewer");
 
       function post(data) { window.parent.postMessage(data, "*"); }
@@ -5386,6 +5389,26 @@
         });
       }
 
+      function computeFrameHeight() {
+        var msgHeight = msgEl && msgEl.style.display !== "none" ? msgEl.offsetHeight : 0;
+        var rootScrollHeight = rootEl ? rootEl.scrollHeight : 0;
+        var docHeight = document.documentElement ? document.documentElement.scrollHeight : 0;
+        var bodyHeight = document.body ? document.body.scrollHeight : 0;
+        return Math.max(420, msgHeight + rootScrollHeight, docHeight, bodyHeight);
+      }
+
+      function scheduleHeightReport() {
+        window.requestAnimationFrame(function () {
+          post({ type: "ata:bracket-frame-height", height: computeFrameHeight() });
+          window.setTimeout(function () {
+            post({ type: "ata:bracket-frame-height", height: computeFrameHeight() });
+          }, 100);
+          window.setTimeout(function () {
+            post({ type: "ata:bracket-frame-height", height: computeFrameHeight() });
+          }, 320);
+        });
+      }
+
       function render(payload) {
         if (!window.bracketsViewer || typeof window.bracketsViewer.render !== "function") {
           throw new Error("brackets-viewer not found");
@@ -5403,6 +5426,7 @@
         if (msgEl) {
           msgEl.style.display = "none";
         }
+        scheduleHeightReport();
       }
 
       window.addEventListener("message", function (event) {
@@ -5421,12 +5445,36 @@
         }
       });
 
+      window.addEventListener("resize", scheduleHeightReport);
+
+      if (window.ResizeObserver && viewerEl) {
+        var resizeObserver = new window.ResizeObserver(scheduleHeightReport);
+        resizeObserver.observe(viewerEl);
+        if (rootEl) {
+          resizeObserver.observe(rootEl);
+        }
+      }
+
       post({ type: "ata:bracket-frame-ready" });
+      scheduleHeightReport();
     })();
   </script>
 </body>
 </html>
     `;
+  }
+
+  function applyBracketFrameHeight(height) {
+    const frame = state.bracket.iframe;
+    if (!(frame instanceof HTMLIFrameElement)) {
+      return;
+    }
+    const nextHeight = clampInt(height, 0, 420, 12000);
+    if (!nextHeight || nextHeight === state.bracket.frameHeight) {
+      return;
+    }
+    state.bracket.frameHeight = nextHeight;
+    frame.style.height = `${nextHeight}px`;
   }
 
   function queueBracketRender(forceReload = false) {
@@ -5452,7 +5500,9 @@
       state.bracket.iframe = frame;
       state.bracket.ready = false;
       state.bracket.failed = false;
+      state.bracket.frameHeight = 0;
       state.bracket.lastError = "";
+      frame.style.removeProperty("height");
       syncBracketFallbackVisibility();
       frame.srcdoc = buildBracketFrameSrcdoc();
     }
@@ -5492,6 +5542,11 @@
       if (payload && frame.contentWindow) {
         frame.contentWindow.postMessage({ type: "ata:render-bracket", payload }, "*");
       }
+      return;
+    }
+
+    if (data.type === "ata:bracket-frame-height") {
+      applyBracketFrameHeight(data.height);
       return;
     }
 
