@@ -1,0 +1,9 @@
+{
+  "scenario": "ko-seeded-9",
+  "description": "9 Teilnehmer im 16er-KO: exakt ein offenes Match in Runde 1, restliche Byes.",
+  "participants": 9,
+  "drawMode": "seeded",
+  "expect": {
+    "round1OpenMatches": 1
+  }
+}

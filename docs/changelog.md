@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.3.0
+- Codebasis in Schichten aufgeteilt (`src/core`, `src/data`, `src/domain`, `src/infra`, `src/ui`, `src/bracket`, `src/runtime`).
+- Build-Pipeline ohne npm/Node eingeführt:
+  - deterministischer Build via `scripts/build.ps1`
+  - Reihenfolge über `build/manifest.json`
+  - CSS aus `src/ui/styles/main.css` wird ins Bundle eingebettet.
+- Storage auf `schemaVersion: 3` angehoben.
+- Neues Turnier-Regelfeld:
+  - `tournament.rules.tieBreakMode` (`dra_strict | legacy`)
+  - Bestandsdaten werden auf `dra_strict` migriert.
+- DRA-stricte Tie-Break-Logik umgesetzt:
+  - Punkte
+  - Direktvergleich (2 Punktgleiche)
+  - Teilgruppen-LegDiff (3+ Punktgleiche)
+  - Gesamt-LegDiff
+  - Gesamt-Legs+
+  - danach `playoff_required`.
+- Gruppen->KO-Auflösung blockiert bei `playoff_required`.
+- PDC-konforme Terminologie in der UI ergänzt:
+  - `Freilos (Bye)`
+  - `KO (Straight Knockout)`
+  - `Liga (Round Robin)`
+  - `Nächstes Match (Next Match)`.
+- Diagnose-API ergänzt:
+  - `window.__ATA_RUNTIME.runSelfTests()`
+- Mehrstufige QA-Skripte ergänzt:
+  - `scripts/qa.ps1`
+  - `scripts/qa-encoding.ps1`
+  - `scripts/qa-regelcheck.ps1`
+
 ## 0.2.17
 - Turnierformular (`Neues Turnier erstellen`) visuell und strukturell optimiert:
   - kompakte Zwei-Zonen-Ansicht (Konfiguration links, Teilnehmer + Aktionen rechts), damit die Inhalte auf Desktop besser auf eine Bildschirmansicht passen.

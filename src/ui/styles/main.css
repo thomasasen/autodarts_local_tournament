@@ -1,0 +1,1226 @@
+﻿
+      :host {
+        --ata-space-1: 4px;
+        --ata-space-2: 8px;
+        --ata-space-3: 12px;
+        --ata-space-4: 16px;
+        --ata-space-5: 20px;
+        --ata-space-6: 24px;
+        --ata-radius-sm: 6px;
+        --ata-radius-md: 10px;
+        --ata-radius-lg: 16px;
+        --ata-shadow-lg: 0 18px 52px rgba(3, 8, 23, 0.52);
+        --ata-font-body: "Open Sans", "Segoe UI", Tahoma, sans-serif;
+        --ata-font-head: "Audiowide", "Open Sans", "Segoe UI", Tahoma, sans-serif;
+        --ata-color-bg: #162d56;
+        --ata-color-bg-panel: #2c326d;
+        --ata-color-bg-panel-2: #1f3f71;
+        --ata-color-bg-soft: rgba(255, 255, 255, 0.1);
+        --ata-color-text: #f4f7ff;
+        --ata-color-muted: rgba(232, 237, 255, 0.74);
+        --ata-color-border: rgba(255, 255, 255, 0.2);
+        --ata-color-accent: #5ad299;
+        --ata-color-danger: #fc8181;
+        --ata-color-focus: #ffd34f;
+        --ata-control-bg: rgba(16, 30, 62, 0.72);
+        --ata-control-bg-hover: rgba(23, 40, 82, 0.82);
+        --ata-control-bg-disabled: rgba(17, 27, 49, 0.55);
+        --ata-control-border: rgba(181, 201, 243, 0.36);
+        --ata-control-border-strong: rgba(210, 223, 255, 0.62);
+        --ata-z-overlay: 2147483000;
+        color: var(--ata-color-text);
+        font-family: var(--ata-font-body);
+        font-size: 19px;
+        line-height: 1.4;
+        color-scheme: dark;
+      }
+
+      .ata-root {
+        position: fixed;
+        inset: 0;
+        z-index: var(--ata-z-overlay);
+        display: grid;
+        place-items: center;
+        padding: 4px;
+        box-sizing: border-box;
+        pointer-events: none;
+      }
+
+      .ata-overlay {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at 15% 12%, rgba(114, 121, 224, 0.22), transparent 50%),
+          radial-gradient(circle at 78% 8%, rgba(90, 210, 153, 0.12), transparent 48%),
+          linear-gradient(120deg, rgba(7, 11, 25, 0.54), rgba(7, 11, 25, 0.76));
+        opacity: 0;
+        transition: opacity 180ms ease;
+      }
+
+      .ata-drawer {
+        position: relative;
+        z-index: 1;
+        width: calc(100vw - 8px);
+        height: calc(100vh - 8px);
+        max-height: calc(100vh - 8px);
+        display: grid;
+        grid-template-rows: auto auto auto 1fr;
+        border-radius: 10px;
+        overflow: hidden;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(22px) scale(0.985);
+        transition: transform 220ms ease, opacity 220ms ease, visibility 0ms linear 220ms;
+        background: linear-gradient(180deg, var(--ata-color-bg-panel), var(--ata-color-bg-panel-2) 42%, var(--ata-color-bg));
+        box-shadow: var(--ata-shadow-lg);
+        border: 1px solid var(--ata-color-border);
+        pointer-events: auto;
+      }
+
+      .ata-root[data-open="1"] {
+        pointer-events: auto;
+      }
+
+      .ata-root[data-open="1"] .ata-overlay {
+        opacity: 1;
+      }
+
+      .ata-root[data-open="1"] .ata-drawer {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0) scale(1);
+        transition: transform 220ms ease, opacity 220ms ease, visibility 0ms linear 0ms;
+      }
+
+      .ata-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--ata-space-3);
+        padding: 12px 18px 10px;
+        border-bottom: 1px solid var(--ata-color-border);
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .ata-title-wrap {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        flex-wrap: wrap;
+        min-width: 0;
+      }
+
+      .ata-title-wrap h2 {
+        margin: 0;
+        font-family: var(--ata-font-head);
+        letter-spacing: 0.3px;
+        font-size: 27px;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      .ata-title-wrap p {
+        margin: 0;
+        color: var(--ata-color-muted);
+        font-size: 14px;
+        line-height: 1.2;
+      }
+
+      .ata-version {
+        color: #ffd34f;
+      }
+
+      .ata-close-btn {
+        border: 1px solid var(--ata-color-border);
+        background: rgba(255, 255, 255, 0.12);
+        color: var(--ata-color-text);
+        border-radius: var(--ata-radius-sm);
+        padding: var(--ata-space-2) var(--ata-space-3);
+        cursor: pointer;
+        transition: background 120ms ease, border-color 120ms ease;
+      }
+
+      .ata-close-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: rgba(255, 255, 255, 0.36);
+      }
+
+      .ata-tabs {
+        display: flex;
+        gap: var(--ata-space-2);
+        overflow-x: auto;
+        padding: var(--ata-space-3) var(--ata-space-5);
+        border-bottom: 1px solid var(--ata-color-border);
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .ata-tab {
+        border: 1px solid var(--ata-color-border);
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--ata-color-text);
+        border-radius: 999px;
+        padding: 9px 16px;
+        font-size: 18px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+      }
+
+      .ata-tab:hover {
+        background: rgba(255, 255, 255, 0.16);
+        border-color: rgba(255, 255, 255, 0.34);
+      }
+
+      .ata-tab[data-active="1"] {
+        background: #fff;
+        border-color: #fff;
+        color: #1e2d56;
+        font-weight: 700;
+      }
+
+      .ata-content {
+        overflow: auto;
+        padding: var(--ata-space-5);
+      }
+
+      .ata-runtime-statusbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px 20px;
+        border-bottom: 1px solid var(--ata-color-border);
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .ata-status-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--ata-color-text);
+        padding: 4px 10px;
+        font-size: 15px;
+        line-height: 1.2;
+        white-space: nowrap;
+      }
+
+      .ata-status-pill.ata-status-ok {
+        border-color: rgba(90, 210, 153, 0.5);
+        background: rgba(90, 210, 153, 0.2);
+      }
+
+      .ata-status-pill.ata-status-warn {
+        border-color: rgba(252, 129, 129, 0.55);
+        background: rgba(252, 129, 129, 0.2);
+      }
+
+      .ata-status-pill.ata-status-info {
+        border-color: rgba(153, 160, 245, 0.56);
+        background: rgba(114, 121, 224, 0.24);
+      }
+
+      .ata-status-pill.ata-status-neutral {
+        border-color: rgba(255, 255, 255, 0.3);
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .ata-runtime-hint {
+        color: var(--ata-color-muted);
+        font-size: 15px;
+      }
+
+      .ata-content::-webkit-scrollbar {
+        width: 10px;
+      }
+
+      .ata-content::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.24);
+        border-radius: 999px;
+      }
+
+      .ata-notice {
+        margin-bottom: var(--ata-space-4);
+        padding: var(--ata-space-3) var(--ata-space-4);
+        border-radius: var(--ata-radius-md);
+        border: 1px solid transparent;
+      }
+
+      .ata-notice-info {
+        background: rgba(114, 121, 224, 0.18);
+        border-color: rgba(153, 160, 245, 0.36);
+      }
+
+      .ata-notice-error {
+        background: rgba(252, 129, 129, 0.18);
+        border-color: rgba(252, 129, 129, 0.36);
+      }
+
+      .ata-notice-success {
+        background: rgba(90, 210, 153, 0.18);
+        border-color: rgba(90, 210, 153, 0.38);
+      }
+
+      .ata-card,
+      .tournamentCard {
+        border: 1px solid var(--ata-color-border);
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: var(--ata-radius-lg);
+        padding: var(--ata-space-4);
+        margin-bottom: var(--ata-space-4);
+        transition: background 150ms ease, border-color 150ms ease;
+      }
+
+      .ata-card:hover,
+      .tournamentCard:hover {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.34);
+      }
+
+      .ata-card h3 {
+        margin: 0 0 var(--ata-space-3) 0;
+        font-size: 26px;
+        font-family: var(--ata-font-body);
+        font-weight: 700;
+      }
+
+      .ata-grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--ata-space-3);
+      }
+
+      .ata-grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--ata-space-3);
+      }
+
+      .ata-grid-3-tight {
+        gap: 10px;
+      }
+
+      .ata-field-span-3 {
+        grid-column: 1 / -1;
+      }
+
+      .ata-create-form {
+        display: grid;
+        gap: 10px;
+      }
+
+      .ata-create-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 2.35fr) minmax(300px, 1fr);
+        gap: 12px;
+        align-items: start;
+      }
+
+      .ata-create-main,
+      .ata-create-side {
+        display: grid;
+        gap: 10px;
+      }
+
+      .ata-create-side {
+        border: 1px solid var(--ata-color-border);
+        border-radius: var(--ata-radius-md);
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .ata-field {
+        display: grid;
+        gap: var(--ata-space-1);
+      }
+
+      .ata-field label {
+        color: var(--ata-color-muted);
+        font-size: 15px;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+      }
+
+      .ata-field input,
+      .ata-field select,
+      .ata-field textarea {
+        width: 100%;
+        border-radius: var(--ata-radius-sm);
+        border: 1px solid var(--ata-control-border);
+        background: var(--ata-control-bg);
+        color: var(--ata-color-text);
+        padding: 11px 12px;
+        font-size: 18px;
+        font-weight: 600;
+        box-sizing: border-box;
+        transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease, color 120ms ease;
+      }
+
+      .ata-field input:focus,
+      .ata-field select:focus,
+      .ata-field textarea:focus {
+        outline: none;
+        border-color: var(--ata-color-focus);
+        box-shadow: 0 0 0 2px rgba(255, 211, 79, 0.26);
+        background: var(--ata-control-bg-hover);
+      }
+
+      .ata-field textarea {
+        min-height: 92px;
+        resize: vertical;
+      }
+
+      .ata-create-form .ata-field label {
+        font-size: 13px;
+        letter-spacing: 0.35px;
+      }
+
+      .ata-create-form .ata-field input,
+      .ata-create-form .ata-field select,
+      .ata-create-form .ata-field textarea {
+        padding: 9px 10px;
+        font-size: 16px;
+        line-height: 1.25;
+      }
+
+      .ata-create-form #ata-participants {
+        min-height: clamp(190px, 30vh, 320px);
+      }
+
+      .ata-field-readonly {
+        display: inline-flex;
+        align-items: center;
+        min-height: 42px;
+        border-radius: var(--ata-radius-sm);
+        border: 1px solid rgba(185, 199, 236, 0.22);
+        background: var(--ata-control-bg-disabled);
+        color: rgba(232, 237, 255, 0.78);
+        padding: 9px 10px;
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      .ata-form-inline-actions {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--ata-space-2);
+      }
+
+      .ata-preset-pill {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid rgba(255, 211, 79, 0.48);
+        border-radius: 999px;
+        padding: 5px 11px;
+        background: rgba(255, 211, 79, 0.14);
+        color: #ffe39a;
+        font-size: 14px;
+        line-height: 1.1;
+        white-space: nowrap;
+      }
+
+      .ata-score-grid select,
+      .ata-score-grid input[type="number"] {
+        border-radius: 8px;
+        border: 1px solid var(--ata-control-border);
+        background: var(--ata-control-bg);
+        color: var(--ata-color-text);
+        box-sizing: border-box;
+        min-height: 40px;
+        font-size: 17px;
+        font-weight: 600;
+        padding: 7px 10px;
+        transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease, color 120ms ease;
+      }
+
+      .ata-score-grid select {
+        width: 100%;
+        appearance: none;
+        background-image:
+          linear-gradient(45deg, transparent 50%, rgba(228, 238, 255, 0.92) 50%),
+          linear-gradient(135deg, rgba(228, 238, 255, 0.92) 50%, transparent 50%),
+          linear-gradient(to right, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.12));
+        background-position:
+          calc(100% - 16px) 50%,
+          calc(100% - 10px) 50%,
+          calc(100% - 30px) 0;
+        background-size: 6px 6px, 6px 6px, 1px 100%;
+        background-repeat: no-repeat;
+        padding-right: 36px;
+      }
+
+      .ata-score-grid input[type="number"] {
+        width: 100%;
+        text-align: center;
+      }
+
+      .ata-score-grid select:hover,
+      .ata-score-grid input[type="number"]:hover,
+      .ata-field input:hover,
+      .ata-field select:hover,
+      .ata-field textarea:hover {
+        background: var(--ata-control-bg-hover);
+        border-color: var(--ata-control-border-strong);
+      }
+
+      .ata-score-grid select:focus,
+      .ata-score-grid input[type="number"]:focus {
+        outline: none;
+        border-color: var(--ata-color-focus);
+        box-shadow: 0 0 0 2px rgba(255, 211, 79, 0.22);
+        background: var(--ata-control-bg-hover);
+      }
+
+      .ata-score-grid select:disabled,
+      .ata-score-grid input[type="number"]:disabled,
+      .ata-field input:disabled,
+      .ata-field select:disabled,
+      .ata-field textarea:disabled {
+        background: var(--ata-control-bg-disabled);
+        color: rgba(229, 236, 255, 0.56);
+        border-color: rgba(185, 199, 236, 0.2);
+        cursor: not-allowed;
+      }
+
+      .ata-drawer input::placeholder,
+      .ata-drawer textarea::placeholder {
+        color: rgba(220, 230, 255, 0.62);
+      }
+
+      .ata-drawer select option {
+        background: #2d3e76;
+        color: #eff3ff;
+      }
+
+      .ata-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--ata-space-2);
+      }
+
+      .ata-btn {
+        border: 1px solid var(--ata-color-border);
+        background: rgba(255, 255, 255, 0.12);
+        color: var(--ata-color-text);
+        border-radius: var(--ata-radius-sm);
+        padding: 11px 15px;
+        font-size: 17px;
+        cursor: pointer;
+        transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+      }
+
+      .ata-btn-sm {
+        padding: 7px 10px;
+        font-size: 14px;
+        line-height: 1.2;
+      }
+
+      .ata-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: rgba(255, 255, 255, 0.36);
+      }
+
+      .ata-btn:active {
+        transform: translateY(1px);
+      }
+
+      .ata-btn[disabled] {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .ata-btn-primary {
+        background: var(--ata-color-accent);
+        color: #071611;
+        border-color: var(--ata-color-accent);
+        font-weight: 700;
+      }
+
+      .ata-btn-primary:hover {
+        background: #77dfae;
+        border-color: #77dfae;
+      }
+
+      .ata-btn-danger {
+        border-color: rgba(252, 129, 129, 0.55);
+        background: rgba(252, 129, 129, 0.2);
+      }
+
+      .ata-pill {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--ata-color-border);
+        border-radius: 999px;
+        padding: 2px 9px;
+        margin-right: 6px;
+        margin-bottom: 6px;
+        font-size: 13px;
+      }
+
+      .ata-tournament-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .ata-tournament-mode-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 2px 10px;
+        border: 1px solid rgba(153, 160, 245, 0.56);
+        background: rgba(114, 121, 224, 0.22);
+        color: #dce2ff;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .ata-tournament-meta {
+        display: grid;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .ata-meta-block {
+        display: grid;
+        gap: 5px;
+      }
+
+      .ata-meta-heading {
+        color: var(--ata-color-muted);
+        font-size: 12px;
+        letter-spacing: 0.35px;
+        text-transform: uppercase;
+      }
+
+      .ata-info-tag-cloud {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin: 0;
+      }
+
+      .ata-info-tag {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(236, 242, 255, 0.92);
+        font-size: 12px;
+        line-height: 1.2;
+        padding: 2px 8px;
+        white-space: nowrap;
+      }
+
+      .ata-info-tag.ata-info-tag-key {
+        background: rgba(114, 121, 224, 0.22);
+        border-color: rgba(153, 160, 245, 0.52);
+        color: #dce2ff;
+        font-weight: 700;
+      }
+
+      .ata-info-tag.ata-info-tag-accent {
+        background: rgba(90, 210, 153, 0.16);
+        border-color: rgba(90, 210, 153, 0.44);
+        color: #7be7b5;
+      }
+
+      .ata-player-chip-cloud {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+
+      .ata-player-chip {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid rgba(188, 205, 245, 0.4);
+        background: rgba(34, 53, 98, 0.62);
+        color: #eaf0ff;
+        font-size: 13px;
+        line-height: 1.2;
+        padding: 2px 9px;
+      }
+
+      .ata-player-chip-count {
+        color: #a9bce8;
+        font-size: 12px;
+      }
+
+      .ata-table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--ata-color-border);
+        border-radius: var(--ata-radius-md);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      table.ata-table,
+      table.tournamentRanking {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 17px;
+      }
+
+      .ata-table th,
+      .ata-table td {
+        text-align: left;
+        border-bottom: 1px solid rgba(157, 180, 197, 0.16);
+        padding: 10px 12px;
+        vertical-align: middle;
+      }
+
+      .ata-table th {
+        color: var(--ata-color-muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 15px;
+        letter-spacing: 0.4px;
+      }
+
+      .ata-table tbody tr:nth-of-type(odd) {
+        background: #ffffff0d;
+      }
+
+      .ata-table tbody tr:hover {
+        background: #ffd9262b;
+      }
+
+      .ata-table tr.ata-row-inactive {
+        background: rgba(17, 27, 49, 0.62) !important;
+      }
+
+      .ata-table tr.ata-row-inactive td {
+        color: rgba(211, 223, 250, 0.78);
+      }
+
+      .ata-table tr.ata-row-completed {
+        background: rgba(90, 210, 153, 0.12) !important;
+      }
+
+      .ata-table tr.ata-row-completed td {
+        border-bottom-color: rgba(90, 210, 153, 0.28);
+      }
+
+      .ata-pill-open-slot {
+        display: inline-block;
+        color: #ffd34f;
+        font-weight: 700;
+      }
+
+      .ata-match-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .ata-matches-card {
+        max-width: min(1240px, calc(100vw - 28px));
+        margin: 0 auto;
+      }
+
+      .ata-matches-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 6px;
+      }
+
+      .ata-segmented {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        padding: 2px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .ata-segmented-btn {
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: rgba(232, 237, 255, 0.86);
+        font-size: 11px;
+        line-height: 1.2;
+        padding: 4px 8px;
+        cursor: pointer;
+      }
+
+      .ata-segmented-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .ata-segmented-btn[data-active="1"] {
+        background: rgba(255, 255, 255, 0.95);
+        color: #1e2d56;
+        font-weight: 700;
+      }
+
+      .ata-match-card {
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: var(--ata-radius-md);
+        padding: 8px 10px;
+        background: rgba(255, 255, 255, 0.05);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        column-gap: 10px;
+        row-gap: 6px;
+        transition: background 120ms ease, border-color 120ms ease;
+      }
+
+      .ata-match-card:hover {
+        background: rgba(255, 255, 255, 0.09);
+        border-color: rgba(255, 255, 255, 0.32);
+      }
+
+      .ata-match-card.ata-row-inactive {
+        background: rgba(17, 27, 49, 0.62);
+      }
+
+      .ata-match-card.ata-row-completed {
+        background: rgba(90, 210, 153, 0.12);
+        border-color: rgba(90, 210, 153, 0.35);
+      }
+
+      .ata-match-card.ata-row-live {
+        background: rgba(90, 210, 153, 0.15);
+        border-color: rgba(110, 231, 183, 0.62);
+      }
+
+      .ata-match-card.ata-row-ready {
+        background: rgba(106, 146, 237, 0.14);
+        border-color: rgba(153, 184, 245, 0.52);
+      }
+
+      .ata-match-card.ata-row-next {
+        border-color: rgba(255, 255, 255, 0.46);
+        box-shadow: inset 4px 0 0 rgba(255, 255, 255, 0.75);
+      }
+
+      .ata-match-card.ata-row-blocked {
+        background: rgba(20, 31, 57, 0.7);
+        border-color: rgba(126, 145, 196, 0.34);
+      }
+
+      .ata-match-card.ata-row-bye {
+        background: rgba(255, 211, 79, 0.09);
+        border-color: rgba(255, 211, 79, 0.42);
+      }
+
+      .ata-match-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+        flex: 1 1 420px;
+        min-width: 280px;
+      }
+
+      .ata-match-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+        flex-wrap: wrap;
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+
+      .ata-match-meta-inline {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        flex-wrap: wrap;
+      }
+
+      .ata-match-advance-pill,
+      .ata-match-context-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        padding: 1px 7px;
+        font-size: 11px;
+        line-height: 1.2;
+      }
+
+      .ata-match-advance-pill {
+        border-color: rgba(90, 210, 153, 0.58);
+        background: rgba(90, 210, 153, 0.22);
+        color: #7be7b5;
+        font-weight: 800;
+        font-size: 12px;
+        padding: 2px 10px;
+        box-shadow: 0 0 0 1px rgba(90, 210, 153, 0.22) inset;
+      }
+
+      .ata-match-advance-pill.ata-match-advance-bye {
+        border-color: rgba(255, 211, 79, 0.62);
+        background: rgba(255, 211, 79, 0.2);
+        color: #ffe07a;
+      }
+
+      .ata-match-context-pill {
+        color: rgba(226, 234, 255, 0.88);
+        border-color: rgba(188, 205, 245, 0.38);
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .ata-match-context-pill.ata-match-context-open {
+        border-color: rgba(188, 205, 245, 0.38);
+      }
+
+      .ata-match-context-pill.ata-match-context-completed {
+        border-color: rgba(90, 210, 153, 0.5);
+        background: rgba(90, 210, 153, 0.16);
+      }
+
+      .ata-match-context-pill.ata-match-context-bye {
+        border-color: rgba(255, 211, 79, 0.58);
+        background: rgba(255, 211, 79, 0.16);
+      }
+
+      .ata-match-next-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.56);
+        background: rgba(255, 255, 255, 0.14);
+        color: #f4f7ff;
+        padding: 1px 8px;
+        font-size: 11px;
+        line-height: 1.2;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+      }
+
+      .ata-next-hint {
+        margin: 8px 0 2px 0;
+        color: rgba(235, 239, 255, 0.82);
+      }
+
+      .ata-match-pairing {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 5px;
+        font-size: 14px;
+        line-height: 1.2;
+      }
+
+      .ata-match-pairing .ata-vs {
+        color: var(--ata-color-muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.35px;
+      }
+
+      .ata-pairing-player {
+        font-weight: 700;
+        color: #edf3ff;
+      }
+
+      .ata-pairing-player.is-winner {
+        color: #72e5b0;
+      }
+
+      .ata-pairing-player.is-loser {
+        color: rgba(229, 237, 255, 0.72);
+      }
+
+      .ata-pairing-player.ata-open-slot {
+        color: #ffd34f;
+      }
+
+      .ata-match-status {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 1px 7px;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        background: rgba(255, 255, 255, 0.08);
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+
+      .ata-match-status-open {
+        border-color: rgba(188, 205, 245, 0.38);
+        color: #e8efff;
+      }
+
+      .ata-match-status-completed {
+        border-color: rgba(90, 210, 153, 0.5);
+        background: rgba(90, 210, 153, 0.18);
+        color: #72e5b0;
+      }
+
+      .ata-match-status-bye {
+        border-color: rgba(255, 211, 79, 0.55);
+        background: rgba(255, 211, 79, 0.16);
+        color: #ffd34f;
+      }
+
+      .ata-score-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 58px);
+        gap: 6px;
+        min-width: 0;
+        align-items: center;
+        width: auto;
+        flex: 0 0 auto;
+      }
+
+      .ata-match-editor {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex: 1 1 100%;
+        min-width: 0;
+      }
+
+      .ata-editor-actions {
+        display: grid;
+        grid-template-columns: minmax(100px, 126px) minmax(136px, 176px);
+        gap: 6px;
+        align-items: center;
+        margin-left: auto;
+      }
+
+      .ata-editor-actions .ata-btn {
+        min-height: 34px;
+        padding: 6px 10px;
+        font-size: 14px;
+      }
+
+      .ata-score-grid input[type="number"] {
+        width: 100%;
+        max-width: 58px;
+        min-height: 30px;
+        padding: 4px 7px;
+        font-size: 14px;
+      }
+
+      .ata-match-note {
+        font-size: 12px;
+        color: var(--ata-color-muted);
+        line-height: 1.25;
+        width: 100%;
+      }
+
+      .ata-small {
+        font-size: 13px;
+        color: var(--ata-color-muted);
+        line-height: 1.3;
+      }
+
+      .ata-group-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: var(--ata-space-3);
+      }
+
+      .ata-bracket-dock {
+        position: relative;
+      }
+
+      .ata-bracket-shell {
+        border: 1px solid var(--ata-color-border);
+        border-radius: var(--ata-radius-md);
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.04);
+        min-height: 620px;
+      }
+
+      .ata-bracket-frame {
+        width: 100%;
+        min-height: 620px;
+        height: 620px;
+        border: 0;
+        background: transparent;
+      }
+
+      .ata-bracket-fallback {
+        display: none;
+        padding: var(--ata-space-3);
+        background: rgba(255, 255, 255, 0.05);
+        border-top: 1px solid var(--ata-color-border);
+      }
+
+      .ata-bracket-fallback[data-visible="1"] {
+        display: block;
+      }
+
+      .ata-bracket-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: var(--ata-space-2);
+      }
+
+      .ata-bracket-round {
+        border: 1px solid var(--ata-color-border);
+        border-radius: var(--ata-radius-sm);
+        padding: var(--ata-space-2);
+      }
+
+      .ata-bracket-match {
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 6px;
+        padding: 6px;
+        margin-top: 8px;
+        background: #ffffff0d;
+        display: grid;
+        gap: 4px;
+      }
+
+      .ata-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--ata-space-3);
+        border: 1px solid var(--ata-color-border);
+        border-radius: var(--ata-radius-sm);
+        padding: 10px 12px;
+        margin-bottom: var(--ata-space-2);
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .ata-toggle-compact {
+        padding: 8px 10px;
+        margin-bottom: 0;
+      }
+
+      .ata-create-help {
+        margin: 0;
+        font-size: 14px;
+      }
+
+      .ata-toggle input {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--ata-color-accent);
+      }
+
+      @media (max-width: 1250px) {
+        .ata-grid-3 {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .ata-create-layout {
+          grid-template-columns: 1fr;
+        }
+
+        .ata-match-card {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 6px;
+          align-items: stretch;
+        }
+
+        .ata-match-card-head {
+          min-width: 0;
+        }
+
+        .ata-score-grid {
+          grid-template-columns: repeat(2, 58px);
+          width: auto;
+        }
+
+        .ata-match-editor {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 6px;
+          align-items: stretch;
+        }
+
+        .ata-editor-actions {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          width: 100%;
+          margin-left: 0;
+        }
+      }
+
+      @media (max-width: 820px) {
+        .ata-root {
+          padding: 2px;
+        }
+
+        .ata-drawer {
+          width: calc(100vw - 4px);
+          height: calc(100vh - 4px);
+          max-height: calc(100vh - 4px);
+          border-radius: 8px;
+        }
+
+        .ata-grid-2 {
+          grid-template-columns: 1fr;
+        }
+
+        .ata-grid-3 {
+          grid-template-columns: 1fr;
+        }
+
+        .ata-runtime-statusbar {
+          padding: 10px 14px;
+        }
+
+        .ata-header {
+          align-items: flex-start;
+          padding: 9px 12px;
+          gap: 8px;
+        }
+
+        .ata-title-wrap {
+          gap: 6px;
+        }
+
+        .ata-title-wrap h2 {
+          font-size: 21px;
+          letter-spacing: 0.2px;
+        }
+
+        .ata-title-wrap p {
+          margin: 0;
+          font-size: 12px;
+          line-height: 1.2;
+        }
+
+        .ata-close-btn {
+          padding: 6px 10px;
+          font-size: 14px;
+        }
+
+        .ata-bracket-shell {
+          min-height: 420px;
+        }
+
+        .ata-bracket-frame {
+          min-height: 420px;
+          height: 420px;
+        }
+
+        .ata-match-pairing {
+          font-size: 15px;
+        }
+
+        .ata-score-grid {
+          grid-template-columns: repeat(2, 58px);
+        }
+
+        .ata-editor-actions {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          width: 100%;
+        }
+
+      }
+    

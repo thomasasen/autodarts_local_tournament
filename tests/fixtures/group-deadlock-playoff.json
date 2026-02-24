@@ -1,0 +1,8 @@
+{
+  "scenario": "group-deadlock-playoff",
+  "description": "Drei Spieler mit identischen Punkten, Mini-LegDiff und Legs+ -> Playoff erforderlich.",
+  "expect": {
+    "tiebreakState": "playoff_required",
+    "blocksKoAssignment": true
+  }
+}

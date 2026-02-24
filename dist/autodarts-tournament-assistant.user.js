@@ -1,7 +1,7 @@
-// ==UserScript==
+﻿// ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.2.17
+// @version      0.3.0
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,9 +21,9 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.2.17";
+  const APP_VERSION = "0.3.0";
   const STORAGE_KEY = "ata:tournament:v1";
-  const STORAGE_SCHEMA_VERSION = 2;
+  const STORAGE_SCHEMA_VERSION = 3;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
   const SAVE_DEBOUNCE_MS = 150;
   const UI_HOST_ID = "ata-ui-host";
@@ -41,2515 +41,7 @@
   const BRACKETS_VIEWER_CSS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.css";
   const BRACKETS_VIEWER_JS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.js";
   const I18NEXT_JS = "https://cdn.jsdelivr.net/npm/i18next@23.16.8/dist/umd/i18next.min.js";
-
-  const STATUS_COMPLETED = "completed";
-  const STATUS_PENDING = "pending";
-  const MATCH_STAGE_KO = "ko";
-  const MATCH_STAGE_GROUP = "group";
-  const MATCH_STAGE_LEAGUE = "league";
-  const KO_ENGINE_VERSION = 2;
-  const KO_DRAW_MODE_SEEDED = "seeded";
-  const KO_DRAW_MODE_OPEN_DRAW = "open_draw";
-  const X01_VARIANT = "X01";
-  const X01_PRESET_PDC_STANDARD = "pdc_standard";
-  const X01_PRESET_CUSTOM = "custom";
-  const X01_IN_MODES = Object.freeze(["Straight", "Double", "Master"]);
-  const X01_OUT_MODES = Object.freeze(["Straight", "Double", "Master"]);
-  const X01_BULL_MODES = Object.freeze(["25/50", "50/50"]);
-  const X01_BULL_OFF_MODES = Object.freeze(["Off", "Normal", "Official"]);
-  const X01_MAX_ROUNDS_OPTIONS = Object.freeze([15, 20, 50, 80]);
-  const X01_START_SCORE_OPTIONS = Object.freeze([121, 170, 301, 501, 701, 901]);
-  const MATCH_SORT_MODE_READY_FIRST = "ready_first";
-  const MATCH_SORT_MODE_ROUND = "round";
-  const MATCH_SORT_MODE_STATUS = "status";
-  const MATCH_SORT_MODES = Object.freeze([
-    MATCH_SORT_MODE_READY_FIRST,
-    MATCH_SORT_MODE_ROUND,
-    MATCH_SORT_MODE_STATUS,
-  ]);
-
-  const TAB_IDS = Object.freeze(["tournament", "matches", "view", "io", "settings"]);
-  const TAB_META = Object.freeze([
-    { id: "tournament", label: "Turnier" },
-    { id: "matches", label: "Spiele" },
-    { id: "view", label: "Turnierbaum" },
-    { id: "io", label: "Import/Export" },
-    { id: "settings", label: "Einstellungen" },
-  ]);
-
-  const TECHNICAL_PARTICIPANT_HARD_MAX = 128;
-  const MODE_PARTICIPANT_LIMITS = Object.freeze({
-    ko: Object.freeze({ label: "KO", min: 2, max: 128 }),
-    league: Object.freeze({ label: "Liga", min: 2, max: 16 }),
-    groups_ko: Object.freeze({ label: "Gruppenphase + KO", min: 4, max: 16 }),
-  });
-  const BYE_PLACEHOLDER_TOKENS = new Set([
-    "bye",
-    "freilos",
-    "tbd",
-    "tobeconfirmed",
-    "tobedetermined",
-    "unknown",
-    "none",
-    "null",
-    "na",
-  ]);
-
-  if (window[RUNTIME_GUARD_KEY]) {
-    return;
-  }
-  window[RUNTIME_GUARD_KEY] = true;
-
-  const state = {
-    ready: false,
-    drawerOpen: false,
-    activeTab: "tournament",
-    lastFocused: null,
-    notice: { type: "info", message: "" },
-    noticeTimer: null,
-    saveTimer: null,
-    host: null,
-    shadowRoot: null,
-    patchedHistory: null,
-    routeKey: routeKey(),
-    store: createDefaultStore(),
-    bracket: {
-      iframe: null,
-      ready: false,
-      failed: false,
-      timeoutHandle: null,
-      frameHeight: 0,
-      lastError: "",
-    },
-    autoDetect: {
-      observer: null,
-      queued: false,
-      lastScanAt: 0,
-      lastFingerprint: "",
-    },
-    apiAutomation: {
-      syncing: false,
-      startingMatchId: "",
-      authBackoffUntil: 0,
-      lastAuthNoticeAt: 0,
-    },
-    matchReturnShortcut: {
-      root: null,
-      syncing: false,
-    },
-    runtimeStatusSignature: "",
-    cleanupStack: [],
-  };
-
-  function createDefaultCreateDraft(settings = null) {
-    const defaultRandomize = settings?.featureFlags?.randomizeKoRound1 !== false;
-    const pdcSettings = buildPdcX01Settings();
-    return {
-      name: "",
-      mode: "ko",
-      bestOfLegs: 5,
-      startScore: pdcSettings.baseScore,
-      x01Preset: pdcSettings.presetId,
-      x01InMode: pdcSettings.inMode,
-      x01OutMode: pdcSettings.outMode,
-      x01BullMode: pdcSettings.bullMode,
-      x01MaxRounds: pdcSettings.maxRounds,
-      x01BullOffMode: pdcSettings.bullOffMode,
-      lobbyVisibility: pdcSettings.lobbyVisibility,
-      participantsText: "",
-      randomizeKoRound1: Boolean(defaultRandomize),
-    };
-  }
-
-  function normalizeCreateDraft(rawDraft, settings = null) {
-    const base = createDefaultCreateDraft(settings);
-    const modeRaw = normalizeText(rawDraft?.mode || base.mode);
-    const mode = ["ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : base.mode;
-    const hasDraftObject = rawDraft && typeof rawDraft === "object";
-    const hasExplicitPreset = hasDraftObject && Object.prototype.hasOwnProperty.call(rawDraft, "x01Preset");
-    const rawPreset = hasExplicitPreset
-      ? sanitizeX01Preset(rawDraft?.x01Preset, base.x01Preset)
-      : (hasDraftObject ? X01_PRESET_CUSTOM : base.x01Preset);
-    let x01Settings = normalizeTournamentX01Settings({
-      presetId: rawPreset,
-      baseScore: rawDraft?.startScore ?? base.startScore,
-      inMode: rawDraft?.x01InMode ?? base.x01InMode,
-      outMode: rawDraft?.x01OutMode ?? base.x01OutMode,
-      bullMode: rawDraft?.x01BullMode ?? base.x01BullMode,
-      maxRounds: rawDraft?.x01MaxRounds ?? base.x01MaxRounds,
-      bullOffMode: rawDraft?.x01BullOffMode ?? base.x01BullOffMode,
-      lobbyVisibility: rawDraft?.lobbyVisibility ?? base.lobbyVisibility,
-    }, rawDraft?.startScore ?? base.startScore);
-    if (rawPreset === X01_PRESET_PDC_STANDARD) {
-      x01Settings = buildPdcX01Settings();
-    }
-    return {
-      name: normalizeText(rawDraft?.name || base.name),
-      mode,
-      bestOfLegs: sanitizeBestOf(rawDraft?.bestOfLegs ?? base.bestOfLegs),
-      startScore: x01Settings.baseScore,
-      x01Preset: x01Settings.presetId,
-      x01InMode: x01Settings.inMode,
-      x01OutMode: x01Settings.outMode,
-      x01BullMode: x01Settings.bullMode,
-      x01MaxRounds: x01Settings.maxRounds,
-      x01BullOffMode: x01Settings.bullOffMode,
-      lobbyVisibility: x01Settings.lobbyVisibility,
-      participantsText: String(rawDraft?.participantsText ?? base.participantsText),
-      randomizeKoRound1: typeof rawDraft?.randomizeKoRound1 === "boolean"
-        ? rawDraft.randomizeKoRound1
-        : base.randomizeKoRound1,
-    };
-  }
-
-  function createDefaultStore() {
-    const settings = {
-      debug: false,
-      featureFlags: {
-        autoLobbyStart: false,
-        randomizeKoRound1: true,
-      },
-    };
-    return {
-      schemaVersion: STORAGE_SCHEMA_VERSION,
-      settings,
-      ui: {
-        activeTab: "tournament",
-        matchesSortMode: MATCH_SORT_MODE_READY_FIRST,
-        createDraft: createDefaultCreateDraft(settings),
-      },
-      tournament: null,
-    };
-  }
-
-  function nowIso() {
-    return new Date().toISOString();
-  }
-
-  function routeKey() {
-    return `${location.pathname}${location.search}${location.hash}`;
-  }
-
-  function normalizeText(value) {
-    return String(value || "")
-      .trim()
-      .replace(/\s+/g, " ");
-  }
-
-  function normalizeLookup(value) {
-    return normalizeText(value)
-      .toLowerCase()
-      .normalize("NFKD")
-      .replace(/[\u0300-\u036f]/g, "");
-  }
-
-  function normalizeToken(value) {
-    return normalizeLookup(value).replace(/[^a-z0-9]+/g, "");
-  }
-
-  function cloneSerializable(value) {
-    try {
-      return JSON.parse(JSON.stringify(value));
-    } catch (_) {
-      return null;
-    }
-  }
-
-  function normalizeKoDrawMode(value, fallback = KO_DRAW_MODE_SEEDED) {
-    const mode = normalizeText(value || "").toLowerCase();
-    if (mode === KO_DRAW_MODE_OPEN_DRAW || mode === KO_DRAW_MODE_SEEDED) {
-      return mode;
-    }
-    return fallback;
-  }
-
-  function normalizeKoEngineVersion(value, fallback = 0) {
-    const parsed = clampInt(value, fallback, 0, KO_ENGINE_VERSION);
-    return parsed > KO_ENGINE_VERSION ? KO_ENGINE_VERSION : parsed;
-  }
-
-  function normalizeMatchResultKind(value) {
-    const normalized = normalizeText(value || "").toLowerCase();
-    return normalized === "bye" ? "bye" : null;
-  }
-
-  function isByePlaceholderValue(value) {
-    const token = normalizeToken(value);
-    return Boolean(token) && BYE_PLACEHOLDER_TOKENS.has(token);
-  }
-
-  function escapeHtml(value) {
-    return String(value || "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#39;");
-  }
-
-  function toPromise(value) {
-    return value && typeof value.then === "function" ? value : Promise.resolve(value);
-  }
-
-  function clampInt(value, fallback, min, max) {
-    const num = Number.parseInt(String(value || ""), 10);
-    if (!Number.isFinite(num)) {
-      return fallback;
-    }
-    return Math.max(min, Math.min(max, num));
-  }
-
-  function uuid(prefix) {
-    const random = Math.random().toString(36).slice(2, 8);
-    const timestamp = Date.now().toString(36);
-    return `${prefix}-${timestamp}-${random}`;
-  }
-
-  function addCleanup(fn) {
-    state.cleanupStack.push(fn);
-    return fn;
-  }
-
-  function addListener(target, eventName, handler, options) {
-    target.addEventListener(eventName, handler, options);
-    addCleanup(() => target.removeEventListener(eventName, handler, options));
-  }
-
-  function addInterval(handler, ms) {
-    const handle = window.setInterval(handler, ms);
-    addCleanup(() => clearInterval(handle));
-    return handle;
-  }
-
-  function addObserver(observer) {
-    addCleanup(() => observer.disconnect());
-    return observer;
-  }
-
-  function logDebug(category, message, ...args) {
-    if (!state.store.settings.debug) {
-      return;
-    }
-    console.info(`[ATA][${category}] ${message}`, ...args);
-  }
-
-  function logWarn(category, message, ...args) {
-    console.warn(`[ATA][${category}] ${message}`, ...args);
-  }
-
-  function logError(category, message, ...args) {
-    console.error(`[ATA][${category}] ${message}`, ...args);
-  }
-
-  // Data layer: persistence, migration and normalization.
-  async function readStoreValue(key, fallbackValue) {
-    try {
-      if (typeof GM_getValue === "function") {
-        const value = await toPromise(GM_getValue(key, fallbackValue));
-        if (value !== undefined) {
-          return value;
-        }
-      }
-    } catch (error) {
-      logWarn("storage", `GM_getValue failed for ${key}, fallback to localStorage.`, error);
-    }
-
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw !== null) {
-        return JSON.parse(raw);
-      }
-    } catch (error) {
-      logWarn("storage", `localStorage read failed for ${key}.`, error);
-    }
-    return fallbackValue;
-  }
-
-  async function writeStoreValue(key, value) {
-    try {
-      if (typeof GM_setValue === "function") {
-        await toPromise(GM_setValue(key, value));
-      }
-    } catch (error) {
-      logWarn("storage", `GM_setValue failed for ${key}, fallback to localStorage.`, error);
-    }
-
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch (error) {
-      logWarn("storage", `localStorage write failed for ${key}.`, error);
-    }
-  }
-
-  function sanitizeBestOf(value) {
-    let bestOf = clampInt(value, 5, 1, 21);
-    if (bestOf % 2 === 0) {
-      bestOf += 1;
-    }
-    return bestOf;
-  }
-
-  function sanitizeStartScore(value) {
-    const allowed = new Set(X01_START_SCORE_OPTIONS);
-    const score = clampInt(value, 501, 121, 901);
-    return allowed.has(score) ? score : 501;
-  }
-
-  function getLegsToWin(bestOfLegs) {
-    const bestOf = sanitizeBestOf(bestOfLegs);
-    return Math.floor(bestOf / 2) + 1;
-  }
-
-  function sanitizeX01Preset(value, fallback = X01_PRESET_PDC_STANDARD) {
-    const preset = normalizeText(value || "").toLowerCase();
-    if (preset === X01_PRESET_CUSTOM || preset === X01_PRESET_PDC_STANDARD) {
-      return preset;
-    }
-    return fallback;
-  }
-
-  function sanitizeX01Mode(value, allowedModes, fallback) {
-    const mode = normalizeText(value || "");
-    return allowedModes.includes(mode) ? mode : fallback;
-  }
-
-  function sanitizeX01InMode(value) {
-    return sanitizeX01Mode(value, X01_IN_MODES, "Straight");
-  }
-
-  function sanitizeX01OutMode(value) {
-    return sanitizeX01Mode(value, X01_OUT_MODES, "Double");
-  }
-
-  function sanitizeX01BullMode(value) {
-    return sanitizeX01Mode(value, X01_BULL_MODES, "25/50");
-  }
-
-  function sanitizeX01BullOffMode(value) {
-    return sanitizeX01Mode(value, X01_BULL_OFF_MODES, "Normal");
-  }
-
-  function sanitizeX01MaxRounds(value) {
-    const rounds = clampInt(value, 50, 15, 80);
-    return X01_MAX_ROUNDS_OPTIONS.includes(rounds) ? rounds : 50;
-  }
-
-  function sanitizeMatchesSortMode(value, fallback = MATCH_SORT_MODE_READY_FIRST) {
-    const mode = normalizeText(value || "").toLowerCase();
-    return MATCH_SORT_MODES.includes(mode) ? mode : fallback;
-  }
-
-  function sanitizeLobbyVisibility(value) {
-    void value;
-    return "private";
-  }
-
-  function buildPdcX01Settings() {
-    return {
-      presetId: X01_PRESET_PDC_STANDARD,
-      variant: X01_VARIANT,
-      baseScore: 501,
-      inMode: "Straight",
-      outMode: "Double",
-      bullMode: "25/50",
-      maxRounds: 50,
-      bullOffMode: "Normal",
-      lobbyVisibility: "private",
-    };
-  }
-
-  function normalizeTournamentX01Settings(rawX01, fallbackStartScore = 501) {
-    const hasRawObject = rawX01 && typeof rawX01 === "object";
-    const input = hasRawObject ? rawX01 : {};
-    const rawPreset = normalizeText(input.presetId || input.preset || "").toLowerCase();
-    const hasExplicitPreset = Boolean(rawPreset);
-    const presetId = hasExplicitPreset ? sanitizeX01Preset(rawPreset, X01_PRESET_CUSTOM) : X01_PRESET_CUSTOM;
-
-    if (presetId === X01_PRESET_PDC_STANDARD) {
-      return buildPdcX01Settings();
-    }
-
-    return {
-      presetId: X01_PRESET_CUSTOM,
-      variant: X01_VARIANT,
-      baseScore: sanitizeStartScore(input.baseScore ?? fallbackStartScore),
-      inMode: sanitizeX01InMode(input.inMode),
-      outMode: sanitizeX01OutMode(input.outMode),
-      bullMode: sanitizeX01BullMode(input.bullMode),
-      maxRounds: sanitizeX01MaxRounds(input.maxRounds),
-      bullOffMode: sanitizeX01BullOffMode(input.bullOffMode || input.bullOff),
-      lobbyVisibility: sanitizeLobbyVisibility(input.lobbyVisibility ?? input.isPrivate),
-    };
-  }
-
-  function normalizeAutomationStatus(value, fallback = "idle") {
-    return ["idle", "started", "completed", "error"].includes(value) ? value : fallback;
-  }
-
-  function normalizeAutomationMeta(rawAuto) {
-    const auto = rawAuto && typeof rawAuto === "object" ? rawAuto : {};
-    const lobbyId = normalizeText(auto.lobbyId || "");
-    let status = normalizeAutomationStatus(normalizeText(auto.status || ""), lobbyId ? "started" : "idle");
-    if (!lobbyId && status !== "error") {
-      status = "idle";
-    }
-    return {
-      provider: API_PROVIDER,
-      lobbyId: lobbyId || null,
-      status,
-      startedAt: normalizeText(auto.startedAt || "") || null,
-      finishedAt: normalizeText(auto.finishedAt || "") || null,
-      lastSyncAt: normalizeText(auto.lastSyncAt || "") || null,
-      lastError: normalizeText(auto.lastError || "") || null,
-    };
-  }
-
-  function resetMatchAutomationMeta(match) {
-    const auto = ensureMatchAutoMeta(match);
-    auto.lobbyId = null;
-    auto.status = "idle";
-    auto.startedAt = null;
-    auto.finishedAt = null;
-    auto.lastSyncAt = null;
-    auto.lastError = null;
-    return auto;
-  }
-
-  function normalizeMatchMeta(rawMeta) {
-    const meta = rawMeta && typeof rawMeta === "object" ? rawMeta : {};
-    const resultKind = normalizeMatchResultKind(meta.resultKind);
-    return {
-      ...meta,
-      resultKind,
-      auto: normalizeAutomationMeta(meta.auto),
-    };
-  }
-
-  function ensureMatchMeta(match) {
-    if (!match || typeof match !== "object") {
-      return normalizeMatchMeta(null);
-    }
-    if (!match.meta || typeof match.meta !== "object") {
-      match.meta = {};
-    }
-    match.meta = normalizeMatchMeta(match.meta);
-    return match.meta;
-  }
-
-  function setMatchResultKind(match, resultKind) {
-    const meta = ensureMatchMeta(match);
-    const nextKind = normalizeMatchResultKind(resultKind);
-    if (meta.resultKind === nextKind) {
-      return false;
-    }
-    meta.resultKind = nextKind;
-    return true;
-  }
-
-  function isByeMatchResult(match) {
-    return normalizeMatchResultKind(match?.meta?.resultKind) === "bye";
-  }
-
-  function ensureMatchAutoMeta(match) {
-    const meta = ensureMatchMeta(match);
-    meta.auto = normalizeAutomationMeta(meta.auto);
-    return meta.auto;
-  }
-
-  function normalizeTournamentKoMeta(rawKo, fallbackDrawMode = KO_DRAW_MODE_SEEDED) {
-    const ko = rawKo && typeof rawKo === "object" ? rawKo : {};
-    const drawMode = normalizeKoDrawMode(ko.drawMode, fallbackDrawMode);
-    const engineVersion = normalizeKoEngineVersion(ko.engineVersion, 0);
-    return {
-      drawMode,
-      engineVersion,
-    };
-  }
-
-  async function persistKoMigrationBackup(tournamentSnapshot, reason = "ko-engine-v2-migration") {
-    const snapshot = cloneSerializable(tournamentSnapshot);
-    if (!snapshot) {
-      return false;
-    }
-
-    const backupsRaw = await readStoreValue(STORAGE_KO_MIGRATION_BACKUPS_KEY, []);
-    const backups = Array.isArray(backupsRaw) ? backupsRaw : [];
-    backups.unshift({
-      id: uuid("ko-backup"),
-      reason: normalizeText(reason) || "ko-engine-v2-migration",
-      createdAt: nowIso(),
-      schemaVersion: STORAGE_SCHEMA_VERSION,
-      tournament: snapshot,
-    });
-    const limitedBackups = backups.slice(0, 5);
-    await writeStoreValue(STORAGE_KO_MIGRATION_BACKUPS_KEY, limitedBackups);
-    return true;
-  }
-
-  function normalizeTournament(rawTournament) {
-    if (!rawTournament || typeof rawTournament !== "object") {
-      return null;
-    }
-
-    const mode = ["ko", "league", "groups_ko"].includes(rawTournament.mode) ? rawTournament.mode : "ko";
-    const modeLimits = getModeParticipantLimits(mode);
-    const participantsRaw = Array.isArray(rawTournament.participants) ? rawTournament.participants : [];
-    const participants = participantsRaw
-      .map((entry, index) => {
-        const name = normalizeText(entry?.name || entry || "");
-        if (!name) {
-          return null;
-        }
-        const id = normalizeText(entry?.id || `p-${index + 1}`);
-        return { id, name };
-      })
-      .filter(Boolean)
-      .slice(0, TECHNICAL_PARTICIPANT_HARD_MAX);
-
-    if (participants.length < modeLimits.min) {
-      return null;
-    }
-
-    const groupsRaw = Array.isArray(rawTournament.groups) ? rawTournament.groups : [];
-    const groups = groupsRaw.map((group, index) => ({
-      id: normalizeText(group?.id || `G${index + 1}`),
-      name: normalizeText(group?.name || `Gruppe ${index + 1}`),
-      participantIds: Array.isArray(group?.participantIds)
-        ? group.participantIds.map((id) => normalizeText(id)).filter(Boolean)
-        : [],
-    }));
-
-    const matchesRaw = Array.isArray(rawTournament.matches) ? rawTournament.matches : [];
-    const matches = matchesRaw.map((match, index) => ({
-      id: normalizeText(match?.id || `match-${index + 1}`),
-      stage: [MATCH_STAGE_KO, MATCH_STAGE_GROUP, MATCH_STAGE_LEAGUE].includes(match?.stage) ? match.stage : MATCH_STAGE_KO,
-      round: clampInt(match?.round, 1, 1, 64),
-      number: clampInt(match?.number, index + 1, 1, 256),
-      groupId: match?.groupId ? normalizeText(match.groupId) : null,
-      player1Id: match?.player1Id ? normalizeText(match.player1Id) : null,
-      player2Id: match?.player2Id ? normalizeText(match.player2Id) : null,
-      status: match?.status === STATUS_COMPLETED ? STATUS_COMPLETED : STATUS_PENDING,
-      winnerId: match?.winnerId ? normalizeText(match.winnerId) : null,
-      source: match?.source === "auto" || match?.source === "manual" ? match.source : null,
-      legs: {
-        p1: clampInt(match?.legs?.p1, 0, 0, 50),
-        p2: clampInt(match?.legs?.p2, 0, 0, 50),
-      },
-      updatedAt: normalizeText(match?.updatedAt || nowIso()),
-      meta: normalizeMatchMeta(match?.meta),
-    }));
-
-    const fallbackStartScore = sanitizeStartScore(rawTournament.startScore);
-    const x01 = normalizeTournamentX01Settings(rawTournament.x01, fallbackStartScore);
-
-    return {
-      id: normalizeText(rawTournament.id || uuid("tournament")),
-      name: normalizeText(rawTournament.name || "Lokales Turnier"),
-      mode,
-      ko: mode === "ko"
-        ? normalizeTournamentKoMeta(rawTournament.ko, KO_DRAW_MODE_SEEDED)
-        : null,
-      bestOfLegs: sanitizeBestOf(rawTournament.bestOfLegs),
-      startScore: x01.baseScore,
-      x01,
-      participants,
-      groups,
-      matches,
-      createdAt: normalizeText(rawTournament.createdAt || nowIso()),
-      updatedAt: normalizeText(rawTournament.updatedAt || nowIso()),
-    };
-  }
-
-  function normalizeStoreShape(input) {
-    const defaults = createDefaultStore();
-    const settings = {
-      debug: Boolean(input?.settings?.debug),
-      featureFlags: {
-        autoLobbyStart: Boolean(input?.settings?.featureFlags?.autoLobbyStart),
-        randomizeKoRound1: input?.settings?.featureFlags?.randomizeKoRound1 !== false,
-      },
-    };
-    return {
-      schemaVersion: STORAGE_SCHEMA_VERSION,
-      settings,
-      ui: {
-        activeTab: TAB_IDS.includes(input?.ui?.activeTab) ? input.ui.activeTab : defaults.ui.activeTab,
-        matchesSortMode: sanitizeMatchesSortMode(input?.ui?.matchesSortMode, defaults.ui.matchesSortMode),
-        createDraft: normalizeCreateDraft(input?.ui?.createDraft, settings),
-      },
-      tournament: normalizeTournament(input?.tournament),
-    };
-  }
-
-  function migrateStorage(rawValue) {
-    if (!rawValue || typeof rawValue !== "object") {
-      return createDefaultStore();
-    }
-
-    const version = Number(rawValue.schemaVersion || 0);
-    switch (version) {
-      case 2:
-      case 1:
-        return normalizeStoreShape(rawValue);
-      default:
-        if (rawValue.mode && rawValue.participants) {
-          return normalizeStoreShape({ tournament: rawValue });
-        }
-        return createDefaultStore();
-    }
-  }
-
-  async function loadPersistedStore() {
-    const raw = await readStoreValue(STORAGE_KEY, createDefaultStore());
-    state.store = migrateStorage(raw);
-    state.activeTab = state.store.ui.activeTab;
-    const needsSchemaWriteback = Number(raw?.schemaVersion || 0) !== STORAGE_SCHEMA_VERSION;
-    if (state.store.tournament) {
-      const changed = refreshDerivedMatches(state.store.tournament);
-      if (changed || needsSchemaWriteback) {
-        state.store.tournament.updatedAt = nowIso();
-        schedulePersist();
-      }
-    } else if (needsSchemaWriteback) {
-      schedulePersist();
-    }
-    logDebug("storage", "Store loaded", state.store);
-  }
-
-  function schedulePersist() {
-    if (state.saveTimer) {
-      clearTimeout(state.saveTimer);
-      state.saveTimer = null;
-    }
-
-    state.saveTimer = window.setTimeout(() => {
-      state.saveTimer = null;
-      persistStore().catch((error) => {
-        logError("storage", "Persisting store failed.", error);
-      });
-    }, SAVE_DEBOUNCE_MS);
-  }
-
-  async function persistStore() {
-    state.store.schemaVersion = STORAGE_SCHEMA_VERSION;
-    state.store.ui.activeTab = state.activeTab;
-    await writeStoreValue(STORAGE_KEY, state.store);
-  }
-
-  function setNotice(type, message, timeoutMs = 4500) {
-    state.notice = { type, message: String(message || "") };
-    renderShell();
-
-    if (state.noticeTimer) {
-      clearTimeout(state.noticeTimer);
-      state.noticeTimer = null;
-    }
-
-    if (timeoutMs > 0 && state.notice.message) {
-      state.noticeTimer = window.setTimeout(() => {
-        state.notice = { type: "info", message: "" };
-        renderShell();
-      }, timeoutMs);
-    }
-  }
-
-  function participantById(tournament, participantId) {
-    return tournament?.participants?.find((participant) => participant.id === participantId) || null;
-  }
-
-  function participantNameById(tournament, participantId) {
-    if (!participantId) {
-      return "\u2205 offen";
-    }
-    const participant = participantById(tournament, participantId);
-    return participant ? participant.name : "\u2205 offen";
-  }
-
-  function buildParticipantIndexes(tournament) {
-    const byId = new Map();
-    const byName = new Map();
-    (tournament?.participants || []).forEach((participant) => {
-      const id = normalizeText(participant?.id || "");
-      if (!id) {
-        return;
-      }
-      byId.set(id, participant);
-      const key = normalizeLookup(participant?.name || "");
-      if (key && !byName.has(key)) {
-        byName.set(key, id);
-      }
-    });
-    return { byId, byName };
-  }
-
-  function resolveParticipantSlotId(tournament, rawValue, indexes = null) {
-    const value = normalizeText(rawValue || "");
-    if (!value || isByePlaceholderValue(value)) {
-      return null;
-    }
-
-    const participantIndexes = indexes || buildParticipantIndexes(tournament);
-    if (participantIndexes.byId.has(value)) {
-      return value;
-    }
-
-    const mappedByName = participantIndexes.byName.get(normalizeLookup(value));
-    return mappedByName || null;
-  }
-
-  // Logic layer: deterministic tournament and bracket calculations.
-  function nextPowerOfTwo(value) {
-    let size = 1;
-    while (size < value) {
-      size *= 2;
-    }
-    return size;
-  }
-
-  function getModeParticipantLimits(mode) {
-    return MODE_PARTICIPANT_LIMITS[mode] || MODE_PARTICIPANT_LIMITS.ko;
-  }
-
-  function buildModeParticipantLimitSummary() {
-    return Object.entries(MODE_PARTICIPANT_LIMITS)
-      .map(([, limits]) => `${limits.label}: ${limits.min}-${limits.max}`)
-      .join(", ");
-  }
-
-  function getParticipantCountError(mode, count) {
-    const limits = getModeParticipantLimits(mode);
-    const participantCount = Number(count || 0);
-    if (participantCount < limits.min || participantCount > limits.max) {
-      return `${limits.label} erfordert ${limits.min}-${limits.max} Teilnehmer.`;
-    }
-    return "";
-  }
-
-  function parseParticipantLines(rawLines) {
-    const lines = String(rawLines || "").split(/\r?\n/);
-    const seen = new Set();
-    const participants = [];
-
-    lines.forEach((line) => {
-      const name = normalizeText(line);
-      if (!name) {
-        return;
-      }
-      const key = normalizeLookup(name);
-      if (seen.has(key)) {
-        return;
-      }
-      seen.add(key);
-      participants.push({ id: uuid("p"), name });
-    });
-
-    return participants;
-  }
-
-  function randomInt(maxExclusive) {
-    const max = Number(maxExclusive);
-    if (!Number.isFinite(max) || max <= 0) {
-      return 0;
-    }
-    const cryptoApi = window.crypto || window.msCrypto;
-    if (cryptoApi && typeof cryptoApi.getRandomValues === "function") {
-      const buffer = new Uint32Array(1);
-      const maxUnbiased = Math.floor(0x100000000 / max) * max;
-      let value = 0;
-      do {
-        cryptoApi.getRandomValues(buffer);
-        value = buffer[0];
-      } while (value >= maxUnbiased);
-      return value % max;
-    }
-    return Math.floor(Math.random() * max);
-  }
-
-  function shuffleArray(values) {
-    const shuffled = Array.isArray(values) ? values.slice() : [];
-    for (let index = shuffled.length - 1; index > 0; index -= 1) {
-      const swapIndex = randomInt(index + 1);
-      const current = shuffled[index];
-      shuffled[index] = shuffled[swapIndex];
-      shuffled[swapIndex] = current;
-    }
-    return shuffled;
-  }
-
-  function createMatch({
-    id,
-    stage,
-    round,
-    number,
-    groupId = null,
-    player1Id = null,
-    player2Id = null,
-    meta = {},
-  }) {
-    return {
-      id,
-      stage,
-      round,
-      number,
-      groupId,
-      player1Id,
-      player2Id,
-      status: STATUS_PENDING,
-      winnerId: null,
-      source: null,
-      legs: { p1: 0, p2: 0 },
-      updatedAt: nowIso(),
-      meta: normalizeMatchMeta(meta),
-    };
-  }
-
-  function createRoundRobinPairings(participantIds) {
-    const ids = participantIds.slice();
-    if (ids.length % 2 === 1) {
-      ids.push(null);
-    }
-
-    const rounds = [];
-    const total = ids.length;
-    const roundsCount = total - 1;
-    let rotation = ids.slice();
-
-    for (let roundIndex = 0; roundIndex < roundsCount; roundIndex += 1) {
-      const roundPairs = [];
-      for (let i = 0; i < total / 2; i += 1) {
-        const left = rotation[i];
-        const right = rotation[total - 1 - i];
-        if (left && right) {
-          roundPairs.push([left, right]);
-        }
-      }
-      rounds.push(roundPairs);
-
-      const fixed = rotation[0];
-      const rest = rotation.slice(1);
-      rest.unshift(rest.pop());
-      rotation = [fixed].concat(rest);
-    }
-
-    return rounds;
-  }
-
-  function buildLeagueMatches(participantIds) {
-    const rounds = createRoundRobinPairings(participantIds);
-    const matches = [];
-    rounds.forEach((pairs, roundIndex) => {
-      pairs.forEach((pair, pairIndex) => {
-        matches.push(createMatch({
-          id: `league-r${roundIndex + 1}-m${pairIndex + 1}`,
-          stage: MATCH_STAGE_LEAGUE,
-          round: roundIndex + 1,
-          number: pairIndex + 1,
-          player1Id: pair[0],
-          player2Id: pair[1],
-        }));
-      });
-    });
-    return matches;
-  }
-
-  function buildSeedPlacement(size) {
-    if (!Number.isFinite(size) || size < 2 || size % 2 !== 0) {
-      return [];
-    }
-    let placement = [1];
-    while (placement.length < size) {
-      const mirrorBase = (placement.length * 2) + 1;
-      const next = [];
-      placement.forEach((seedNumber) => {
-        next.push(seedNumber, mirrorBase - seedNumber);
-      });
-      placement = next;
-    }
-    return placement;
-  }
-
-  function buildKoRound1Slots(participantIds, drawMode) {
-    const ids = Array.isArray(participantIds) ? participantIds.slice() : [];
-    if (!ids.length) {
-      return [];
-    }
-    const size = nextPowerOfTwo(ids.length);
-    const mode = normalizeKoDrawMode(drawMode, KO_DRAW_MODE_SEEDED);
-    const seedOrderedParticipants = mode === KO_DRAW_MODE_OPEN_DRAW ? shuffleArray(ids) : ids;
-    const placement = buildSeedPlacement(size);
-    const seedToParticipant = new Map();
-    seedOrderedParticipants.forEach((participantId, index) => {
-      seedToParticipant.set(index + 1, participantId);
-    });
-    return placement.map((seedNumber) => seedToParticipant.get(seedNumber) || null);
-  }
-
-  function buildKoMatchesV2(participantIds, drawMode = KO_DRAW_MODE_SEEDED) {
-    const roundOneSlots = buildKoRound1Slots(participantIds, drawMode);
-    const size = roundOneSlots.length || nextPowerOfTwo(participantIds.length);
-
-    const matches = [];
-    const rounds = Math.log2(size);
-
-    for (let round = 1; round <= rounds; round += 1) {
-      const matchesInRound = size / (2 ** round);
-      for (let number = 1; number <= matchesInRound; number += 1) {
-        const idx = (number - 1) * 2;
-        const player1Id = round === 1 ? roundOneSlots[idx] || null : null;
-        const player2Id = round === 1 ? roundOneSlots[idx + 1] || null : null;
-        matches.push(createMatch({
-          id: `ko-r${round}-m${number}`,
-          stage: MATCH_STAGE_KO,
-          round,
-          number,
-          player1Id,
-          player2Id,
-        }));
-      }
-    }
-
-    return matches;
-  }
-
-  function buildGroups(participantIds) {
-    const groupA = [];
-    const groupB = [];
-    participantIds.forEach((participantId, index) => {
-      if (index % 2 === 0) {
-        groupA.push(participantId);
-      } else {
-        groupB.push(participantId);
-      }
-    });
-    return [
-      { id: "A", name: "Gruppe A", participantIds: groupA },
-      { id: "B", name: "Gruppe B", participantIds: groupB },
-    ];
-  }
-
-  function buildGroupMatches(groups) {
-    const matches = [];
-    groups.forEach((group) => {
-      const rounds = createRoundRobinPairings(group.participantIds);
-      rounds.forEach((pairs, roundIndex) => {
-        pairs.forEach((pair, pairIndex) => {
-          matches.push(createMatch({
-            id: `group-${group.id}-r${roundIndex + 1}-m${pairIndex + 1}`,
-            stage: MATCH_STAGE_GROUP,
-            groupId: group.id,
-            round: roundIndex + 1,
-            number: pairIndex + 1,
-            player1Id: pair[0],
-            player2Id: pair[1],
-          }));
-        });
-      });
-    });
-    return matches;
-  }
-
-  function buildGroupsKoMatches() {
-    return [
-      createMatch({
-        id: "ko-r1-m1",
-        stage: MATCH_STAGE_KO,
-        round: 1,
-        number: 1,
-        meta: {
-          from1: { type: "groupRank", groupId: "A", rank: 1 },
-          from2: { type: "groupRank", groupId: "B", rank: 2 },
-        },
-      }),
-      createMatch({
-        id: "ko-r1-m2",
-        stage: MATCH_STAGE_KO,
-        round: 1,
-        number: 2,
-        meta: {
-          from1: { type: "groupRank", groupId: "B", rank: 1 },
-          from2: { type: "groupRank", groupId: "A", rank: 2 },
-        },
-      }),
-      createMatch({
-        id: "ko-r2-m1",
-        stage: MATCH_STAGE_KO,
-        round: 2,
-        number: 1,
-      }),
-    ];
-  }
-
-  function validateCreateConfig(config) {
-    const errors = [];
-
-    if (!normalizeText(config.name)) {
-      errors.push("Bitte einen Turniernamen eingeben.");
-    }
-    if (!["ko", "league", "groups_ko"].includes(config.mode)) {
-      errors.push("Ung\u00fcltiger Modus.");
-    }
-    const participantCountError = getParticipantCountError(config.mode, config.participants.length);
-    if (participantCountError) {
-      errors.push(participantCountError);
-    }
-
-    return errors;
-  }
-
-  function createTournament(config) {
-    const modeLimits = getModeParticipantLimits(config.mode);
-    const participants = config.participants.slice(0, modeLimits.max);
-    const participantIds = participants.map((participant) => participant.id);
-    const koDrawMode = config.mode === "ko" && config.randomizeKoRound1
-      ? KO_DRAW_MODE_OPEN_DRAW
-      : KO_DRAW_MODE_SEEDED;
-    const x01 = normalizeTournamentX01Settings({
-      presetId: config.x01Preset,
-      baseScore: config.startScore,
-      inMode: config.x01InMode,
-      outMode: config.x01OutMode,
-      bullMode: config.x01BullMode,
-      maxRounds: config.x01MaxRounds,
-      bullOffMode: config.x01BullOffMode,
-      lobbyVisibility: config.lobbyVisibility,
-    }, config.startScore);
-
-    let groups = [];
-    let matches = [];
-
-    if (config.mode === "league") {
-      matches = buildLeagueMatches(participantIds);
-    } else if (config.mode === "groups_ko") {
-      groups = buildGroups(participantIds);
-      matches = buildGroupMatches(groups).concat(buildGroupsKoMatches());
-    } else {
-      matches = buildKoMatchesV2(participantIds, koDrawMode);
-    }
-
-    const tournament = {
-      id: uuid("tournament"),
-      name: normalizeText(config.name),
-      mode: config.mode,
-      ko: config.mode === "ko" ? {
-        drawMode: koDrawMode,
-        engineVersion: KO_ENGINE_VERSION,
-      } : null,
-      bestOfLegs: sanitizeBestOf(config.bestOfLegs),
-      startScore: x01.baseScore,
-      x01,
-      participants,
-      groups,
-      matches,
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-    };
-
-    refreshDerivedMatches(tournament);
-    return tournament;
-  }
-
-  function getMatchesByStage(tournament, stage) {
-    return tournament.matches
-      .filter((match) => match.stage === stage)
-      .sort((left, right) => left.round - right.round || left.number - right.number);
-  }
-
-  function findMatch(tournament, matchId) {
-    return tournament.matches.find((match) => match.id === matchId) || null;
-  }
-
-  function standingsForMatches(tournament, matches) {
-    const rows = tournament.participants.map((participant) => ({
-      id: participant.id,
-      name: participant.name,
-      played: 0,
-      wins: 0,
-      losses: 0,
-      legsFor: 0,
-      legsAgainst: 0,
-      legDiff: 0,
-      points: 0,
-      rank: 0,
-    }));
-
-    const rowById = new Map(rows.map((row) => [row.id, row]));
-
-    matches.forEach((match) => {
-      if (match.status !== STATUS_COMPLETED) {
-        return;
-      }
-      if (!match.player1Id || !match.player2Id || !match.winnerId) {
-        return;
-      }
-
-      const row1 = rowById.get(match.player1Id);
-      const row2 = rowById.get(match.player2Id);
-      if (!row1 || !row2) {
-        return;
-      }
-
-      row1.played += 1;
-      row2.played += 1;
-
-      const p1Legs = clampInt(match.legs?.p1, 0, 0, 50);
-      const p2Legs = clampInt(match.legs?.p2, 0, 0, 50);
-      row1.legsFor += p1Legs;
-      row1.legsAgainst += p2Legs;
-      row2.legsFor += p2Legs;
-      row2.legsAgainst += p1Legs;
-
-      if (match.winnerId === match.player1Id) {
-        row1.wins += 1;
-        row2.losses += 1;
-        row1.points += 2;
-      } else if (match.winnerId === match.player2Id) {
-        row2.wins += 1;
-        row1.losses += 1;
-        row2.points += 2;
-      }
-    });
-
-    rows.forEach((row) => {
-      row.legDiff = row.legsFor - row.legsAgainst;
-    });
-
-    rows.sort((left, right) => {
-      if (right.points !== left.points) {
-        return right.points - left.points;
-      }
-      if (right.legDiff !== left.legDiff) {
-        return right.legDiff - left.legDiff;
-      }
-      if (right.legsFor !== left.legsFor) {
-        return right.legsFor - left.legsFor;
-      }
-      return left.name.localeCompare(right.name, "de");
-    });
-
-    rows.forEach((row, index) => {
-      row.rank = index + 1;
-    });
-
-    return rows;
-  }
-
-  function groupStandingsMap(tournament) {
-    const map = new Map();
-    (tournament.groups || []).forEach((group) => {
-      const groupMatches = tournament.matches.filter((match) => match.stage === MATCH_STAGE_GROUP && match.groupId === group.id);
-      const rows = standingsForMatches(tournament, groupMatches).filter((row) => group.participantIds.includes(row.id));
-      map.set(group.id, {
-        group,
-        rows,
-        complete: groupMatches.length > 0 && groupMatches.every((match) => match.status === STATUS_COMPLETED),
-      });
-    });
-    return map;
-  }
-
-  function clearMatchResult(match) {
-    match.status = STATUS_PENDING;
-    match.winnerId = null;
-    match.source = null;
-    match.legs = { p1: 0, p2: 0 };
-    setMatchResultKind(match, null);
-    resetMatchAutomationMeta(match);
-    match.updatedAt = nowIso();
-  }
-
-  function assignPlayerSlot(match, slot, participantId) {
-    const field = slot === 1 ? "player1Id" : "player2Id";
-    const currentValue = match[field] || null;
-    const nextValue = participantId || null;
-    if (currentValue === nextValue) {
-      return false;
-    }
-    match[field] = nextValue;
-    const hasStoredResult = match.status === STATUS_COMPLETED
-      || Boolean(match.winnerId || match.source || match.legs?.p1 || match.legs?.p2);
-    if (hasStoredResult) {
-      clearMatchResult(match);
-    }
-    match.updatedAt = nowIso();
-    return true;
-  }
-
-  function resolveGroupsToKoAssignments(tournament) {
-    if (tournament.mode !== "groups_ko") {
-      return false;
-    }
-
-    let changed = false;
-    const standingMap = groupStandingsMap(tournament);
-    const semifinals = getMatchesByStage(tournament, MATCH_STAGE_KO).filter((match) => match.round === 1);
-
-    semifinals.forEach((match) => {
-      const from1 = match.meta?.from1;
-      const from2 = match.meta?.from2;
-      if (!from1 || !from2) {
-        return;
-      }
-
-      const group1 = standingMap.get(from1.groupId);
-      const group2 = standingMap.get(from2.groupId);
-      const p1 = group1 && group1.complete ? group1.rows[from1.rank - 1]?.id || null : null;
-      const p2 = group2 && group2.complete ? group2.rows[from2.rank - 1]?.id || null : null;
-      changed = assignPlayerSlot(match, 1, p1) || changed;
-      changed = assignPlayerSlot(match, 2, p2) || changed;
-    });
-
-    return changed;
-  }
-
-  function findKoNextMatch(tournament, match) {
-    const nextRound = match.round + 1;
-    const nextNumber = Math.ceil(match.number / 2);
-    return tournament.matches.find(
-      (item) => item.stage === MATCH_STAGE_KO && item.round === nextRound && item.number === nextNumber,
-    ) || null;
-  }
-
-  function advanceKoWinners(tournament) {
-    const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
-    let changed = false;
-
-    koMatches.forEach((match) => {
-      if (match.status !== STATUS_COMPLETED || !match.winnerId) {
-        return;
-      }
-      const nextMatch = findKoNextMatch(tournament, match);
-      if (!nextMatch) {
-        return;
-      }
-      if (match.number % 2 === 1) {
-        changed = assignPlayerSlot(nextMatch, 1, match.winnerId) || changed;
-      } else {
-        changed = assignPlayerSlot(nextMatch, 2, match.winnerId) || changed;
-      }
-    });
-
-    return changed;
-  }
-
-  function migrateKoTournamentToV2(tournament, defaultDrawMode = KO_DRAW_MODE_SEEDED) {
-    if (!tournament || tournament.mode !== "ko") {
-      return false;
-    }
-
-    const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, defaultDrawMode);
-    const engineVersion = normalizeKoEngineVersion(tournament?.ko?.engineVersion, 0);
-
-    if (engineVersion >= KO_ENGINE_VERSION) {
-      if (!tournament.ko || tournament.ko.drawMode !== drawMode || tournament.ko.engineVersion !== KO_ENGINE_VERSION) {
-        tournament.ko = { drawMode, engineVersion: KO_ENGINE_VERSION };
-        return true;
-      }
-      return false;
-    }
-
-    const backupSnapshot = cloneSerializable(tournament);
-    if (backupSnapshot) {
-      persistKoMigrationBackup(backupSnapshot, "ko-engine-v2-migration").catch((error) => {
-        logWarn("storage", "KO migration backup write failed.", error);
-      });
-    }
-
-    const participantIds = (tournament.participants || [])
-      .map((participant) => normalizeText(participant?.id || ""))
-      .filter(Boolean);
-
-    const nonKoMatches = (tournament.matches || []).filter((match) => match.stage !== MATCH_STAGE_KO);
-    const migratedKoMatches = buildKoMatchesV2(participantIds, drawMode);
-    tournament.matches = nonKoMatches.concat(migratedKoMatches);
-    tournament.ko = { drawMode, engineVersion: KO_ENGINE_VERSION };
-    tournament.updatedAt = nowIso();
-
-    logDebug("ko", "KO tournament migrated to engine v2.", {
-      drawMode,
-      participantCount: participantIds.length,
-    });
-
-    return true;
-  }
-
-  function autoCompleteByes(tournament) {
-    if (!tournament || tournament.mode !== "ko") {
-      return false;
-    }
-
-    let changed = false;
-    const participantIndexes = buildParticipantIndexes(tournament);
-    const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
-
-    function applyByeCompletion(match, winnerId) {
-      let localChanged = false;
-      if (match.status !== STATUS_COMPLETED) {
-        match.status = STATUS_COMPLETED;
-        localChanged = true;
-      }
-      if (match.winnerId !== winnerId) {
-        match.winnerId = winnerId;
-        localChanged = true;
-      }
-      if (match.source !== "auto") {
-        match.source = "auto";
-        localChanged = true;
-      }
-      if (clampInt(match.legs?.p1, 0, 0, 99) !== 0 || clampInt(match.legs?.p2, 0, 0, 99) !== 0) {
-        match.legs = { p1: 0, p2: 0 };
-        localChanged = true;
-      }
-      localChanged = setMatchResultKind(match, "bye") || localChanged;
-      const auto = ensureMatchAutoMeta(match);
-      if (auto.lobbyId || auto.status !== "idle" || auto.startedAt || auto.finishedAt || auto.lastSyncAt || auto.lastError) {
-        resetMatchAutomationMeta(match);
-        localChanged = true;
-      }
-      if (localChanged) {
-        match.updatedAt = nowIso();
-      }
-      return localChanged;
-    }
-
-    koMatches.forEach((match) => {
-      // Byes are only legitimate in round 1 seeding; later rounds with one empty slot
-      // mean "winner not known yet", not an automatic win.
-      if (match.round !== 1) {
-        if (isByeMatchResult(match)) {
-          const localChanged = setMatchResultKind(match, null);
-          if (localChanged) {
-            match.updatedAt = nowIso();
-          }
-          changed = localChanged || changed;
-        }
-        return;
-      }
-      const p1 = resolveParticipantSlotId(tournament, match.player1Id, participantIndexes);
-      const p2 = resolveParticipantSlotId(tournament, match.player2Id, participantIndexes);
-      changed = assignPlayerSlot(match, 1, p1) || changed;
-      changed = assignPlayerSlot(match, 2, p2) || changed;
-
-      if (p1 && p2) {
-        if (isByeMatchResult(match)) {
-          const localChanged = setMatchResultKind(match, null);
-          if (localChanged) {
-            match.updatedAt = nowIso();
-          }
-          changed = localChanged || changed;
-        }
-        return;
-      }
-
-      if (p1 && !p2) {
-        changed = applyByeCompletion(match, p1) || changed;
-      } else if (p2 && !p1) {
-        changed = applyByeCompletion(match, p2) || changed;
-      } else if (isByeMatchResult(match)) {
-        const localChanged = setMatchResultKind(match, null);
-        if (localChanged) {
-          match.updatedAt = nowIso();
-        }
-        changed = localChanged || changed;
-      }
-    });
-    return changed;
-  }
-
-  function isCompletedMatchResultValid(tournament, match) {
-    if (!match || match.status !== STATUS_COMPLETED) {
-      return true;
-    }
-    if (!match.player1Id || !match.player2Id) {
-      const availablePlayerId = match.player1Id || match.player2Id;
-      if (match.stage !== MATCH_STAGE_KO || match.round !== 1) {
-        return false;
-      }
-      return Boolean(availablePlayerId && match.winnerId === availablePlayerId);
-    }
-    if (match.winnerId !== match.player1Id && match.winnerId !== match.player2Id) {
-      return false;
-    }
-
-    const legsToWin = getLegsToWin(tournament?.bestOfLegs);
-    const p1Legs = clampInt(match.legs?.p1, 0, 0, 99);
-    const p2Legs = clampInt(match.legs?.p2, 0, 0, 99);
-    if (p1Legs > legsToWin || p2Legs > legsToWin) {
-      return false;
-    }
-    if (p1Legs === p2Legs) {
-      return false;
-    }
-
-    const winnerLegs = match.winnerId === match.player1Id ? p1Legs : p2Legs;
-    const loserLegs = match.winnerId === match.player1Id ? p2Legs : p1Legs;
-    return winnerLegs === legsToWin && winnerLegs > loserLegs;
-  }
-
-  function normalizeCompletedMatchResults(tournament) {
-    if (!tournament) {
-      return false;
-    }
-    let changed = false;
-    tournament.matches.forEach((match) => {
-      if (match.status === STATUS_COMPLETED && !isCompletedMatchResultValid(tournament, match)) {
-        clearMatchResult(match);
-        changed = true;
-      }
-    });
-    return changed;
-  }
-
-  function refreshDerivedMatches(tournament) {
-    if (!tournament) {
-      return false;
-    }
-
-    let changedAny = false;
-    for (let i = 0; i < 8; i += 1) {
-      let changed = false;
-      changed = migrateKoTournamentToV2(tournament, KO_DRAW_MODE_SEEDED) || changed;
-      changed = normalizeCompletedMatchResults(tournament) || changed;
-      changed = resolveGroupsToKoAssignments(tournament) || changed;
-      changed = autoCompleteByes(tournament) || changed;
-      changed = advanceKoWinners(tournament) || changed;
-      changedAny = changedAny || changed;
-      if (!changed) {
-        break;
-      }
-    }
-    return changedAny;
-  }
-
-  function getOpenMatchByPlayers(tournament, player1Id, player2Id) {
-    const key = new Set([player1Id, player2Id]);
-    const candidates = tournament.matches.filter((match) => {
-      if (match.status !== STATUS_PENDING) {
-        return false;
-      }
-      if (!match.player1Id || !match.player2Id) {
-        return false;
-      }
-      const set = new Set([match.player1Id, match.player2Id]);
-      return key.size === set.size && [...key].every((id) => set.has(id));
-    });
-    return candidates.length === 1 ? candidates[0] : null;
-  }
-
-  function updateMatchResult(matchId, winnerId, legs, source) {
-    const tournament = state.store.tournament;
-    if (!tournament) {
-      return { ok: false, message: "Kein aktives Turnier vorhanden." };
-    }
-
-    const match = findMatch(tournament, matchId);
-    if (!match) {
-      return { ok: false, message: "Match nicht gefunden." };
-    }
-    if (!match.player1Id || !match.player2Id) {
-      return { ok: false, message: "Match hat noch keine zwei Teilnehmer." };
-    }
-    if (winnerId !== match.player1Id && winnerId !== match.player2Id) {
-      return { ok: false, message: "Gewinner passt nicht zum Match." };
-    }
-
-    const legsToWin = getLegsToWin(tournament.bestOfLegs);
-    const p1Legs = clampInt(legs?.p1, 0, 0, 99);
-    const p2Legs = clampInt(legs?.p2, 0, 0, 99);
-    const winnerIsP1 = winnerId === match.player1Id;
-    const winnerLegs = winnerIsP1 ? p1Legs : p2Legs;
-    const loserLegs = winnerIsP1 ? p2Legs : p1Legs;
-
-    if (p1Legs > legsToWin || p2Legs > legsToWin) {
-      return {
-        ok: false,
-        message: `Ung\u00fcltiges Ergebnis: Pro Spieler sind maximal ${legsToWin} Legs m\u00f6glich (Best-of ${sanitizeBestOf(tournament.bestOfLegs)}).`,
-      };
-    }
-
-    if (p1Legs === p2Legs) {
-      return { ok: false, message: "Ung\u00fcltiges Ergebnis: Bei Best-of ist kein Gleichstand m\u00f6glich." };
-    }
-
-    if (winnerLegs <= loserLegs) {
-      return { ok: false, message: "Ung\u00fcltiges Ergebnis: Der gew\u00e4hlte Gewinner muss mehr Legs als der Gegner haben." };
-    }
-
-    if (winnerLegs !== legsToWin) {
-      return {
-        ok: false,
-        message: `Ung\u00fcltiges Ergebnis: Der Gewinner muss genau ${legsToWin} Legs erreichen (Best-of ${sanitizeBestOf(tournament.bestOfLegs)}).`,
-      };
-    }
-
-    match.status = STATUS_COMPLETED;
-    match.winnerId = winnerId;
-    match.source = source === "auto" ? "auto" : "manual";
-    match.legs = { p1: p1Legs, p2: p2Legs };
-    setMatchResultKind(match, null);
-    const now = nowIso();
-    const auto = ensureMatchAutoMeta(match);
-    if (source === "auto") {
-      auto.status = "completed";
-      auto.finishedAt = now;
-      auto.lastSyncAt = now;
-      auto.lastError = null;
-    } else if (auto.lobbyId || auto.status === "started" || auto.status === "error") {
-      auto.status = "completed";
-      auto.finishedAt = now;
-      auto.lastSyncAt = now;
-      auto.lastError = null;
-    }
-    match.updatedAt = now;
-
-    refreshDerivedMatches(tournament);
-    tournament.updatedAt = now;
-    schedulePersist();
-    renderShell();
-    return { ok: true };
-  }
-
-  function getKoBlockingSourceMatch(tournament, match) {
-    if (!tournament || !match || match.stage !== MATCH_STAGE_KO || match.round <= 1) {
-      return null;
-    }
-
-    const previousRound = match.round - 1;
-    const sourceNumberA = ((match.number - 1) * 2) + 1;
-    const sourceNumberB = sourceNumberA + 1;
-    const sourceMatches = getMatchesByStage(tournament, MATCH_STAGE_KO)
-      .filter((item) => (
-        item.round === previousRound
-        && (item.number === sourceNumberA || item.number === sourceNumberB)
-      ))
-      .sort((left, right) => left.number - right.number);
-
-    if (!sourceMatches.length) {
-      return null;
-    }
-
-    return sourceMatches.find((item) => item.status !== STATUS_COMPLETED) || null;
-  }
-
-  function getMatchEditability(tournament, match) {
-    if (!tournament || !match) {
-      return { editable: false, reason: "Match nicht verf\u00fcgbar." };
-    }
-
-    if (match.status === STATUS_COMPLETED) {
-      if (isByeMatchResult(match)) {
-        return { editable: false, reason: "Freilos wurde automatisch weitergeleitet." };
-      }
-      return { editable: false, reason: "Match ist bereits abgeschlossen." };
-    }
-
-    if (!match.player1Id || !match.player2Id) {
-      return { editable: false, reason: "Paarung steht noch nicht fest." };
-    }
-
-    if (match.stage === MATCH_STAGE_KO) {
-      const blockingMatch = getKoBlockingSourceMatch(tournament, match);
-      if (blockingMatch) {
-        return {
-          editable: false,
-          reason: `Vorg\u00e4nger-Match Runde ${blockingMatch.round} / Spiel ${blockingMatch.number} muss zuerst abgeschlossen werden.`,
-        };
-      }
-    }
-
-    return { editable: true, reason: "" };
-  }
-
-  function shouldShowAuthNotice() {
-    const now = Date.now();
-    if (now - state.apiAutomation.lastAuthNoticeAt < API_AUTH_NOTICE_THROTTLE_MS) {
-      return false;
-    }
-    state.apiAutomation.lastAuthNoticeAt = now;
-    return true;
-  }
-
-  function getAuthTokenFromCookie() {
-    try {
-      const value = `; ${document.cookie || ""}`;
-      const parts = value.split("; Authorization=");
-      if (parts.length !== 2) {
-        return "";
-      }
-      let token = parts.pop().split(";").shift() || "";
-      try {
-        token = decodeURIComponent(token);
-      } catch (_) {
-        // Keep raw token if decoding fails.
-      }
-      token = String(token).trim().replace(/^Bearer\s+/i, "");
-      return token;
-    } catch (_) {
-      return "";
-    }
-  }
-
-  function getBoardId() {
-    try {
-      const rawBoardValue = localStorage.getItem("autodarts-board");
-      if (!rawBoardValue) {
-        return "";
-      }
-      let boardId = rawBoardValue;
-      try {
-        const parsed = JSON.parse(rawBoardValue);
-        if (typeof parsed === "string") {
-          boardId = parsed;
-        } else if (parsed && typeof parsed === "object") {
-          boardId = normalizeText(parsed.id || parsed.boardId || parsed.uuid || parsed.value || "");
-        }
-      } catch (_) {
-        // Keep raw value when localStorage entry is not JSON encoded.
-      }
-      return normalizeText(String(boardId || "").replace(/^"+|"+$/g, ""));
-    } catch (_) {
-      return "";
-    }
-  }
-
-  function isValidBoardId(boardId) {
-    const value = normalizeText(boardId || "");
-    if (!value) {
-      return false;
-    }
-    if (value === "[object Object]" || value.toLowerCase() === "manual") {
-      return false;
-    }
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
-      return true;
-    }
-    return /^[a-z0-9][a-z0-9-]{7,}$/i.test(value);
-  }
-
-  function collectRuntimeStatus() {
-    const token = getAuthTokenFromCookie();
-    const boardId = getBoardId();
-    const boardPreview = boardId.length > 18 ? `${boardId.slice(0, 7)}...${boardId.slice(-6)}` : boardId;
-    const autoEnabled = Boolean(state.store?.settings?.featureFlags?.autoLobbyStart);
-    const authBlocked = Number(state.apiAutomation?.authBackoffUntil || 0) > Date.now();
-    const hasToken = Boolean(token);
-    const hasBoard = isValidBoardId(boardId);
-    const hasBoardValue = Boolean(boardId);
-    return {
-      hasToken,
-      hasBoard,
-      boardId: boardId || "",
-      autoEnabled,
-      authBlocked,
-      apiLabel: hasToken ? (authBlocked ? "API Auth abgelaufen" : "API Auth bereit") : "API Auth fehlt",
-      boardLabel: hasBoard
-        ? `Board aktiv (${boardPreview})`
-        : hasBoardValue
-          ? `Board-ID ung\u00fcltig (${boardPreview})`
-          : "Kein aktives Board",
-      autoLabel: autoEnabled ? "Auto-Lobby ON" : "Auto-Lobby OFF",
-    };
-  }
-
-  function renderRuntimeStatusBar() {
-    const status = collectRuntimeStatus();
-    const apiStateClass = status.hasToken && !status.authBlocked ? "ata-status-ok" : "ata-status-warn";
-    const boardStateClass = status.hasBoard ? "ata-status-ok" : "ata-status-warn";
-    const autoStateClass = status.autoEnabled ? "ata-status-info" : "ata-status-neutral";
-    const hint = status.autoEnabled && (!status.hasToken || !status.hasBoard)
-      ? `<span class="ata-runtime-hint">Hinweis: F\u00fcr API-Halbautomatik werden Auth-Token und aktives Board ben\u00f6tigt.</span>`
-      : "";
-    return `
-      <div class="ata-runtime-statusbar">
-        <span class="ata-status-pill ${apiStateClass}">${escapeHtml(status.apiLabel)}</span>
-        <span class="ata-status-pill ${boardStateClass}">${escapeHtml(status.boardLabel)}</span>
-        <span class="ata-status-pill ${autoStateClass}">${escapeHtml(status.autoLabel)}</span>
-        ${hint}
-      </div>
-    `;
-  }
-
-  function runtimeStatusSignature() {
-    const status = collectRuntimeStatus();
-    return [
-      status.hasToken ? "1" : "0",
-      status.authBlocked ? "1" : "0",
-      status.boardId || "",
-      status.autoEnabled ? "1" : "0",
-    ].join("|");
-  }
-
-  function refreshRuntimeStatusUi() {
-    const signature = runtimeStatusSignature();
-    if (signature === state.runtimeStatusSignature) {
-      return;
-    }
-    state.runtimeStatusSignature = signature;
-    if (state.drawerOpen) {
-      renderShell();
-    }
-  }
-
-  function createApiError(status, message, body) {
-    const error = new Error(String(message || "API request failed."));
-    error.status = Number(status || 0);
-    error.body = body;
-    return error;
-  }
-
-  function apiBodyToErrorText(value, depth = 0) {
-    if (value == null || depth > 3) {
-      return "";
-    }
-    if (typeof value === "string") {
-      return normalizeText(value);
-    }
-    if (Array.isArray(value)) {
-      const parts = value.map((entry) => apiBodyToErrorText(entry, depth + 1)).filter(Boolean);
-      return normalizeText(parts.join(" | "));
-    }
-    if (typeof value === "object") {
-      const parts = [];
-      ["message", "error", "detail", "title", "reason", "description"].forEach((key) => {
-        if (Object.prototype.hasOwnProperty.call(value, key)) {
-          const text = apiBodyToErrorText(value[key], depth + 1);
-          if (text) {
-            parts.push(text);
-          }
-        }
-      });
-      if (value.errors && typeof value.errors === "object") {
-        Object.entries(value.errors).forEach(([key, entry]) => {
-          const text = apiBodyToErrorText(entry, depth + 1);
-          if (text) {
-            parts.push(`${key}: ${text}`);
-          }
-        });
-      }
-      const deduped = [...new Set(parts.map((entry) => normalizeText(entry)).filter(Boolean))];
-      if (deduped.length) {
-        return normalizeText(deduped.join(" | "));
-      }
-      try {
-        const json = JSON.stringify(value);
-        if (json && json !== "{}") {
-          return normalizeText(json);
-        }
-      } catch (_) {
-        return "";
-      }
-      return "";
-    }
-    return normalizeText(String(value));
-  }
-
-  function extractApiErrorMessage(status, body) {
-    const detail = apiBodyToErrorText(body);
-    if (detail) {
-      return `HTTP ${status}: ${detail}`;
-    }
-    return `HTTP ${status}`;
-  }
-
-  function parseJsonOrText(rawText) {
-    const text = String(rawText || "");
-    if (!text) {
-      return null;
-    }
-    try {
-      return JSON.parse(text);
-    } catch (_) {
-      return text;
-    }
-  }
-
-  async function requestJsonViaGm(method, url, payload, headers) {
-    return new Promise((resolve, reject) => {
-      GM_xmlhttpRequest({
-        method,
-        url,
-        timeout: API_REQUEST_TIMEOUT_MS,
-        headers,
-        data: payload ? JSON.stringify(payload) : undefined,
-        onload: (response) => {
-          const status = Number(response?.status || 0);
-          const body = parseJsonOrText(response?.responseText || "");
-          if (status >= 200 && status < 300) {
-            resolve(body || {});
-            return;
-          }
-          reject(createApiError(status, extractApiErrorMessage(status, body), body));
-        },
-        onerror: () => {
-          reject(createApiError(0, "Netzwerkfehler bei API-Anfrage.", null));
-        },
-        ontimeout: () => {
-          reject(createApiError(0, "API-Anfrage Timeout.", null));
-        },
-      });
-    });
-  }
-
-  async function requestJsonViaFetch(method, url, payload, headers) {
-    const response = await fetch(url, {
-      method,
-      headers,
-      body: payload ? JSON.stringify(payload) : undefined,
-      cache: "no-store",
-      credentials: "omit",
-    });
-    const text = await response.text();
-    const body = parseJsonOrText(text);
-    if (!response.ok) {
-      throw createApiError(response.status, extractApiErrorMessage(response.status, body), body);
-    }
-    return body || {};
-  }
-
-  async function apiRequestJson(method, url, payload, token) {
-    const headers = { Accept: "application/json" };
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-    if (payload) {
-      headers["Content-Type"] = "application/json";
-    }
-
-    if (typeof GM_xmlhttpRequest === "function") {
-      try {
-        return await requestJsonViaGm(method, url, payload, headers);
-      } catch (error) {
-        const status = Number(error?.status || 0);
-        if (status > 0) {
-          throw error;
-        }
-        logWarn("api", "GM_xmlhttpRequest failed, falling back to fetch().", error);
-      }
-    }
-
-    return requestJsonViaFetch(method, url, payload, headers);
-  }
-
-  async function createLobby(payload, token) {
-    return apiRequestJson("POST", `${API_GS_BASE}/lobbies`, payload, token);
-  }
-
-  async function addLobbyPlayer(lobbyId, name, boardId, token) {
-    return apiRequestJson("POST", `${API_GS_BASE}/lobbies/${encodeURIComponent(lobbyId)}/players`, { name, boardId }, token);
-  }
-
-  async function startLobby(lobbyId, token) {
-    return apiRequestJson("POST", `${API_GS_BASE}/lobbies/${encodeURIComponent(lobbyId)}/start`, null, token);
-  }
-
-  async function fetchMatchStats(lobbyId, token) {
-    return apiRequestJson("GET", `${API_AS_BASE}/matches/${encodeURIComponent(lobbyId)}/stats`, null, token);
-  }
-
-  function getRouteLobbyId(pathname = location.pathname) {
-    const route = normalizeText(pathname || "");
-    if (!route) {
-      return "";
-    }
-    const match = route.match(/^\/(?:(?:history\/)?(?:matches|lobbies))\/([^/?#]+)/i);
-    if (!match || !match[1]) {
-      return "";
-    }
-    try {
-      return normalizeText(decodeURIComponent(match[1]));
-    } catch (_) {
-      return normalizeText(match[1]);
-    }
-  }
-
-  function isApiSyncCandidateMatch(match, includeErrored = false) {
-    if (!match || match.status !== STATUS_PENDING) {
-      return false;
-    }
-    const auto = ensureMatchAutoMeta(match);
-    if (!auto.lobbyId) {
-      return false;
-    }
-    if (auto.status === "started") {
-      return true;
-    }
-    return includeErrored && auto.status === "error";
-  }
-
-  function findTournamentMatchByLobbyId(tournament, lobbyId, includeCompleted = false) {
-    const targetLobbyId = normalizeText(lobbyId || "");
-    if (!tournament || !targetLobbyId) {
-      return null;
-    }
-    return tournament.matches.find((match) => {
-      if (!includeCompleted && match.status !== STATUS_PENDING) {
-        return false;
-      }
-      const auto = ensureMatchAutoMeta(match);
-      return normalizeText(auto.lobbyId || "") === targetLobbyId;
-    }) || null;
-  }
-
-  async function syncApiMatchResult(tournament, match, token, options = {}) {
-    const notifyErrors = Boolean(options.notifyErrors);
-    const notifyNotReady = Boolean(options.notifyNotReady);
-    const includeErrorRetry = options.includeErrorRetry !== false;
-    const auto = ensureMatchAutoMeta(match);
-    const lobbyId = normalizeText(auto.lobbyId || "");
-    if (!lobbyId) {
-      return { ok: false, updated: false, completed: false, pending: true, message: "Keine Lobby-ID vorhanden." };
-    }
-    if (!includeErrorRetry && auto.status === "error") {
-      return { ok: false, updated: false, completed: false, pending: true, message: "Match ist im Fehlerstatus." };
-    }
-
-    let updated = false;
-    if (auto.status === "error") {
-      auto.status = "started";
-      auto.lastSyncAt = nowIso();
-      match.updatedAt = nowIso();
-      updated = true;
-    }
-
-    try {
-      const stats = await fetchMatchStats(lobbyId, token);
-      const syncTimestamp = nowIso();
-      if (auto.lastError) {
-        auto.lastError = null;
-        auto.lastSyncAt = syncTimestamp;
-        match.updatedAt = syncTimestamp;
-        updated = true;
-      } else if (!auto.lastSyncAt) {
-        auto.lastSyncAt = syncTimestamp;
-        match.updatedAt = syncTimestamp;
-        updated = true;
-      }
-
-      const winnerIndex = Number(stats?.winner);
-      if (!Number.isInteger(winnerIndex) || winnerIndex < 0) {
-        auto.status = "started";
-        if (!auto.lastSyncAt) {
-          auto.lastSyncAt = syncTimestamp;
-        }
-        if (notifyNotReady) {
-          setNotice("info", "API-Ergebnis ist noch nicht final verf\u00fcgbar.", 2200);
-        }
-        return {
-          ok: true,
-          updated,
-          completed: false,
-          pending: true,
-          recoverable: true,
-          message: "API-Ergebnis ist noch nicht final verf\u00fcgbar.",
-        };
-      }
-
-      const winnerName = normalizeText(stats?.players?.[winnerIndex]?.name || "");
-      const winnerId = resolveWinnerIdFromApiName(tournament, match, winnerName);
-      if (!winnerId) {
-        const mappingError = "Gewinner konnte nicht eindeutig zugeordnet werden.";
-        const changedError = auto.lastError !== mappingError || auto.status !== "error";
-        auto.status = "error";
-        auto.lastError = mappingError;
-        auto.lastSyncAt = syncTimestamp;
-        match.updatedAt = syncTimestamp;
-        updated = true;
-        if (notifyErrors && changedError) {
-          setNotice("error", `Auto-Sync Fehler bei ${match.id}: Gewinner nicht zuordenbar.`);
-        }
-        return { ok: false, updated, completed: false, pending: true, recoverable: false, message: mappingError };
-      }
-
-      const legs = getApiMatchLegsFromStats(stats);
-      const result = updateMatchResult(match.id, winnerId, legs, "auto");
-      if (!result.ok) {
-        const saveError = result.message || "Auto-Sync konnte Ergebnis nicht speichern.";
-        const changedError = auto.lastError !== saveError || auto.status !== "error";
-        auto.status = "error";
-        auto.lastError = saveError;
-        auto.lastSyncAt = syncTimestamp;
-        match.updatedAt = syncTimestamp;
-        updated = true;
-        if (notifyErrors && changedError) {
-          setNotice("error", `Auto-Sync Fehler bei ${match.id}: ${saveError}`);
-        }
-        return { ok: false, updated, completed: false, pending: true, recoverable: false, message: saveError };
-      }
-
-      const updatedMatch = findMatch(tournament, match.id);
-      if (updatedMatch) {
-        const updatedAuto = ensureMatchAutoMeta(updatedMatch);
-        const finishedAt = nowIso();
-        updatedAuto.provider = API_PROVIDER;
-        updatedAuto.status = "completed";
-        updatedAuto.finishedAt = finishedAt;
-        updatedAuto.lastSyncAt = finishedAt;
-        updatedAuto.lastError = null;
-        updatedMatch.updatedAt = finishedAt;
-      }
-
-      return { ok: true, updated: true, completed: true, pending: false, message: "Ergebnis \u00fcbernommen." };
-    } catch (error) {
-      const status = Number(error?.status || 0);
-      if (status === 401 || status === 403) {
-        return { ok: false, updated, completed: false, pending: true, authError: true, message: "Auth abgelaufen." };
-      }
-      if (status === 404) {
-        return {
-          ok: false,
-          updated,
-          completed: false,
-          pending: true,
-          recoverable: true,
-          message: "Match-Stats noch nicht verf\u00fcgbar.",
-        };
-      }
-
-      const errorMessage = normalizeText(error?.message || "API-Sync fehlgeschlagen.") || "API-Sync fehlgeschlagen.";
-      const lastSyncAtMs = auto.lastSyncAt ? Date.parse(auto.lastSyncAt) : 0;
-      const shouldPersistError = auto.lastError !== errorMessage
-        || !Number.isFinite(lastSyncAtMs)
-        || (Date.now() - lastSyncAtMs > API_AUTH_NOTICE_THROTTLE_MS);
-      if (shouldPersistError) {
-        auto.status = "error";
-        auto.lastError = errorMessage;
-        auto.lastSyncAt = nowIso();
-        match.updatedAt = nowIso();
-        updated = true;
-      }
-      if (notifyErrors && shouldPersistError) {
-        setNotice("error", `Auto-Sync Fehler bei ${match.id}: ${errorMessage}`);
-      }
-      return { ok: false, updated, completed: false, pending: true, recoverable: false, message: errorMessage };
-    }
-  }
-
-  async function syncResultForLobbyId(lobbyId, options = {}) {
-    const targetLobbyId = normalizeText(lobbyId || "");
-    const tournament = state.store.tournament;
-    if (!targetLobbyId) {
-      return { ok: false, message: "Keine Lobby-ID erkannt." };
-    }
-    if (!tournament) {
-      return { ok: false, message: "Kein aktives Turnier vorhanden." };
-    }
-    if (!state.store.settings.featureFlags.autoLobbyStart) {
-      return { ok: false, message: "Auto-Lobby ist deaktiviert." };
-    }
-
-    const openMatch = findTournamentMatchByLobbyId(tournament, targetLobbyId, false);
-    const completedMatch = openMatch ? null : findTournamentMatchByLobbyId(tournament, targetLobbyId, true);
-    if (!openMatch && completedMatch?.status === STATUS_COMPLETED) {
-      return { ok: true, completed: true, message: "Ergebnis war bereits \u00fcbernommen." };
-    }
-    if (!openMatch) {
-      return { ok: false, message: "Kein offenes Turnier-Match f\u00fcr diese Lobby gefunden." };
-    }
-
-    const token = getAuthTokenFromCookie();
-    if (!token) {
-      return { ok: false, message: "Kein Auth-Token gefunden. Bitte neu einloggen." };
-    }
-
-    const syncOutcome = await syncApiMatchResult(tournament, openMatch, token, {
-      notifyErrors: Boolean(options.notifyErrors),
-      notifyNotReady: Boolean(options.notifyNotReady),
-      includeErrorRetry: true,
-    });
-
-    if (syncOutcome.authError) {
-      state.apiAutomation.authBackoffUntil = Date.now() + API_AUTH_NOTICE_THROTTLE_MS;
-      return { ok: false, message: "Auth abgelaufen. Bitte neu einloggen." };
-    }
-
-    if (syncOutcome.updated) {
-      if (state.store.tournament) {
-        state.store.tournament.updatedAt = nowIso();
-      }
-      schedulePersist();
-      renderShell();
-    }
-
-    return syncOutcome;
-  }
-
-  function getDuplicateParticipantNames(tournament) {
-    const seen = new Map();
-    const duplicates = [];
-    (tournament?.participants || []).forEach((participant) => {
-      const key = normalizeLookup(participant?.name || "");
-      if (!key) {
-        return;
-      }
-      if (seen.has(key)) {
-        duplicates.push(participant.name);
-        return;
-      }
-      seen.set(key, participant.name);
-    });
-    return duplicates;
-  }
-
-  function findActiveStartedMatch(tournament, excludeMatchId = "") {
-    if (!tournament) {
-      return null;
-    }
-    return tournament.matches.find((match) => {
-      if (excludeMatchId && match.id === excludeMatchId) {
-        return false;
-      }
-      if (match.status !== STATUS_PENDING) {
-        return false;
-      }
-      const auto = ensureMatchAutoMeta(match);
-      return Boolean(auto.lobbyId && auto.status === "started");
-    }) || null;
-  }
-
-  function buildLobbyCreatePayload(tournament) {
-    const legsToWin = getLegsToWin(tournament.bestOfLegs);
-    const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
-    const settings = {
-      baseScore: x01Settings.baseScore,
-      inMode: x01Settings.inMode,
-      outMode: x01Settings.outMode,
-      maxRounds: x01Settings.maxRounds,
-      bullOffMode: x01Settings.bullOffMode,
-      // API expects a valid bullMode even when bull-off is "Off".
-      bullMode: sanitizeX01BullMode(x01Settings.bullMode),
-    };
-    return {
-      variant: x01Settings.variant,
-      isPrivate: true,
-      legs: legsToWin,
-      settings,
-    };
-  }
-
-  function openMatchPage(lobbyId) {
-    if (!normalizeText(lobbyId)) {
-      return;
-    }
-    window.location.href = `${window.location.origin}/matches/${encodeURIComponent(lobbyId)}`;
-  }
-
-  function resolveWinnerIdFromApiName(tournament, match, winnerName) {
-    const normalizedWinner = normalizeLookup(winnerName);
-    if (!normalizedWinner || !match?.player1Id || !match?.player2Id) {
-      return "";
-    }
-
-    const p1 = participantById(tournament, match.player1Id);
-    const p2 = participantById(tournament, match.player2Id);
-    const p1Name = normalizeLookup(p1?.name || "");
-    const p2Name = normalizeLookup(p2?.name || "");
-    if (!p1Name || !p2Name || p1Name === p2Name) {
-      return "";
-    }
-    if (p1Name === normalizedWinner) {
-      return match.player1Id;
-    }
-    if (p2Name === normalizedWinner) {
-      return match.player2Id;
-    }
-    return "";
-  }
-
-  function getApiMatchLegsFromStats(data) {
-    return {
-      p1: clampInt(data?.matchStats?.[0]?.legsWon, 0, 0, 50),
-      p2: clampInt(data?.matchStats?.[1]?.legsWon, 0, 0, 50),
-    };
-  }
-
-  function getApiMatchStartUi(tournament, match, activeStartedMatch) {
-    const auto = ensureMatchAutoMeta(match);
-    if (auto.lobbyId) {
-      return {
-        label: "Zum Match",
-        disabled: false,
-        title: "\u00d6ffnet das bereits gestartete Match.",
-      };
-    }
-
-    if (!state.store.settings.featureFlags.autoLobbyStart) {
-      return {
-        label: "Match starten",
-        disabled: true,
-        title: "Feature-Flag in Einstellungen aktivieren.",
-      };
-    }
-
-    const editability = getMatchEditability(tournament, match);
-    if (!editability.editable) {
-      return {
-        label: "Match starten",
-        disabled: true,
-        title: editability.reason || "Match kann aktuell nicht gestartet werden.",
-      };
-    }
-
-    if (!getAuthTokenFromCookie()) {
-      return {
-        label: "Match starten",
-        disabled: true,
-        title: "Kein Auth-Token vorhanden. Bitte einloggen.",
-      };
-    }
-
-    const boardId = getBoardId();
-    if (!isValidBoardId(boardId)) {
-      return {
-        label: "Match starten",
-        disabled: true,
-        title: boardId
-          ? `Board-ID ung\u00fcltig (${boardId}). Bitte Board in einer manuellen Lobby w\u00e4hlen.`
-          : "Kein Board aktiv. Bitte einmal manuell eine Lobby \u00f6ffnen und Board w\u00e4hlen.",
-      };
-    }
-
-    if (activeStartedMatch && activeStartedMatch.id !== match.id) {
-      return {
-        label: "Match starten",
-        disabled: true,
-        title: "Es l\u00e4uft bereits ein aktives Match.",
-      };
-    }
-
-    if (state.apiAutomation.startingMatchId && state.apiAutomation.startingMatchId !== match.id) {
-      return {
-        label: "Match starten",
-        disabled: true,
-        title: "Ein anderer Matchstart l\u00e4uft bereits.",
-      };
-    }
-
-    if (state.apiAutomation.startingMatchId === match.id) {
-      return {
-        label: "Startet...",
-        disabled: true,
-        title: "Lobby wird erstellt.",
-      };
-    }
-
-    return {
-      label: "Match starten",
-      disabled: false,
-      title: "Erstellt Lobby, f\u00fcgt Spieler hinzu und startet automatisch.",
-    };
-  }
-
-  function getApiMatchStatusText(match) {
-    if (isByeMatchResult(match)) {
-      return "Freilos: kein API-Sync erforderlich";
-    }
-    const auto = ensureMatchAutoMeta(match);
-    if (auto.status === "completed") {
-      return "API-Sync: abgeschlossen";
-    }
-    if (auto.status === "started" && auto.lobbyId) {
-      return `API-Sync: aktiv (Lobby ${auto.lobbyId})`;
-    }
-    if (auto.status === "error") {
-      return `API-Sync: Fehler${auto.lastError ? ` (${auto.lastError})` : ""}`;
-    }
-    return "API-Sync: nicht gestartet";
-  }
-
-  async function handleStartMatch(matchId) {
-    const tournament = state.store.tournament;
-    if (!tournament) {
-      return;
-    }
-
-    const match = findMatch(tournament, matchId);
-    if (!match) {
-      setNotice("error", "Match nicht gefunden.");
-      return;
-    }
-
-    const auto = ensureMatchAutoMeta(match);
-    if (auto.lobbyId) {
-      openMatchPage(auto.lobbyId);
-      return;
-    }
-
-    if (!state.store.settings.featureFlags.autoLobbyStart) {
-      setNotice("info", "Auto-Lobby ist deaktiviert. Bitte im Tab Einstellungen aktivieren.");
-      return;
-    }
-
-    const editability = getMatchEditability(tournament, match);
-    if (!editability.editable) {
-      setNotice("error", editability.reason || "Match kann aktuell nicht gestartet werden.");
-      return;
-    }
-
-    const duplicates = getDuplicateParticipantNames(tournament);
-    if (duplicates.length) {
-      setNotice("error", "F\u00fcr Auto-Sync m\u00fcssen Teilnehmernamen eindeutig sein.");
-      return;
-    }
-
-    const activeMatch = findActiveStartedMatch(tournament, match.id);
-    if (activeMatch) {
-      const activeAuto = ensureMatchAutoMeta(activeMatch);
-      setNotice("info", "Es l\u00e4uft bereits ein aktives Match. Weiterleitung dorthin.");
-      if (activeAuto.lobbyId) {
-        openMatchPage(activeAuto.lobbyId);
-      }
-      return;
-    }
-
-    const token = getAuthTokenFromCookie();
-    if (!token) {
-      setNotice("error", "Kein Autodarts-Token gefunden. Bitte einloggen und Seite neu laden.");
-      return;
-    }
-
-    const boardId = getBoardId();
-    if (!boardId) {
-      setNotice("error", "Board-ID fehlt. Bitte einmal manuell eine Lobby \u00f6ffnen und Board ausw\u00e4hlen.");
-      return;
-    }
-    if (!isValidBoardId(boardId)) {
-      setNotice("error", `Board-ID ist ung\u00fcltig (${boardId}). Bitte in einer manuellen Lobby ein echtes Board ausw\u00e4hlen.`);
-      return;
-    }
-
-    const participant1 = participantById(tournament, match.player1Id);
-    const participant2 = participantById(tournament, match.player2Id);
-    if (!participant1 || !participant2) {
-      setNotice("error", "Teilnehmerzuordnung im Match ist unvollst\u00e4ndig.");
-      return;
-    }
-
-    let createdLobbyId = "";
-    state.apiAutomation.startingMatchId = match.id;
-    renderShell();
-
-    try {
-      const lobby = await createLobby(buildLobbyCreatePayload(tournament), token);
-      createdLobbyId = normalizeText(lobby?.id || lobby?.uuid || "");
-      if (!createdLobbyId) {
-        throw createApiError(0, "Lobby konnte nicht erstellt werden (keine Lobby-ID).", lobby);
-      }
-
-      await addLobbyPlayer(createdLobbyId, participant1.name, boardId, token);
-      await addLobbyPlayer(createdLobbyId, participant2.name, boardId, token);
-      await startLobby(createdLobbyId, token);
-
-      const now = nowIso();
-      auto.provider = API_PROVIDER;
-      auto.lobbyId = createdLobbyId;
-      auto.status = "started";
-      auto.startedAt = auto.startedAt || now;
-      auto.finishedAt = null;
-      auto.lastSyncAt = now;
-      auto.lastError = null;
-      match.updatedAt = now;
-      tournament.updatedAt = now;
-
-      schedulePersist();
-      renderShell();
-      setNotice("success", "Match gestartet. Weiterleitung ins Match.");
-      openMatchPage(createdLobbyId);
-    } catch (error) {
-      const message = normalizeText(error?.message || apiBodyToErrorText(error?.body) || "Unbekannter API-Fehler.") || "Unbekannter API-Fehler.";
-      const now = nowIso();
-      auto.provider = API_PROVIDER;
-      auto.lobbyId = createdLobbyId || auto.lobbyId || null;
-      auto.status = "error";
-      auto.lastError = message;
-      auto.lastSyncAt = now;
-      match.updatedAt = now;
-      tournament.updatedAt = now;
-      schedulePersist();
-      renderShell();
-      setNotice("error", `Matchstart fehlgeschlagen: ${message}`);
-      logWarn("api", "Match start failed.", error);
-    } finally {
-      state.apiAutomation.startingMatchId = "";
-      renderShell();
-    }
-  }
-
-  async function syncPendingApiMatches() {
-    if (state.apiAutomation.syncing) {
-      return;
-    }
-    if (!state.store.settings.featureFlags.autoLobbyStart) {
-      return;
-    }
-    if (Date.now() < state.apiAutomation.authBackoffUntil) {
-      return;
-    }
-
-    const tournament = state.store.tournament;
-    if (!tournament) {
-      return;
-    }
-
-    const syncTargets = tournament.matches.filter((match) => {
-      return isApiSyncCandidateMatch(match, true);
-    });
-
-    if (!syncTargets.length) {
-      return;
-    }
-
-    const token = getAuthTokenFromCookie();
-    if (!token) {
-      state.apiAutomation.authBackoffUntil = Date.now() + API_AUTH_NOTICE_THROTTLE_MS;
-      if (shouldShowAuthNotice()) {
-        setNotice("error", "Auto-Sync pausiert: kein Auth-Token gefunden. Bitte neu einloggen.");
-      }
-      return;
-    }
-
-    state.apiAutomation.syncing = true;
-    let hasMetaUpdates = false;
-
-    try {
-      for (const match of syncTargets) {
-        const syncOutcome = await syncApiMatchResult(tournament, match, token, {
-          notifyErrors: false,
-          notifyNotReady: false,
-          includeErrorRetry: true,
-        });
-
-        if (syncOutcome.authError) {
-          state.apiAutomation.authBackoffUntil = Date.now() + API_AUTH_NOTICE_THROTTLE_MS;
-          if (shouldShowAuthNotice()) {
-            setNotice("error", "Auto-Sync pausiert: Auth abgelaufen. Bitte neu einloggen.");
-          }
-          logWarn("api", "Auto-sync auth error.");
-          return;
-        }
-
-        if (syncOutcome.updated) {
-          hasMetaUpdates = true;
-        }
-
-        if (!syncOutcome.ok && syncOutcome.message && !syncOutcome.recoverable) {
-          logWarn("api", `Auto-sync failed for ${match.id}: ${syncOutcome.message}`);
-        }
-      }
-    } finally {
-      state.apiAutomation.syncing = false;
-      if (hasMetaUpdates) {
-        if (state.store.tournament) {
-          state.store.tournament.updatedAt = nowIso();
-        }
-        schedulePersist();
-        renderShell();
-      }
-    }
-  }
-
-  // Presentation layer: UI rendering and interaction wiring.
-  function buildStyles() {
-    return `
-      :host {
+  const ATA_UI_MAIN_CSS = `      :host {
         --ata-space-1: 4px;
         --ata-space-2: 8px;
         --ata-space-3: 12px;
@@ -3774,6 +1266,2863 @@
 
       }
     `;
+
+  const STATUS_COMPLETED = "completed";
+  const STATUS_PENDING = "pending";
+  const MATCH_STAGE_KO = "ko";
+  const MATCH_STAGE_GROUP = "group";
+  const MATCH_STAGE_LEAGUE = "league";
+  const KO_ENGINE_VERSION = 2;
+  const KO_DRAW_MODE_SEEDED = "seeded";
+  const KO_DRAW_MODE_OPEN_DRAW = "open_draw";
+  const X01_VARIANT = "X01";
+  const X01_PRESET_PDC_STANDARD = "pdc_standard";
+  const X01_PRESET_CUSTOM = "custom";
+  const X01_IN_MODES = Object.freeze(["Straight", "Double", "Master"]);
+  const X01_OUT_MODES = Object.freeze(["Straight", "Double", "Master"]);
+  const X01_BULL_MODES = Object.freeze(["25/50", "50/50"]);
+  const X01_BULL_OFF_MODES = Object.freeze(["Off", "Normal", "Official"]);
+  const X01_MAX_ROUNDS_OPTIONS = Object.freeze([15, 20, 50, 80]);
+  const X01_START_SCORE_OPTIONS = Object.freeze([121, 170, 301, 501, 701, 901]);
+  const MATCH_SORT_MODE_READY_FIRST = "ready_first";
+  const MATCH_SORT_MODE_ROUND = "round";
+  const MATCH_SORT_MODE_STATUS = "status";
+  const TIE_BREAK_MODE_DRA_STRICT = "dra_strict";
+  const TIE_BREAK_MODE_LEGACY = "legacy";
+  const TIE_BREAK_MODES = Object.freeze([
+    TIE_BREAK_MODE_DRA_STRICT,
+    TIE_BREAK_MODE_LEGACY,
+  ]);
+  const MATCH_SORT_MODES = Object.freeze([
+    MATCH_SORT_MODE_READY_FIRST,
+    MATCH_SORT_MODE_ROUND,
+    MATCH_SORT_MODE_STATUS,
+  ]);
+
+  const TAB_IDS = Object.freeze(["tournament", "matches", "view", "io", "settings"]);
+  const TAB_META = Object.freeze([
+    { id: "tournament", label: "Turnier" },
+    { id: "matches", label: "Spiele" },
+    { id: "view", label: "Turnierbaum" },
+    { id: "io", label: "Import/Export" },
+    { id: "settings", label: "Einstellungen" },
+  ]);
+
+  const TECHNICAL_PARTICIPANT_HARD_MAX = 128;
+  const MODE_PARTICIPANT_LIMITS = Object.freeze({
+    ko: Object.freeze({ label: "KO", min: 2, max: 128 }),
+    league: Object.freeze({ label: "Liga", min: 2, max: 16 }),
+    groups_ko: Object.freeze({ label: "Gruppenphase + KO", min: 4, max: 16 }),
+  });
+  const BYE_PLACEHOLDER_TOKENS = new Set([
+    "bye",
+    "freilos",
+    "tbd",
+    "tobeconfirmed",
+    "tobedetermined",
+    "unknown",
+    "none",
+    "null",
+    "na",
+  ]);
+
+  if (window[RUNTIME_GUARD_KEY]) {
+    return;
+  }
+  window[RUNTIME_GUARD_KEY] = true;
+
+  const state = {
+    ready: false,
+    drawerOpen: false,
+    activeTab: "tournament",
+    lastFocused: null,
+    notice: { type: "info", message: "" },
+    noticeTimer: null,
+    saveTimer: null,
+    host: null,
+    shadowRoot: null,
+    patchedHistory: null,
+    routeKey: routeKey(),
+    store: createDefaultStore(),
+    bracket: {
+      iframe: null,
+      ready: false,
+      failed: false,
+      timeoutHandle: null,
+      frameHeight: 0,
+      lastError: "",
+    },
+    autoDetect: {
+      observer: null,
+      queued: false,
+      lastScanAt: 0,
+      lastFingerprint: "",
+    },
+    apiAutomation: {
+      syncing: false,
+      startingMatchId: "",
+      authBackoffUntil: 0,
+      lastAuthNoticeAt: 0,
+    },
+    matchReturnShortcut: {
+      root: null,
+      syncing: false,
+    },
+    runtimeStatusSignature: "",
+    cleanupStack: [],
+  };
+
+  function nowIso() {
+    return new Date().toISOString();
+  }
+
+
+  function routeKey() {
+    return `${location.pathname}${location.search}${location.hash}`;
+  }
+
+
+  function normalizeText(value) {
+    return String(value || "")
+      .trim()
+      .replace(/\s+/g, " ");
+  }
+
+
+  function normalizeLookup(value) {
+    return normalizeText(value)
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "");
+  }
+
+
+  function normalizeToken(value) {
+    return normalizeLookup(value).replace(/[^a-z0-9]+/g, "");
+  }
+
+
+  function cloneSerializable(value) {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (_) {
+      return null;
+    }
+  }
+
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+
+  function toPromise(value) {
+    return value && typeof value.then === "function" ? value : Promise.resolve(value);
+  }
+
+
+  function clampInt(value, fallback, min, max) {
+    const num = Number.parseInt(String(value || ""), 10);
+    if (!Number.isFinite(num)) {
+      return fallback;
+    }
+    return Math.max(min, Math.min(max, num));
+  }
+
+
+  function uuid(prefix) {
+    const random = Math.random().toString(36).slice(2, 8);
+    const timestamp = Date.now().toString(36);
+    return `${prefix}-${timestamp}-${random}`;
+  }
+
+
+  function nextPowerOfTwo(value) {
+    let size = 1;
+    while (size < value) {
+      size *= 2;
+    }
+    return size;
+  }
+
+
+  function parseParticipantLines(rawLines) {
+    const lines = String(rawLines || "").split(/\r?\n/);
+    const seen = new Set();
+    const participants = [];
+
+    lines.forEach((line) => {
+      const name = normalizeText(line);
+      if (!name) {
+        return;
+      }
+      const key = normalizeLookup(name);
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      participants.push({ id: uuid("p"), name });
+    });
+
+    return participants;
+  }
+
+
+  function randomInt(maxExclusive) {
+    const max = Number(maxExclusive);
+    if (!Number.isFinite(max) || max <= 0) {
+      return 0;
+    }
+    const cryptoApi = window.crypto || window.msCrypto;
+    if (cryptoApi && typeof cryptoApi.getRandomValues === "function") {
+      const buffer = new Uint32Array(1);
+      const maxUnbiased = Math.floor(0x100000000 / max) * max;
+      let value = 0;
+      do {
+        cryptoApi.getRandomValues(buffer);
+        value = buffer[0];
+      } while (value >= maxUnbiased);
+      return value % max;
+    }
+    return Math.floor(Math.random() * max);
+  }
+
+
+  function shuffleArray(values) {
+    const shuffled = Array.isArray(values) ? values.slice() : [];
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+      const swapIndex = randomInt(index + 1);
+      const current = shuffled[index];
+      shuffled[index] = shuffled[swapIndex];
+      shuffled[swapIndex] = current;
+    }
+    return shuffled;
+  }
+
+  function logDebug(category, message, ...args) {
+    if (!state.store.settings.debug) {
+      return;
+    }
+    console.info(`[ATA][${category}] ${message}`, ...args);
+  }
+
+
+  function logWarn(category, message, ...args) {
+    console.warn(`[ATA][${category}] ${message}`, ...args);
+  }
+
+
+  function logError(category, message, ...args) {
+    console.error(`[ATA][${category}] ${message}`, ...args);
+  }
+
+  // Data layer: persistence, migration and normalization.
+
+  function addCleanup(fn) {
+    state.cleanupStack.push(fn);
+    return fn;
+  }
+
+
+  function addListener(target, eventName, handler, options) {
+    target.addEventListener(eventName, handler, options);
+    addCleanup(() => target.removeEventListener(eventName, handler, options));
+  }
+
+
+  function addInterval(handler, ms) {
+    const handle = window.setInterval(handler, ms);
+    addCleanup(() => clearInterval(handle));
+    return handle;
+  }
+
+
+  function addObserver(observer) {
+    addCleanup(() => observer.disconnect());
+    return observer;
+  }
+
+  async function readStoreValue(key, fallbackValue) {
+    try {
+      if (typeof GM_getValue === "function") {
+        const value = await toPromise(GM_getValue(key, fallbackValue));
+        if (value !== undefined) {
+          return value;
+        }
+      }
+    } catch (error) {
+      logWarn("storage", `GM_getValue failed for ${key}, fallback to localStorage.`, error);
+    }
+
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw !== null) {
+        return JSON.parse(raw);
+      }
+    } catch (error) {
+      logWarn("storage", `localStorage read failed for ${key}.`, error);
+    }
+    return fallbackValue;
+  }
+
+
+  async function writeStoreValue(key, value) {
+    try {
+      if (typeof GM_setValue === "function") {
+        await toPromise(GM_setValue(key, value));
+      }
+    } catch (error) {
+      logWarn("storage", `GM_setValue failed for ${key}, fallback to localStorage.`, error);
+    }
+
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      logWarn("storage", `localStorage write failed for ${key}.`, error);
+    }
+  }
+
+
+  async function loadPersistedStore() {
+    const raw = await readStoreValue(STORAGE_KEY, createDefaultStore());
+    state.store = migrateStorage(raw);
+    state.activeTab = state.store.ui.activeTab;
+    const needsSchemaWriteback = Number(raw?.schemaVersion || 0) !== STORAGE_SCHEMA_VERSION;
+    if (state.store.tournament) {
+      const changed = refreshDerivedMatches(state.store.tournament);
+      if (changed || needsSchemaWriteback) {
+        state.store.tournament.updatedAt = nowIso();
+        schedulePersist();
+      }
+    } else if (needsSchemaWriteback) {
+      schedulePersist();
+    }
+    logDebug("storage", "Store loaded", state.store);
+  }
+
+
+  function schedulePersist() {
+    if (state.saveTimer) {
+      clearTimeout(state.saveTimer);
+      state.saveTimer = null;
+    }
+
+    state.saveTimer = window.setTimeout(() => {
+      state.saveTimer = null;
+      persistStore().catch((error) => {
+        logError("storage", "Persisting store failed.", error);
+      });
+    }, SAVE_DEBOUNCE_MS);
+  }
+
+
+  async function persistStore() {
+    state.store.schemaVersion = STORAGE_SCHEMA_VERSION;
+    state.store.ui.activeTab = state.activeTab;
+    await writeStoreValue(STORAGE_KEY, state.store);
+  }
+
+
+  function setNotice(type, message, timeoutMs = 4500) {
+    state.notice = { type, message: String(message || "") };
+    renderShell();
+
+    if (state.noticeTimer) {
+      clearTimeout(state.noticeTimer);
+      state.noticeTimer = null;
+    }
+
+    if (timeoutMs > 0 && state.notice.message) {
+      state.noticeTimer = window.setTimeout(() => {
+        state.notice = { type: "info", message: "" };
+        renderShell();
+      }, timeoutMs);
+    }
+  }
+
+  function createDefaultCreateDraft(settings = null) {
+    const defaultRandomize = settings?.featureFlags?.randomizeKoRound1 !== false;
+    const pdcSettings = buildPdcX01Settings();
+    return {
+      name: "",
+      mode: "ko",
+      bestOfLegs: 5,
+      startScore: pdcSettings.baseScore,
+      x01Preset: pdcSettings.presetId,
+      x01InMode: pdcSettings.inMode,
+      x01OutMode: pdcSettings.outMode,
+      x01BullMode: pdcSettings.bullMode,
+      x01MaxRounds: pdcSettings.maxRounds,
+      x01BullOffMode: pdcSettings.bullOffMode,
+      lobbyVisibility: pdcSettings.lobbyVisibility,
+      participantsText: "",
+      randomizeKoRound1: Boolean(defaultRandomize),
+    };
+  }
+
+
+  function normalizeCreateDraft(rawDraft, settings = null) {
+    const base = createDefaultCreateDraft(settings);
+    const modeRaw = normalizeText(rawDraft?.mode || base.mode);
+    const mode = ["ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : base.mode;
+    const hasDraftObject = rawDraft && typeof rawDraft === "object";
+    const hasExplicitPreset = hasDraftObject && Object.prototype.hasOwnProperty.call(rawDraft, "x01Preset");
+    const rawPreset = hasExplicitPreset
+      ? sanitizeX01Preset(rawDraft?.x01Preset, base.x01Preset)
+      : (hasDraftObject ? X01_PRESET_CUSTOM : base.x01Preset);
+    let x01Settings = normalizeTournamentX01Settings({
+      presetId: rawPreset,
+      baseScore: rawDraft?.startScore ?? base.startScore,
+      inMode: rawDraft?.x01InMode ?? base.x01InMode,
+      outMode: rawDraft?.x01OutMode ?? base.x01OutMode,
+      bullMode: rawDraft?.x01BullMode ?? base.x01BullMode,
+      maxRounds: rawDraft?.x01MaxRounds ?? base.x01MaxRounds,
+      bullOffMode: rawDraft?.x01BullOffMode ?? base.x01BullOffMode,
+      lobbyVisibility: rawDraft?.lobbyVisibility ?? base.lobbyVisibility,
+    }, rawDraft?.startScore ?? base.startScore);
+    if (rawPreset === X01_PRESET_PDC_STANDARD) {
+      x01Settings = buildPdcX01Settings();
+    }
+    return {
+      name: normalizeText(rawDraft?.name || base.name),
+      mode,
+      bestOfLegs: sanitizeBestOf(rawDraft?.bestOfLegs ?? base.bestOfLegs),
+      startScore: x01Settings.baseScore,
+      x01Preset: x01Settings.presetId,
+      x01InMode: x01Settings.inMode,
+      x01OutMode: x01Settings.outMode,
+      x01BullMode: x01Settings.bullMode,
+      x01MaxRounds: x01Settings.maxRounds,
+      x01BullOffMode: x01Settings.bullOffMode,
+      lobbyVisibility: x01Settings.lobbyVisibility,
+      participantsText: String(rawDraft?.participantsText ?? base.participantsText),
+      randomizeKoRound1: typeof rawDraft?.randomizeKoRound1 === "boolean"
+        ? rawDraft.randomizeKoRound1
+        : base.randomizeKoRound1,
+    };
+  }
+
+
+  function createDefaultStore() {
+    const settings = {
+      debug: false,
+      featureFlags: {
+        autoLobbyStart: false,
+        randomizeKoRound1: true,
+      },
+    };
+    return {
+      schemaVersion: STORAGE_SCHEMA_VERSION,
+      settings,
+      ui: {
+        activeTab: "tournament",
+        matchesSortMode: MATCH_SORT_MODE_READY_FIRST,
+        createDraft: createDefaultCreateDraft(settings),
+      },
+      tournament: null,
+    };
+  }
+
+
+  function normalizeKoDrawMode(value, fallback = KO_DRAW_MODE_SEEDED) {
+    const mode = normalizeText(value || "").toLowerCase();
+    if (mode === KO_DRAW_MODE_OPEN_DRAW || mode === KO_DRAW_MODE_SEEDED) {
+      return mode;
+    }
+    return fallback;
+  }
+
+
+  function normalizeKoEngineVersion(value, fallback = 0) {
+    const parsed = clampInt(value, fallback, 0, KO_ENGINE_VERSION);
+    return parsed > KO_ENGINE_VERSION ? KO_ENGINE_VERSION : parsed;
+  }
+
+
+  function normalizeMatchResultKind(value) {
+    const normalized = normalizeText(value || "").toLowerCase();
+    return normalized === "bye" ? "bye" : null;
+  }
+
+
+  function isByePlaceholderValue(value) {
+    const token = normalizeToken(value);
+    return Boolean(token) && BYE_PLACEHOLDER_TOKENS.has(token);
+  }
+
+
+  function sanitizeBestOf(value) {
+    let bestOf = clampInt(value, 5, 1, 21);
+    if (bestOf % 2 === 0) {
+      bestOf += 1;
+    }
+    return bestOf;
+  }
+
+
+  function sanitizeStartScore(value) {
+    const allowed = new Set(X01_START_SCORE_OPTIONS);
+    const score = clampInt(value, 501, 121, 901);
+    return allowed.has(score) ? score : 501;
+  }
+
+
+  function getLegsToWin(bestOfLegs) {
+    const bestOf = sanitizeBestOf(bestOfLegs);
+    return Math.floor(bestOf / 2) + 1;
+  }
+
+
+  function sanitizeX01Preset(value, fallback = X01_PRESET_PDC_STANDARD) {
+    const preset = normalizeText(value || "").toLowerCase();
+    if (preset === X01_PRESET_CUSTOM || preset === X01_PRESET_PDC_STANDARD) {
+      return preset;
+    }
+    return fallback;
+  }
+
+
+  function sanitizeX01Mode(value, allowedModes, fallback) {
+    const mode = normalizeText(value || "");
+    return allowedModes.includes(mode) ? mode : fallback;
+  }
+
+
+  function sanitizeX01InMode(value) {
+    return sanitizeX01Mode(value, X01_IN_MODES, "Straight");
+  }
+
+
+  function sanitizeX01OutMode(value) {
+    return sanitizeX01Mode(value, X01_OUT_MODES, "Double");
+  }
+
+
+  function sanitizeX01BullMode(value) {
+    return sanitizeX01Mode(value, X01_BULL_MODES, "25/50");
+  }
+
+
+  function sanitizeX01BullOffMode(value) {
+    return sanitizeX01Mode(value, X01_BULL_OFF_MODES, "Normal");
+  }
+
+
+  function sanitizeX01MaxRounds(value) {
+    const rounds = clampInt(value, 50, 15, 80);
+    return X01_MAX_ROUNDS_OPTIONS.includes(rounds) ? rounds : 50;
+  }
+
+
+  function sanitizeMatchesSortMode(value, fallback = MATCH_SORT_MODE_READY_FIRST) {
+    const mode = normalizeText(value || "").toLowerCase();
+    return MATCH_SORT_MODES.includes(mode) ? mode : fallback;
+  }
+
+
+  function sanitizeLobbyVisibility(value) {
+    void value;
+    return "private";
+  }
+
+
+  function normalizeTieBreakMode(value, fallback = TIE_BREAK_MODE_DRA_STRICT) {
+    const mode = normalizeText(value || "").toLowerCase();
+    return TIE_BREAK_MODES.includes(mode) ? mode : fallback;
+  }
+
+
+  function normalizeTournamentRules(rawRules) {
+    const rules = rawRules && typeof rawRules === "object" ? rawRules : {};
+    return {
+      tieBreakMode: normalizeTieBreakMode(rules.tieBreakMode, TIE_BREAK_MODE_DRA_STRICT),
+    };
+  }
+
+
+  function buildPdcX01Settings() {
+    return {
+      presetId: X01_PRESET_PDC_STANDARD,
+      variant: X01_VARIANT,
+      baseScore: 501,
+      inMode: "Straight",
+      outMode: "Double",
+      bullMode: "25/50",
+      maxRounds: 50,
+      bullOffMode: "Normal",
+      lobbyVisibility: "private",
+    };
+  }
+
+
+  function normalizeTournamentX01Settings(rawX01, fallbackStartScore = 501) {
+    const hasRawObject = rawX01 && typeof rawX01 === "object";
+    const input = hasRawObject ? rawX01 : {};
+    const rawPreset = normalizeText(input.presetId || input.preset || "").toLowerCase();
+    const hasExplicitPreset = Boolean(rawPreset);
+    const presetId = hasExplicitPreset ? sanitizeX01Preset(rawPreset, X01_PRESET_CUSTOM) : X01_PRESET_CUSTOM;
+
+    if (presetId === X01_PRESET_PDC_STANDARD) {
+      return buildPdcX01Settings();
+    }
+
+    return {
+      presetId: X01_PRESET_CUSTOM,
+      variant: X01_VARIANT,
+      baseScore: sanitizeStartScore(input.baseScore ?? fallbackStartScore),
+      inMode: sanitizeX01InMode(input.inMode),
+      outMode: sanitizeX01OutMode(input.outMode),
+      bullMode: sanitizeX01BullMode(input.bullMode),
+      maxRounds: sanitizeX01MaxRounds(input.maxRounds),
+      bullOffMode: sanitizeX01BullOffMode(input.bullOffMode || input.bullOff),
+      lobbyVisibility: sanitizeLobbyVisibility(input.lobbyVisibility ?? input.isPrivate),
+    };
+  }
+
+
+  function normalizeAutomationStatus(value, fallback = "idle") {
+    return ["idle", "started", "completed", "error"].includes(value) ? value : fallback;
+  }
+
+
+  function normalizeAutomationMeta(rawAuto) {
+    const auto = rawAuto && typeof rawAuto === "object" ? rawAuto : {};
+    const lobbyId = normalizeText(auto.lobbyId || "");
+    let status = normalizeAutomationStatus(normalizeText(auto.status || ""), lobbyId ? "started" : "idle");
+    if (!lobbyId && status !== "error") {
+      status = "idle";
+    }
+    return {
+      provider: API_PROVIDER,
+      lobbyId: lobbyId || null,
+      status,
+      startedAt: normalizeText(auto.startedAt || "") || null,
+      finishedAt: normalizeText(auto.finishedAt || "") || null,
+      lastSyncAt: normalizeText(auto.lastSyncAt || "") || null,
+      lastError: normalizeText(auto.lastError || "") || null,
+    };
+  }
+
+
+  function resetMatchAutomationMeta(match) {
+    const auto = ensureMatchAutoMeta(match);
+    auto.lobbyId = null;
+    auto.status = "idle";
+    auto.startedAt = null;
+    auto.finishedAt = null;
+    auto.lastSyncAt = null;
+    auto.lastError = null;
+    return auto;
+  }
+
+
+  function normalizeMatchMeta(rawMeta) {
+    const meta = rawMeta && typeof rawMeta === "object" ? rawMeta : {};
+    const resultKind = normalizeMatchResultKind(meta.resultKind);
+    return {
+      ...meta,
+      resultKind,
+      auto: normalizeAutomationMeta(meta.auto),
+    };
+  }
+
+
+  function ensureMatchMeta(match) {
+    if (!match || typeof match !== "object") {
+      return normalizeMatchMeta(null);
+    }
+    if (!match.meta || typeof match.meta !== "object") {
+      match.meta = {};
+    }
+    match.meta = normalizeMatchMeta(match.meta);
+    return match.meta;
+  }
+
+
+  function setMatchResultKind(match, resultKind) {
+    const meta = ensureMatchMeta(match);
+    const nextKind = normalizeMatchResultKind(resultKind);
+    if (meta.resultKind === nextKind) {
+      return false;
+    }
+    meta.resultKind = nextKind;
+    return true;
+  }
+
+
+  function isByeMatchResult(match) {
+    return normalizeMatchResultKind(match?.meta?.resultKind) === "bye";
+  }
+
+
+  function ensureMatchAutoMeta(match) {
+    const meta = ensureMatchMeta(match);
+    meta.auto = normalizeAutomationMeta(meta.auto);
+    return meta.auto;
+  }
+
+
+  function normalizeTournamentKoMeta(rawKo, fallbackDrawMode = KO_DRAW_MODE_SEEDED) {
+    const ko = rawKo && typeof rawKo === "object" ? rawKo : {};
+    const drawMode = normalizeKoDrawMode(ko.drawMode, fallbackDrawMode);
+    const engineVersion = normalizeKoEngineVersion(ko.engineVersion, 0);
+    return {
+      drawMode,
+      engineVersion,
+    };
+  }
+
+
+  function normalizeTournament(rawTournament) {
+    if (!rawTournament || typeof rawTournament !== "object") {
+      return null;
+    }
+
+    const mode = ["ko", "league", "groups_ko"].includes(rawTournament.mode) ? rawTournament.mode : "ko";
+    const modeLimits = getModeParticipantLimits(mode);
+    const participantsRaw = Array.isArray(rawTournament.participants) ? rawTournament.participants : [];
+    const participants = participantsRaw
+      .map((entry, index) => {
+        const name = normalizeText(entry?.name || entry || "");
+        if (!name) {
+          return null;
+        }
+        const id = normalizeText(entry?.id || `p-${index + 1}`);
+        return { id, name };
+      })
+      .filter(Boolean)
+      .slice(0, TECHNICAL_PARTICIPANT_HARD_MAX);
+
+    if (participants.length < modeLimits.min) {
+      return null;
+    }
+
+    const groupsRaw = Array.isArray(rawTournament.groups) ? rawTournament.groups : [];
+    const groups = groupsRaw.map((group, index) => ({
+      id: normalizeText(group?.id || `G${index + 1}`),
+      name: normalizeText(group?.name || `Gruppe ${index + 1}`),
+      participantIds: Array.isArray(group?.participantIds)
+        ? group.participantIds.map((id) => normalizeText(id)).filter(Boolean)
+        : [],
+    }));
+
+    const matchesRaw = Array.isArray(rawTournament.matches) ? rawTournament.matches : [];
+    const matches = matchesRaw.map((match, index) => ({
+      id: normalizeText(match?.id || `match-${index + 1}`),
+      stage: [MATCH_STAGE_KO, MATCH_STAGE_GROUP, MATCH_STAGE_LEAGUE].includes(match?.stage) ? match.stage : MATCH_STAGE_KO,
+      round: clampInt(match?.round, 1, 1, 64),
+      number: clampInt(match?.number, index + 1, 1, 256),
+      groupId: match?.groupId ? normalizeText(match.groupId) : null,
+      player1Id: match?.player1Id ? normalizeText(match.player1Id) : null,
+      player2Id: match?.player2Id ? normalizeText(match.player2Id) : null,
+      status: match?.status === STATUS_COMPLETED ? STATUS_COMPLETED : STATUS_PENDING,
+      winnerId: match?.winnerId ? normalizeText(match.winnerId) : null,
+      source: match?.source === "auto" || match?.source === "manual" ? match.source : null,
+      legs: {
+        p1: clampInt(match?.legs?.p1, 0, 0, 50),
+        p2: clampInt(match?.legs?.p2, 0, 0, 50),
+      },
+      updatedAt: normalizeText(match?.updatedAt || nowIso()),
+      meta: normalizeMatchMeta(match?.meta),
+    }));
+
+    const fallbackStartScore = sanitizeStartScore(rawTournament.startScore);
+    const x01 = normalizeTournamentX01Settings(rawTournament.x01, fallbackStartScore);
+    const rules = normalizeTournamentRules(rawTournament.rules);
+
+    return {
+      id: normalizeText(rawTournament.id || uuid("tournament")),
+      name: normalizeText(rawTournament.name || "Lokales Turnier"),
+      mode,
+      ko: mode === "ko"
+        ? normalizeTournamentKoMeta(rawTournament.ko, KO_DRAW_MODE_SEEDED)
+        : null,
+      bestOfLegs: sanitizeBestOf(rawTournament.bestOfLegs),
+      startScore: x01.baseScore,
+      x01,
+      rules,
+      participants,
+      groups,
+      matches,
+      createdAt: normalizeText(rawTournament.createdAt || nowIso()),
+      updatedAt: normalizeText(rawTournament.updatedAt || nowIso()),
+    };
+  }
+
+
+  function normalizeStoreShape(input) {
+    const defaults = createDefaultStore();
+    const settings = {
+      debug: Boolean(input?.settings?.debug),
+      featureFlags: {
+        autoLobbyStart: Boolean(input?.settings?.featureFlags?.autoLobbyStart),
+        randomizeKoRound1: input?.settings?.featureFlags?.randomizeKoRound1 !== false,
+      },
+    };
+    return {
+      schemaVersion: STORAGE_SCHEMA_VERSION,
+      settings,
+      ui: {
+        activeTab: TAB_IDS.includes(input?.ui?.activeTab) ? input.ui.activeTab : defaults.ui.activeTab,
+        matchesSortMode: sanitizeMatchesSortMode(input?.ui?.matchesSortMode, defaults.ui.matchesSortMode),
+        createDraft: normalizeCreateDraft(input?.ui?.createDraft, settings),
+      },
+      tournament: normalizeTournament(input?.tournament),
+    };
+  }
+
+
+  function participantById(tournament, participantId) {
+    return tournament?.participants?.find((participant) => participant.id === participantId) || null;
+  }
+
+
+  function participantNameById(tournament, participantId) {
+    if (!participantId) {
+      return "\u2205 offen";
+    }
+    const participant = participantById(tournament, participantId);
+    return participant ? participant.name : "\u2205 offen";
+  }
+
+
+  function buildParticipantIndexes(tournament) {
+    const byId = new Map();
+    const byName = new Map();
+    (tournament?.participants || []).forEach((participant) => {
+      const id = normalizeText(participant?.id || "");
+      if (!id) {
+        return;
+      }
+      byId.set(id, participant);
+      const key = normalizeLookup(participant?.name || "");
+      if (key && !byName.has(key)) {
+        byName.set(key, id);
+      }
+    });
+    return { byId, byName };
+  }
+
+
+  function resolveParticipantSlotId(tournament, rawValue, indexes = null) {
+    const value = normalizeText(rawValue || "");
+    if (!value || isByePlaceholderValue(value)) {
+      return null;
+    }
+
+    const participantIndexes = indexes || buildParticipantIndexes(tournament);
+    if (participantIndexes.byId.has(value)) {
+      return value;
+    }
+
+    const mappedByName = participantIndexes.byName.get(normalizeLookup(value));
+    return mappedByName || null;
+  }
+
+  // Logic layer: deterministic tournament and bracket calculations.
+
+  function getModeParticipantLimits(mode) {
+    return MODE_PARTICIPANT_LIMITS[mode] || MODE_PARTICIPANT_LIMITS.ko;
+  }
+
+
+  function buildModeParticipantLimitSummary() {
+    return Object.entries(MODE_PARTICIPANT_LIMITS)
+      .map(([, limits]) => `${limits.label}: ${limits.min}-${limits.max}`)
+      .join(", ");
+  }
+
+
+  function getParticipantCountError(mode, count) {
+    const limits = getModeParticipantLimits(mode);
+    const participantCount = Number(count || 0);
+    if (participantCount < limits.min || participantCount > limits.max) {
+      return `${limits.label} erfordert ${limits.min}-${limits.max} Teilnehmer.`;
+    }
+    return "";
+  }
+
+  async function persistKoMigrationBackup(tournamentSnapshot, reason = "ko-engine-v2-migration") {
+    const snapshot = cloneSerializable(tournamentSnapshot);
+    if (!snapshot) {
+      return false;
+    }
+
+    const backupsRaw = await readStoreValue(STORAGE_KO_MIGRATION_BACKUPS_KEY, []);
+    const backups = Array.isArray(backupsRaw) ? backupsRaw : [];
+    backups.unshift({
+      id: uuid("ko-backup"),
+      reason: normalizeText(reason) || "ko-engine-v2-migration",
+      createdAt: nowIso(),
+      schemaVersion: STORAGE_SCHEMA_VERSION,
+      tournament: snapshot,
+    });
+    const limitedBackups = backups.slice(0, 5);
+    await writeStoreValue(STORAGE_KO_MIGRATION_BACKUPS_KEY, limitedBackups);
+    return true;
+  }
+
+
+  function migrateStorage(rawValue) {
+    if (!rawValue || typeof rawValue !== "object") {
+      return createDefaultStore();
+    }
+
+    const version = Number(rawValue.schemaVersion || 0);
+    switch (version) {
+      case 3:
+      case 2:
+      case 1:
+        return normalizeStoreShape({
+          ...rawValue,
+          tournament: rawValue.tournament
+            ? {
+              ...rawValue.tournament,
+              rules: normalizeTournamentRules(rawValue.tournament.rules),
+            }
+            : rawValue.tournament,
+        });
+      default:
+        if (rawValue.mode && rawValue.participants) {
+          return normalizeStoreShape({
+            tournament: {
+              ...rawValue,
+              rules: normalizeTournamentRules(rawValue.rules),
+            },
+          });
+        }
+        return createDefaultStore();
+    }
+  }
+
+  function setTournamentTieBreakMode(mode) {
+    const tournament = state.store.tournament;
+    if (!tournament) {
+      return { ok: false, message: "Kein aktives Turnier vorhanden." };
+    }
+    const nextMode = normalizeTieBreakMode(mode, TIE_BREAK_MODE_DRA_STRICT);
+    const currentMode = normalizeTieBreakMode(tournament?.rules?.tieBreakMode, TIE_BREAK_MODE_DRA_STRICT);
+    if (nextMode === currentMode) {
+      return { ok: true, changed: false };
+    }
+    tournament.rules = normalizeTournamentRules({
+      ...(tournament.rules || {}),
+      tieBreakMode: nextMode,
+    });
+    refreshDerivedMatches(tournament);
+    tournament.updatedAt = nowIso();
+    schedulePersist();
+    renderShell();
+    return { ok: true, changed: true };
+  }
+
+  function createMatch({
+    id,
+    stage,
+    round,
+    number,
+    groupId = null,
+    player1Id = null,
+    player2Id = null,
+    meta = {},
+  }) {
+    return {
+      id,
+      stage,
+      round,
+      number,
+      groupId,
+      player1Id,
+      player2Id,
+      status: STATUS_PENDING,
+      winnerId: null,
+      source: null,
+      legs: { p1: 0, p2: 0 },
+      updatedAt: nowIso(),
+      meta: normalizeMatchMeta(meta),
+    };
+  }
+
+
+  function createRoundRobinPairings(participantIds) {
+    const ids = participantIds.slice();
+    if (ids.length % 2 === 1) {
+      ids.push(null);
+    }
+
+    const rounds = [];
+    const total = ids.length;
+    const roundsCount = total - 1;
+    let rotation = ids.slice();
+
+    for (let roundIndex = 0; roundIndex < roundsCount; roundIndex += 1) {
+      const roundPairs = [];
+      for (let i = 0; i < total / 2; i += 1) {
+        const left = rotation[i];
+        const right = rotation[total - 1 - i];
+        if (left && right) {
+          roundPairs.push([left, right]);
+        }
+      }
+      rounds.push(roundPairs);
+
+      const fixed = rotation[0];
+      const rest = rotation.slice(1);
+      rest.unshift(rest.pop());
+      rotation = [fixed].concat(rest);
+    }
+
+    return rounds;
+  }
+
+
+  function buildLeagueMatches(participantIds) {
+    const rounds = createRoundRobinPairings(participantIds);
+    const matches = [];
+    rounds.forEach((pairs, roundIndex) => {
+      pairs.forEach((pair, pairIndex) => {
+        matches.push(createMatch({
+          id: `league-r${roundIndex + 1}-m${pairIndex + 1}`,
+          stage: MATCH_STAGE_LEAGUE,
+          round: roundIndex + 1,
+          number: pairIndex + 1,
+          player1Id: pair[0],
+          player2Id: pair[1],
+        }));
+      });
+    });
+    return matches;
+  }
+
+
+  function buildSeedPlacement(size) {
+    if (!Number.isFinite(size) || size < 2 || size % 2 !== 0) {
+      return [];
+    }
+    let placement = [1];
+    while (placement.length < size) {
+      const mirrorBase = (placement.length * 2) + 1;
+      const next = [];
+      placement.forEach((seedNumber) => {
+        next.push(seedNumber, mirrorBase - seedNumber);
+      });
+      placement = next;
+    }
+    return placement;
+  }
+
+
+  function buildKoRound1Slots(participantIds, drawMode) {
+    const ids = Array.isArray(participantIds) ? participantIds.slice() : [];
+    if (!ids.length) {
+      return [];
+    }
+    const size = nextPowerOfTwo(ids.length);
+    const mode = normalizeKoDrawMode(drawMode, KO_DRAW_MODE_SEEDED);
+    const seedOrderedParticipants = mode === KO_DRAW_MODE_OPEN_DRAW ? shuffleArray(ids) : ids;
+    const placement = buildSeedPlacement(size);
+    const seedToParticipant = new Map();
+    seedOrderedParticipants.forEach((participantId, index) => {
+      seedToParticipant.set(index + 1, participantId);
+    });
+    return placement.map((seedNumber) => seedToParticipant.get(seedNumber) || null);
+  }
+
+
+  function buildKoMatchesV2(participantIds, drawMode = KO_DRAW_MODE_SEEDED) {
+    const roundOneSlots = buildKoRound1Slots(participantIds, drawMode);
+    const size = roundOneSlots.length || nextPowerOfTwo(participantIds.length);
+
+    const matches = [];
+    const rounds = Math.log2(size);
+
+    for (let round = 1; round <= rounds; round += 1) {
+      const matchesInRound = size / (2 ** round);
+      for (let number = 1; number <= matchesInRound; number += 1) {
+        const idx = (number - 1) * 2;
+        const player1Id = round === 1 ? roundOneSlots[idx] || null : null;
+        const player2Id = round === 1 ? roundOneSlots[idx + 1] || null : null;
+        matches.push(createMatch({
+          id: `ko-r${round}-m${number}`,
+          stage: MATCH_STAGE_KO,
+          round,
+          number,
+          player1Id,
+          player2Id,
+        }));
+      }
+    }
+
+    return matches;
+  }
+
+
+  function buildGroups(participantIds) {
+    const groupA = [];
+    const groupB = [];
+    participantIds.forEach((participantId, index) => {
+      if (index % 2 === 0) {
+        groupA.push(participantId);
+      } else {
+        groupB.push(participantId);
+      }
+    });
+    return [
+      { id: "A", name: "Gruppe A", participantIds: groupA },
+      { id: "B", name: "Gruppe B", participantIds: groupB },
+    ];
+  }
+
+
+  function buildGroupMatches(groups) {
+    const matches = [];
+    groups.forEach((group) => {
+      const rounds = createRoundRobinPairings(group.participantIds);
+      rounds.forEach((pairs, roundIndex) => {
+        pairs.forEach((pair, pairIndex) => {
+          matches.push(createMatch({
+            id: `group-${group.id}-r${roundIndex + 1}-m${pairIndex + 1}`,
+            stage: MATCH_STAGE_GROUP,
+            groupId: group.id,
+            round: roundIndex + 1,
+            number: pairIndex + 1,
+            player1Id: pair[0],
+            player2Id: pair[1],
+          }));
+        });
+      });
+    });
+    return matches;
+  }
+
+
+  function buildGroupsKoMatches() {
+    return [
+      createMatch({
+        id: "ko-r1-m1",
+        stage: MATCH_STAGE_KO,
+        round: 1,
+        number: 1,
+        meta: {
+          from1: { type: "groupRank", groupId: "A", rank: 1 },
+          from2: { type: "groupRank", groupId: "B", rank: 2 },
+        },
+      }),
+      createMatch({
+        id: "ko-r1-m2",
+        stage: MATCH_STAGE_KO,
+        round: 1,
+        number: 2,
+        meta: {
+          from1: { type: "groupRank", groupId: "B", rank: 1 },
+          from2: { type: "groupRank", groupId: "A", rank: 2 },
+        },
+      }),
+      createMatch({
+        id: "ko-r2-m1",
+        stage: MATCH_STAGE_KO,
+        round: 2,
+        number: 1,
+      }),
+    ];
+  }
+
+
+  function validateCreateConfig(config) {
+    const errors = [];
+
+    if (!normalizeText(config.name)) {
+      errors.push("Bitte einen Turniernamen eingeben.");
+    }
+    if (!["ko", "league", "groups_ko"].includes(config.mode)) {
+      errors.push("Ung\u00fcltiger Modus.");
+    }
+    const participantCountError = getParticipantCountError(config.mode, config.participants.length);
+    if (participantCountError) {
+      errors.push(participantCountError);
+    }
+
+    return errors;
+  }
+
+
+  function createTournament(config) {
+    const modeLimits = getModeParticipantLimits(config.mode);
+    const participants = config.participants.slice(0, modeLimits.max);
+    const participantIds = participants.map((participant) => participant.id);
+    const koDrawMode = config.mode === "ko" && config.randomizeKoRound1
+      ? KO_DRAW_MODE_OPEN_DRAW
+      : KO_DRAW_MODE_SEEDED;
+    const x01 = normalizeTournamentX01Settings({
+      presetId: config.x01Preset,
+      baseScore: config.startScore,
+      inMode: config.x01InMode,
+      outMode: config.x01OutMode,
+      bullMode: config.x01BullMode,
+      maxRounds: config.x01MaxRounds,
+      bullOffMode: config.x01BullOffMode,
+      lobbyVisibility: config.lobbyVisibility,
+    }, config.startScore);
+
+    let groups = [];
+    let matches = [];
+
+    if (config.mode === "league") {
+      matches = buildLeagueMatches(participantIds);
+    } else if (config.mode === "groups_ko") {
+      groups = buildGroups(participantIds);
+      matches = buildGroupMatches(groups).concat(buildGroupsKoMatches());
+    } else {
+      matches = buildKoMatchesV2(participantIds, koDrawMode);
+    }
+
+    const tournament = {
+      id: uuid("tournament"),
+      name: normalizeText(config.name),
+      mode: config.mode,
+      ko: config.mode === "ko" ? {
+        drawMode: koDrawMode,
+        engineVersion: KO_ENGINE_VERSION,
+      } : null,
+      bestOfLegs: sanitizeBestOf(config.bestOfLegs),
+      startScore: x01.baseScore,
+      x01,
+      rules: normalizeTournamentRules({ tieBreakMode: TIE_BREAK_MODE_DRA_STRICT }),
+      participants,
+      groups,
+      matches,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+
+    refreshDerivedMatches(tournament);
+    return tournament;
+  }
+
+
+  function getMatchesByStage(tournament, stage) {
+    return tournament.matches
+      .filter((match) => match.stage === stage)
+      .sort((left, right) => left.round - right.round || left.number - right.number);
+  }
+
+
+  function findMatch(tournament, matchId) {
+    return tournament.matches.find((match) => match.id === matchId) || null;
+  }
+
+  function standingsForMatches(tournament, matches, participantIds = null) {
+    const allowedIds = Array.isArray(participantIds)
+      ? new Set(participantIds.map((id) => normalizeText(id)).filter(Boolean))
+      : null;
+
+    const rows = (tournament?.participants || [])
+      .filter((participant) => !allowedIds || allowedIds.has(participant.id))
+      .map((participant) => ({
+        id: participant.id,
+        name: participant.name,
+        played: 0,
+        wins: 0,
+        draws: 0,
+        losses: 0,
+        legsFor: 0,
+        legsAgainst: 0,
+        legDiff: 0,
+        points: 0,
+        rank: 0,
+        tiebreakState: "resolved",
+      }));
+
+    const rowById = new Map(rows.map((row) => [row.id, row]));
+    const completedMatches = (Array.isArray(matches) ? matches : []).filter((match) => match?.status === STATUS_COMPLETED);
+
+    completedMatches.forEach((match) => {
+      if (!match.player1Id || !match.player2Id) {
+        return;
+      }
+      const row1 = rowById.get(match.player1Id);
+      const row2 = rowById.get(match.player2Id);
+      if (!row1 || !row2) {
+        return;
+      }
+
+      row1.played += 1;
+      row2.played += 1;
+
+      const p1Legs = clampInt(match.legs?.p1, 0, 0, 50);
+      const p2Legs = clampInt(match.legs?.p2, 0, 0, 50);
+      row1.legsFor += p1Legs;
+      row1.legsAgainst += p2Legs;
+      row2.legsFor += p2Legs;
+      row2.legsAgainst += p1Legs;
+
+      if (match.winnerId === match.player1Id) {
+        row1.wins += 1;
+        row2.losses += 1;
+        row1.points += 2;
+        return;
+      }
+      if (match.winnerId === match.player2Id) {
+        row2.wins += 1;
+        row1.losses += 1;
+        row2.points += 2;
+        return;
+      }
+      row1.draws += 1;
+      row2.draws += 1;
+      row1.points += 1;
+      row2.points += 1;
+    });
+
+    rows.forEach((row) => {
+      row.legDiff = row.legsFor - row.legsAgainst;
+    });
+
+    const tieBreakMode = normalizeTieBreakMode(tournament?.rules?.tieBreakMode, TIE_BREAK_MODE_DRA_STRICT);
+    const tiePrimaryById = new Map(rows.map((row) => [row.id, 0]));
+
+    if (tieBreakMode === TIE_BREAK_MODE_DRA_STRICT) {
+      const pointsBuckets = new Map();
+      rows.forEach((row) => {
+        if (!pointsBuckets.has(row.points)) {
+          pointsBuckets.set(row.points, []);
+        }
+        pointsBuckets.get(row.points).push(row);
+      });
+
+      pointsBuckets.forEach((bucketRows) => {
+        if (bucketRows.length < 2) {
+          return;
+        }
+        const bucketIds = new Set(bucketRows.map((row) => row.id));
+        const bucketMatches = completedMatches.filter((match) => (
+          match.player1Id
+          && match.player2Id
+          && bucketIds.has(match.player1Id)
+          && bucketIds.has(match.player2Id)
+        ));
+
+        if (bucketRows.length === 2) {
+          const left = bucketRows[0];
+          const right = bucketRows[1];
+          let leftDirectScore = 0;
+          let rightDirectScore = 0;
+          bucketMatches.forEach((match) => {
+            if (match.winnerId === left.id) {
+              leftDirectScore += 1;
+            } else if (match.winnerId === right.id) {
+              rightDirectScore += 1;
+            }
+          });
+          if (leftDirectScore !== rightDirectScore) {
+            tiePrimaryById.set(left.id, leftDirectScore - rightDirectScore);
+            tiePrimaryById.set(right.id, rightDirectScore - leftDirectScore);
+          }
+          return;
+        }
+
+        const miniLegDiffById = new Map(bucketRows.map((row) => [row.id, 0]));
+        bucketMatches.forEach((match) => {
+          const p1 = clampInt(match.legs?.p1, 0, 0, 50);
+          const p2 = clampInt(match.legs?.p2, 0, 0, 50);
+          miniLegDiffById.set(match.player1Id, (miniLegDiffById.get(match.player1Id) || 0) + (p1 - p2));
+          miniLegDiffById.set(match.player2Id, (miniLegDiffById.get(match.player2Id) || 0) + (p2 - p1));
+        });
+        bucketRows.forEach((row) => {
+          tiePrimaryById.set(row.id, miniLegDiffById.get(row.id) || 0);
+        });
+      });
+    }
+
+    rows.sort((left, right) => {
+      if (right.points !== left.points) {
+        return right.points - left.points;
+      }
+
+      if (tieBreakMode === TIE_BREAK_MODE_DRA_STRICT) {
+        const rightPrimary = tiePrimaryById.get(right.id) || 0;
+        const leftPrimary = tiePrimaryById.get(left.id) || 0;
+        if (rightPrimary !== leftPrimary) {
+          return rightPrimary - leftPrimary;
+        }
+      }
+
+      if (right.legDiff !== left.legDiff) {
+        return right.legDiff - left.legDiff;
+      }
+      if (right.legsFor !== left.legsFor) {
+        return right.legsFor - left.legsFor;
+      }
+      return left.name.localeCompare(right.name, "de");
+    });
+
+    if (tieBreakMode === TIE_BREAK_MODE_DRA_STRICT) {
+      const unresolvedBuckets = new Map();
+      rows.forEach((row) => {
+        const key = [
+          row.points,
+          tiePrimaryById.get(row.id) || 0,
+          row.legDiff,
+          row.legsFor,
+        ].join("|");
+        if (!unresolvedBuckets.has(key)) {
+          unresolvedBuckets.set(key, []);
+        }
+        unresolvedBuckets.get(key).push(row);
+      });
+      unresolvedBuckets.forEach((bucketRows) => {
+        if (bucketRows.length < 2) {
+          return;
+        }
+        bucketRows.forEach((row) => {
+          row.tiebreakState = "playoff_required";
+        });
+      });
+    }
+
+    rows.forEach((row, index) => {
+      row.rank = index + 1;
+    });
+
+    return rows;
+  }
+
+  function groupStandingsMap(tournament) {
+    const map = new Map();
+    (tournament.groups || []).forEach((group) => {
+      const groupMatches = tournament.matches.filter((match) => match.stage === MATCH_STAGE_GROUP && match.groupId === group.id);
+      const rows = standingsForMatches(tournament, groupMatches, group.participantIds);
+      const complete = groupMatches.length > 0 && groupMatches.every((match) => match.status === STATUS_COMPLETED);
+      const groupResolution = complete && rows.some((row) => row.tiebreakState === "playoff_required")
+        ? {
+          status: "playoff_required",
+          reason: "Playoff erforderlich: Gleichstand nach DRA-Tie-Break.",
+        }
+        : {
+          status: "resolved",
+          reason: "",
+        };
+      map.set(group.id, {
+        group,
+        rows,
+        complete,
+        groupResolution,
+      });
+    });
+    return map;
+  }
+
+
+  function resolveGroupsToKoAssignments(tournament) {
+    if (tournament.mode !== "groups_ko") {
+      return false;
+    }
+
+    let changed = false;
+    const standingMap = groupStandingsMap(tournament);
+    const semifinals = getMatchesByStage(tournament, MATCH_STAGE_KO).filter((match) => match.round === 1);
+
+    semifinals.forEach((match) => {
+      const from1 = match.meta?.from1;
+      const from2 = match.meta?.from2;
+      if (!from1 || !from2) {
+        return;
+      }
+
+      const group1 = standingMap.get(from1.groupId);
+      const group2 = standingMap.get(from2.groupId);
+      const p1 = group1 && group1.complete && group1.groupResolution?.status === "resolved"
+        ? group1.rows[from1.rank - 1]?.id || null
+        : null;
+      const p2 = group2 && group2.complete && group2.groupResolution?.status === "resolved"
+        ? group2.rows[from2.rank - 1]?.id || null
+        : null;
+      changed = assignPlayerSlot(match, 1, p1) || changed;
+      changed = assignPlayerSlot(match, 2, p2) || changed;
+    });
+
+    return changed;
+  }
+
+  function clearMatchResult(match) {
+    match.status = STATUS_PENDING;
+    match.winnerId = null;
+    match.source = null;
+    match.legs = { p1: 0, p2: 0 };
+    setMatchResultKind(match, null);
+    resetMatchAutomationMeta(match);
+    match.updatedAt = nowIso();
+  }
+
+
+  function assignPlayerSlot(match, slot, participantId) {
+    const field = slot === 1 ? "player1Id" : "player2Id";
+    const currentValue = match[field] || null;
+    const nextValue = participantId || null;
+    if (currentValue === nextValue) {
+      return false;
+    }
+    match[field] = nextValue;
+    const hasStoredResult = match.status === STATUS_COMPLETED
+      || Boolean(match.winnerId || match.source || match.legs?.p1 || match.legs?.p2);
+    if (hasStoredResult) {
+      clearMatchResult(match);
+    }
+    match.updatedAt = nowIso();
+    return true;
+  }
+
+
+  function findKoNextMatch(tournament, match) {
+    const nextRound = match.round + 1;
+    const nextNumber = Math.ceil(match.number / 2);
+    return tournament.matches.find(
+      (item) => item.stage === MATCH_STAGE_KO && item.round === nextRound && item.number === nextNumber,
+    ) || null;
+  }
+
+
+  function advanceKoWinners(tournament) {
+    const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
+    let changed = false;
+
+    koMatches.forEach((match) => {
+      if (match.status !== STATUS_COMPLETED || !match.winnerId) {
+        return;
+      }
+      const nextMatch = findKoNextMatch(tournament, match);
+      if (!nextMatch) {
+        return;
+      }
+      if (match.number % 2 === 1) {
+        changed = assignPlayerSlot(nextMatch, 1, match.winnerId) || changed;
+      } else {
+        changed = assignPlayerSlot(nextMatch, 2, match.winnerId) || changed;
+      }
+    });
+
+    return changed;
+  }
+
+
+  function migrateKoTournamentToV2(tournament, defaultDrawMode = KO_DRAW_MODE_SEEDED) {
+    if (!tournament || tournament.mode !== "ko") {
+      return false;
+    }
+
+    const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, defaultDrawMode);
+    const engineVersion = normalizeKoEngineVersion(tournament?.ko?.engineVersion, 0);
+
+    if (engineVersion >= KO_ENGINE_VERSION) {
+      if (!tournament.ko || tournament.ko.drawMode !== drawMode || tournament.ko.engineVersion !== KO_ENGINE_VERSION) {
+        tournament.ko = { drawMode, engineVersion: KO_ENGINE_VERSION };
+        return true;
+      }
+      return false;
+    }
+
+    const backupSnapshot = cloneSerializable(tournament);
+    if (backupSnapshot) {
+      persistKoMigrationBackup(backupSnapshot, "ko-engine-v2-migration").catch((error) => {
+        logWarn("storage", "KO migration backup write failed.", error);
+      });
+    }
+
+    const participantIds = (tournament.participants || [])
+      .map((participant) => normalizeText(participant?.id || ""))
+      .filter(Boolean);
+
+    const nonKoMatches = (tournament.matches || []).filter((match) => match.stage !== MATCH_STAGE_KO);
+    const migratedKoMatches = buildKoMatchesV2(participantIds, drawMode);
+    tournament.matches = nonKoMatches.concat(migratedKoMatches);
+    tournament.ko = { drawMode, engineVersion: KO_ENGINE_VERSION };
+    tournament.updatedAt = nowIso();
+
+    logDebug("ko", "KO tournament migrated to engine v2.", {
+      drawMode,
+      participantCount: participantIds.length,
+    });
+
+    return true;
+  }
+
+
+  function autoCompleteByes(tournament) {
+    if (!tournament || tournament.mode !== "ko") {
+      return false;
+    }
+
+    let changed = false;
+    const participantIndexes = buildParticipantIndexes(tournament);
+    const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
+
+    function applyByeCompletion(match, winnerId) {
+      let localChanged = false;
+      if (match.status !== STATUS_COMPLETED) {
+        match.status = STATUS_COMPLETED;
+        localChanged = true;
+      }
+      if (match.winnerId !== winnerId) {
+        match.winnerId = winnerId;
+        localChanged = true;
+      }
+      if (match.source !== "auto") {
+        match.source = "auto";
+        localChanged = true;
+      }
+      if (clampInt(match.legs?.p1, 0, 0, 99) !== 0 || clampInt(match.legs?.p2, 0, 0, 99) !== 0) {
+        match.legs = { p1: 0, p2: 0 };
+        localChanged = true;
+      }
+      localChanged = setMatchResultKind(match, "bye") || localChanged;
+      const auto = ensureMatchAutoMeta(match);
+      if (auto.lobbyId || auto.status !== "idle" || auto.startedAt || auto.finishedAt || auto.lastSyncAt || auto.lastError) {
+        resetMatchAutomationMeta(match);
+        localChanged = true;
+      }
+      if (localChanged) {
+        match.updatedAt = nowIso();
+      }
+      return localChanged;
+    }
+
+    koMatches.forEach((match) => {
+      // Byes are only legitimate in round 1 seeding; later rounds with one empty slot
+      // mean "winner not known yet", not an automatic win.
+      if (match.round !== 1) {
+        if (isByeMatchResult(match)) {
+          const localChanged = setMatchResultKind(match, null);
+          if (localChanged) {
+            match.updatedAt = nowIso();
+          }
+          changed = localChanged || changed;
+        }
+        return;
+      }
+      const p1 = resolveParticipantSlotId(tournament, match.player1Id, participantIndexes);
+      const p2 = resolveParticipantSlotId(tournament, match.player2Id, participantIndexes);
+      changed = assignPlayerSlot(match, 1, p1) || changed;
+      changed = assignPlayerSlot(match, 2, p2) || changed;
+
+      if (p1 && p2) {
+        if (isByeMatchResult(match)) {
+          const localChanged = setMatchResultKind(match, null);
+          if (localChanged) {
+            match.updatedAt = nowIso();
+          }
+          changed = localChanged || changed;
+        }
+        return;
+      }
+
+      if (p1 && !p2) {
+        changed = applyByeCompletion(match, p1) || changed;
+      } else if (p2 && !p1) {
+        changed = applyByeCompletion(match, p2) || changed;
+      } else if (isByeMatchResult(match)) {
+        const localChanged = setMatchResultKind(match, null);
+        if (localChanged) {
+          match.updatedAt = nowIso();
+        }
+        changed = localChanged || changed;
+      }
+    });
+    return changed;
+  }
+
+
+  function isCompletedMatchResultValid(tournament, match) {
+    if (!match || match.status !== STATUS_COMPLETED) {
+      return true;
+    }
+    if (!match.player1Id || !match.player2Id) {
+      const availablePlayerId = match.player1Id || match.player2Id;
+      if (match.stage !== MATCH_STAGE_KO || match.round !== 1) {
+        return false;
+      }
+      return Boolean(availablePlayerId && match.winnerId === availablePlayerId);
+    }
+    if (match.winnerId !== match.player1Id && match.winnerId !== match.player2Id) {
+      return false;
+    }
+
+    const legsToWin = getLegsToWin(tournament?.bestOfLegs);
+    const p1Legs = clampInt(match.legs?.p1, 0, 0, 99);
+    const p2Legs = clampInt(match.legs?.p2, 0, 0, 99);
+    if (p1Legs > legsToWin || p2Legs > legsToWin) {
+      return false;
+    }
+    if (p1Legs === p2Legs) {
+      return false;
+    }
+
+    const winnerLegs = match.winnerId === match.player1Id ? p1Legs : p2Legs;
+    const loserLegs = match.winnerId === match.player1Id ? p2Legs : p1Legs;
+    return winnerLegs === legsToWin && winnerLegs > loserLegs;
+  }
+
+
+  function normalizeCompletedMatchResults(tournament) {
+    if (!tournament) {
+      return false;
+    }
+    let changed = false;
+    tournament.matches.forEach((match) => {
+      if (match.status === STATUS_COMPLETED && !isCompletedMatchResultValid(tournament, match)) {
+        clearMatchResult(match);
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
+
+  function refreshDerivedMatches(tournament) {
+    if (!tournament) {
+      return false;
+    }
+
+    let changedAny = false;
+    for (let i = 0; i < 8; i += 1) {
+      let changed = false;
+      changed = migrateKoTournamentToV2(tournament, KO_DRAW_MODE_SEEDED) || changed;
+      changed = normalizeCompletedMatchResults(tournament) || changed;
+      changed = resolveGroupsToKoAssignments(tournament) || changed;
+      changed = autoCompleteByes(tournament) || changed;
+      changed = advanceKoWinners(tournament) || changed;
+      changedAny = changedAny || changed;
+      if (!changed) {
+        break;
+      }
+    }
+    return changedAny;
+  }
+
+  function getOpenMatchByPlayers(tournament, player1Id, player2Id) {
+    const key = new Set([player1Id, player2Id]);
+    const candidates = tournament.matches.filter((match) => {
+      if (match.status !== STATUS_PENDING) {
+        return false;
+      }
+      if (!match.player1Id || !match.player2Id) {
+        return false;
+      }
+      const set = new Set([match.player1Id, match.player2Id]);
+      return key.size === set.size && [...key].every((id) => set.has(id));
+    });
+    return candidates.length === 1 ? candidates[0] : null;
+  }
+
+
+  function updateMatchResult(matchId, winnerId, legs, source) {
+    const tournament = state.store.tournament;
+    if (!tournament) {
+      return { ok: false, message: "Kein aktives Turnier vorhanden." };
+    }
+
+    const match = findMatch(tournament, matchId);
+    if (!match) {
+      return { ok: false, message: "Match nicht gefunden." };
+    }
+    if (!match.player1Id || !match.player2Id) {
+      return { ok: false, message: "Match hat noch keine zwei Teilnehmer." };
+    }
+    if (winnerId !== match.player1Id && winnerId !== match.player2Id) {
+      return { ok: false, message: "Gewinner passt nicht zum Match." };
+    }
+
+    const legsToWin = getLegsToWin(tournament.bestOfLegs);
+    const p1Legs = clampInt(legs?.p1, 0, 0, 99);
+    const p2Legs = clampInt(legs?.p2, 0, 0, 99);
+    const winnerIsP1 = winnerId === match.player1Id;
+    const winnerLegs = winnerIsP1 ? p1Legs : p2Legs;
+    const loserLegs = winnerIsP1 ? p2Legs : p1Legs;
+
+    if (p1Legs > legsToWin || p2Legs > legsToWin) {
+      return {
+        ok: false,
+        message: `Ung\u00fcltiges Ergebnis: Pro Spieler sind maximal ${legsToWin} Legs m\u00f6glich (Best-of ${sanitizeBestOf(tournament.bestOfLegs)}).`,
+      };
+    }
+
+    if (p1Legs === p2Legs) {
+      return { ok: false, message: "Ung\u00fcltiges Ergebnis: Bei Best-of ist kein Gleichstand m\u00f6glich." };
+    }
+
+    if (winnerLegs <= loserLegs) {
+      return { ok: false, message: "Ung\u00fcltiges Ergebnis: Der gew\u00e4hlte Gewinner muss mehr Legs als der Gegner haben." };
+    }
+
+    if (winnerLegs !== legsToWin) {
+      return {
+        ok: false,
+        message: `Ung\u00fcltiges Ergebnis: Der Gewinner muss genau ${legsToWin} Legs erreichen (Best-of ${sanitizeBestOf(tournament.bestOfLegs)}).`,
+      };
+    }
+
+    match.status = STATUS_COMPLETED;
+    match.winnerId = winnerId;
+    match.source = source === "auto" ? "auto" : "manual";
+    match.legs = { p1: p1Legs, p2: p2Legs };
+    setMatchResultKind(match, null);
+    const now = nowIso();
+    const auto = ensureMatchAutoMeta(match);
+    if (source === "auto") {
+      auto.status = "completed";
+      auto.finishedAt = now;
+      auto.lastSyncAt = now;
+      auto.lastError = null;
+    } else if (auto.lobbyId || auto.status === "started" || auto.status === "error") {
+      auto.status = "completed";
+      auto.finishedAt = now;
+      auto.lastSyncAt = now;
+      auto.lastError = null;
+    }
+    match.updatedAt = now;
+
+    refreshDerivedMatches(tournament);
+    tournament.updatedAt = now;
+    schedulePersist();
+    renderShell();
+    return { ok: true };
+  }
+
+
+  function getKoBlockingSourceMatch(tournament, match) {
+    if (!tournament || !match || match.stage !== MATCH_STAGE_KO || match.round <= 1) {
+      return null;
+    }
+
+    const previousRound = match.round - 1;
+    const sourceNumberA = ((match.number - 1) * 2) + 1;
+    const sourceNumberB = sourceNumberA + 1;
+    const sourceMatches = getMatchesByStage(tournament, MATCH_STAGE_KO)
+      .filter((item) => (
+        item.round === previousRound
+        && (item.number === sourceNumberA || item.number === sourceNumberB)
+      ))
+      .sort((left, right) => left.number - right.number);
+
+    if (!sourceMatches.length) {
+      return null;
+    }
+
+    return sourceMatches.find((item) => item.status !== STATUS_COMPLETED) || null;
+  }
+
+
+  function getMatchEditability(tournament, match) {
+    if (!tournament || !match) {
+      return { editable: false, reason: "Match nicht verf\u00fcgbar." };
+    }
+
+    if (match.status === STATUS_COMPLETED) {
+      if (isByeMatchResult(match)) {
+        return { editable: false, reason: "Freilos wurde automatisch weitergeleitet." };
+      }
+      return { editable: false, reason: "Match ist bereits abgeschlossen." };
+    }
+
+    if (!match.player1Id || !match.player2Id) {
+      return { editable: false, reason: "Paarung steht noch nicht fest." };
+    }
+
+    if (match.stage === MATCH_STAGE_KO) {
+      const blockingMatch = getKoBlockingSourceMatch(tournament, match);
+      if (blockingMatch) {
+        return {
+          editable: false,
+          reason: `Vorg\u00e4nger-Match Runde ${blockingMatch.round} / Spiel ${blockingMatch.number} muss zuerst abgeschlossen werden.`,
+        };
+      }
+    }
+
+    return { editable: true, reason: "" };
+  }
+
+  function shouldShowAuthNotice() {
+    const now = Date.now();
+    if (now - state.apiAutomation.lastAuthNoticeAt < API_AUTH_NOTICE_THROTTLE_MS) {
+      return false;
+    }
+    state.apiAutomation.lastAuthNoticeAt = now;
+    return true;
+  }
+
+
+  function getAuthTokenFromCookie() {
+    try {
+      const value = `; ${document.cookie || ""}`;
+      const parts = value.split("; Authorization=");
+      if (parts.length !== 2) {
+        return "";
+      }
+      let token = parts.pop().split(";").shift() || "";
+      try {
+        token = decodeURIComponent(token);
+      } catch (_) {
+        // Keep raw token if decoding fails.
+      }
+      token = String(token).trim().replace(/^Bearer\s+/i, "");
+      return token;
+    } catch (_) {
+      return "";
+    }
+  }
+
+
+  function getBoardId() {
+    try {
+      const rawBoardValue = localStorage.getItem("autodarts-board");
+      if (!rawBoardValue) {
+        return "";
+      }
+      let boardId = rawBoardValue;
+      try {
+        const parsed = JSON.parse(rawBoardValue);
+        if (typeof parsed === "string") {
+          boardId = parsed;
+        } else if (parsed && typeof parsed === "object") {
+          boardId = normalizeText(parsed.id || parsed.boardId || parsed.uuid || parsed.value || "");
+        }
+      } catch (_) {
+        // Keep raw value when localStorage entry is not JSON encoded.
+      }
+      return normalizeText(String(boardId || "").replace(/^"+|"+$/g, ""));
+    } catch (_) {
+      return "";
+    }
+  }
+
+
+  function isValidBoardId(boardId) {
+    const value = normalizeText(boardId || "");
+    if (!value) {
+      return false;
+    }
+    if (value === "[object Object]" || value.toLowerCase() === "manual") {
+      return false;
+    }
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+      return true;
+    }
+    return /^[a-z0-9][a-z0-9-]{7,}$/i.test(value);
+  }
+
+
+  function collectRuntimeStatus() {
+    const token = getAuthTokenFromCookie();
+    const boardId = getBoardId();
+    const boardPreview = boardId.length > 18 ? `${boardId.slice(0, 7)}...${boardId.slice(-6)}` : boardId;
+    const autoEnabled = Boolean(state.store?.settings?.featureFlags?.autoLobbyStart);
+    const authBlocked = Number(state.apiAutomation?.authBackoffUntil || 0) > Date.now();
+    const hasToken = Boolean(token);
+    const hasBoard = isValidBoardId(boardId);
+    const hasBoardValue = Boolean(boardId);
+    return {
+      hasToken,
+      hasBoard,
+      boardId: boardId || "",
+      autoEnabled,
+      authBlocked,
+      apiLabel: hasToken ? (authBlocked ? "API Auth abgelaufen" : "API Auth bereit") : "API Auth fehlt",
+      boardLabel: hasBoard
+        ? `Board aktiv (${boardPreview})`
+        : hasBoardValue
+          ? `Board-ID ung\u00fcltig (${boardPreview})`
+          : "Kein aktives Board",
+      autoLabel: autoEnabled ? "Auto-Lobby ON" : "Auto-Lobby OFF",
+    };
+  }
+
+
+  function renderRuntimeStatusBar() {
+    const status = collectRuntimeStatus();
+    const apiStateClass = status.hasToken && !status.authBlocked ? "ata-status-ok" : "ata-status-warn";
+    const boardStateClass = status.hasBoard ? "ata-status-ok" : "ata-status-warn";
+    const autoStateClass = status.autoEnabled ? "ata-status-info" : "ata-status-neutral";
+    const hint = status.autoEnabled && (!status.hasToken || !status.hasBoard)
+      ? `<span class="ata-runtime-hint">Hinweis: F\u00fcr API-Halbautomatik werden Auth-Token und aktives Board ben\u00f6tigt.</span>`
+      : "";
+    return `
+      <div class="ata-runtime-statusbar">
+        <span class="ata-status-pill ${apiStateClass}">${escapeHtml(status.apiLabel)}</span>
+        <span class="ata-status-pill ${boardStateClass}">${escapeHtml(status.boardLabel)}</span>
+        <span class="ata-status-pill ${autoStateClass}">${escapeHtml(status.autoLabel)}</span>
+        ${hint}
+      </div>
+    `;
+  }
+
+
+  function runtimeStatusSignature() {
+    const status = collectRuntimeStatus();
+    return [
+      status.hasToken ? "1" : "0",
+      status.authBlocked ? "1" : "0",
+      status.boardId || "",
+      status.autoEnabled ? "1" : "0",
+    ].join("|");
+  }
+
+
+  function refreshRuntimeStatusUi() {
+    const signature = runtimeStatusSignature();
+    if (signature === state.runtimeStatusSignature) {
+      return;
+    }
+    state.runtimeStatusSignature = signature;
+    if (state.drawerOpen) {
+      renderShell();
+    }
+  }
+
+
+  function createApiError(status, message, body) {
+    const error = new Error(String(message || "API request failed."));
+    error.status = Number(status || 0);
+    error.body = body;
+    return error;
+  }
+
+
+  function apiBodyToErrorText(value, depth = 0) {
+    if (value == null || depth > 3) {
+      return "";
+    }
+    if (typeof value === "string") {
+      return normalizeText(value);
+    }
+    if (Array.isArray(value)) {
+      const parts = value.map((entry) => apiBodyToErrorText(entry, depth + 1)).filter(Boolean);
+      return normalizeText(parts.join(" | "));
+    }
+    if (typeof value === "object") {
+      const parts = [];
+      ["message", "error", "detail", "title", "reason", "description"].forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(value, key)) {
+          const text = apiBodyToErrorText(value[key], depth + 1);
+          if (text) {
+            parts.push(text);
+          }
+        }
+      });
+      if (value.errors && typeof value.errors === "object") {
+        Object.entries(value.errors).forEach(([key, entry]) => {
+          const text = apiBodyToErrorText(entry, depth + 1);
+          if (text) {
+            parts.push(`${key}: ${text}`);
+          }
+        });
+      }
+      const deduped = [...new Set(parts.map((entry) => normalizeText(entry)).filter(Boolean))];
+      if (deduped.length) {
+        return normalizeText(deduped.join(" | "));
+      }
+      try {
+        const json = JSON.stringify(value);
+        if (json && json !== "{}") {
+          return normalizeText(json);
+        }
+      } catch (_) {
+        return "";
+      }
+      return "";
+    }
+    return normalizeText(String(value));
+  }
+
+
+  function extractApiErrorMessage(status, body) {
+    const detail = apiBodyToErrorText(body);
+    if (detail) {
+      return `HTTP ${status}: ${detail}`;
+    }
+    return `HTTP ${status}`;
+  }
+
+
+  function parseJsonOrText(rawText) {
+    const text = String(rawText || "");
+    if (!text) {
+      return null;
+    }
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      return text;
+    }
+  }
+
+
+  async function requestJsonViaGm(method, url, payload, headers) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method,
+        url,
+        timeout: API_REQUEST_TIMEOUT_MS,
+        headers,
+        data: payload ? JSON.stringify(payload) : undefined,
+        onload: (response) => {
+          const status = Number(response?.status || 0);
+          const body = parseJsonOrText(response?.responseText || "");
+          if (status >= 200 && status < 300) {
+            resolve(body || {});
+            return;
+          }
+          reject(createApiError(status, extractApiErrorMessage(status, body), body));
+        },
+        onerror: () => {
+          reject(createApiError(0, "Netzwerkfehler bei API-Anfrage.", null));
+        },
+        ontimeout: () => {
+          reject(createApiError(0, "API-Anfrage Timeout.", null));
+        },
+      });
+    });
+  }
+
+
+  async function requestJsonViaFetch(method, url, payload, headers) {
+    const response = await fetch(url, {
+      method,
+      headers,
+      body: payload ? JSON.stringify(payload) : undefined,
+      cache: "no-store",
+      credentials: "omit",
+    });
+    const text = await response.text();
+    const body = parseJsonOrText(text);
+    if (!response.ok) {
+      throw createApiError(response.status, extractApiErrorMessage(response.status, body), body);
+    }
+    return body || {};
+  }
+
+
+  async function apiRequestJson(method, url, payload, token) {
+    const headers = { Accept: "application/json" };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    if (payload) {
+      headers["Content-Type"] = "application/json";
+    }
+
+    if (typeof GM_xmlhttpRequest === "function") {
+      try {
+        return await requestJsonViaGm(method, url, payload, headers);
+      } catch (error) {
+        const status = Number(error?.status || 0);
+        if (status > 0) {
+          throw error;
+        }
+        logWarn("api", "GM_xmlhttpRequest failed, falling back to fetch().", error);
+      }
+    }
+
+    return requestJsonViaFetch(method, url, payload, headers);
+  }
+
+
+  async function createLobby(payload, token) {
+    return apiRequestJson("POST", `${API_GS_BASE}/lobbies`, payload, token);
+  }
+
+
+  async function addLobbyPlayer(lobbyId, name, boardId, token) {
+    return apiRequestJson("POST", `${API_GS_BASE}/lobbies/${encodeURIComponent(lobbyId)}/players`, { name, boardId }, token);
+  }
+
+
+  async function startLobby(lobbyId, token) {
+    return apiRequestJson("POST", `${API_GS_BASE}/lobbies/${encodeURIComponent(lobbyId)}/start`, null, token);
+  }
+
+
+  async function fetchMatchStats(lobbyId, token) {
+    return apiRequestJson("GET", `${API_AS_BASE}/matches/${encodeURIComponent(lobbyId)}/stats`, null, token);
+  }
+
+
+  function getRouteLobbyId(pathname = location.pathname) {
+    const route = normalizeText(pathname || "");
+    if (!route) {
+      return "";
+    }
+    const match = route.match(/^\/(?:(?:history\/)?(?:matches|lobbies))\/([^/?#]+)/i);
+    if (!match || !match[1]) {
+      return "";
+    }
+    try {
+      return normalizeText(decodeURIComponent(match[1]));
+    } catch (_) {
+      return normalizeText(match[1]);
+    }
+  }
+
+
+  function isApiSyncCandidateMatch(match, includeErrored = false) {
+    if (!match || match.status !== STATUS_PENDING) {
+      return false;
+    }
+    const auto = ensureMatchAutoMeta(match);
+    if (!auto.lobbyId) {
+      return false;
+    }
+    if (auto.status === "started") {
+      return true;
+    }
+    return includeErrored && auto.status === "error";
+  }
+
+
+  function findTournamentMatchByLobbyId(tournament, lobbyId, includeCompleted = false) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    if (!tournament || !targetLobbyId) {
+      return null;
+    }
+    return tournament.matches.find((match) => {
+      if (!includeCompleted && match.status !== STATUS_PENDING) {
+        return false;
+      }
+      const auto = ensureMatchAutoMeta(match);
+      return normalizeText(auto.lobbyId || "") === targetLobbyId;
+    }) || null;
+  }
+
+  async function syncApiMatchResult(tournament, match, token, options = {}) {
+    const notifyErrors = Boolean(options.notifyErrors);
+    const notifyNotReady = Boolean(options.notifyNotReady);
+    const includeErrorRetry = options.includeErrorRetry !== false;
+    const auto = ensureMatchAutoMeta(match);
+    const lobbyId = normalizeText(auto.lobbyId || "");
+    if (!lobbyId) {
+      return { ok: false, updated: false, completed: false, pending: true, message: "Keine Lobby-ID vorhanden." };
+    }
+    if (!includeErrorRetry && auto.status === "error") {
+      return { ok: false, updated: false, completed: false, pending: true, message: "Match ist im Fehlerstatus." };
+    }
+
+    let updated = false;
+    if (auto.status === "error") {
+      auto.status = "started";
+      auto.lastSyncAt = nowIso();
+      match.updatedAt = nowIso();
+      updated = true;
+    }
+
+    try {
+      const stats = await fetchMatchStats(lobbyId, token);
+      const syncTimestamp = nowIso();
+      if (auto.lastError) {
+        auto.lastError = null;
+        auto.lastSyncAt = syncTimestamp;
+        match.updatedAt = syncTimestamp;
+        updated = true;
+      } else if (!auto.lastSyncAt) {
+        auto.lastSyncAt = syncTimestamp;
+        match.updatedAt = syncTimestamp;
+        updated = true;
+      }
+
+      const winnerIndex = Number(stats?.winner);
+      if (!Number.isInteger(winnerIndex) || winnerIndex < 0) {
+        auto.status = "started";
+        if (!auto.lastSyncAt) {
+          auto.lastSyncAt = syncTimestamp;
+        }
+        if (notifyNotReady) {
+          setNotice("info", "API-Ergebnis ist noch nicht final verf\u00fcgbar.", 2200);
+        }
+        return {
+          ok: true,
+          updated,
+          completed: false,
+          pending: true,
+          recoverable: true,
+          message: "API-Ergebnis ist noch nicht final verf\u00fcgbar.",
+        };
+      }
+
+      const winnerName = normalizeText(stats?.players?.[winnerIndex]?.name || "");
+      const winnerId = resolveWinnerIdFromApiName(tournament, match, winnerName);
+      if (!winnerId) {
+        const mappingError = "Gewinner konnte nicht eindeutig zugeordnet werden.";
+        const changedError = auto.lastError !== mappingError || auto.status !== "error";
+        auto.status = "error";
+        auto.lastError = mappingError;
+        auto.lastSyncAt = syncTimestamp;
+        match.updatedAt = syncTimestamp;
+        updated = true;
+        if (notifyErrors && changedError) {
+          setNotice("error", `Auto-Sync Fehler bei ${match.id}: Gewinner nicht zuordenbar.`);
+        }
+        return { ok: false, updated, completed: false, pending: true, recoverable: false, message: mappingError };
+      }
+
+      const legs = getApiMatchLegsFromStats(stats);
+      const result = updateMatchResult(match.id, winnerId, legs, "auto");
+      if (!result.ok) {
+        const saveError = result.message || "Auto-Sync konnte Ergebnis nicht speichern.";
+        const changedError = auto.lastError !== saveError || auto.status !== "error";
+        auto.status = "error";
+        auto.lastError = saveError;
+        auto.lastSyncAt = syncTimestamp;
+        match.updatedAt = syncTimestamp;
+        updated = true;
+        if (notifyErrors && changedError) {
+          setNotice("error", `Auto-Sync Fehler bei ${match.id}: ${saveError}`);
+        }
+        return { ok: false, updated, completed: false, pending: true, recoverable: false, message: saveError };
+      }
+
+      const updatedMatch = findMatch(tournament, match.id);
+      if (updatedMatch) {
+        const updatedAuto = ensureMatchAutoMeta(updatedMatch);
+        const finishedAt = nowIso();
+        updatedAuto.provider = API_PROVIDER;
+        updatedAuto.status = "completed";
+        updatedAuto.finishedAt = finishedAt;
+        updatedAuto.lastSyncAt = finishedAt;
+        updatedAuto.lastError = null;
+        updatedMatch.updatedAt = finishedAt;
+      }
+
+      return { ok: true, updated: true, completed: true, pending: false, message: "Ergebnis \u00fcbernommen." };
+    } catch (error) {
+      const status = Number(error?.status || 0);
+      if (status === 401 || status === 403) {
+        return { ok: false, updated, completed: false, pending: true, authError: true, message: "Auth abgelaufen." };
+      }
+      if (status === 404) {
+        return {
+          ok: false,
+          updated,
+          completed: false,
+          pending: true,
+          recoverable: true,
+          message: "Match-Stats noch nicht verf\u00fcgbar.",
+        };
+      }
+
+      const errorMessage = normalizeText(error?.message || "API-Sync fehlgeschlagen.") || "API-Sync fehlgeschlagen.";
+      const lastSyncAtMs = auto.lastSyncAt ? Date.parse(auto.lastSyncAt) : 0;
+      const shouldPersistError = auto.lastError !== errorMessage
+        || !Number.isFinite(lastSyncAtMs)
+        || (Date.now() - lastSyncAtMs > API_AUTH_NOTICE_THROTTLE_MS);
+      if (shouldPersistError) {
+        auto.status = "error";
+        auto.lastError = errorMessage;
+        auto.lastSyncAt = nowIso();
+        match.updatedAt = nowIso();
+        updated = true;
+      }
+      if (notifyErrors && shouldPersistError) {
+        setNotice("error", `Auto-Sync Fehler bei ${match.id}: ${errorMessage}`);
+      }
+      return { ok: false, updated, completed: false, pending: true, recoverable: false, message: errorMessage };
+    }
+  }
+
+
+  async function syncResultForLobbyId(lobbyId, options = {}) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    const tournament = state.store.tournament;
+    if (!targetLobbyId) {
+      return { ok: false, message: "Keine Lobby-ID erkannt." };
+    }
+    if (!tournament) {
+      return { ok: false, message: "Kein aktives Turnier vorhanden." };
+    }
+    if (!state.store.settings.featureFlags.autoLobbyStart) {
+      return { ok: false, message: "Auto-Lobby ist deaktiviert." };
+    }
+
+    const openMatch = findTournamentMatchByLobbyId(tournament, targetLobbyId, false);
+    const completedMatch = openMatch ? null : findTournamentMatchByLobbyId(tournament, targetLobbyId, true);
+    if (!openMatch && completedMatch?.status === STATUS_COMPLETED) {
+      return { ok: true, completed: true, message: "Ergebnis war bereits \u00fcbernommen." };
+    }
+    if (!openMatch) {
+      return { ok: false, message: "Kein offenes Turnier-Match f\u00fcr diese Lobby gefunden." };
+    }
+
+    const token = getAuthTokenFromCookie();
+    if (!token) {
+      return { ok: false, message: "Kein Auth-Token gefunden. Bitte neu einloggen." };
+    }
+
+    const syncOutcome = await syncApiMatchResult(tournament, openMatch, token, {
+      notifyErrors: Boolean(options.notifyErrors),
+      notifyNotReady: Boolean(options.notifyNotReady),
+      includeErrorRetry: true,
+    });
+
+    if (syncOutcome.authError) {
+      state.apiAutomation.authBackoffUntil = Date.now() + API_AUTH_NOTICE_THROTTLE_MS;
+      return { ok: false, message: "Auth abgelaufen. Bitte neu einloggen." };
+    }
+
+    if (syncOutcome.updated) {
+      if (state.store.tournament) {
+        state.store.tournament.updatedAt = nowIso();
+      }
+      schedulePersist();
+      renderShell();
+    }
+
+    return syncOutcome;
+  }
+
+
+  function getDuplicateParticipantNames(tournament) {
+    const seen = new Map();
+    const duplicates = [];
+    (tournament?.participants || []).forEach((participant) => {
+      const key = normalizeLookup(participant?.name || "");
+      if (!key) {
+        return;
+      }
+      if (seen.has(key)) {
+        duplicates.push(participant.name);
+        return;
+      }
+      seen.set(key, participant.name);
+    });
+    return duplicates;
+  }
+
+
+  function findActiveStartedMatch(tournament, excludeMatchId = "") {
+    if (!tournament) {
+      return null;
+    }
+    return tournament.matches.find((match) => {
+      if (excludeMatchId && match.id === excludeMatchId) {
+        return false;
+      }
+      if (match.status !== STATUS_PENDING) {
+        return false;
+      }
+      const auto = ensureMatchAutoMeta(match);
+      return Boolean(auto.lobbyId && auto.status === "started");
+    }) || null;
+  }
+
+
+  function buildLobbyCreatePayload(tournament) {
+    const legsToWin = getLegsToWin(tournament.bestOfLegs);
+    const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
+    const settings = {
+      baseScore: x01Settings.baseScore,
+      inMode: x01Settings.inMode,
+      outMode: x01Settings.outMode,
+      maxRounds: x01Settings.maxRounds,
+      bullOffMode: x01Settings.bullOffMode,
+      // API expects a valid bullMode even when bull-off is "Off".
+      bullMode: sanitizeX01BullMode(x01Settings.bullMode),
+    };
+    return {
+      variant: x01Settings.variant,
+      isPrivate: true,
+      legs: legsToWin,
+      settings,
+    };
+  }
+
+
+  function openMatchPage(lobbyId) {
+    if (!normalizeText(lobbyId)) {
+      return;
+    }
+    window.location.href = `${window.location.origin}/matches/${encodeURIComponent(lobbyId)}`;
+  }
+
+
+  function resolveWinnerIdFromApiName(tournament, match, winnerName) {
+    const normalizedWinner = normalizeLookup(winnerName);
+    if (!normalizedWinner || !match?.player1Id || !match?.player2Id) {
+      return "";
+    }
+
+    const p1 = participantById(tournament, match.player1Id);
+    const p2 = participantById(tournament, match.player2Id);
+    const p1Name = normalizeLookup(p1?.name || "");
+    const p2Name = normalizeLookup(p2?.name || "");
+    if (!p1Name || !p2Name || p1Name === p2Name) {
+      return "";
+    }
+    if (p1Name === normalizedWinner) {
+      return match.player1Id;
+    }
+    if (p2Name === normalizedWinner) {
+      return match.player2Id;
+    }
+    return "";
+  }
+
+
+  function getApiMatchLegsFromStats(data) {
+    return {
+      p1: clampInt(data?.matchStats?.[0]?.legsWon, 0, 0, 50),
+      p2: clampInt(data?.matchStats?.[1]?.legsWon, 0, 0, 50),
+    };
+  }
+
+
+  function getApiMatchStartUi(tournament, match, activeStartedMatch) {
+    const auto = ensureMatchAutoMeta(match);
+    if (auto.lobbyId) {
+      return {
+        label: "Zum Match",
+        disabled: false,
+        title: "\u00d6ffnet das bereits gestartete Match.",
+      };
+    }
+
+    if (!state.store.settings.featureFlags.autoLobbyStart) {
+      return {
+        label: "Match starten",
+        disabled: true,
+        title: "Feature-Flag in Einstellungen aktivieren.",
+      };
+    }
+
+    const editability = getMatchEditability(tournament, match);
+    if (!editability.editable) {
+      return {
+        label: "Match starten",
+        disabled: true,
+        title: editability.reason || "Match kann aktuell nicht gestartet werden.",
+      };
+    }
+
+    if (!getAuthTokenFromCookie()) {
+      return {
+        label: "Match starten",
+        disabled: true,
+        title: "Kein Auth-Token vorhanden. Bitte einloggen.",
+      };
+    }
+
+    const boardId = getBoardId();
+    if (!isValidBoardId(boardId)) {
+      return {
+        label: "Match starten",
+        disabled: true,
+        title: boardId
+          ? `Board-ID ung\u00fcltig (${boardId}). Bitte Board in einer manuellen Lobby w\u00e4hlen.`
+          : "Kein Board aktiv. Bitte einmal manuell eine Lobby \u00f6ffnen und Board w\u00e4hlen.",
+      };
+    }
+
+    if (activeStartedMatch && activeStartedMatch.id !== match.id) {
+      return {
+        label: "Match starten",
+        disabled: true,
+        title: "Es l\u00e4uft bereits ein aktives Match.",
+      };
+    }
+
+    if (state.apiAutomation.startingMatchId && state.apiAutomation.startingMatchId !== match.id) {
+      return {
+        label: "Match starten",
+        disabled: true,
+        title: "Ein anderer Matchstart l\u00e4uft bereits.",
+      };
+    }
+
+    if (state.apiAutomation.startingMatchId === match.id) {
+      return {
+        label: "Startet...",
+        disabled: true,
+        title: "Lobby wird erstellt.",
+      };
+    }
+
+    return {
+      label: "Match starten",
+      disabled: false,
+      title: "Erstellt Lobby, f\u00fcgt Spieler hinzu und startet automatisch.",
+    };
+  }
+
+
+  function getApiMatchStatusText(match) {
+    if (isByeMatchResult(match)) {
+      return "Freilos (Bye): kein API-Sync erforderlich";
+    }
+    const auto = ensureMatchAutoMeta(match);
+    if (auto.status === "completed") {
+      return "API-Sync: abgeschlossen";
+    }
+    if (auto.status === "started" && auto.lobbyId) {
+      return `API-Sync: aktiv (Lobby ${auto.lobbyId})`;
+    }
+    if (auto.status === "error") {
+      return `API-Sync: Fehler${auto.lastError ? ` (${auto.lastError})` : ""}`;
+    }
+    return "API-Sync: nicht gestartet";
+  }
+
+
+  async function handleStartMatch(matchId) {
+    const tournament = state.store.tournament;
+    if (!tournament) {
+      return;
+    }
+
+    const match = findMatch(tournament, matchId);
+    if (!match) {
+      setNotice("error", "Match nicht gefunden.");
+      return;
+    }
+
+    const auto = ensureMatchAutoMeta(match);
+    if (auto.lobbyId) {
+      openMatchPage(auto.lobbyId);
+      return;
+    }
+
+    if (!state.store.settings.featureFlags.autoLobbyStart) {
+      setNotice("info", "Auto-Lobby ist deaktiviert. Bitte im Tab Einstellungen aktivieren.");
+      return;
+    }
+
+    const editability = getMatchEditability(tournament, match);
+    if (!editability.editable) {
+      setNotice("error", editability.reason || "Match kann aktuell nicht gestartet werden.");
+      return;
+    }
+
+    const duplicates = getDuplicateParticipantNames(tournament);
+    if (duplicates.length) {
+      setNotice("error", "F\u00fcr Auto-Sync m\u00fcssen Teilnehmernamen eindeutig sein.");
+      return;
+    }
+
+    const activeMatch = findActiveStartedMatch(tournament, match.id);
+    if (activeMatch) {
+      const activeAuto = ensureMatchAutoMeta(activeMatch);
+      setNotice("info", "Es l\u00e4uft bereits ein aktives Match. Weiterleitung dorthin.");
+      if (activeAuto.lobbyId) {
+        openMatchPage(activeAuto.lobbyId);
+      }
+      return;
+    }
+
+    const token = getAuthTokenFromCookie();
+    if (!token) {
+      setNotice("error", "Kein Autodarts-Token gefunden. Bitte einloggen und Seite neu laden.");
+      return;
+    }
+
+    const boardId = getBoardId();
+    if (!boardId) {
+      setNotice("error", "Board-ID fehlt. Bitte einmal manuell eine Lobby \u00f6ffnen und Board ausw\u00e4hlen.");
+      return;
+    }
+    if (!isValidBoardId(boardId)) {
+      setNotice("error", `Board-ID ist ung\u00fcltig (${boardId}). Bitte in einer manuellen Lobby ein echtes Board ausw\u00e4hlen.`);
+      return;
+    }
+
+    const participant1 = participantById(tournament, match.player1Id);
+    const participant2 = participantById(tournament, match.player2Id);
+    if (!participant1 || !participant2) {
+      setNotice("error", "Teilnehmerzuordnung im Match ist unvollst\u00e4ndig.");
+      return;
+    }
+
+    let createdLobbyId = "";
+    state.apiAutomation.startingMatchId = match.id;
+    renderShell();
+
+    try {
+      const lobby = await createLobby(buildLobbyCreatePayload(tournament), token);
+      createdLobbyId = normalizeText(lobby?.id || lobby?.uuid || "");
+      if (!createdLobbyId) {
+        throw createApiError(0, "Lobby konnte nicht erstellt werden (keine Lobby-ID).", lobby);
+      }
+
+      await addLobbyPlayer(createdLobbyId, participant1.name, boardId, token);
+      await addLobbyPlayer(createdLobbyId, participant2.name, boardId, token);
+      await startLobby(createdLobbyId, token);
+
+      const now = nowIso();
+      auto.provider = API_PROVIDER;
+      auto.lobbyId = createdLobbyId;
+      auto.status = "started";
+      auto.startedAt = auto.startedAt || now;
+      auto.finishedAt = null;
+      auto.lastSyncAt = now;
+      auto.lastError = null;
+      match.updatedAt = now;
+      tournament.updatedAt = now;
+
+      schedulePersist();
+      renderShell();
+      setNotice("success", "Match gestartet. Weiterleitung ins Match.");
+      openMatchPage(createdLobbyId);
+    } catch (error) {
+      const message = normalizeText(error?.message || apiBodyToErrorText(error?.body) || "Unbekannter API-Fehler.") || "Unbekannter API-Fehler.";
+      const now = nowIso();
+      auto.provider = API_PROVIDER;
+      auto.lobbyId = createdLobbyId || auto.lobbyId || null;
+      auto.status = "error";
+      auto.lastError = message;
+      auto.lastSyncAt = now;
+      match.updatedAt = now;
+      tournament.updatedAt = now;
+      schedulePersist();
+      renderShell();
+      setNotice("error", `Matchstart fehlgeschlagen: ${message}`);
+      logWarn("api", "Match start failed.", error);
+    } finally {
+      state.apiAutomation.startingMatchId = "";
+      renderShell();
+    }
+  }
+
+
+  async function syncPendingApiMatches() {
+    if (state.apiAutomation.syncing) {
+      return;
+    }
+    if (!state.store.settings.featureFlags.autoLobbyStart) {
+      return;
+    }
+    if (Date.now() < state.apiAutomation.authBackoffUntil) {
+      return;
+    }
+
+    const tournament = state.store.tournament;
+    if (!tournament) {
+      return;
+    }
+
+    const syncTargets = tournament.matches.filter((match) => {
+      return isApiSyncCandidateMatch(match, true);
+    });
+
+    if (!syncTargets.length) {
+      return;
+    }
+
+    const token = getAuthTokenFromCookie();
+    if (!token) {
+      state.apiAutomation.authBackoffUntil = Date.now() + API_AUTH_NOTICE_THROTTLE_MS;
+      if (shouldShowAuthNotice()) {
+        setNotice("error", "Auto-Sync pausiert: kein Auth-Token gefunden. Bitte neu einloggen.");
+      }
+      return;
+    }
+
+    state.apiAutomation.syncing = true;
+    let hasMetaUpdates = false;
+
+    try {
+      for (const match of syncTargets) {
+        const syncOutcome = await syncApiMatchResult(tournament, match, token, {
+          notifyErrors: false,
+          notifyNotReady: false,
+          includeErrorRetry: true,
+        });
+
+        if (syncOutcome.authError) {
+          state.apiAutomation.authBackoffUntil = Date.now() + API_AUTH_NOTICE_THROTTLE_MS;
+          if (shouldShowAuthNotice()) {
+            setNotice("error", "Auto-Sync pausiert: Auth abgelaufen. Bitte neu einloggen.");
+          }
+          logWarn("api", "Auto-sync auth error.");
+          return;
+        }
+
+        if (syncOutcome.updated) {
+          hasMetaUpdates = true;
+        }
+
+        if (!syncOutcome.ok && syncOutcome.message && !syncOutcome.recoverable) {
+          logWarn("api", `Auto-sync failed for ${match.id}: ${syncOutcome.message}`);
+        }
+      }
+    } finally {
+      state.apiAutomation.syncing = false;
+      if (hasMetaUpdates) {
+        if (state.store.tournament) {
+          state.store.tournament.updatedAt = nowIso();
+        }
+        schedulePersist();
+        renderShell();
+      }
+    }
+  }
+
+  // Presentation layer: UI rendering and interaction wiring.
+
+  function onRouteChange() {
+    const current = routeKey();
+    if (current === state.routeKey) {
+      return;
+    }
+    state.routeKey = current;
+    logDebug("route", `Route changed to ${current}`);
+    ensureHost();
+    renderShell();
+    renderMatchReturnShortcut();
+  }
+
+
+  function installRouteHooks() {
+    if (state.patchedHistory) {
+      return;
+    }
+
+    const originalPushState = window.history.pushState;
+    const originalReplaceState = window.history.replaceState;
+
+    window.history.pushState = function patchedPushState(...args) {
+      const result = originalPushState.apply(this, args);
+      onRouteChange();
+      return result;
+    };
+    window.history.replaceState = function patchedReplaceState(...args) {
+      const result = originalReplaceState.apply(this, args);
+      onRouteChange();
+      return result;
+    };
+
+    state.patchedHistory = {
+      pushState: originalPushState,
+      replaceState: originalReplaceState,
+    };
+
+    addCleanup(() => {
+      if (state.patchedHistory) {
+        window.history.pushState = state.patchedHistory.pushState;
+        window.history.replaceState = state.patchedHistory.replaceState;
+        state.patchedHistory = null;
+      }
+    });
+
+    addListener(window, "popstate", onRouteChange, { passive: true });
+    addListener(window, "hashchange", onRouteChange, { passive: true });
+    addInterval(() => {
+      if (!document.getElementById(UI_HOST_ID)) {
+        ensureHost();
+      }
+      onRouteChange();
+    }, 1000);
+  }
+
+  function buildStyles() {
+    return ATA_UI_MAIN_CSS;
   }
 
   function buildShellHtml() {
@@ -3957,10 +4306,10 @@
     }
 
     const modeLabel = tournament.mode === "ko"
-      ? "KO"
+      ? "KO (Straight Knockout)"
       : tournament.mode === "league"
-        ? "Liga"
-        : "Gruppenphase + KO";
+        ? "Liga (Round Robin)"
+        : "Gruppenphase + KO (Round Robin + Straight Knockout)";
 
     const participantsHtml = tournament.participants.map((participant) => (
       `<span class="ata-player-chip">${escapeHtml(participant.name)}</span>`
@@ -4033,6 +4382,7 @@
     return left.round - right.round || left.number - right.number;
   }
 
+
   function getMatchPriorityReadyFirst(tournament, match) {
     const auto = ensureMatchAutoMeta(match);
     const playability = getMatchEditability(tournament, match);
@@ -4051,6 +4401,7 @@
     return 4;
   }
 
+
   function getMatchPriorityStatus(tournament, match) {
     const playability = getMatchEditability(tournament, match);
     if (match.status === STATUS_PENDING && playability.editable) {
@@ -4064,6 +4415,7 @@
     }
     return 2;
   }
+
 
   function sortMatchesForDisplay(tournament, sortMode) {
     const mode = sanitizeMatchesSortMode(sortMode, MATCH_SORT_MODE_READY_FIRST);
@@ -4091,6 +4443,7 @@
     });
   }
 
+
   function findSuggestedNextMatch(tournament) {
     const source = Array.isArray(tournament?.matches) ? tournament.matches.slice() : [];
     const candidates = source
@@ -4108,6 +4461,7 @@
       .sort(compareMatchesByRound);
     return candidates[0] || null;
   }
+
 
   function renderMatchesTab() {
     const tournament = state.store.tournament;
@@ -4145,8 +4499,8 @@
       const stageLabel = match.stage === MATCH_STAGE_GROUP
         ? `Gruppe ${match.groupId || "?"}`
         : match.stage === MATCH_STAGE_LEAGUE
-          ? "Liga"
-          : "KO";
+          ? "Liga (Round Robin)"
+          : "KO (Straight Knockout)";
       const startUi = getApiMatchStartUi(tournament, match, activeStartedMatch);
       const startDisabledAttr = startUi.disabled ? "disabled" : "";
       const startTitleAttr = startUi.title ? `title="${escapeHtml(startUi.title)}"` : "";
@@ -4178,13 +4532,13 @@
         isBlockedPending ? "ata-row-blocked" : "",
         !editable ? "ata-row-inactive" : "",
       ].filter(Boolean).join(" ");
-      const statusBadgeText = isByeCompletion ? "Freilos" : (isCompleted ? "Abgeschlossen" : "Offen");
+      const statusBadgeText = isByeCompletion ? "Freilos (Bye)" : (isCompleted ? "Abgeschlossen" : "Offen");
       const contextPillClass = isByeCompletion
         ? "ata-match-context-pill ata-match-context-bye"
         : (isCompleted ? "ata-match-context-pill ata-match-context-completed" : "ata-match-context-pill ata-match-context-open");
       const contextText = `${stageLabel}, ${matchCellText}, ${statusBadgeText}`;
       const summaryText = isCompleted
-        ? (isByeCompletion ? `Weiter: ${winner}` : `Sieger: ${winner} (${match.legs.p1}:${match.legs.p2})`)
+        ? (isByeCompletion ? `Weiter (Bye): ${winner}` : `Sieger: ${winner} (${match.legs.p1}:${match.legs.p2})`)
         : "";
       const advanceClasses = [
         "ata-match-advance-pill",
@@ -4299,10 +4653,12 @@
         <td>${escapeHtml(row.name)}</td>
         <td>${row.played}</td>
         <td>${row.wins}</td>
+        <td>${row.draws || 0}</td>
         <td>${row.losses}</td>
         <td>${row.points}</td>
         <td>${row.legDiff}</td>
         <td>${row.legsFor}</td>
+        <td>${row.tiebreakState === "playoff_required" ? "Playoff" : "-"}</td>
       </tr>
     `).join("");
 
@@ -4317,10 +4673,12 @@
                 <th>Name</th>
                 <th>Sp</th>
                 <th>S</th>
+                <th>U</th>
                 <th>N</th>
                 <th>Pkt</th>
                 <th>LegDiff</th>
                 <th>Legs+</th>
+                <th>TB</th>
               </tr>
             </thead>
             <tbody>${bodyRows}</tbody>
@@ -4329,6 +4687,7 @@
       </div>
     `;
   }
+
 
   function renderLeagueSchedule(tournament) {
     const matches = getMatchesByStage(tournament, MATCH_STAGE_LEAGUE);
@@ -4366,6 +4725,7 @@
     `;
   }
 
+
   function renderStaticBracketFallback(tournament) {
     const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
     if (!koMatches.length) {
@@ -4391,11 +4751,11 @@
             const statusBadgeClass = isBye
               ? "ata-match-status ata-match-status-bye"
               : (isCompleted ? "ata-match-status ata-match-status-completed" : "ata-match-status ata-match-status-open");
-            const statusBadgeText = isBye ? "Freilos" : (isCompleted ? "Abgeschlossen" : "Offen");
+            const statusBadgeText = isBye ? "Freilos (Bye)" : (isCompleted ? "Abgeschlossen" : "Offen");
             const statusText = !isCompleted
               ? "Noch nicht abgeschlossen."
               : isBye
-                ? `Freilos: ${escapeHtml(participantNameById(tournament, match.winnerId))}`
+                ? `Freilos (Bye): ${escapeHtml(participantNameById(tournament, match.winnerId))}`
                 : `Gewinner: ${escapeHtml(participantNameById(tournament, match.winnerId))}`;
             return `
               <div class="ata-bracket-match">
@@ -4418,6 +4778,7 @@
     return `<div class="ata-bracket-grid">${roundHtml}</div>`;
   }
 
+
   function renderViewTab() {
     const tournament = state.store.tournament;
     if (!tournament) {
@@ -4434,10 +4795,25 @@
     } else if (tournament.mode === "groups_ko") {
       const standingsMap = groupStandingsMap(tournament);
       const groupCards = [];
+      const blockedGroups = [];
       standingsMap.forEach((entry) => {
         groupCards.push(renderStandingsTable(entry.rows, `Tabelle ${entry.group.name}`));
+        if (entry.groupResolution?.status === "playoff_required") {
+          blockedGroups.push(`${entry.group.name}: ${entry.groupResolution.reason}`);
+        }
       });
       html += `<div class="ata-group-grid">${groupCards.join("")}</div>`;
+      if (blockedGroups.length) {
+        html += `
+          <section class="ata-card tournamentCard">
+            <h3>Gruppenentscheidung offen</h3>
+            <p class="ata-small">KO-Qualifikation ist blockiert, bis folgende DRA-Entscheidungen gekl\u00e4rt sind:</p>
+            <ul class="ata-small">
+              ${blockedGroups.map((text) => `<li>${escapeHtml(text)}</li>`).join("")}
+            </ul>
+          </section>
+        `;
+      }
     }
 
     if (tournament.mode === "ko" || tournament.mode === "groups_ko") {
@@ -4462,6 +4838,7 @@
 
     return html || `<section class="ata-card tournamentCard"><h3>Turnierbaum</h3><p>Keine Daten.</p></section>`;
   }
+
 
   function syncBracketFallbackVisibility() {
     const shadow = state.shadowRoot;
@@ -4506,6 +4883,8 @@
     const autoLobbyEnabled = state.store.settings.featureFlags.autoLobbyStart ? "checked" : "";
     const randomizeKoEnabled = state.store.settings.featureFlags.randomizeKoRound1 ? "checked" : "";
     const modeLimitSummary = buildModeParticipantLimitSummary();
+    const tieBreakMode = normalizeTieBreakMode(state.store?.tournament?.rules?.tieBreakMode, TIE_BREAK_MODE_DRA_STRICT);
+    const tieBreakDisabledAttr = state.store?.tournament ? "" : "disabled";
     return `
       <section class="ata-card tournamentCard">
         <h3>Debug und Feature-Flags</h3>
@@ -4530,6 +4909,17 @@
           </div>
           <input type="checkbox" id="ata-setting-randomize-ko" data-action="toggle-randomize-ko" ${randomizeKoEnabled}>
         </div>
+      </section>
+      <section class="ata-card tournamentCard">
+        <h3>DRA Tie-Break</h3>
+        <div class="ata-field">
+          <label for="ata-setting-tiebreak">Regelmodus pro Turnier</label>
+          <select id="ata-setting-tiebreak" data-action="set-tiebreak-mode" ${tieBreakDisabledAttr}>
+            <option value="${TIE_BREAK_MODE_DRA_STRICT}" ${tieBreakMode === TIE_BREAK_MODE_DRA_STRICT ? "selected" : ""}>DRA Strict (empfohlen)</option>
+            <option value="${TIE_BREAK_MODE_LEGACY}" ${tieBreakMode === TIE_BREAK_MODE_LEGACY ? "selected" : ""}>Legacy</option>
+          </select>
+        </div>
+        <p class="ata-small">DRA Strict nutzt Direktvergleich/Teilgruppen-Logik und markiert unaufl\u00f6sbare Gleichst\u00e4nde als "Playoff erforderlich".</p>
       </section>
       <section class="ata-card tournamentCard">
         <h3>Regelbasis und Limits</h3>
@@ -4561,6 +4951,7 @@
     state.shadowRoot = host.shadowRoot;
   }
 
+
   function renderShell() {
     if (!state.shadowRoot) {
       return;
@@ -4573,6 +4964,7 @@
       syncBracketFallbackVisibility();
     }
   }
+
 
   function bindUiHandlers() {
     const shadow = state.shadowRoot;
@@ -4734,6 +5126,20 @@
       });
     }
 
+    const tieBreakSelect = shadow.getElementById("ata-setting-tiebreak");
+    if (tieBreakSelect instanceof HTMLSelectElement) {
+      tieBreakSelect.addEventListener("change", () => {
+        const result = setTournamentTieBreakMode(tieBreakSelect.value);
+        if (!result.ok) {
+          setNotice("error", result.message || "Tie-Break-Modus konnte nicht gesetzt werden.");
+          return;
+        }
+        if (result.changed) {
+          setNotice("success", "Tie-Break-Modus aktualisiert.", 1800);
+        }
+      });
+    }
+
     const retryBracketButton = shadow.querySelector("[data-action='retry-bracket']");
     if (retryBracketButton) {
       retryBracketButton.addEventListener("click", () => queueBracketRender(true));
@@ -4744,6 +5150,7 @@
       drawer.addEventListener("keydown", handleDrawerKeydown);
     }
   }
+
 
   function handleDrawerKeydown(event) {
     if (event.key === "Escape") {
@@ -4785,6 +5192,7 @@
     }
   }
 
+
   function openDrawer() {
     state.lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     state.drawerOpen = true;
@@ -4795,6 +5203,7 @@
     }
   }
 
+
   function closeDrawer() {
     state.drawerOpen = false;
     renderShell();
@@ -4803,6 +5212,7 @@
     }
   }
 
+
   function toggleDrawer() {
     if (state.drawerOpen) {
       closeDrawer();
@@ -4810,6 +5220,7 @@
       openDrawer();
     }
   }
+
 
   function isCreateDraftX01Field(fieldName) {
     return [
@@ -4822,6 +5233,7 @@
     ].includes(normalizeText(fieldName || ""));
   }
 
+
   function setCreateFormPresetValue(form, presetId) {
     if (!(form instanceof HTMLFormElement)) {
       return;
@@ -4833,6 +5245,7 @@
     const normalizedPreset = sanitizeX01Preset(presetId, X01_PRESET_CUSTOM);
     presetInput.value = normalizedPreset;
   }
+
 
   function refreshCreateFormPresetBadge(form) {
     if (!(form instanceof HTMLFormElement)) {
@@ -4848,6 +5261,7 @@
       ? "Preset aktiv: PDC-Standard"
       : "Preset aktiv: Individuell";
   }
+
 
   function syncCreateFormDependencies(form) {
     if (!(form instanceof HTMLFormElement)) {
@@ -4883,6 +5297,7 @@
     refreshCreateFormPresetBadge(form);
   }
 
+
   function applyPdcPresetToCreateForm(form) {
     if (!(form instanceof HTMLFormElement)) {
       return;
@@ -4910,6 +5325,7 @@
     setNotice("info", "PDC-Preset wurde auf die X01-Felder angewendet.", 2200);
   }
 
+
   function readCreateDraftInput(formData) {
     return {
       name: formData.get("name"),
@@ -4927,6 +5343,7 @@
     };
   }
 
+
   function updateCreateDraftFromForm(form, persist = true) {
     if (!(form instanceof HTMLFormElement)) {
       return;
@@ -4943,6 +5360,7 @@
       schedulePersist();
     }
   }
+
 
   function handleShuffleParticipants(form) {
     if (!(form instanceof HTMLFormElement)) {
@@ -4962,6 +5380,7 @@
     updateCreateDraftFromForm(form, true);
     setNotice("success", "Teilnehmer wurden zuf\u00e4llig gemischt.", 1800);
   }
+
 
   function handleCreateTournament(form) {
     syncCreateFormDependencies(form);
@@ -4998,10 +5417,12 @@
     renderShell();
   }
 
+
   function getMatchFieldElement(shadow, fieldName, matchId) {
     const candidates = Array.from(shadow.querySelectorAll(`[data-field="${fieldName}"]`));
     return candidates.find((candidate) => candidate.getAttribute("data-match-id") === matchId) || null;
   }
+
 
   function handleSaveMatchResult(matchId) {
     const shadow = state.shadowRoot;
@@ -5050,6 +5471,7 @@
     }
   }
 
+
   function handleResetTournament() {
     const confirmed = window.confirm("Soll das Turnier wirklich gel\u00f6scht werden? Dieser Schritt kann nicht r\u00fcckg\u00e4ngig gemacht werden.");
     if (!confirmed) {
@@ -5064,6 +5486,7 @@
     renderShell();
   }
 
+
   function exportDataPayload() {
     return {
       schemaVersion: STORAGE_SCHEMA_VERSION,
@@ -5071,6 +5494,7 @@
       tournament: state.store.tournament,
     };
   }
+
 
   function handleExportFile() {
     const payload = exportDataPayload();
@@ -5087,6 +5511,7 @@
     setNotice("success", "JSON-Datei exportiert.", 2000);
   }
 
+
   async function handleExportClipboard() {
     try {
       const payload = exportDataPayload();
@@ -5098,6 +5523,7 @@
       logWarn("io", "Clipboard write failed.", error);
     }
   }
+
 
   function importPayload(rawObject) {
     if (!rawObject || typeof rawObject !== "object") {
@@ -5126,6 +5552,7 @@
     return { ok: true };
   }
 
+
   function handleImportFromTextarea() {
     const textarea = state.shadowRoot?.getElementById("ata-import-text");
     if (!(textarea instanceof HTMLTextAreaElement)) {
@@ -5147,6 +5574,7 @@
       logWarn("io", "Import parse failed.", error);
     }
   }
+
 
   function handleImportFromFile(fileInput) {
     const file = fileInput.files && fileInput.files[0];
@@ -5602,6 +6030,7 @@
     frame.style.height = `${nextHeight}px`;
   }
 
+
   function queueBracketRender(forceReload = false) {
     const tournament = state.store.tournament;
     if (!tournament || (tournament.mode !== "ko" && tournament.mode !== "groups_ko")) {
@@ -5649,6 +6078,7 @@
       frame.contentWindow.postMessage({ type: "ata:render-bracket", payload }, "*");
     }
   }
+
 
   function handleBracketMessage(event) {
     const frame = state.bracket.iframe;
@@ -5708,6 +6138,7 @@
     return map;
   }
 
+
   function extractNameCandidatesFromDom(tournament) {
     const map = playerLookupMap(tournament);
     const counts = new Map();
@@ -5738,6 +6169,7 @@
     const sorted = [...counts.entries()].sort((left, right) => right[1] - left[1]);
     return sorted.slice(0, 4).map((entry) => entry[0]);
   }
+
 
   function extractWinnerFromDom(tournament) {
     const map = playerLookupMap(tournament);
@@ -5777,6 +6209,7 @@
     return null;
   }
 
+
   function extractLegScoreFromDom(bestOfLegs) {
     const neededWins = getLegsToWin(bestOfLegs);
     const selectors = ['[class*="legs"]', '[data-testid*="legs"]', '[class*="score"]', '[class*="result"]'];
@@ -5803,6 +6236,7 @@
     }
     return fallback;
   }
+
 
   function scanForAutoResult() {
     const tournament = state.store.tournament;
@@ -5870,6 +6304,7 @@
     }
   }
 
+
   function queueAutoScan() {
     if (state.autoDetect.queued) {
       return;
@@ -5880,6 +6315,7 @@
       scanForAutoResult();
     });
   }
+
 
   function startAutoDetectionObserver() {
     if (state.autoDetect.observer) {
@@ -5909,6 +6345,7 @@
     addObserver(observer);
   }
 
+
   function removeMatchReturnShortcut() {
     if (state.matchReturnShortcut.root instanceof HTMLElement) {
       state.matchReturnShortcut.root.remove();
@@ -5916,6 +6353,7 @@
     state.matchReturnShortcut.root = null;
     state.matchReturnShortcut.syncing = false;
   }
+
 
   function ensureMatchReturnShortcutRoot() {
     if (state.matchReturnShortcut.root instanceof HTMLElement && document.body?.contains(state.matchReturnShortcut.root)) {
@@ -5941,6 +6379,7 @@
     return root;
   }
 
+
   function openAssistantMatchesTab() {
     state.activeTab = "matches";
     state.store.ui.activeTab = "matches";
@@ -5951,6 +6390,7 @@
     }
     openDrawer();
   }
+
 
   async function handleMatchShortcutSyncAndOpen(lobbyId) {
     const targetLobbyId = normalizeText(lobbyId || "");
@@ -5980,6 +6420,7 @@
       renderMatchReturnShortcut();
     }
   }
+
 
   function renderMatchReturnShortcut() {
     const lobbyId = getRouteLobbyId();
@@ -6054,75 +6495,6 @@
     }
   }
 
-  function onRouteChange() {
-    const current = routeKey();
-    if (current === state.routeKey) {
-      return;
-    }
-    state.routeKey = current;
-    logDebug("route", `Route changed to ${current}`);
-    ensureHost();
-    renderShell();
-    renderMatchReturnShortcut();
-  }
-
-  function installRouteHooks() {
-    if (state.patchedHistory) {
-      return;
-    }
-
-    const originalPushState = window.history.pushState;
-    const originalReplaceState = window.history.replaceState;
-
-    window.history.pushState = function patchedPushState(...args) {
-      const result = originalPushState.apply(this, args);
-      onRouteChange();
-      return result;
-    };
-    window.history.replaceState = function patchedReplaceState(...args) {
-      const result = originalReplaceState.apply(this, args);
-      onRouteChange();
-      return result;
-    };
-
-    state.patchedHistory = {
-      pushState: originalPushState,
-      replaceState: originalReplaceState,
-    };
-
-    addCleanup(() => {
-      if (state.patchedHistory) {
-        window.history.pushState = state.patchedHistory.pushState;
-        window.history.replaceState = state.patchedHistory.replaceState;
-        state.patchedHistory = null;
-      }
-    });
-
-    addListener(window, "popstate", onRouteChange, { passive: true });
-    addListener(window, "hashchange", onRouteChange, { passive: true });
-    addInterval(() => {
-      if (!document.getElementById(UI_HOST_ID)) {
-        ensureHost();
-      }
-      onRouteChange();
-    }, 1000);
-  }
-
-  function setupRuntimeApi() {
-    window[RUNTIME_GLOBAL_KEY] = {
-      version: APP_VERSION,
-      isReady: () => state.ready,
-      openDrawer,
-      closeDrawer,
-      toggleDrawer,
-    };
-
-    addCleanup(() => {
-      if (window[RUNTIME_GLOBAL_KEY]) {
-        delete window[RUNTIME_GLOBAL_KEY];
-      }
-    });
-  }
 
   function cleanupRuntime() {
     if (state.saveTimer) {
@@ -6148,6 +6520,7 @@
     }
   }
 
+
   function initEventBridge() {
     addListener(window, TOGGLE_EVENT, () => {
       toggleDrawer();
@@ -6155,6 +6528,184 @@
     addListener(window, "message", handleBracketMessage);
     addListener(window, "pagehide", cleanupRuntime, { once: true });
     addListener(window, "beforeunload", cleanupRuntime, { once: true });
+  }
+
+  function runSelfTests() {
+    const results = [];
+    const record = (name, ok, details = "") => {
+      results.push({ name, ok: Boolean(ok), details: normalizeText(details || "") });
+    };
+    const participantList = (count, prefix = "P") => {
+      const list = [];
+      for (let i = 1; i <= count; i += 1) {
+        list.push({ id: `${prefix}${i}`, name: `${prefix}${i}` });
+      }
+      return list;
+    };
+
+    try {
+      const participants = participantList(9, "S");
+      const ids = participants.map((item) => item.id);
+      const seededMatches = buildKoMatchesV2(ids, KO_DRAW_MODE_SEEDED);
+      const seededRoundOne = seededMatches.filter((match) => match.round === 1);
+      const seededOpenRoundOne = seededRoundOne.filter((match) => match.player1Id && match.player2Id);
+      record(
+        "KO Seeded: 9 Teilnehmer -> genau 1 offenes R1-Match",
+        seededOpenRoundOne.length === 1,
+        `offene R1-Matches: ${seededOpenRoundOne.length}`,
+      );
+    } catch (error) {
+      record("KO Seeded: 9 Teilnehmer -> genau 1 offenes R1-Match", false, String(error?.message || error));
+    }
+
+    try {
+      const participants = participantList(9, "O");
+      const ids = participants.map((item) => item.id);
+      const openDrawMatches = buildKoMatchesV2(ids, KO_DRAW_MODE_OPEN_DRAW);
+      const roundOne = openDrawMatches.filter((match) => match.round === 1);
+      const slottedPlayers = roundOne.reduce((sum, match) => sum + (match.player1Id ? 1 : 0) + (match.player2Id ? 1 : 0), 0);
+      record(
+        "KO Open Draw: alle Teilnehmer korrekt in R1-Slots",
+        slottedPlayers === participants.length,
+        `R1-Slots belegt: ${slottedPlayers}/${participants.length}`,
+      );
+    } catch (error) {
+      record("KO Open Draw: alle Teilnehmer korrekt in R1-Slots", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = {
+        id: "t1",
+        name: "T1",
+        mode: "league",
+        ko: null,
+        bestOfLegs: 3,
+        startScore: 501,
+        x01: buildPdcX01Settings(),
+        rules: normalizeTournamentRules({ tieBreakMode: TIE_BREAK_MODE_DRA_STRICT }),
+        participants: [
+          { id: "A", name: "A" },
+          { id: "B", name: "B" },
+        ],
+        groups: [],
+        matches: [
+          createMatch({
+            id: "m1",
+            stage: MATCH_STAGE_LEAGUE,
+            round: 1,
+            number: 1,
+            player1Id: "A",
+            player2Id: "B",
+            status: STATUS_COMPLETED,
+            winnerId: "A",
+            legs: { p1: 2, p2: 1 },
+          }),
+        ],
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      };
+      const rows = standingsForMatches(tournament, tournament.matches);
+      record(
+        "DRA Strict: Direktvergleich bei 2 punktgleichen Spielern",
+        rows[0]?.id === "A" && rows[0]?.tiebreakState === "resolved",
+        rows.map((row) => `${row.id}:${row.points}/${row.tiebreakState}`).join(", "),
+      );
+    } catch (error) {
+      record("DRA Strict: Direktvergleich bei 2 punktgleichen Spielern", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = {
+        id: "t2",
+        name: "T2",
+        mode: "groups_ko",
+        ko: null,
+        bestOfLegs: 3,
+        startScore: 501,
+        x01: buildPdcX01Settings(),
+        rules: normalizeTournamentRules({ tieBreakMode: TIE_BREAK_MODE_DRA_STRICT }),
+        participants: [
+          { id: "A", name: "A" },
+          { id: "B", name: "B" },
+          { id: "C", name: "C" },
+        ],
+        groups: [],
+        matches: [
+          createMatch({ id: "m1", stage: MATCH_STAGE_GROUP, groupId: "A", round: 1, number: 1, player1Id: "A", player2Id: "B", status: STATUS_COMPLETED, winnerId: "A", legs: { p1: 2, p2: 1 } }),
+          createMatch({ id: "m2", stage: MATCH_STAGE_GROUP, groupId: "A", round: 2, number: 1, player1Id: "B", player2Id: "C", status: STATUS_COMPLETED, winnerId: "B", legs: { p1: 2, p2: 1 } }),
+          createMatch({ id: "m3", stage: MATCH_STAGE_GROUP, groupId: "A", round: 3, number: 1, player1Id: "C", player2Id: "A", status: STATUS_COMPLETED, winnerId: "C", legs: { p1: 2, p2: 1 } }),
+        ],
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      };
+      const rows = standingsForMatches(tournament, tournament.matches, ["A", "B", "C"]);
+      const blocked = rows.filter((row) => row.tiebreakState === "playoff_required").length;
+      record(
+        "DRA Strict: Deadlock -> Playoff erforderlich",
+        blocked === 3,
+        rows.map((row) => `${row.id}:${row.tiebreakState}`).join(", "),
+      );
+    } catch (error) {
+      record("DRA Strict: Deadlock -> Playoff erforderlich", false, String(error?.message || error));
+    }
+
+    try {
+      const rawStoreV2 = {
+        schemaVersion: 2,
+        settings: { debug: false, featureFlags: { autoLobbyStart: false, randomizeKoRound1: true } },
+        ui: { activeTab: "tournament", matchesSortMode: MATCH_SORT_MODE_READY_FIRST },
+        tournament: {
+          id: "legacy",
+          name: "Legacy",
+          mode: "league",
+          bestOfLegs: 3,
+          startScore: 501,
+          x01: buildPdcX01Settings(),
+          participants: [{ id: "A", name: "A" }, { id: "B", name: "B" }],
+          groups: [],
+          matches: [],
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        },
+      };
+      const migrated = migrateStorage(rawStoreV2);
+      record(
+        "Migration: v2 -> v3 setzt Tie-Break-Regeln",
+        migrated.schemaVersion === 3 && migrated.tournament?.rules?.tieBreakMode === TIE_BREAK_MODE_DRA_STRICT,
+        `schema=${migrated.schemaVersion}, mode=${migrated.tournament?.rules?.tieBreakMode}`,
+      );
+    } catch (error) {
+      record("Migration: v2 -> v3 setzt Tie-Break-Regeln", false, String(error?.message || error));
+    }
+
+    const passed = results.filter((entry) => entry.ok).length;
+    const failed = results.length - passed;
+    return {
+      ok: failed === 0,
+      passed,
+      failed,
+      results,
+      generatedAt: nowIso(),
+      version: APP_VERSION,
+    };
+  }
+
+
+  function setupRuntimeApi() {
+    window[RUNTIME_GLOBAL_KEY] = {
+      version: APP_VERSION,
+      isReady: () => state.ready,
+      openDrawer,
+      closeDrawer,
+      toggleDrawer,
+      runSelfTests,
+    };
+
+    addCleanup(() => {
+      if (window[RUNTIME_GLOBAL_KEY]) {
+        delete window[RUNTIME_GLOBAL_KEY];
+      }
+    });
   }
 
   async function init() {

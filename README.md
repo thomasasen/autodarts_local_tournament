@@ -77,9 +77,11 @@ Der Assistent erweitert die Autodarts-Oberflaeche um einen eigenen Bereich fuer:
 - Vollstaendiger Round-Robin-Spielplan.
 - Tabelle basiert auf:
   - Punkte
-  - Leg-Differenz
-  - Legs For
-  - Name (als letzter Tiebreak)
+  - Direktvergleich (bei 2 Punktgleichen, DRA strict)
+  - Teilgruppen-Leg-Differenz (bei 3+ Punktgleichen, DRA strict)
+  - Leg-Differenz gesamt
+  - Legs For gesamt
+  - Bei weiterem Gleichstand: `Playoff erforderlich`
 
 ### Gruppenphase + KO (`groups_ko`)
 - Zwei Gruppen (`A`, `B`).
@@ -205,10 +207,11 @@ Tab: `Import/Export`
 - JSON direkt in Textfeld einfuegen
 
 ### Hinweise
-- Das Persistenzschema ist `schemaVersion: 2`.
+- Das Persistenzschema ist `schemaVersion: 3`.
 - Beim Import werden Daten defensiv normalisiert.
 - Legacy-KO-Turniere werden auf KO-Engine v2 migriert.
 - Vor KO-Migration wird ein Backup unter `ata:tournament:ko-migration-backups:v2` abgelegt.
+- Bestehende Turniere werden auf `tournament.rules.tieBreakMode = dra_strict` normalisiert.
 
 ## Troubleshooting
 ### "Match ist abgeschlossen", obwohl neu
@@ -235,12 +238,33 @@ Tab: `Import/Export`
 ### Repo-Struktur
 ```text
 autodarts_local_tournament/
+|- src/
+|  |- core/
+|  |- data/
+|  |- domain/
+|  |- infra/
+|  |- ui/
+|  |  |- styles/
+|  |- bracket/
+|  |- runtime/
+|- build/
+|  |- manifest.json
+|- scripts/
+|  |- build.ps1
+|  |- qa.ps1
+|  |- qa-encoding.ps1
+|  |- qa-regelcheck.ps1
+|- tests/
+|  |- fixtures/
+|  |- selftest-runtime.js
 |- installer/
 |  |- Autodarts Tournament Assistant Loader.user.js
 |- dist/
 |  |- autodarts-tournament-assistant.user.js
 |- docs/
 |  |- architecture.md
+|  |- pdc-dra-compliance.md
+|  |- refactor-guide.md
 |  |- selector-strategy.md
 |  |- changelog.md
 |- README.md
@@ -248,8 +272,17 @@ autodarts_local_tournament/
 ```
 
 ### Hauptdateien
+- Quellcode: `src/*`
+- Build-Metadaten: `build/manifest.json`
+- Build/QA: `scripts/*.ps1`
 - Runtime-Script: `dist/autodarts-tournament-assistant.user.js`
 - Loader-Script: `installer/Autodarts Tournament Assistant Loader.user.js`
+
+### Build und QA
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build.ps1
+powershell -ExecutionPolicy Bypass -File scripts/qa.ps1
+```
 
 ### Architektur
 - Shadow DOM fuer gekapselte UI
@@ -269,9 +302,13 @@ autodarts_local_tournament/
 ## Quellen
 - DRA (offizielle Regelbasis):
   - https://www.thedra.co.uk/rules
-  - https://www.thedra.co.uk/_files/ugd/298855_5df36f5f7b5449f8af7f1606f153b8f2.pdf
+  - https://static.wixstatic.com/ugd/298855_0050acb8726842f7b7ca13ec829f5ebf.pdf
 - PDC (Open Draw Kontext, Eventregeln):
   - https://www.pdc.tv/news/2013/01/16/rules-challenge-youth-tours
+- JS-Modularisierung:
+  - https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules
+- Tampermonkey Dokumentation:
+  - https://www.tampermonkey.net/documentation.php?locale=en
 - Referenz-Extension:
   - https://chromewebstore.google.com/detail/autodarts-local-tournamen/algfbicoennnolleogigbefngpkkmcng
 - Bracket Viewer:
