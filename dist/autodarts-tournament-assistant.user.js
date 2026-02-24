@@ -3341,6 +3341,11 @@
         border-color: rgba(153, 184, 245, 0.52);
       }
 
+      .ata-match-card.ata-row-next {
+        border-color: rgba(255, 211, 79, 0.56);
+        box-shadow: inset 3px 0 0 rgba(255, 211, 79, 0.58);
+      }
+
       .ata-match-card.ata-row-blocked {
         background: rgba(20, 31, 57, 0.7);
         border-color: rgba(126, 145, 196, 0.34);
@@ -3423,6 +3428,25 @@
       .ata-match-context-pill.ata-match-context-bye {
         border-color: rgba(255, 211, 79, 0.58);
         background: rgba(255, 211, 79, 0.16);
+      }
+
+      .ata-match-next-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 211, 79, 0.62);
+        background: rgba(255, 211, 79, 0.15);
+        color: #ffe07a;
+        padding: 1px 8px;
+        font-size: 11px;
+        line-height: 1.2;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+      }
+
+      .ata-next-hint {
+        margin: 8px 0 2px 0;
+        color: rgba(235, 239, 255, 0.82);
       }
 
       .ata-match-pairing {
@@ -4006,6 +4030,24 @@
     });
   }
 
+  function findSuggestedNextMatch(tournament) {
+    const source = Array.isArray(tournament?.matches) ? tournament.matches.slice() : [];
+    const candidates = source
+      .filter((match) => {
+        if (!match || match.status !== STATUS_PENDING) {
+          return false;
+        }
+        const playability = getMatchEditability(tournament, match);
+        if (!playability.editable) {
+          return false;
+        }
+        const auto = ensureMatchAutoMeta(match);
+        return !(auto.status === "started" && auto.lobbyId);
+      })
+      .sort(compareMatchesByRound);
+    return candidates[0] || null;
+  }
+
   function renderMatchesTab() {
     const tournament = state.store.tournament;
     if (!tournament) {
@@ -4022,6 +4064,8 @@
 
     const matches = sortMatchesForDisplay(tournament, sortMode);
     const legsToWin = getLegsToWin(tournament.bestOfLegs);
+    const suggestedNextMatch = findSuggestedNextMatch(tournament);
+    const suggestedNextMatchId = suggestedNextMatch?.id || "";
 
     const cards = matches.map((match) => {
       const player1 = participantNameById(tournament, match.player1Id);
@@ -4036,6 +4080,7 @@
       const isAutoStarted = match.status === STATUS_PENDING && auto.status === "started" && Boolean(auto.lobbyId);
       const isBlockedPending = match.status === STATUS_PENDING && !editable;
       const isReadyPending = match.status === STATUS_PENDING && editable;
+      const isSuggestedNext = Boolean(suggestedNextMatchId) && match.id === suggestedNextMatchId;
       const stageLabel = match.stage === MATCH_STAGE_GROUP
         ? `Gruppe ${match.groupId || "?"}`
         : match.stage === MATCH_STAGE_LEAGUE
@@ -4068,6 +4113,7 @@
         isByeCompletion ? "ata-row-bye" : "",
         isAutoStarted ? "ata-row-live" : "",
         isReadyPending ? "ata-row-ready" : "",
+        isSuggestedNext ? "ata-row-next" : "",
         isBlockedPending ? "ata-row-blocked" : "",
         !editable ? "ata-row-inactive" : "",
       ].filter(Boolean).join(" ");
@@ -4136,6 +4182,9 @@
       const summaryHtml = summaryText
         ? `<span class="${escapeHtml(advanceClasses)}">${escapeHtml(summaryText)}</span>`
         : "";
+      const nextPillHtml = isSuggestedNext
+        ? `<span class="ata-match-next-pill" title="Empfohlene naechste Paarung">Als Naechstes</span>`
+        : "";
       const statusLineHtml = statusLine
         ? `<div class="ata-match-note">${escapeHtml(statusLine)}</div>`
         : "";
@@ -4146,6 +4195,7 @@
             <div class="ata-match-title-row">
               <div class="ata-match-pairing">${player1PairingHtml} <span class="ata-vs">vs</span> ${player2PairingHtml}</div>
               <div class="ata-match-meta-inline">
+                ${nextPillHtml}
                 <span class="${contextPillClass}" title="${escapeHtml(matchCellHelpText)}">${escapeHtml(contextText)}</span>
               </div>
             </div>
@@ -4158,6 +4208,9 @@
     }).join("");
 
     const cardsHtml = cards || `<p class="ata-small">Keine Matches vorhanden.</p>`;
+    const nextHintHtml = suggestedNextMatchId
+      ? `<p class="ata-small ata-next-hint">Hinweis: Die Markierung "Als Naechstes" zeigt die empfohlene naechste Paarung.</p>`
+      : "";
     const sortButtonsHtml = sortOptions.map((option) => `
       <button type="button" class="ata-segmented-btn" data-action="set-matches-sort" data-sort-mode="${option.id}" data-active="${sortMode === option.id ? "1" : "0"}">${escapeHtml(option.label)}</button>
     `).join("");
@@ -4169,6 +4222,7 @@
         <div class="ata-matches-toolbar">
           <div class="ata-segmented" role="group" aria-label="Match-Sortierung">${sortButtonsHtml}</div>
         </div>
+        ${nextHintHtml}
         <div class="ata-match-list">${cardsHtml}</div>
       </section>
     `;
