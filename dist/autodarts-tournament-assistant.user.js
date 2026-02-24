@@ -1650,7 +1650,7 @@
       if (blockingMatch) {
         return {
           editable: false,
-          reason: `Vorgaenger-Match Runde ${blockingMatch.round} / Spiel ${blockingMatch.number} muss zuerst abgeschlossen werden.`,
+          reason: `Vorg\u00e4nger-Match Runde ${blockingMatch.round} / Spiel ${blockingMatch.number} muss zuerst abgeschlossen werden.`,
         };
       }
     }
@@ -2030,7 +2030,7 @@
           auto.lastSyncAt = syncTimestamp;
         }
         if (notifyNotReady) {
-          setNotice("info", "API-Ergebnis ist noch nicht final verfuegbar.", 2200);
+          setNotice("info", "API-Ergebnis ist noch nicht final verf\u00fcgbar.", 2200);
         }
         return {
           ok: true,
@@ -2038,7 +2038,7 @@
           completed: false,
           pending: true,
           recoverable: true,
-          message: "API-Ergebnis ist noch nicht final verfuegbar.",
+          message: "API-Ergebnis ist noch nicht final verf\u00fcgbar.",
         };
       }
 
@@ -2086,7 +2086,7 @@
         updatedMatch.updatedAt = finishedAt;
       }
 
-      return { ok: true, updated: true, completed: true, pending: false, message: "Ergebnis uebernommen." };
+      return { ok: true, updated: true, completed: true, pending: false, message: "Ergebnis \u00fcbernommen." };
     } catch (error) {
       const status = Number(error?.status || 0);
       if (status === 401 || status === 403) {
@@ -2099,7 +2099,7 @@
           completed: false,
           pending: true,
           recoverable: true,
-          message: "Match-Stats noch nicht verfuegbar.",
+          message: "Match-Stats noch nicht verf\u00fcgbar.",
         };
       }
 
@@ -2138,10 +2138,10 @@
     const openMatch = findTournamentMatchByLobbyId(tournament, targetLobbyId, false);
     const completedMatch = openMatch ? null : findTournamentMatchByLobbyId(tournament, targetLobbyId, true);
     if (!openMatch && completedMatch?.status === STATUS_COMPLETED) {
-      return { ok: true, completed: true, message: "Ergebnis war bereits uebernommen." };
+      return { ok: true, completed: true, message: "Ergebnis war bereits \u00fcbernommen." };
     }
     if (!openMatch) {
-      return { ok: false, message: "Kein offenes Turnier-Match fuer diese Lobby gefunden." };
+      return { ok: false, message: "Kein offenes Turnier-Match f\u00fcr diese Lobby gefunden." };
     }
 
     const token = getAuthTokenFromCookie();
@@ -3093,17 +3093,54 @@
         align-items: center;
         border: 1px solid var(--ata-color-border);
         border-radius: 999px;
-        padding: 3px 10px;
-        margin-right: 8px;
-        margin-bottom: 8px;
-        font-size: 14px;
+        padding: 2px 9px;
+        margin-right: 6px;
+        margin-bottom: 6px;
+        font-size: 13px;
+      }
+
+      .ata-tournament-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .ata-tournament-mode-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 2px 10px;
+        border: 1px solid rgba(153, 160, 245, 0.56);
+        background: rgba(114, 121, 224, 0.22);
+        color: #dce2ff;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .ata-tournament-meta {
+        display: grid;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .ata-meta-block {
+        display: grid;
+        gap: 5px;
+      }
+
+      .ata-meta-heading {
+        color: var(--ata-color-muted);
+        font-size: 12px;
+        letter-spacing: 0.35px;
+        text-transform: uppercase;
       }
 
       .ata-info-tag-cloud {
         display: flex;
         flex-wrap: wrap;
-        gap: 6px;
-        margin: 8px 0 0 0;
+        gap: 5px;
+        margin: 0;
       }
 
       .ata-info-tag {
@@ -3113,9 +3150,9 @@
         border: 1px solid rgba(255, 255, 255, 0.24);
         background: rgba(255, 255, 255, 0.08);
         color: rgba(236, 242, 255, 0.92);
-        font-size: 13px;
+        font-size: 12px;
         line-height: 1.2;
-        padding: 3px 9px;
+        padding: 2px 8px;
         white-space: nowrap;
       }
 
@@ -3126,10 +3163,33 @@
         font-weight: 700;
       }
 
-      .ata-info-tag.ata-info-tag-warn {
-        background: rgba(255, 211, 79, 0.14);
-        border-color: rgba(255, 211, 79, 0.48);
-        color: #ffe39a;
+      .ata-info-tag.ata-info-tag-accent {
+        background: rgba(90, 210, 153, 0.16);
+        border-color: rgba(90, 210, 153, 0.44);
+        color: #7be7b5;
+      }
+
+      .ata-player-chip-cloud {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+
+      .ata-player-chip {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid rgba(188, 205, 245, 0.4);
+        background: rgba(34, 53, 98, 0.62);
+        color: #eaf0ff;
+        font-size: 13px;
+        line-height: 1.2;
+        padding: 2px 9px;
+      }
+
+      .ata-player-chip-count {
+        color: #a9bce8;
+        font-size: 12px;
       }
 
       .ata-table-wrap {
@@ -3194,16 +3254,16 @@
 
       .ata-match-list {
         display: grid;
-        gap: 8px;
+        gap: 6px;
       }
 
       .ata-matches-toolbar {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        gap: 6px;
         flex-wrap: wrap;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
       }
 
       .ata-segmented {
@@ -3221,9 +3281,9 @@
         border-radius: 999px;
         background: transparent;
         color: rgba(232, 237, 255, 0.86);
-        font-size: 12px;
+        font-size: 11px;
         line-height: 1.2;
-        padding: 5px 10px;
+        padding: 4px 8px;
         cursor: pointer;
       }
 
@@ -3240,10 +3300,10 @@
       .ata-match-card {
         border: 1px solid rgba(255, 255, 255, 0.2);
         border-radius: var(--ata-radius-md);
-        padding: 8px;
+        padding: 6px 8px;
         background: rgba(255, 255, 255, 0.05);
         display: grid;
-        gap: 6px;
+        gap: 4px;
         transition: background 120ms ease, border-color 120ms ease;
       }
 
@@ -3285,7 +3345,7 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 6px;
+        gap: 4px;
         flex-wrap: wrap;
       }
 
@@ -3293,18 +3353,18 @@
         display: inline-flex;
         align-items: center;
         flex-wrap: wrap;
-        gap: 6px;
+        gap: 4px;
       }
 
       .ata-match-stage-pill,
       .ata-match-round-pill,
-      .ata-match-summary-pill {
+      .ata-match-advance-pill {
         display: inline-flex;
         align-items: center;
         border-radius: 999px;
         border: 1px solid rgba(255, 255, 255, 0.24);
-        padding: 1px 8px;
-        font-size: 12px;
+        padding: 1px 7px;
+        font-size: 11px;
         line-height: 1.2;
       }
 
@@ -3319,16 +3379,28 @@
         color: rgba(226, 234, 255, 0.9);
       }
 
-      .ata-match-summary-pill {
-        color: rgba(226, 234, 255, 0.86);
+      .ata-match-advance-pill {
+        border-color: rgba(90, 210, 153, 0.58);
+        background: rgba(90, 210, 153, 0.22);
+        color: #7be7b5;
+        font-weight: 800;
+        font-size: 12px;
+        padding: 2px 10px;
+        box-shadow: 0 0 0 1px rgba(90, 210, 153, 0.22) inset;
+      }
+
+      .ata-match-advance-pill.ata-match-advance-bye {
+        border-color: rgba(255, 211, 79, 0.62);
+        background: rgba(255, 211, 79, 0.2);
+        color: #ffe07a;
       }
 
       .ata-match-pairing {
         display: flex;
         align-items: center;
         flex-wrap: wrap;
-        gap: 6px;
-        font-size: 16px;
+        gap: 5px;
+        font-size: 14px;
         line-height: 1.2;
       }
 
@@ -3360,10 +3432,10 @@
         display: inline-flex;
         align-items: center;
         border-radius: 999px;
-        padding: 1px 8px;
+        padding: 1px 7px;
         border: 1px solid rgba(255, 255, 255, 0.25);
         background: rgba(255, 255, 255, 0.08);
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 700;
         line-height: 1.2;
       }
@@ -3387,16 +3459,16 @@
 
       .ata-score-grid {
         display: grid;
-        grid-template-columns: minmax(112px, 140px) minmax(112px, 140px) auto auto;
-        gap: 8px;
+        grid-template-columns: minmax(84px, 102px) minmax(84px, 102px) minmax(96px, 146px) minmax(126px, 184px);
+        gap: 6px;
         min-width: 0;
         align-items: end;
       }
 
       .ata-score-grid .ata-btn {
-        min-height: 36px;
-        padding: 8px 12px;
-        font-size: 16px;
+        min-height: 32px;
+        padding: 6px 10px;
+        font-size: 15px;
       }
 
       .ata-score-input-wrap {
@@ -3404,27 +3476,33 @@
         flex-direction: column;
         align-items: flex-start;
         justify-content: center;
-        gap: 4px;
+        gap: 2px;
         min-width: 0;
       }
 
       .ata-score-input-wrap input[type="number"] {
         width: 100%;
-        max-width: 84px;
-        min-height: 34px;
-        padding: 5px 8px;
-        font-size: 16px;
+        max-width: 74px;
+        min-height: 30px;
+        padding: 4px 7px;
+        font-size: 15px;
       }
 
       .ata-score-input-label {
-        font-size: 12px;
+        font-size: 11px;
         line-height: 1.2;
         color: var(--ata-color-muted);
         white-space: nowrap;
       }
 
+      .ata-match-note {
+        font-size: 12px;
+        color: var(--ata-color-muted);
+        line-height: 1.25;
+      }
+
       .ata-small {
-        font-size: 14px;
+        font-size: 13px;
         color: var(--ata-color-muted);
         line-height: 1.3;
       }
@@ -3633,8 +3711,8 @@
         `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${score}</option>`
       )).join("");
       const pdcPresetActive = draft.x01Preset === X01_PRESET_PDC_STANDARD;
-      const presetStatusLabel = pdcPresetActive ? "Preset aktiv: PDC Standard" : "Preset aktiv: Custom";
-      const pdcPresetHint = "PDC-Button setzt 501, Straight In, Double Out, Bull-off Normal, Bull 25/50 und Max Runden 50.";
+      const presetStatusLabel = pdcPresetActive ? "Preset aktiv: PDC-Standard" : "Preset aktiv: Individuell";
+      const pdcPresetHint = "PDC-Preset setzt 501, Straight In, Double Out, Bull-off Normal, Bull 25/50 und Max. Runden 50.";
       const bullModeDisabled = draft.x01BullOffMode === "Off";
       const bullModeDisabledAttr = bullModeDisabled ? "disabled" : "";
       const bullModeHiddenInput = bullModeDisabled
@@ -3661,17 +3739,17 @@
                     </select>
                   </div>
                   <div class="ata-field">
-                    <label for="ata-bestof">Best-of Legs</label>
+                    <label for="ata-bestof">Best of Legs</label>
                     <input id="ata-bestof" name="bestOfLegs" type="number" min="1" max="21" step="2" value="${draft.bestOfLegs}">
                   </div>
                   <div class="ata-field">
-                    <label for="ata-startscore">Startscore</label>
+                    <label for="ata-startscore">Startpunkte</label>
                     <select id="ata-startscore" name="startScore">
                       ${startScoreOptions}
                     </select>
                   </div>
                   <div class="ata-field">
-                    <label for="ata-x01-inmode">In mode</label>
+                    <label for="ata-x01-inmode">In-Modus</label>
                     <select id="ata-x01-inmode" name="x01InMode">
                       <option value="Straight" ${draft.x01InMode === "Straight" ? "selected" : ""}>Straight</option>
                       <option value="Double" ${draft.x01InMode === "Double" ? "selected" : ""}>Double</option>
@@ -3679,7 +3757,7 @@
                     </select>
                   </div>
                   <div class="ata-field">
-                    <label for="ata-x01-outmode">Out mode</label>
+                    <label for="ata-x01-outmode">Out-Modus</label>
                     <select id="ata-x01-outmode" name="x01OutMode">
                       <option value="Straight" ${draft.x01OutMode === "Straight" ? "selected" : ""}>Straight</option>
                       <option value="Double" ${draft.x01OutMode === "Double" ? "selected" : ""}>Double</option>
@@ -3695,7 +3773,7 @@
                     </select>
                   </div>
                   <div class="ata-field">
-                    <label for="ata-x01-bullmode">Bull mode</label>
+                    <label for="ata-x01-bullmode">Bull-Modus</label>
                     <select id="ata-x01-bullmode" name="x01BullMode" ${bullModeDisabledAttr}>
                       <option value="25/50" ${draft.x01BullMode === "25/50" ? "selected" : ""}>25/50</option>
                       <option value="50/50" ${draft.x01BullMode === "50/50" ? "selected" : ""}>50/50</option>
@@ -3713,29 +3791,29 @@
                   </div>
                   <div class="ata-field">
                     <label for="ata-match-mode">Spielmodus</label>
-                    <span id="ata-match-mode" class="ata-field-readonly">Legs (First to N aus Best-of)</span>
+                    <span id="ata-match-mode" class="ata-field-readonly">Legs (First to N aus Best of)</span>
                   </div>
                   <div class="ata-field">
                     <label for="ata-lobby-fixed">Lobby</label>
-                    <span id="ata-lobby-fixed" class="ata-field-readonly">Privat (lokal fix)</span>
+                    <span id="ata-lobby-fixed" class="ata-field-readonly">Privat</span>
                   </div>
                   <div class="ata-field ata-field-span-3">
                     <label for="ata-apply-pdc-preset">Preset</label>
                     <div class="ata-form-inline-actions">
-                      <button id="ata-apply-pdc-preset" type="button" class="ata-btn ata-btn-sm" data-action="apply-pdc-preset">PDC Preset anwenden</button>
+                      <button id="ata-apply-pdc-preset" type="button" class="ata-btn ata-btn-sm" data-action="apply-pdc-preset">PDC-Preset anwenden</button>
                       <span class="ata-preset-pill">${escapeHtml(presetStatusLabel)}</span>
                     </div>
                   </div>
                 </div>
                 <div class="ata-toggle ata-toggle-compact">
                   <div>
-                    <strong>KO-Erstrunde zufaellig mischen</strong>
+                    <strong>KO-Erstrunde zuf\u00e4llig mischen</strong>
                     <div class="ata-small">Open Draw bei aktivem Schalter, sonst gesetzter Draw.</div>
                   </div>
                   <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
                 </div>
                 <p class="ata-small ata-create-help">${escapeHtml(pdcPresetHint)}</p>
-                <p class="ata-small ata-create-help">Bull-off = Off deaktiviert Bull mode automatisch (read-only).</p>
+                <p class="ata-small ata-create-help">Bull-off = Off deaktiviert Bull-Modus automatisch (schreibgesch\u00fctzt).</p>
               </div>
               <aside class="ata-create-side">
                 <div class="ata-field">
@@ -3749,7 +3827,7 @@
                 <p class="ata-small">Modus-Limits: ${escapeHtml(modeLimitSummary)}.</p>
               </aside>
             </div>
-            <p class="ata-small">Bei Moduswechsel gelten die jeweiligen Grenzen sofort. Regelbasis und Begruendung: <a href="${README_RULES_URL}" target="_blank" rel="noopener noreferrer">README - Regelbasis und Limits</a>.</p>
+            <p class="ata-small">Bei Moduswechsel gelten die jeweiligen Grenzen sofort. Regelbasis und Begr\u00fcndung: <a href="${README_RULES_URL}" target="_blank" rel="noopener noreferrer">README - Regelbasis und Limits</a>.</p>
           </form>
         </section>
       `;
@@ -3762,25 +3840,30 @@
         : "Gruppenphase + KO";
 
     const participantsHtml = tournament.participants.map((participant) => (
-      `<span class="ata-pill">${escapeHtml(participant.name)}</span>`
+      `<span class="ata-player-chip">${escapeHtml(participant.name)}</span>`
     )).join("");
+    const participantsCount = tournament.participants.length;
     const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
-    const x01PresetLabel = x01Settings.presetId === X01_PRESET_PDC_STANDARD ? "PDC Standard" : "Custom";
-    const x01BullModeLabel = x01Settings.bullOffMode === "Off" ? "-" : x01Settings.bullMode;
+    const x01PresetLabel = x01Settings.presetId === X01_PRESET_PDC_STANDARD ? "PDC-Standard" : "Individuell";
+    const x01BullModeLabel = x01Settings.bullOffMode === "Off"
+      ? "Bull-Modus deaktiviert"
+      : `Bull-Modus ${x01Settings.bullMode}`;
+    const legsToWin = getLegsToWin(tournament.bestOfLegs);
+    const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED);
+    const drawModeLabel = drawMode === KO_DRAW_MODE_OPEN_DRAW ? "Open Draw" : "Gesetzter Draw";
     const primaryTags = [
-      { text: `Best-of ${tournament.bestOfLegs} Legs`, cls: "ata-info-tag ata-info-tag-key" },
-      { text: `Startscore ${tournament.startScore}`, cls: "ata-info-tag" },
+      { text: `Best of ${tournament.bestOfLegs} Legs`, cls: "ata-info-tag ata-info-tag-key" },
+      { text: `First to ${legsToWin} Legs`, cls: "ata-info-tag" },
+      { text: `Startpunkte ${tournament.startScore}`, cls: "ata-info-tag" },
+      ...(tournament.mode === "ko" ? [{ text: drawModeLabel, cls: "ata-info-tag ata-info-tag-accent" }] : []),
     ];
     const x01Tags = [
       { text: `X01 ${x01PresetLabel}`, cls: "ata-info-tag ata-info-tag-key" },
-      { text: `${x01Settings.baseScore}`, cls: "ata-info-tag" },
-      { text: `In ${x01Settings.inMode}`, cls: "ata-info-tag" },
-      { text: `Out ${x01Settings.outMode}`, cls: "ata-info-tag" },
-      { text: `Bull ${x01BullModeLabel}`, cls: "ata-info-tag" },
+      { text: `${x01Settings.inMode} In`, cls: "ata-info-tag" },
+      { text: `${x01Settings.outMode} Out`, cls: "ata-info-tag" },
       { text: `Bull-off ${x01Settings.bullOffMode}`, cls: "ata-info-tag" },
-      { text: `Max Runden ${x01Settings.maxRounds}`, cls: "ata-info-tag" },
-      { text: "Lobby Privat", cls: "ata-info-tag ata-info-tag-warn" },
-      { text: "(lokal fix)", cls: "ata-info-tag" },
+      { text: x01BullModeLabel, cls: "ata-info-tag" },
+      { text: `Max. Runden ${x01Settings.maxRounds}`, cls: "ata-info-tag" },
     ];
     const primaryTagsHtml = primaryTags.map((tag) => `<span class="${tag.cls}">${escapeHtml(tag.text)}</span>`).join("");
     const x01TagsHtml = x01Tags.map((tag) => `<span class="${tag.cls}">${escapeHtml(tag.text)}</span>`).join("");
@@ -3788,10 +3871,24 @@
     return `
       <section class="ata-card tournamentCard">
         <h3>Aktives Turnier</h3>
-        <p><b>${escapeHtml(tournament.name)}</b> (${escapeHtml(modeLabel)})</p>
-        <div class="ata-info-tag-cloud">${primaryTagsHtml}</div>
-        <div class="ata-info-tag-cloud">${x01TagsHtml}</div>
-        <div>${participantsHtml}</div>
+        <p class="ata-tournament-title">
+          <b>${escapeHtml(tournament.name)}</b>
+          <span class="ata-tournament-mode-pill">${escapeHtml(modeLabel)}</span>
+        </p>
+        <div class="ata-tournament-meta">
+          <div class="ata-meta-block">
+            <div class="ata-meta-heading">Format</div>
+            <div class="ata-info-tag-cloud">${primaryTagsHtml}</div>
+          </div>
+          <div class="ata-meta-block">
+            <div class="ata-meta-heading">Spiel-Setup (X01)</div>
+            <div class="ata-info-tag-cloud">${x01TagsHtml}</div>
+          </div>
+          <div class="ata-meta-block">
+            <div class="ata-meta-heading">Teilnehmerfeld <span class="ata-player-chip-count">(${participantsCount})</span></div>
+            <div class="ata-player-chip-cloud">${participantsHtml}</div>
+          </div>
+        </div>
       </section>
       <section class="ata-card tournamentCard">
         <h3>Turnier zur\u00fccksetzen</h3>
@@ -3879,11 +3976,6 @@
 
     const activeStartedMatch = findActiveStartedMatch(tournament);
     const sortMode = sanitizeMatchesSortMode(state.store?.ui?.matchesSortMode, MATCH_SORT_MODE_READY_FIRST);
-    const sortLabels = {
-      [MATCH_SORT_MODE_READY_FIRST]: "Spielbar zuerst",
-      [MATCH_SORT_MODE_ROUND]: "Runde/Spiel",
-      [MATCH_SORT_MODE_STATUS]: "Status",
-    };
     const sortOptions = [
       { id: MATCH_SORT_MODE_READY_FIRST, label: "Spielbar zuerst" },
       { id: MATCH_SORT_MODE_ROUND, label: "Runde/Spiel" },
@@ -3915,20 +4007,29 @@
       const startDisabledAttr = startUi.disabled ? "disabled" : "";
       const startTitleAttr = startUi.title ? `title="${escapeHtml(startUi.title)}"` : "";
       const autoStatus = getApiMatchStatusText(match);
-      const statusLine = isByeCompletion
-        ? "Freilos wurde automatisch in die naechste Runde weitergeleitet."
-        : (!editable && playability.reason ? `${playability.reason} - ${autoStatus}` : autoStatus);
+      let statusLine = "";
+      if (match.status === STATUS_PENDING) {
+        if (!editable && playability.reason) {
+          statusLine = auto.status === "idle"
+            ? playability.reason
+            : `${playability.reason} - ${autoStatus}`;
+        } else if (auto.status !== "idle") {
+          statusLine = autoStatus;
+        }
+      } else if (!isByeCompletion && auto.status !== "completed") {
+        statusLine = autoStatus;
+      }
       const matchCellText = `Runde ${match.round} / Spiel ${match.number}`;
       const matchCellHelpText = "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
-      const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs fuer den Matchgewinn.`;
-      const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs fuer den Matchgewinn.`;
+      const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
+      const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
       const legsP1LabelHtml = isOpenSlot(player1)
         ? `<span class="ata-pill-open-slot">${escapeHtml(player1)}</span>`
         : escapeHtml(player1);
       const legsP2LabelHtml = isOpenSlot(player2)
         ? `<span class="ata-pill-open-slot">${escapeHtml(player2)}</span>`
         : escapeHtml(player2);
-      const saveHelpText = `Speichert Legs fuer ${player1} vs ${player2}. Gewinner wird automatisch aus den Legs bestimmt. Gewinner muss ${legsToWin} Legs erreichen.`;
+      const saveHelpText = `Speichert Legs f\u00fcr ${player1} vs ${player2}. Sieger wird automatisch aus den Legs bestimmt. Sieger muss ${legsToWin} Legs erreichen.`;
       const rowClasses = [
         "ata-match-card",
         isCompleted ? "ata-row-completed" : "",
@@ -3943,8 +4044,12 @@
         : (isCompleted ? "ata-match-status ata-match-status-completed" : "ata-match-status ata-match-status-open");
       const statusBadgeText = isByeCompletion ? "Freilos" : (isCompleted ? "Abgeschlossen" : "Offen");
       const summaryText = isCompleted
-        ? (isByeCompletion ? `Weiter: ${winner}` : `${winner} ${match.legs.p1}:${match.legs.p2}`)
+        ? (isByeCompletion ? `Weiter: ${winner}` : `Sieger: ${winner} (${match.legs.p1}:${match.legs.p2})`)
         : "";
+      const advanceClasses = [
+        "ata-match-advance-pill",
+        isByeCompletion ? "ata-match-advance-bye" : "",
+      ].filter(Boolean).join(" ");
 
       const buildPairingPlayerHtml = (name, participantId) => {
         const classes = ["ata-pairing-player"];
@@ -4001,7 +4106,10 @@
         : "";
 
       const summaryHtml = summaryText
-        ? `<div class="ata-match-meta"><span class="ata-match-summary-pill">${escapeHtml(summaryText)}</span></div>`
+        ? `<span class="${escapeHtml(advanceClasses)}">${escapeHtml(summaryText)}</span>`
+        : "";
+      const statusLineHtml = statusLine
+        ? `<div class="ata-match-note">${escapeHtml(statusLine)}</div>`
         : "";
 
       return `
@@ -4016,7 +4124,7 @@
           </div>
           <div class="ata-match-pairing">${player1PairingHtml} <span class="ata-vs">vs</span> ${player2PairingHtml}</div>
           ${editorHtml}
-          <div class="ata-small">${escapeHtml(statusLine)}</div>
+          ${statusLineHtml}
         </article>
       `;
     }).join("");
@@ -4032,7 +4140,6 @@
         <p class="ata-small">API-Halbautomatik: Match per Klick starten, Ergebnis wird automatisch synchronisiert. Manuelle Eingabe bleibt als Fallback aktiv.</p>
         <div class="ata-matches-toolbar">
           <div class="ata-segmented" role="group" aria-label="Match-Sortierung">${sortButtonsHtml}</div>
-          <span class="ata-small">Sortierung: ${escapeHtml(sortLabels[sortMode] || sortLabels[MATCH_SORT_MODE_READY_FIRST])}</span>
         </div>
         <div class="ata-match-list">${cardsHtml}</div>
       </section>
@@ -4266,14 +4373,14 @@
         <div class="ata-toggle">
           <div>
             <strong>Automatischer Lobby-Start + API-Sync</strong>
-            <div class="ata-small">Default OFF. Aktiviert Matchstart per Klick und automatische Ergebnis\u00fcbernahme aus der Autodarts-API.</div>
+            <div class="ata-small">Standard: AUS. Aktiviert Matchstart per Klick und automatische Ergebnis\u00fcbernahme aus der Autodarts-API.</div>
           </div>
           <input type="checkbox" id="ata-setting-autolobby" data-action="toggle-autolobby" ${autoLobbyEnabled}>
         </div>
         <div class="ata-toggle">
           <div>
-            <strong>KO-Erstrunde zufaellig mischen (Standard)</strong>
-            <div class="ata-small">Default ON. Neue KO-Turniere nutzen damit Open Draw (zufaellige Reihenfolge, PDC-konforme Freilose).</div>
+            <strong>KO-Erstrunde zuf\u00e4llig mischen (Standard)</strong>
+            <div class="ata-small">Standard: EIN. Neue KO-Turniere nutzen damit Open Draw (zuf\u00e4llige Reihenfolge, PDC-konforme Freilose).</div>
           </div>
           <input type="checkbox" id="ata-setting-randomize-ko" data-action="toggle-randomize-ko" ${randomizeKoEnabled}>
         </div>
@@ -4281,7 +4388,7 @@
       <section class="ata-card tournamentCard">
         <h3>Regelbasis und Limits</h3>
         <p class="ata-small">Aktive Modus-Limits: ${escapeHtml(modeLimitSummary)}.</p>
-        <p class="ata-small">Die DRA-Regeln setzen kein fixes globales Teilnehmermaximum. Die Grenzen oben sind bewusst fuer faire Turnierdauer und stabile Darstellung gesetzt. Details: <a href="${README_RULES_URL}" target="_blank" rel="noopener noreferrer">README - Regelbasis und Limits</a>.</p>
+        <p class="ata-small">Die DRA-Regeln setzen kein fixes globales Teilnehmermaximum. Die Grenzen oben sind bewusst f\u00fcr faire Turnierdauer und stabile Darstellung gesetzt. Details: <a href="${README_RULES_URL}" target="_blank" rel="noopener noreferrer">README - Regelbasis und Limits</a>.</p>
       </section>
       <section class="ata-card tournamentCard">
         <h3>Storage</h3>
@@ -4592,8 +4699,8 @@
     }
     const presetId = sanitizeX01Preset(presetInput.value, X01_PRESET_CUSTOM);
     presetBadge.textContent = presetId === X01_PRESET_PDC_STANDARD
-      ? "Preset aktiv: PDC Standard"
-      : "Preset aktiv: Custom";
+      ? "Preset aktiv: PDC-Standard"
+      : "Preset aktiv: Individuell";
   }
 
   function syncCreateFormDependencies(form) {
@@ -4610,7 +4717,7 @@
     const disableBullMode = normalizeText(bullOffSelect.value) === "Off";
     bullModeSelect.disabled = disableBullMode;
     bullModeSelect.title = disableBullMode
-      ? "Bull mode ist bei Bull-off = Off ohne Wirkung und daher read-only."
+      ? "Bull-Modus ist bei Bull-off = Off ohne Wirkung und daher schreibgesch\u00fctzt."
       : "";
 
     let hiddenBullMode = form.querySelector("#ata-x01-bullmode-hidden");
@@ -4654,7 +4761,7 @@
     setCreateFormPresetValue(form, X01_PRESET_PDC_STANDARD);
     syncCreateFormDependencies(form);
     updateCreateDraftFromForm(form, true);
-    setNotice("info", "PDC Preset wurde auf die X01-Felder angewendet.", 2200);
+    setNotice("info", "PDC-Preset wurde auf die X01-Felder angewendet.", 2200);
   }
 
   function readCreateDraftInput(formData) {
@@ -4707,7 +4814,7 @@
     const shuffledNames = shuffleArray(participants.map((participant) => participant.name));
     participantField.value = shuffledNames.join("\n");
     updateCreateDraftFromForm(form, true);
-    setNotice("success", "Teilnehmer wurden zufaellig gemischt.", 1800);
+    setNotice("success", "Teilnehmer wurden zuf\u00e4llig gemischt.", 1800);
   }
 
   function handleCreateTournament(form) {
@@ -5652,15 +5759,15 @@
       });
       openAssistantMatchesTab();
       if (syncOutcome.completed) {
-        setNotice("success", "Ergebnis wurde in xLokale Turniere uebernommen.", 2400);
+        setNotice("success", "Ergebnis wurde in xLokale Turniere \u00fcbernommen.", 2400);
       } else if (!syncOutcome.ok && syncOutcome.message) {
         setNotice("info", syncOutcome.message, 3200);
       } else if (syncOutcome.ok && !syncOutcome.completed) {
-        setNotice("info", "Noch kein finales Ergebnis verfuegbar. Match laeuft ggf. noch.", 2600);
+        setNotice("info", "Noch kein finales Ergebnis verf\u00fcgbar. Match l\u00e4uft ggf. noch.", 2600);
       }
     } catch (error) {
       logWarn("api", "Manual shortcut sync failed.", error);
-      setNotice("error", "Ergebnisuebernahme fehlgeschlagen. Bitte spaeter erneut versuchen.");
+      setNotice("error", "Ergebnis\u00fcbernahme fehlgeschlagen. Bitte sp\u00e4ter erneut versuchen.");
     } finally {
       state.matchReturnShortcut.syncing = false;
       renderMatchReturnShortcut();
@@ -5697,12 +5804,12 @@
       : auto.status === "error"
         ? `Letzter Sync-Fehler: ${normalizeText(auto.lastError || "Unbekannt") || "Unbekannt"}`
         : auto.status === "started"
-          ? "Match verknuepft. Ergebnis kann uebernommen werden."
+          ? "Match verkn\u00fcpft. Ergebnis kann \u00fcbernommen werden."
           : "API-Sync wartet auf Match-Start.";
 
     const primaryLabel = hasOpenMatch
-      ? (isSyncing ? "Uebernehme..." : "Ergebnis uebernehmen & Turnier oeffnen")
-      : "Turnierassistent oeffnen";
+      ? (isSyncing ? "\u00dcbernehme..." : "Ergebnis \u00fcbernehmen & Turnier \u00f6ffnen")
+      : "Turnierassistent \u00f6ffnen";
 
     const secondaryButtonHtml = hasOpenMatch
       ? `<button type="button" data-action="open-assistant" style="flex:1 1 auto;border:1px solid rgba(255,255,255,0.28);background:rgba(255,255,255,0.1);color:#f4f7ff;border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer;">Nur Turnierassistent</button>`
