@@ -5215,7 +5215,7 @@
       --participant-image-size: 1.1em;
       width: max-content;
       min-width: 100%;
-      min-height: calc(100% - 6px);
+      min-height: 0;
       margin: 0;
       padding: 12px 20px 22px;
     }
@@ -5389,12 +5389,19 @@
         });
       }
 
+      function pxToNumber(value) {
+        var num = Number.parseFloat(String(value || "0"));
+        return Number.isFinite(num) ? num : 0;
+      }
+
       function computeFrameHeight() {
         var msgHeight = msgEl && msgEl.style.display !== "none" ? msgEl.offsetHeight : 0;
-        var rootScrollHeight = rootEl ? rootEl.scrollHeight : 0;
-        var docHeight = document.documentElement ? document.documentElement.scrollHeight : 0;
-        var bodyHeight = document.body ? document.body.scrollHeight : 0;
-        return Math.max(420, msgHeight + rootScrollHeight, docHeight, bodyHeight);
+        var rootStyles = rootEl ? window.getComputedStyle(rootEl) : null;
+        var rootPadding = rootStyles
+          ? pxToNumber(rootStyles.paddingTop) + pxToNumber(rootStyles.paddingBottom)
+          : 0;
+        var viewerHeight = viewerEl ? Math.ceil(viewerEl.getBoundingClientRect().height) : 0;
+        return Math.max(420, msgHeight + rootPadding + viewerHeight);
       }
 
       function scheduleHeightReport() {
@@ -5470,7 +5477,7 @@
       return;
     }
     const nextHeight = clampInt(height, 0, 420, 12000);
-    if (!nextHeight || nextHeight === state.bracket.frameHeight) {
+    if (!nextHeight || Math.abs(nextHeight - state.bracket.frameHeight) < 2) {
       return;
     }
     state.bracket.frameHeight = nextHeight;
