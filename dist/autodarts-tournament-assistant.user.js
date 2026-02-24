@@ -3254,7 +3254,12 @@
 
       .ata-match-list {
         display: grid;
-        gap: 6px;
+        gap: 8px;
+      }
+
+      .ata-matches-card {
+        max-width: min(1240px, calc(100vw - 28px));
+        margin: 0 auto;
       }
 
       .ata-matches-toolbar {
@@ -3300,10 +3305,14 @@
       .ata-match-card {
         border: 1px solid rgba(255, 255, 255, 0.2);
         border-radius: var(--ata-radius-md);
-        padding: 6px 8px;
+        padding: 8px 10px;
         background: rgba(255, 255, 255, 0.05);
-        display: grid;
-        gap: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        column-gap: 10px;
+        row-gap: 6px;
         transition: background 120ms ease, border-color 120ms ease;
       }
 
@@ -3343,16 +3352,18 @@
 
       .ata-match-card-head {
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         justify-content: space-between;
-        gap: 4px;
+        gap: 8px;
         flex-wrap: wrap;
+        flex: 1 1 420px;
+        min-width: 280px;
       }
 
       .ata-match-title-row {
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        justify-content: flex-start;
         gap: 8px;
         flex-wrap: wrap;
         flex: 1 1 auto;
@@ -3477,24 +3488,26 @@
 
       .ata-score-grid {
         display: grid;
-        grid-template-columns: minmax(58px, 74px) auto minmax(58px, 74px) minmax(96px, 146px) minmax(126px, 184px);
+        grid-template-columns: 58px 26px 58px minmax(100px, 126px) minmax(136px, 176px);
         gap: 6px;
         min-width: 0;
         align-items: center;
+        width: max-content;
+        flex: 0 0 auto;
       }
 
       .ata-score-grid .ata-btn {
-        min-height: 32px;
+        min-height: 34px;
         padding: 6px 10px;
-        font-size: 15px;
+        font-size: 14px;
       }
 
       .ata-score-grid input[type="number"] {
         width: 100%;
-        max-width: 72px;
+        max-width: 58px;
         min-height: 30px;
         padding: 4px 7px;
-        font-size: 15px;
+        font-size: 14px;
       }
 
       .ata-score-vs {
@@ -3510,6 +3523,7 @@
         font-size: 12px;
         color: var(--ata-color-muted);
         line-height: 1.25;
+        width: 100%;
       }
 
       .ata-small {
@@ -3614,8 +3628,20 @@
           grid-template-columns: 1fr;
         }
 
+        .ata-match-card {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 6px;
+          align-items: stretch;
+        }
+
+        .ata-match-card-head {
+          min-width: 0;
+        }
+
         .ata-score-grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
+          width: 100%;
         }
       }
 
@@ -4136,7 +4162,7 @@
     `).join("");
 
     return `
-      <section class="ata-card tournamentCard">
+      <section class="ata-card tournamentCard ata-matches-card">
         <h3>Ergebnisf\u00fchrung</h3>
         <p class="ata-small">API-Halbautomatik: Match per Klick starten, Ergebnis wird automatisch synchronisiert. Manuelle Eingabe bleibt als Fallback aktiv.</p>
         <div class="ata-matches-toolbar">
