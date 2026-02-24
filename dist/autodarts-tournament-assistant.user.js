@@ -2644,32 +2644,36 @@
 
       .ata-header {
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         justify-content: space-between;
         gap: var(--ata-space-3);
-        padding: 14px 20px 12px;
+        padding: 12px 18px 10px;
         border-bottom: 1px solid var(--ata-color-border);
         background: rgba(255, 255, 255, 0.03);
       }
 
       .ata-title-wrap {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        flex-wrap: wrap;
         min-width: 0;
       }
 
       .ata-title-wrap h2 {
         margin: 0;
         font-family: var(--ata-font-head);
-        letter-spacing: 0.35px;
-        font-size: 31px;
-        line-height: 0.98;
+        letter-spacing: 0.3px;
+        font-size: 27px;
+        line-height: 1;
         text-transform: uppercase;
       }
 
       .ata-title-wrap p {
-        margin: 4px 0 0 0;
+        margin: 0;
         color: var(--ata-color-muted);
-        font-size: 16px;
-        line-height: 1.25;
+        font-size: 14px;
+        line-height: 1.2;
       }
 
       .ata-version {
@@ -3700,19 +3704,24 @@
         }
 
         .ata-header {
-          padding: 10px 14px;
+          align-items: flex-start;
+          padding: 9px 12px;
           gap: 8px;
         }
 
+        .ata-title-wrap {
+          gap: 6px;
+        }
+
         .ata-title-wrap h2 {
-          font-size: 24px;
-          letter-spacing: 0.25px;
+          font-size: 21px;
+          letter-spacing: 0.2px;
         }
 
         .ata-title-wrap p {
-          margin-top: 3px;
-          font-size: 14px;
-          line-height: 1.25;
+          margin: 0;
+          font-size: 12px;
+          line-height: 1.2;
         }
 
         .ata-close-btn {
