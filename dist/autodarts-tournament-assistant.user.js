@@ -2646,25 +2646,30 @@
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
-        gap: var(--ata-space-4);
-        padding: var(--ata-space-5);
+        gap: var(--ata-space-3);
+        padding: 14px 20px 12px;
         border-bottom: 1px solid var(--ata-color-border);
         background: rgba(255, 255, 255, 0.03);
+      }
+
+      .ata-title-wrap {
+        min-width: 0;
       }
 
       .ata-title-wrap h2 {
         margin: 0;
         font-family: var(--ata-font-head);
-        letter-spacing: 0.6px;
-        font-size: 38px;
-        line-height: 1;
+        letter-spacing: 0.35px;
+        font-size: 31px;
+        line-height: 0.98;
         text-transform: uppercase;
       }
 
       .ata-title-wrap p {
-        margin: var(--ata-space-2) 0 0 0;
+        margin: 4px 0 0 0;
         color: var(--ata-color-muted);
-        font-size: 20px;
+        font-size: 16px;
+        line-height: 1.25;
       }
 
       .ata-version {
@@ -3692,6 +3697,27 @@
 
         .ata-runtime-statusbar {
           padding: 10px 14px;
+        }
+
+        .ata-header {
+          padding: 10px 14px;
+          gap: 8px;
+        }
+
+        .ata-title-wrap h2 {
+          font-size: 24px;
+          letter-spacing: 0.25px;
+        }
+
+        .ata-title-wrap p {
+          margin-top: 3px;
+          font-size: 14px;
+          line-height: 1.25;
+        }
+
+        .ata-close-btn {
+          padding: 6px 10px;
+          font-size: 14px;
         }
 
         .ata-bracket-shell {
