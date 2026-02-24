@@ -3522,15 +3522,32 @@
 
       .ata-score-grid {
         display: grid;
-        grid-template-columns: 58px 26px 58px minmax(100px, 126px) minmax(136px, 176px);
+        grid-template-columns: repeat(2, 58px);
         gap: 6px;
         min-width: 0;
         align-items: center;
-        width: max-content;
+        width: auto;
         flex: 0 0 auto;
       }
 
-      .ata-score-grid .ata-btn {
+      .ata-match-editor {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex: 1 1 100%;
+        min-width: 0;
+      }
+
+      .ata-editor-actions {
+        display: grid;
+        grid-template-columns: minmax(100px, 126px) minmax(136px, 176px);
+        gap: 6px;
+        align-items: center;
+        margin-left: auto;
+      }
+
+      .ata-editor-actions .ata-btn {
         min-height: 34px;
         padding: 6px 10px;
         font-size: 14px;
@@ -3542,15 +3559,6 @@
         min-height: 30px;
         padding: 4px 7px;
         font-size: 14px;
-      }
-
-      .ata-score-vs {
-        font-size: 12px;
-        line-height: 1.2;
-        color: var(--ata-color-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.35px;
-        justify-self: center;
       }
 
       .ata-match-note {
@@ -3674,8 +3682,21 @@
         }
 
         .ata-score-grid {
+          grid-template-columns: repeat(2, 58px);
+          width: auto;
+        }
+
+        .ata-match-editor {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 6px;
+          align-items: stretch;
+        }
+
+        .ata-editor-actions {
           grid-template-columns: repeat(2, minmax(0, 1fr));
           width: 100%;
+          margin-left: 0;
         }
       }
 
@@ -3743,7 +3764,12 @@
         }
 
         .ata-score-grid {
+          grid-template-columns: repeat(2, 58px);
+        }
+
+        .ata-editor-actions {
           grid-template-columns: repeat(2, minmax(0, 1fr));
+          width: 100%;
         }
 
       }
@@ -4186,30 +4212,33 @@
 
       const editorHtml = editable
         ? `
-          <div class="ata-score-grid">
-            <input
-              type="number"
-              min="0"
-              max="${legsToWin}"
-              data-field="legs-p1"
-              data-match-id="${escapeHtml(match.id)}"
-              value="${match.legs.p1}"
-              aria-label="${escapeHtml(legsP1HelpText)}"
-              title="${escapeHtml(legsP1HelpText)}"
-            >
-            <span class="ata-score-vs">vs</span>
-            <input
-              type="number"
-              min="0"
-              max="${legsToWin}"
-              data-field="legs-p2"
-              data-match-id="${escapeHtml(match.id)}"
-              value="${match.legs.p2}"
-              aria-label="${escapeHtml(legsP2HelpText)}"
-              title="${escapeHtml(legsP2HelpText)}"
-            >
-            <button type="button" class="ata-btn" data-action="save-match" data-match-id="${escapeHtml(match.id)}" title="${escapeHtml(saveHelpText)}">Speichern</button>
-            <button type="button" class="ata-btn ata-btn-primary" data-action="start-match" data-match-id="${escapeHtml(match.id)}" ${startDisabledAttr} ${startTitleAttr}>${escapeHtml(startUi.label)}</button>
+          <div class="ata-match-editor">
+            <div class="ata-score-grid">
+              <input
+                type="number"
+                min="0"
+                max="${legsToWin}"
+                data-field="legs-p1"
+                data-match-id="${escapeHtml(match.id)}"
+                value="${match.legs.p1}"
+                aria-label="${escapeHtml(legsP1HelpText)}"
+                title="${escapeHtml(legsP1HelpText)}"
+              >
+              <input
+                type="number"
+                min="0"
+                max="${legsToWin}"
+                data-field="legs-p2"
+                data-match-id="${escapeHtml(match.id)}"
+                value="${match.legs.p2}"
+                aria-label="${escapeHtml(legsP2HelpText)}"
+                title="${escapeHtml(legsP2HelpText)}"
+              >
+            </div>
+            <div class="ata-editor-actions">
+              <button type="button" class="ata-btn" data-action="save-match" data-match-id="${escapeHtml(match.id)}" title="${escapeHtml(saveHelpText)}">Speichern</button>
+              <button type="button" class="ata-btn ata-btn-primary" data-action="start-match" data-match-id="${escapeHtml(match.id)}" ${startDisabledAttr} ${startTitleAttr}>${escapeHtml(startUi.label)}</button>
+            </div>
           </div>
         `
         : "";
