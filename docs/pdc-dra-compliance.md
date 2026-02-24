@@ -1,4 +1,4 @@
-# PDC/DRA Compliance-Mapping
+﻿# PDC/DRA Compliance-Mapping
 
 ## Quellen
 - DRA Rules: https://www.thedra.co.uk/rules
@@ -26,7 +26,7 @@
 - Freilose (Bye) werden nur in Runde 1 automatisch abgeschlossen.
 
 4. **Terminologie (PDC-konform)**
-- UI nutzt deutsche Begriffe mit PDC-Bezug, z. B.:
+- Die UI nutzt deutsche Begriffe mit PDC-Bezug, z. B.:
   - `Freilos (Bye)`
   - `KO (Straight Knockout)`
   - `Liga (Round Robin)`
@@ -34,4 +34,4 @@
 
 ## Bewusste Nicht-Automatisierung
 - Bei vollständigem Deadlock wird keine automatische Entscheidung getroffen.
-- Systemstatus ist `playoff_required` und erfordert manuelle Turnierentscheidung.
+- Der Systemstatus ist `playoff_required` und erfordert eine manuelle Turnierentscheidung.

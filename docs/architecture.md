@@ -1,4 +1,4 @@
-# Architektur
+﻿# Architektur
 
 ## Überblick
 Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einzelnes Userscript ausgeliefert (`dist/autodarts-tournament-assistant.user.js`).
@@ -12,10 +12,10 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
 - `src/runtime`: Lifecycle, Public API, Bootstrap
 
 ## Build und Distribution
-- Build läuft ohne npm/Node über `scripts/build.ps1`.
-- Reihenfolge ist deterministisch über `build/manifest.json`.
+- Der Build läuft ohne npm/Node über `scripts/build.ps1`.
+- Die Reihenfolge ist deterministisch über `build/manifest.json`.
 - CSS liegt in `src/ui/styles/main.css` und wird beim Build in das Bundle eingebettet.
-- Ausgabe bleibt eine Datei in `dist/`, Loader-kompatibel.
+- Die Ausgabe bleibt eine einzelne Datei in `dist/` (Loader-kompatibel).
 
 ## Runtime
 - Runtime-Guard: `window.__ATA_RUNTIME_BOOTSTRAPPED`
@@ -30,7 +30,7 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
   - `tournament.rules.tieBreakMode: "dra_strict" | "legacy"`
 
 ## Regelmodell (DRA/PDC)
-- Standard: `dra_strict` (auch bei Migration von Bestand).
+- Standard: `dra_strict` (auch bei Migration von Bestandsdaten).
 - Tie-Break-Reihenfolge (Round Robin):
   1. Punkte (2 Sieg, 1 Remis, 0 Niederlage)
   2. Bei 2 Punktgleichen: Direktvergleich
@@ -46,7 +46,7 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
   - `seeded`
   - `open_draw`
 - Bye-Handling bleibt DRA-konform:
-  - automatische Bye-Abschlüsse nur in KO Runde 1.
+  - automatische Bye-Abschlüsse nur in KO-Runde 1
 
 ## Qualitätssicherung
 - `scripts/qa.ps1`: Orchestrierung
