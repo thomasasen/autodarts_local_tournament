@@ -1,4 +1,4 @@
-﻿// Auto-generated module split from dist source.
+// Auto-generated module split from dist source.
   function renderSettingsTab() {
     const debugEnabled = state.store.settings.debug ? "checked" : "";
     const autoLobbyEnabled = state.store.settings.featureFlags.autoLobbyStart ? "checked" : "";
@@ -6,9 +6,19 @@
     const modeLimitSummary = buildModeParticipantLimitSummary();
     const tieBreakMode = normalizeTieBreakMode(state.store?.tournament?.rules?.tieBreakMode, TIE_BREAK_MODE_DRA_STRICT);
     const tieBreakDisabledAttr = state.store?.tournament ? "" : "disabled";
+    const apiSyncHelpLinks = renderInfoLinks([
+      { href: README_API_AUTOMATION_URL, label: "Erklärung zur API-Halbautomatik öffnen", title: "README: API-Halbautomatik" },
+    ]);
+    const koDrawHelpLinks = renderInfoLinks([
+      { href: README_TOURNAMENT_MODES_URL, label: "Erklärung zu Turniermodi öffnen", title: "README: Turniermodi und Open Draw" },
+      { href: PDC_OPEN_DRAW_CONTEXT_URL, label: "PDC-Kontext zu Open Draw öffnen", title: "PDC: Open Draw Kontext" },
+    ]);
+
     return `
       <section class="ata-card tournamentCard">
-        <h3>Debug und Feature-Flags</h3>
+        ${renderSectionHeading("Debug und Feature-Flags", [
+          { href: README_SETTINGS_URL, label: "Einstellungen-Dokumentation öffnen", title: "README: Einstellungen" },
+        ])}
         <div class="ata-toggle">
           <div>
             <strong>Debug-Mode</strong>
@@ -18,37 +28,49 @@
         </div>
         <div class="ata-toggle">
           <div>
-            <strong>Automatischer Lobby-Start + API-Sync</strong>
-            <div class="ata-small">Standard: AUS. Aktiviert Matchstart per Klick und automatische Ergebnis\u00fcbernahme aus der Autodarts-API.</div>
+            <strong>Automatischer Lobby-Start + API-Sync ${apiSyncHelpLinks}</strong>
+            <div class="ata-small">Standard: AUS. Aktiviert Matchstart per Klick und automatische Ergebnisübernahme aus der Autodarts-API.</div>
           </div>
           <input type="checkbox" id="ata-setting-autolobby" data-action="toggle-autolobby" ${autoLobbyEnabled}>
         </div>
         <div class="ata-toggle">
           <div>
-            <strong>KO-Erstrunde zuf\u00e4llig mischen (Standard)</strong>
-            <div class="ata-small">Standard: EIN. Neue KO-Turniere nutzen damit Open Draw (zuf\u00e4llige Reihenfolge, PDC-konforme Freilose).</div>
+            <strong>KO-Erstrunde zufällig mischen (Standard) ${koDrawHelpLinks}</strong>
+            <div class="ata-small">Standard: EIN. Neue KO-Turniere nutzen damit Open Draw (zufällige Reihenfolge, PDC-konforme Freilose).</div>
           </div>
           <input type="checkbox" id="ata-setting-randomize-ko" data-action="toggle-randomize-ko" ${randomizeKoEnabled}>
         </div>
       </section>
       <section class="ata-card tournamentCard">
-        <h3>DRA Tie-Break</h3>
+        ${renderSectionHeading("DRA Tie-Break", [
+          { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
+          { href: DRA_RULES_PDF_URL, label: "DRA-Regel-PDF öffnen", title: "DRA Rules PDF (offizieller Regeltext)" },
+          { href: README_TIE_BREAK_URL, label: "Erklärung DRA Strict und Legacy öffnen", title: "README: DRA Tie-Break" },
+        ])}
         <div class="ata-field">
-          <label for="ata-setting-tiebreak">Regelmodus pro Turnier</label>
+          <label for="ata-setting-tiebreak">Regelmodus pro Turnier ${renderInfoLinks([
+            { href: DRA_RULES_URL, label: "Offizielle Regelquelle öffnen", title: "DRA Rules: Tie-Break-Basis" },
+          ])}</label>
           <select id="ata-setting-tiebreak" data-action="set-tiebreak-mode" ${tieBreakDisabledAttr}>
             <option value="${TIE_BREAK_MODE_DRA_STRICT}" ${tieBreakMode === TIE_BREAK_MODE_DRA_STRICT ? "selected" : ""}>DRA Strict (empfohlen)</option>
             <option value="${TIE_BREAK_MODE_LEGACY}" ${tieBreakMode === TIE_BREAK_MODE_LEGACY ? "selected" : ""}>Legacy</option>
           </select>
         </div>
-        <p class="ata-small">DRA Strict nutzt Direktvergleich/Teilgruppen-Logik und markiert unaufl\u00f6sbare Gleichst\u00e4nde als "Playoff erforderlich".</p>
+        <p class="ata-small"><strong>DRA Strict:</strong> Punkte (2/1/0), danach Direktvergleich (2er-Gleichstand), Teilgruppen-Leg-Differenz (3+), Gesamt-Leg-Differenz, Legs gewonnen; verbleibender Gleichstand = „Playoff erforderlich“.</p>
+        <p class="ata-small"><strong>Legacy:</strong> bisherige, vereinfachte Sortierung (Punkte, Gesamt-Leg-Differenz, Legs gewonnen). Dieser Modus ist für Rückwärtskompatibilität gedacht und nicht DRA-strict.</p>
       </section>
       <section class="ata-card tournamentCard">
-        <h3>Regelbasis und Limits</h3>
+        ${renderSectionHeading("Regelbasis und Limits", [
+          { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
+          { href: README_RULES_URL, label: "Projekt-Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+        ])}
         <p class="ata-small">Aktive Modus-Limits: ${escapeHtml(modeLimitSummary)}.</p>
-        <p class="ata-small">Die DRA-Regeln setzen kein fixes globales Teilnehmermaximum. Die Grenzen oben sind bewusst f\u00fcr faire Turnierdauer und stabile Darstellung gesetzt. Details: <a href="${README_RULES_URL}" target="_blank" rel="noopener noreferrer">README - Regelbasis und Limits</a>.</p>
+        <p class="ata-small">Die DRA-Regeln setzen kein fixes globales Teilnehmermaximum. Die Grenzen oben sind bewusst für faire Turnierdauer und stabile Darstellung gesetzt.</p>
       </section>
       <section class="ata-card tournamentCard">
-        <h3>Storage</h3>
+        ${renderSectionHeading("Storage", [
+          { href: README_BASE_URL, label: "Hinweise zu Storage und Import öffnen", title: "README: Import, Migration und Persistenz" },
+        ])}
         <p class="ata-small"><code>${escapeHtml(STORAGE_KEY)}</code>, schemaVersion ${STORAGE_SCHEMA_VERSION}</p>
       </section>
     `;

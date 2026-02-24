@@ -1,5 +1,5 @@
 ﻿// Auto-generated module split from dist source.
-  function renderStandingsTable(rows, headline) {
+  function renderStandingsTable(rows, headline, headingLinks = []) {
     const bodyRows = rows.map((row) => `
       <tr>
         <td>${row.rank}</td>
@@ -17,7 +17,7 @@
 
     return `
       <div class="ata-card">
-        <h3>${escapeHtml(headline)}</h3>
+        ${renderSectionHeading(headline, headingLinks)}
         <div class="ata-table-wrap">
           <table class="ata-table tournamentRanking">
             <thead>
@@ -143,14 +143,20 @@
 
     if (tournament.mode === "league") {
       const standings = standingsForMatches(tournament, getMatchesByStage(tournament, MATCH_STAGE_LEAGUE));
-      html += renderStandingsTable(standings, "Liga-Tabelle");
+      html += renderStandingsTable(standings, "Liga-Tabelle", [
+        { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
+        { href: README_TIE_BREAK_URL, label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
+      ]);
       html += renderLeagueSchedule(tournament);
     } else if (tournament.mode === "groups_ko") {
       const standingsMap = groupStandingsMap(tournament);
       const groupCards = [];
       const blockedGroups = [];
       standingsMap.forEach((entry) => {
-        groupCards.push(renderStandingsTable(entry.rows, `Tabelle ${entry.group.name}`));
+        groupCards.push(renderStandingsTable(entry.rows, `Tabelle ${entry.group.name}`, [
+          { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
+          { href: README_TIE_BREAK_URL, label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
+        ]));
         if (entry.groupResolution?.status === "playoff_required") {
           blockedGroups.push(`${entry.group.name}: ${entry.groupResolution.reason}`);
         }
@@ -159,8 +165,11 @@
       if (blockedGroups.length) {
         html += `
           <section class="ata-card tournamentCard">
-            <h3>Gruppenentscheidung offen</h3>
-            <p class="ata-small">KO-Qualifikation ist blockiert, bis folgende DRA-Entscheidungen gekl\u00e4rt sind:</p>
+            ${renderSectionHeading("Gruppenentscheidung offen", [
+              { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
+              { href: README_TIE_BREAK_URL, label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
+            ])}
+            <p class="ata-small">KO-Qualifikation ist blockiert, bis folgende DRA-Entscheidungen geklärt sind:</p>
             <ul class="ata-small">
               ${blockedGroups.map((text) => `<li>${escapeHtml(text)}</li>`).join("")}
             </ul>

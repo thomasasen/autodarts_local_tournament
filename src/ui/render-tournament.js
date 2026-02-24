@@ -16,9 +16,25 @@
       const bullModeHiddenInput = bullModeDisabled
         ? `<input type="hidden" id="ata-x01-bullmode-hidden" name="x01BullMode" value="${escapeHtml(draft.x01BullMode)}">`
         : "";
+      const createHeadingLinks = [
+        { href: README_TOURNAMENT_CREATE_URL, label: "Erklärung zur Turniererstellung öffnen", title: "README: Turnier anlegen" },
+        { href: README_RULES_URL, label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+      ];
+      const modeHelpLinks = renderInfoLinks([
+        { href: README_TOURNAMENT_MODES_URL, label: "Erklärung der Modi öffnen", title: "README: Turniermodi" },
+        { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
+      ]);
+      const drawHelpLinks = renderInfoLinks([
+        { href: README_TOURNAMENT_MODES_URL, label: "Open Draw und gesetzter Draw erklärt", title: "README: KO-Modus" },
+        { href: PDC_OPEN_DRAW_CONTEXT_URL, label: "PDC-Kontext zu Open Draw öffnen", title: "PDC: Open Draw Kontext" },
+      ]);
+      const modeLimitHelpLinks = renderInfoLinks([
+        { href: README_RULES_URL, label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+        { href: DRA_RULES_URL, label: "Offizielle DRA-Regeln öffnen", title: "DRA Rules (offiziell)" },
+      ]);
       return `
         <section class="ata-card tournamentCard">
-          <h3>Neues Turnier erstellen</h3>
+          ${renderSectionHeading("Neues Turnier erstellen", createHeadingLinks)}
           <form id="ata-create-form" class="ata-create-form">
             <input type="hidden" id="ata-x01-preset" name="x01Preset" value="${escapeHtml(draft.x01Preset)}">
             <div class="ata-create-layout">
@@ -29,7 +45,7 @@
                     <input id="ata-name" name="name" type="text" placeholder="z. B. Freitagsturnier" value="${escapeHtml(draft.name)}" required>
                   </div>
                   <div class="ata-field">
-                    <label for="ata-mode">Modus</label>
+                    <label for="ata-mode">Modus ${modeHelpLinks}</label>
                     <select id="ata-mode" name="mode">
                       <option value="ko" ${draft.mode === "ko" ? "selected" : ""}>KO</option>
                       <option value="league" ${draft.mode === "league" ? "selected" : ""}>Liga</option>
@@ -105,7 +121,7 @@
                 </div>
                 <div class="ata-toggle ata-toggle-compact">
                   <div>
-                    <strong>KO-Erstrunde zuf\u00e4llig mischen</strong>
+                    <strong>KO-Erstrunde zuf\u00e4llig mischen ${drawHelpLinks}</strong>
                     <div class="ata-small">Open Draw bei aktivem Schalter, sonst gesetzter Draw.</div>
                   </div>
                   <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
@@ -122,10 +138,10 @@
                   <button type="button" class="ata-btn ata-btn-sm" data-action="shuffle-participants">Teilnehmer mischen</button>
                   <button type="submit" class="ata-btn ata-btn-primary">Turnier anlegen</button>
                 </div>
-                <p class="ata-small">Modus-Limits: ${escapeHtml(modeLimitSummary)}.</p>
+                <p class="ata-small">Modus-Limits ${modeLimitHelpLinks}: ${escapeHtml(modeLimitSummary)}.</p>
               </aside>
             </div>
-            <p class="ata-small">Bei Moduswechsel gelten die jeweiligen Grenzen sofort. Regelbasis und Begr\u00fcndung: <a href="${README_RULES_URL}" target="_blank" rel="noopener noreferrer">README - Regelbasis und Limits</a>.</p>
+            <p class="ata-small">Bei Moduswechsel gelten die jeweiligen Grenzen sofort. Regelbasis und Begr\u00fcndung ${modeLimitHelpLinks}.</p>
           </form>
         </section>
       `;
@@ -165,10 +181,14 @@
     ];
     const primaryTagsHtml = primaryTags.map((tag) => `<span class="${tag.cls}">${escapeHtml(tag.text)}</span>`).join("");
     const x01TagsHtml = x01Tags.map((tag) => `<span class="${tag.cls}">${escapeHtml(tag.text)}</span>`).join("");
+    const activeTournamentHeadingLinks = [
+      { href: README_TOURNAMENT_MODES_URL, label: "Turniermodus-Erklärung öffnen", title: "README: Turniermodi" },
+      { href: README_RULES_URL, label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+    ];
 
     return `
       <section class="ata-card tournamentCard">
-        <h3>Aktives Turnier</h3>
+        ${renderSectionHeading("Aktives Turnier", activeTournamentHeadingLinks)}
         <p class="ata-tournament-title">
           <b>${escapeHtml(tournament.name)}</b>
           <span class="ata-tournament-mode-pill">${escapeHtml(modeLabel)}</span>

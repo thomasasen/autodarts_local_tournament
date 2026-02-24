@@ -38,6 +38,14 @@
   const API_REQUEST_TIMEOUT_MS = 12000;
   const README_BASE_URL = "https://github.com/thomasasen/autodarts_local_tournament/blob/main/README.md";
   const README_RULES_URL = `${README_BASE_URL}#regelbasis-und-limits`;
+  const README_SETTINGS_URL = `${README_BASE_URL}#einstellungen`;
+  const README_TIE_BREAK_URL = `${README_BASE_URL}#dra-tie-break`;
+  const README_TOURNAMENT_MODES_URL = `${README_BASE_URL}#turniermodi`;
+  const README_TOURNAMENT_CREATE_URL = `${README_BASE_URL}#turnier-anlegen`;
+  const README_API_AUTOMATION_URL = `${README_BASE_URL}#api-halbautomatik`;
+  const DRA_RULES_URL = "https://www.thedra.co.uk/rules";
+  const DRA_RULES_PDF_URL = "https://static.wixstatic.com/ugd/298855_0050acb8726842f7b7ca13ec829f5ebf.pdf";
+  const PDC_OPEN_DRAW_CONTEXT_URL = "https://www.pdc.tv/news/2013/01/16/rules-challenge-youth-tours";
 
   const BRACKETS_VIEWER_CSS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.css";
   const BRACKETS_VIEWER_JS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.js";

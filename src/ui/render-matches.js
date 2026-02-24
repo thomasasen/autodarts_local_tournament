@@ -253,8 +253,16 @@
     }).join("");
 
     const cardsHtml = cards || `<p class="ata-small">Keine Matches vorhanden.</p>`;
+    const resultHeadingLinks = [
+      { href: README_API_AUTOMATION_URL, label: "Erklärung zur API-Halbautomatik öffnen", title: "README: API-Halbautomatik" },
+      { href: README_TIE_BREAK_URL, label: "Erklärung zum Tie-Break und Playoff öffnen", title: "README: DRA Tie-Break" },
+    ];
+    const nextMatchHelpLinks = renderInfoLinks([
+      { href: README_API_AUTOMATION_URL, label: "Ablauf der Ergebnisführung öffnen", title: "README: API-Halbautomatik und Ergebnisführung" },
+      { href: README_TOURNAMENT_MODES_URL, label: "Turniermodus-Kontext öffnen", title: "README: Turniermodi" },
+    ]);
     const nextHintHtml = suggestedNextMatchId
-      ? `<p class="ata-small ata-next-hint">Hinweis: Die Markierung "N\u00e4chstes Match" zeigt die empfohlene n\u00e4chste Paarung (PDC: Next Match).</p>`
+      ? `<p class="ata-small ata-next-hint">Hinweis: Die Markierung "Nächstes Match" zeigt die empfohlene nächste Paarung (PDC: Next Match) ${nextMatchHelpLinks}.</p>`
       : "";
     const sortButtonsHtml = sortOptions.map((option) => `
       <button type="button" class="ata-segmented-btn" data-action="set-matches-sort" data-sort-mode="${option.id}" data-active="${sortMode === option.id ? "1" : "0"}">${escapeHtml(option.label)}</button>
@@ -262,8 +270,10 @@
 
     return `
       <section class="ata-card tournamentCard ata-matches-card">
-        <h3>Ergebnisf\u00fchrung</h3>
-        <p class="ata-small">API-Halbautomatik: Match per Klick starten, Ergebnis wird automatisch synchronisiert. Manuelle Eingabe bleibt als Fallback aktiv.</p>
+        ${renderSectionHeading("Ergebnisführung", resultHeadingLinks)}
+        <p class="ata-small">API-Halbautomatik: Match per Klick starten, Ergebnis wird automatisch synchronisiert. Manuelle Eingabe bleibt als Fallback aktiv. ${renderInfoLinks([
+          { href: README_API_AUTOMATION_URL, label: "Voraussetzungen und Ablauf öffnen", title: "README: API-Halbautomatik" },
+        ])}</p>
         <div class="ata-matches-toolbar">
           <div class="ata-segmented" role="group" aria-label="Match-Sortierung">${sortButtonsHtml}</div>
         </div>

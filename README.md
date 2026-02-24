@@ -98,6 +98,8 @@ Priorisierung fuer Limits in diesem Projekt:
 3. Technische Machbarkeit im Userscript
 
 ### Was sagen die offiziellen Regeln?
+- Offizielle DRA-Regeln: https://www.thedra.co.uk/rules
+- DRA-Regeltext (PDF): https://static.wixstatic.com/ugd/298855_0050acb8726842f7b7ca13ec829f5ebf.pdf
 - DRA 6.6.7 / 6.6.8: In gesetzten Draws werden Byes den gesetzten Spielern zugeordnet.
 - DRA 6.8.1: KO (straight knockout) ist der Standardmodus.
 - DRA 6.8.2: Round-Robin ist zulaessig, wenn vorab bekanntgegeben.
@@ -131,6 +133,20 @@ Tab: `Einstellungen`
 - Bei aktivem Schalter wird ein `open_draw` erzeugt (zufaellige Seed-Reihenfolge).
 - Bei deaktiviertem Schalter wird `seeded` verwendet (Eingabereihenfolge als Seed-Rang).
 - Zusaetzlich gibt es im Turnier-Formular den Button `Teilnehmer mischen`.
+
+### DRA Tie-Break
+- `DRA Strict` (empfohlen):
+  - Punkte (2 Sieg, 1 Unentschieden, 0 Niederlage)
+  - Direktvergleich bei 2 Punktgleichen
+  - Teilgruppen-Leg-Differenz bei 3+ Punktgleichen
+  - danach Gesamt-Leg-Differenz und Legs gewonnen
+  - bei weiterem Gleichstand: `Playoff erforderlich`
+- `Legacy`:
+  - Bisheriges ATA-Verhalten mit vereinfachter Sortierung
+  - Reihenfolge: Punkte -> Gesamt-Leg-Differenz -> Legs gewonnen
+  - Dient nur der Rueckwaertskompatibilitaet alter Daten
+- Offizielle Regelbasis (DRA): https://www.thedra.co.uk/rules
+- Direkter Regeltext (PDF): https://static.wixstatic.com/ugd/298855_0050acb8726842f7b7ca13ec829f5ebf.pdf
 
 ## Turnier anlegen
 Tab: `Turnier`
