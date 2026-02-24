@@ -3342,8 +3342,8 @@
       }
 
       .ata-match-card.ata-row-next {
-        border-color: rgba(255, 211, 79, 0.56);
-        box-shadow: inset 3px 0 0 rgba(255, 211, 79, 0.58);
+        border-color: rgba(255, 255, 255, 0.46);
+        box-shadow: inset 4px 0 0 rgba(255, 255, 255, 0.75);
       }
 
       .ata-match-card.ata-row-blocked {
@@ -3434,9 +3434,9 @@
         display: inline-flex;
         align-items: center;
         border-radius: 999px;
-        border: 1px solid rgba(255, 211, 79, 0.62);
-        background: rgba(255, 211, 79, 0.15);
-        color: #ffe07a;
+        border: 1px solid rgba(255, 255, 255, 0.56);
+        background: rgba(255, 255, 255, 0.14);
+        color: #f4f7ff;
         padding: 1px 8px;
         font-size: 11px;
         line-height: 1.2;
@@ -4183,7 +4183,7 @@
         ? `<span class="${escapeHtml(advanceClasses)}">${escapeHtml(summaryText)}</span>`
         : "";
       const nextPillHtml = isSuggestedNext
-        ? `<span class="ata-match-next-pill" title="Empfohlene naechste Paarung">Als Naechstes</span>`
+        ? `<span class="ata-match-next-pill" title="Empfohlene n\u00e4chste Paarung (PDC: Next Match)">N\u00e4chstes Match</span>`
         : "";
       const statusLineHtml = statusLine
         ? `<div class="ata-match-note">${escapeHtml(statusLine)}</div>`
@@ -4209,7 +4209,7 @@
 
     const cardsHtml = cards || `<p class="ata-small">Keine Matches vorhanden.</p>`;
     const nextHintHtml = suggestedNextMatchId
-      ? `<p class="ata-small ata-next-hint">Hinweis: Die Markierung "Als Naechstes" zeigt die empfohlene naechste Paarung.</p>`
+      ? `<p class="ata-small ata-next-hint">Hinweis: Die Markierung "N\u00e4chstes Match" zeigt die empfohlene n\u00e4chste Paarung (PDC: Next Match).</p>`
       : "";
     const sortButtonsHtml = sortOptions.map((option) => `
       <button type="button" class="ata-segmented-btn" data-action="set-matches-sort" data-sort-mode="${option.id}" data-active="${sortMode === option.id ? "1" : "0"}">${escapeHtml(option.label)}</button>
