@@ -119,6 +119,39 @@
     }
 
     try {
+      const tournament = {
+        participants: [
+          { id: "P1", name: "Sabine" },
+          { id: "P2", name: "Tanja" },
+        ],
+      };
+      const match = {
+        player1Id: "P1",
+        player2Id: "P2",
+      };
+      const apiStats = {
+        winner: 1,
+        players: [
+          { name: "Sabine" },
+          { name: "Tanja" },
+        ],
+        matchStats: [
+          { legsWon: 1 },
+          { legsWon: 0 },
+        ],
+      };
+      const candidates = getApiMatchLegCandidatesFromStats(tournament, match, apiStats, "P2");
+      const best = candidates[0] || { p1: -1, p2: -1 };
+      record(
+        "API Sync: vertauschte Legs-Reihenfolge wird korrigiert",
+        best.p1 === 0 && best.p2 === 1,
+        `best=${best.p1}:${best.p2}`,
+      );
+    } catch (error) {
+      record("API Sync: vertauschte Legs-Reihenfolge wird korrigiert", false, String(error?.message || error));
+    }
+
+    try {
       const rawStoreV2 = {
         schemaVersion: 2,
         settings: { debug: false, featureFlags: { autoLobbyStart: false, randomizeKoRound1: true } },

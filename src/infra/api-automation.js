@@ -69,8 +69,14 @@
         return { ok: false, updated, completed: false, pending: true, recoverable: false, message: mappingError };
       }
 
-      const legs = getApiMatchLegsFromStats(stats);
-      const result = updateMatchResult(match.id, winnerId, legs, "auto");
+      const legCandidates = getApiMatchLegCandidatesFromStats(tournament, match, stats, winnerId);
+      let result = { ok: false, message: "Auto-Sync konnte Ergebnis nicht speichern." };
+      for (const legs of legCandidates) {
+        result = updateMatchResult(match.id, winnerId, legs, "auto");
+        if (result.ok) {
+          break;
+        }
+      }
       if (!result.ok) {
         const saveError = result.message || "Auto-Sync konnte Ergebnis nicht speichern.";
         const changedError = auto.lastError !== saveError || auto.status !== "error";
@@ -271,11 +277,113 @@
   }
 
 
-  function getApiMatchLegsFromStats(data) {
-    return {
+  function addApiLegCandidate(candidates, seenKeys, legs) {
+    if (!legs || typeof legs !== "object") {
+      return;
+    }
+    const p1 = clampInt(legs.p1, 0, 0, 50);
+    const p2 = clampInt(legs.p2, 0, 0, 50);
+    const key = `${p1}:${p2}`;
+    if (seenKeys.has(key)) {
+      return;
+    }
+    seenKeys.add(key);
+    candidates.push({ p1, p2 });
+  }
+
+
+  function doesLegsSupportWinner(match, winnerId, legs) {
+    if (!match || !legs) {
+      return false;
+    }
+    const winnerIsP1 = winnerId === match.player1Id;
+    const winnerIsP2 = winnerId === match.player2Id;
+    if (!winnerIsP1 && !winnerIsP2) {
+      return false;
+    }
+    const winnerLegs = winnerIsP1 ? legs.p1 : legs.p2;
+    const loserLegs = winnerIsP1 ? legs.p2 : legs.p1;
+    return winnerLegs > loserLegs;
+  }
+
+
+  function getApiNameToLegsLookup(data) {
+    const lookup = new Map();
+    const players = Array.isArray(data?.players) ? data.players : [];
+    const matchStats = Array.isArray(data?.matchStats) ? data.matchStats : [];
+    const count = Math.max(players.length, matchStats.length);
+    for (let index = 0; index < count; index += 1) {
+      const statEntry = matchStats[index];
+      const legs = clampInt(statEntry?.legsWon, 0, 0, 50);
+      const playerName = normalizeLookup(players[index]?.name || "");
+      const statName = normalizeLookup(
+        statEntry?.name
+        || statEntry?.playerName
+        || statEntry?.player?.name
+        || statEntry?.player?.username
+        || "",
+      );
+      if (playerName && !lookup.has(playerName)) {
+        lookup.set(playerName, legs);
+      }
+      if (statName && !lookup.has(statName)) {
+        lookup.set(statName, legs);
+      }
+    }
+    return lookup;
+  }
+
+
+  function getApiMatchLegCandidatesFromStats(tournament, match, data, winnerId) {
+    const candidates = [];
+    const seen = new Set();
+    const positional = {
       p1: clampInt(data?.matchStats?.[0]?.legsWon, 0, 0, 50),
       p2: clampInt(data?.matchStats?.[1]?.legsWon, 0, 0, 50),
     };
+    addApiLegCandidate(candidates, seen, positional);
+    addApiLegCandidate(candidates, seen, { p1: positional.p2, p2: positional.p1 });
+
+    const p1 = participantById(tournament, match?.player1Id);
+    const p2 = participantById(tournament, match?.player2Id);
+    const p1Name = normalizeLookup(p1?.name || "");
+    const p2Name = normalizeLookup(p2?.name || "");
+    if (p1Name && p2Name && p1Name !== p2Name) {
+      const nameToLegs = getApiNameToLegsLookup(data);
+      if (nameToLegs.has(p1Name) && nameToLegs.has(p2Name)) {
+        addApiLegCandidate(candidates, seen, {
+          p1: nameToLegs.get(p1Name),
+          p2: nameToLegs.get(p2Name),
+        });
+      }
+    }
+
+    const winnerIndex = Number(data?.winner);
+    if (Number.isInteger(winnerIndex) && winnerIndex >= 0) {
+      const winnerLegs = clampInt(data?.matchStats?.[winnerIndex]?.legsWon, 0, 0, 50);
+      const loserIndex = winnerIndex === 0 ? 1 : 0;
+      const loserLegs = clampInt(data?.matchStats?.[loserIndex]?.legsWon, 0, 0, 50);
+      if (winnerId === match?.player1Id) {
+        addApiLegCandidate(candidates, seen, { p1: winnerLegs, p2: loserLegs });
+      } else if (winnerId === match?.player2Id) {
+        addApiLegCandidate(candidates, seen, { p1: loserLegs, p2: winnerLegs });
+      }
+    }
+
+    if (!candidates.length) {
+      return [positional];
+    }
+
+    const preferred = [];
+    const fallback = [];
+    candidates.forEach((candidate) => {
+      if (doesLegsSupportWinner(match, winnerId, candidate)) {
+        preferred.push(candidate);
+      } else {
+        fallback.push(candidate);
+      }
+    });
+    return preferred.concat(fallback);
   }
 
 
@@ -469,7 +577,12 @@
       match.updatedAt = now;
       tournament.updatedAt = now;
 
-      schedulePersist();
+      try {
+        await persistStore();
+      } catch (persistError) {
+        schedulePersist();
+        logWarn("storage", "Immediate persist before match redirect failed; scheduled retry.", persistError);
+      }
       renderShell();
       setNotice("success", "Match gestartet. Weiterleitung ins Match.");
       openMatchPage(createdLobbyId);
