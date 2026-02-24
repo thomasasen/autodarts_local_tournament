@@ -23,17 +23,20 @@
       ];
       const modeHelpLinks = renderInfoLinks([
         { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Erklärung der Modi öffnen", title: "README: Turniermodi" },
+        { href: DRA_RULEBOOK_FORMATS_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 17, Punkte 6.8/6.10" },
         { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zu Turnierformaten öffnen", title: "DRA Rulebook (offiziell)" },
         { href: README_RULES_URL, kind: "tech", label: "Regelstellen mit Seiten-/Punktangaben öffnen", title: "README: Regelbasis und Limits" },
       ]);
       const drawHelpLinks = renderInfoLinks([
         { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Open Draw und gesetzter Draw erklärt", title: "README: KO-Modus" },
+        { href: DRA_RULEBOOK_LIMITS_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 18, Punkt 6.12.1" },
         { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zur Draw-Stabilität öffnen", title: "DRA Rulebook (offiziell)" },
         { href: README_RULES_URL, kind: "tech", label: "Regelstellen mit Seiten-/Punktangaben öffnen", title: "README: Regelbasis und Limits" },
         { href: PDC_OPEN_DRAW_CONTEXT_URL, kind: "rule", label: "PDC-Kontext zu Open Draw öffnen", title: "PDC: Open Draw Kontext" },
       ]);
       const modeLimitHelpLinks = renderInfoLinks([
         { href: README_RULES_URL, kind: "tech", label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+        { href: DRA_RULEBOOK_LIMITS_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 18, Punkte 6.10.5.2/6.12.1" },
         { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zu Limits und Draw öffnen", title: "DRA Rulebook (offiziell)" },
       ]);
       return `
@@ -188,6 +191,7 @@
     const activeTournamentHeadingLinks = [
       { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Turniermodus-Erklärung öffnen", title: "README: Turniermodi" },
       { href: README_RULES_URL, kind: "tech", label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+      { href: DRA_RULEBOOK_FORMATS_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 17, Punkte 6.8/6.10" },
       { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zu Turnierformaten öffnen", title: "DRA Rulebook (offiziell)" },
     ];
 

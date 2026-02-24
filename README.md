@@ -128,7 +128,8 @@ Tab: `Einstellungen`
 - `ⓘ` = **Technische Information**
   - Verweist auf Bedienung, Implementierung und interne Projektdokumentation (README).
 - `§` = **Regelwerk**
-  - Verweist auf offizielle Regelstellen (DRA/PDC) oder konkrete DRA-PDF-Seiten.
+  - Verweist auf offizielle Regelstellen (DRA/PDC).
+  - Primär wird auf die passende Stelle in [docs/DRA-RULE_BOOK.pdf](docs/DRA-RULE_BOOK.pdf) (inkl. `#page=`) verlinkt.
 
 ### Debug-Mode
 - Aktiviert ausführliche Logs in der Browser-Konsole.

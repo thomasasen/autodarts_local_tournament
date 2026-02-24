@@ -44,6 +44,12 @@
   const README_TOURNAMENT_CREATE_URL = `${README_BASE_URL}#turnier-anlegen`;
   const README_API_AUTOMATION_URL = `${README_BASE_URL}#api-halbautomatik`;
   const DRA_RULES_URL = "https://www.thedra.co.uk/dra-rulebook";
+  const REPO_BLOB_BASE_URL = "https://github.com/thomasasen/autodarts_local_tournament/blob/main";
+  const DRA_RULEBOOK_PDF_URL = `${REPO_BLOB_BASE_URL}/docs/DRA-RULE_BOOK.pdf`;
+  const DRA_RULEBOOK_BASICS_URL = `${DRA_RULEBOOK_PDF_URL}#page=4`;
+  const DRA_RULEBOOK_FORMATS_URL = `${DRA_RULEBOOK_PDF_URL}#page=17`;
+  const DRA_RULEBOOK_LIMITS_URL = `${DRA_RULEBOOK_PDF_URL}#page=18`;
+  const DRA_RULEBOOK_TIEBREAK_URL = `${DRA_RULEBOOK_PDF_URL}#page=20`;
   const PDC_OPEN_DRAW_CONTEXT_URL = "https://www.pdc.tv/news/2013/01/16/rules-challenge-youth-tours";
 
   const BRACKETS_VIEWER_CSS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.css";
@@ -4317,17 +4323,20 @@
       ];
       const modeHelpLinks = renderInfoLinks([
         { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Erklärung der Modi öffnen", title: "README: Turniermodi" },
+        { href: DRA_RULEBOOK_FORMATS_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 17, Punkte 6.8/6.10" },
         { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zu Turnierformaten öffnen", title: "DRA Rulebook (offiziell)" },
         { href: README_RULES_URL, kind: "tech", label: "Regelstellen mit Seiten-/Punktangaben öffnen", title: "README: Regelbasis und Limits" },
       ]);
       const drawHelpLinks = renderInfoLinks([
         { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Open Draw und gesetzter Draw erklärt", title: "README: KO-Modus" },
+        { href: DRA_RULEBOOK_LIMITS_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 18, Punkt 6.12.1" },
         { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zur Draw-Stabilität öffnen", title: "DRA Rulebook (offiziell)" },
         { href: README_RULES_URL, kind: "tech", label: "Regelstellen mit Seiten-/Punktangaben öffnen", title: "README: Regelbasis und Limits" },
         { href: PDC_OPEN_DRAW_CONTEXT_URL, kind: "rule", label: "PDC-Kontext zu Open Draw öffnen", title: "PDC: Open Draw Kontext" },
       ]);
       const modeLimitHelpLinks = renderInfoLinks([
         { href: README_RULES_URL, kind: "tech", label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+        { href: DRA_RULEBOOK_LIMITS_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 18, Punkte 6.10.5.2/6.12.1" },
         { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zu Limits und Draw öffnen", title: "DRA Rulebook (offiziell)" },
       ]);
       return `
@@ -4482,6 +4491,7 @@
     const activeTournamentHeadingLinks = [
       { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Turniermodus-Erklärung öffnen", title: "README: Turniermodi" },
       { href: README_RULES_URL, kind: "tech", label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
+      { href: DRA_RULEBOOK_FORMATS_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 17, Punkte 6.8/6.10" },
       { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zu Turnierformaten öffnen", title: "DRA Rulebook (offiziell)" },
     ];
 
@@ -4774,6 +4784,7 @@
     const resultHeadingLinks = [
       { href: README_API_AUTOMATION_URL, kind: "tech", label: "Erklärung zur API-Halbautomatik öffnen", title: "README: API-Halbautomatik" },
       { href: README_TIE_BREAK_URL, kind: "tech", label: "Erklärung zum Tie-Break und Playoff öffnen", title: "README: DRA Tie-Break" },
+      { href: DRA_RULEBOOK_TIEBREAK_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 20, Punkt 6.16" },
       { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
     ];
     const nextMatchHelpLinks = renderInfoLinks([
@@ -4947,6 +4958,7 @@
     if (tournament.mode === "league") {
       const standings = standingsForMatches(tournament, getMatchesByStage(tournament, MATCH_STAGE_LEAGUE));
       html += renderStandingsTable(standings, "Liga-Tabelle", [
+        { href: DRA_RULEBOOK_TIEBREAK_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 20, Punkt 6.16" },
         { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
         { href: README_TIE_BREAK_URL, kind: "tech", label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
       ]);
@@ -4957,6 +4969,7 @@
       const blockedGroups = [];
       standingsMap.forEach((entry) => {
         groupCards.push(renderStandingsTable(entry.rows, `Tabelle ${entry.group.name}`, [
+          { href: DRA_RULEBOOK_TIEBREAK_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 20, Punkt 6.16" },
           { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
           { href: README_TIE_BREAK_URL, kind: "tech", label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
         ]));
@@ -4969,6 +4982,7 @@
         html += `
           <section class="ata-card tournamentCard">
             ${renderSectionHeading("Gruppenentscheidung offen", [
+              { href: DRA_RULEBOOK_TIEBREAK_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 20, Punkt 6.16" },
               { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
               { href: README_TIE_BREAK_URL, kind: "tech", label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
             ])}
@@ -5056,6 +5070,7 @@
     ]);
     const koDrawHelpLinks = renderInfoLinks([
       { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Erklärung zu Turniermodi öffnen", title: "README: Turniermodi und Open Draw" },
+      { href: DRA_RULEBOOK_FORMATS_URL, kind: "rule", label: "DRA-Referenz zu Turnierformaten öffnen", title: "DRA-RULE_BOOK.pdf, Seite 17, Punkte 6.8/6.10" },
       { href: PDC_OPEN_DRAW_CONTEXT_URL, kind: "rule", label: "PDC-Kontext zu Open Draw öffnen", title: "PDC: Open Draw Kontext" },
     ]);
 
@@ -5089,12 +5104,13 @@
       </section>
       <section class="ata-card tournamentCard">
         ${renderSectionHeading("DRA Tie-Break", [
+          { href: DRA_RULEBOOK_TIEBREAK_URL, kind: "rule", label: "DRA-Regelstelle 6.16 (Tie-Break) öffnen", title: "DRA-RULE_BOOK.pdf, Seite 20, Punkt 6.16" },
           { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Rulebook-Seite öffnen", title: "DRA Rulebook (offiziell)" },
           { href: README_TIE_BREAK_URL, kind: "tech", label: "Erklärung DRA Strict und Legacy öffnen", title: "README: DRA Tie-Break" },
         ])}
         <div class="ata-field">
           <label for="ata-setting-tiebreak">Regelmodus pro Turnier ${renderInfoLinks([
-            { href: DRA_RULES_URL, kind: "rule", label: "Offizielle Regelstelle öffnen", title: "DRA Rulebook (offiziell)" },
+            { href: DRA_RULEBOOK_TIEBREAK_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 20, Punkt 6.16" },
             { href: README_TIE_BREAK_URL, kind: "tech", label: "Regelstelle im Projektkontext öffnen", title: "README: DRA Tie-Break (mit Seiten-/Punktreferenzen)" },
           ])}</label>
           <select id="ata-setting-tiebreak" data-action="set-tiebreak-mode" ${tieBreakDisabledAttr}>
@@ -5107,6 +5123,8 @@
       </section>
       <section class="ata-card tournamentCard">
         ${renderSectionHeading("Regelbasis und Limits", [
+          { href: DRA_RULEBOOK_FORMATS_URL, kind: "rule", label: "DRA-Regelstellen zu Formaten öffnen", title: "DRA-RULE_BOOK.pdf, Seite 17, Punkte 6.8/6.10" },
+          { href: DRA_RULEBOOK_LIMITS_URL, kind: "rule", label: "DRA-Regelstellen zu Limits/Draw öffnen", title: "DRA-RULE_BOOK.pdf, Seite 18, Punkte 6.10.5.2/6.12.1" },
           { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Rulebook-Seite öffnen", title: "DRA Rulebook (offiziell)" },
           { href: README_RULES_URL, kind: "tech", label: "Regelstellen mit Seiten-/Punktangaben öffnen", title: "README: Regelbasis und Limits" },
         ])}

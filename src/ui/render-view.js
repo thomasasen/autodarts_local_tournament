@@ -144,6 +144,7 @@
     if (tournament.mode === "league") {
       const standings = standingsForMatches(tournament, getMatchesByStage(tournament, MATCH_STAGE_LEAGUE));
       html += renderStandingsTable(standings, "Liga-Tabelle", [
+        { href: DRA_RULEBOOK_TIEBREAK_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 20, Punkt 6.16" },
         { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
         { href: README_TIE_BREAK_URL, kind: "tech", label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
       ]);
@@ -154,6 +155,7 @@
       const blockedGroups = [];
       standingsMap.forEach((entry) => {
         groupCards.push(renderStandingsTable(entry.rows, `Tabelle ${entry.group.name}`, [
+          { href: DRA_RULEBOOK_TIEBREAK_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 20, Punkt 6.16" },
           { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
           { href: README_TIE_BREAK_URL, kind: "tech", label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
         ]));
@@ -166,6 +168,7 @@
         html += `
           <section class="ata-card tournamentCard">
             ${renderSectionHeading("Gruppenentscheidung offen", [
+              { href: DRA_RULEBOOK_TIEBREAK_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 20, Punkt 6.16" },
               { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
               { href: README_TIE_BREAK_URL, kind: "tech", label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
             ])}

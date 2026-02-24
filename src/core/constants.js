@@ -45,6 +45,12 @@
   const README_TOURNAMENT_CREATE_URL = `${README_BASE_URL}#turnier-anlegen`;
   const README_API_AUTOMATION_URL = `${README_BASE_URL}#api-halbautomatik`;
   const DRA_RULES_URL = "https://www.thedra.co.uk/dra-rulebook";
+  const REPO_BLOB_BASE_URL = "https://github.com/thomasasen/autodarts_local_tournament/blob/main";
+  const DRA_RULEBOOK_PDF_URL = `${REPO_BLOB_BASE_URL}/docs/DRA-RULE_BOOK.pdf`;
+  const DRA_RULEBOOK_BASICS_URL = `${DRA_RULEBOOK_PDF_URL}#page=4`;
+  const DRA_RULEBOOK_FORMATS_URL = `${DRA_RULEBOOK_PDF_URL}#page=17`;
+  const DRA_RULEBOOK_LIMITS_URL = `${DRA_RULEBOOK_PDF_URL}#page=18`;
+  const DRA_RULEBOOK_TIEBREAK_URL = `${DRA_RULEBOOK_PDF_URL}#page=20`;
   const PDC_OPEN_DRAW_CONTEXT_URL = "https://www.pdc.tv/news/2013/01/16/rules-challenge-youth-tours";
 
   const BRACKETS_VIEWER_CSS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.css";
