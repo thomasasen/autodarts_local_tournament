@@ -3343,22 +3343,31 @@
 
       .ata-match-card-head {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
         gap: 4px;
         flex-wrap: wrap;
       }
 
-      .ata-match-meta {
-        display: inline-flex;
+      .ata-match-title-row {
+        display: flex;
         align-items: center;
+        justify-content: space-between;
+        gap: 8px;
         flex-wrap: wrap;
-        gap: 4px;
+        flex: 1 1 auto;
+        min-width: 0;
       }
 
-      .ata-match-stage-pill,
-      .ata-match-round-pill,
-      .ata-match-advance-pill {
+      .ata-match-meta-inline {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        flex-wrap: wrap;
+      }
+
+      .ata-match-advance-pill,
+      .ata-match-context-pill {
         display: inline-flex;
         align-items: center;
         border-radius: 999px;
@@ -3366,17 +3375,6 @@
         padding: 1px 7px;
         font-size: 11px;
         line-height: 1.2;
-      }
-
-      .ata-match-stage-pill {
-        background: rgba(114, 121, 224, 0.2);
-        border-color: rgba(153, 160, 245, 0.5);
-        color: #d9dfff;
-        font-weight: 700;
-      }
-
-      .ata-match-round-pill {
-        color: rgba(226, 234, 255, 0.9);
       }
 
       .ata-match-advance-pill {
@@ -3393,6 +3391,26 @@
         border-color: rgba(255, 211, 79, 0.62);
         background: rgba(255, 211, 79, 0.2);
         color: #ffe07a;
+      }
+
+      .ata-match-context-pill {
+        color: rgba(226, 234, 255, 0.88);
+        border-color: rgba(188, 205, 245, 0.38);
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .ata-match-context-pill.ata-match-context-open {
+        border-color: rgba(188, 205, 245, 0.38);
+      }
+
+      .ata-match-context-pill.ata-match-context-completed {
+        border-color: rgba(90, 210, 153, 0.5);
+        background: rgba(90, 210, 153, 0.16);
+      }
+
+      .ata-match-context-pill.ata-match-context-bye {
+        border-color: rgba(255, 211, 79, 0.58);
+        background: rgba(255, 211, 79, 0.16);
       }
 
       .ata-match-pairing {
@@ -3459,10 +3477,10 @@
 
       .ata-score-grid {
         display: grid;
-        grid-template-columns: minmax(84px, 102px) minmax(84px, 102px) minmax(96px, 146px) minmax(126px, 184px);
+        grid-template-columns: minmax(58px, 74px) auto minmax(58px, 74px) minmax(96px, 146px) minmax(126px, 184px);
         gap: 6px;
         min-width: 0;
-        align-items: end;
+        align-items: center;
       }
 
       .ata-score-grid .ata-btn {
@@ -3471,28 +3489,21 @@
         font-size: 15px;
       }
 
-      .ata-score-input-wrap {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        justify-content: center;
-        gap: 2px;
-        min-width: 0;
-      }
-
-      .ata-score-input-wrap input[type="number"] {
+      .ata-score-grid input[type="number"] {
         width: 100%;
-        max-width: 74px;
+        max-width: 72px;
         min-height: 30px;
         padding: 4px 7px;
         font-size: 15px;
       }
 
-      .ata-score-input-label {
-        font-size: 11px;
+      .ata-score-vs {
+        font-size: 12px;
         line-height: 1.2;
         color: var(--ata-color-muted);
-        white-space: nowrap;
+        text-transform: uppercase;
+        letter-spacing: 0.35px;
+        justify-self: center;
       }
 
       .ata-match-note {
@@ -4023,12 +4034,6 @@
       const matchCellHelpText = "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
       const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
       const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
-      const legsP1LabelHtml = isOpenSlot(player1)
-        ? `<span class="ata-pill-open-slot">${escapeHtml(player1)}</span>`
-        : escapeHtml(player1);
-      const legsP2LabelHtml = isOpenSlot(player2)
-        ? `<span class="ata-pill-open-slot">${escapeHtml(player2)}</span>`
-        : escapeHtml(player2);
       const saveHelpText = `Speichert Legs f\u00fcr ${player1} vs ${player2}. Sieger wird automatisch aus den Legs bestimmt. Sieger muss ${legsToWin} Legs erreichen.`;
       const rowClasses = [
         "ata-match-card",
@@ -4039,10 +4044,11 @@
         isBlockedPending ? "ata-row-blocked" : "",
         !editable ? "ata-row-inactive" : "",
       ].filter(Boolean).join(" ");
-      const statusBadgeClass = isByeCompletion
-        ? "ata-match-status ata-match-status-bye"
-        : (isCompleted ? "ata-match-status ata-match-status-completed" : "ata-match-status ata-match-status-open");
       const statusBadgeText = isByeCompletion ? "Freilos" : (isCompleted ? "Abgeschlossen" : "Offen");
+      const contextPillClass = isByeCompletion
+        ? "ata-match-context-pill ata-match-context-bye"
+        : (isCompleted ? "ata-match-context-pill ata-match-context-completed" : "ata-match-context-pill ata-match-context-open");
+      const contextText = `${stageLabel}, ${matchCellText}, ${statusBadgeText}`;
       const summaryText = isCompleted
         ? (isByeCompletion ? `Weiter: ${winner}` : `Sieger: ${winner} (${match.legs.p1}:${match.legs.p2})`)
         : "";
@@ -4073,32 +4079,27 @@
       const editorHtml = editable
         ? `
           <div class="ata-score-grid">
-            <div class="ata-score-input-wrap" title="${escapeHtml(legsP1HelpText)}">
-              <span class="ata-score-input-label">${legsP1LabelHtml}</span>
-              <input
-                type="number"
-                min="0"
-                max="${legsToWin}"
-                data-field="legs-p1"
-                data-match-id="${escapeHtml(match.id)}"
-                value="${match.legs.p1}"
-                aria-label="${escapeHtml(legsP1HelpText)}"
-                title="${escapeHtml(legsP1HelpText)}"
-              >
-            </div>
-            <div class="ata-score-input-wrap" title="${escapeHtml(legsP2HelpText)}">
-              <span class="ata-score-input-label">${legsP2LabelHtml}</span>
-              <input
-                type="number"
-                min="0"
-                max="${legsToWin}"
-                data-field="legs-p2"
-                data-match-id="${escapeHtml(match.id)}"
-                value="${match.legs.p2}"
-                aria-label="${escapeHtml(legsP2HelpText)}"
-                title="${escapeHtml(legsP2HelpText)}"
-              >
-            </div>
+            <input
+              type="number"
+              min="0"
+              max="${legsToWin}"
+              data-field="legs-p1"
+              data-match-id="${escapeHtml(match.id)}"
+              value="${match.legs.p1}"
+              aria-label="${escapeHtml(legsP1HelpText)}"
+              title="${escapeHtml(legsP1HelpText)}"
+            >
+            <span class="ata-score-vs">vs</span>
+            <input
+              type="number"
+              min="0"
+              max="${legsToWin}"
+              data-field="legs-p2"
+              data-match-id="${escapeHtml(match.id)}"
+              value="${match.legs.p2}"
+              aria-label="${escapeHtml(legsP2HelpText)}"
+              title="${escapeHtml(legsP2HelpText)}"
+            >
             <button type="button" class="ata-btn" data-action="save-match" data-match-id="${escapeHtml(match.id)}" title="${escapeHtml(saveHelpText)}">Speichern</button>
             <button type="button" class="ata-btn ata-btn-primary" data-action="start-match" data-match-id="${escapeHtml(match.id)}" ${startDisabledAttr} ${startTitleAttr}>${escapeHtml(startUi.label)}</button>
           </div>
@@ -4115,14 +4116,14 @@
       return `
         <article class="${escapeHtml(rowClasses)}" data-match-id="${escapeHtml(match.id)}">
           <div class="ata-match-card-head">
-            <div class="ata-match-meta">
-              <span class="ata-match-stage-pill">${escapeHtml(stageLabel)}</span>
-              <span class="ata-match-round-pill" title="${escapeHtml(matchCellHelpText)}">${escapeHtml(matchCellText)}</span>
-              <span class="${statusBadgeClass}">${statusBadgeText}</span>
+            <div class="ata-match-title-row">
+              <div class="ata-match-pairing">${player1PairingHtml} <span class="ata-vs">vs</span> ${player2PairingHtml}</div>
+              <div class="ata-match-meta-inline">
+                <span class="${contextPillClass}" title="${escapeHtml(matchCellHelpText)}">${escapeHtml(contextText)}</span>
+              </div>
             </div>
             ${summaryHtml}
           </div>
-          <div class="ata-match-pairing">${player1PairingHtml} <span class="ata-vs">vs</span> ${player2PairingHtml}</div>
           ${editorHtml}
           ${statusLineHtml}
         </article>
