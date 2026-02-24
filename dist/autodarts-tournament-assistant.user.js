@@ -3644,7 +3644,7 @@
     }
 
     try {
-      const stats = await fetchMatchStats(lobbyId, token);
+      const stats = options.prefetchedStats || await fetchMatchStats(lobbyId, token);
       const syncTimestamp = nowIso();
       if (auto.lastError) {
         auto.lastError = null;
@@ -3676,9 +3676,14 @@
         };
       }
 
-      const winnerName = normalizeText(stats?.players?.[winnerIndex]?.name || "");
-      const winnerId = resolveWinnerIdFromApiName(tournament, match, winnerName);
-      if (!winnerId) {
+      const winnerCandidates = resolveWinnerIdCandidatesFromApiStats(tournament, match, stats, winnerIndex);
+      logDebug("api", "Auto-sync winner candidates resolved.", {
+        matchId: match.id,
+        lobbyId,
+        winnerIndex,
+        winnerCandidates,
+      });
+      if (!winnerCandidates.length) {
         const mappingError = "Gewinner konnte nicht eindeutig zugeordnet werden.";
         const changedError = auto.lastError !== mappingError || auto.status !== "error";
         auto.status = "error";
@@ -3692,15 +3697,30 @@
         return { ok: false, updated, completed: false, pending: true, recoverable: false, message: mappingError };
       }
 
-      const legCandidates = getApiMatchLegCandidatesFromStats(tournament, match, stats, winnerId);
       let result = { ok: false, message: "Auto-Sync konnte Ergebnis nicht speichern." };
-      for (const legs of legCandidates) {
-        result = updateMatchResult(match.id, winnerId, legs, "auto");
+      for (const winnerId of winnerCandidates) {
+        const legCandidates = getApiMatchLegCandidatesFromStats(tournament, match, stats, winnerId);
+        logDebug("api", "Auto-sync leg candidates resolved.", {
+          matchId: match.id,
+          winnerId,
+          legCandidates,
+        });
+        for (const legs of legCandidates) {
+          result = updateMatchResult(match.id, winnerId, legs, "auto");
+          if (result.ok) {
+            break;
+          }
+        }
         if (result.ok) {
           break;
         }
       }
       if (!result.ok) {
+        logWarn("api", "Auto-sync could not persist result with resolved winner/legs candidates.", {
+          matchId: match.id,
+          winnerCandidates,
+          winnerIndex,
+        });
         const saveError = result.message || "Auto-Sync konnte Ergebnis nicht speichern.";
         const changedError = auto.lastError !== saveError || auto.status !== "error";
         auto.status = "error";
@@ -3776,24 +3796,46 @@
       return { ok: false, message: "Auto-Lobby ist deaktiviert." };
     }
 
-    const openMatch = findTournamentMatchByLobbyId(tournament, targetLobbyId, false);
+    const token = getAuthTokenFromCookie();
+    if (!token) {
+      return { ok: false, message: "Kein Auth-Token gefunden. Bitte neu einloggen." };
+    }
+
+    let openMatch = findTournamentMatchByLobbyId(tournament, targetLobbyId, false);
     const completedMatch = openMatch ? null : findTournamentMatchByLobbyId(tournament, targetLobbyId, true);
     if (!openMatch && completedMatch?.status === STATUS_COMPLETED) {
       return { ok: true, completed: true, message: "Ergebnis war bereits \u00fcbernommen." };
     }
+    let prefetchedStats = null;
+    if (!openMatch) {
+      try {
+        prefetchedStats = await fetchMatchStats(targetLobbyId, token);
+        const recoveredMatch = findOpenMatchByApiStats(tournament, prefetchedStats);
+        if (recoveredMatch) {
+          openMatch = recoveredMatch;
+          const auto = ensureMatchAutoMeta(openMatch);
+          const now = nowIso();
+          auto.provider = API_PROVIDER;
+          auto.lobbyId = targetLobbyId;
+          auto.status = "started";
+          auto.startedAt = auto.startedAt || now;
+          auto.lastSyncAt = now;
+          auto.lastError = null;
+          openMatch.updatedAt = now;
+        }
+      } catch (_) {
+        // Fallback keeps original behavior when stats are not yet available.
+      }
+    }
     if (!openMatch) {
       return { ok: false, message: "Kein offenes Turnier-Match f\u00fcr diese Lobby gefunden." };
-    }
-
-    const token = getAuthTokenFromCookie();
-    if (!token) {
-      return { ok: false, message: "Kein Auth-Token gefunden. Bitte neu einloggen." };
     }
 
     const syncOutcome = await syncApiMatchResult(tournament, openMatch, token, {
       notifyErrors: Boolean(options.notifyErrors),
       notifyNotReady: Boolean(options.notifyNotReady),
       includeErrorRetry: true,
+      prefetchedStats,
     });
 
     if (syncOutcome.authError) {
@@ -3897,6 +3939,174 @@
       return match.player2Id;
     }
     return "";
+  }
+
+
+  function resolveParticipantIdFromApiRef(tournament, participantRef) {
+    const normalizedRef = normalizeText(participantRef || "");
+    if (!normalizedRef) {
+      return "";
+    }
+    const direct = (tournament?.participants || []).find((participant) => (
+      normalizeText(participant?.id || "") === normalizedRef
+    ));
+    if (direct?.id) {
+      return direct.id;
+    }
+    const lookup = normalizeLookup(normalizedRef);
+    const byName = (tournament?.participants || []).find((participant) => (
+      normalizeLookup(participant?.name || "") === lookup
+    ));
+    return byName?.id || "";
+  }
+
+
+  function findOpenMatchByApiStats(tournament, data) {
+    if (!tournament || !data) {
+      return null;
+    }
+    const participantIds = [];
+    const seen = new Set();
+    const pushId = (participantId) => {
+      const id = normalizeText(participantId || "");
+      if (!id || seen.has(id)) {
+        return;
+      }
+      seen.add(id);
+      participantIds.push(id);
+    };
+
+    const collectFrom = (entry) => {
+      const refs = extractApiParticipantRefCandidates(entry);
+      refs.forEach((ref) => {
+        pushId(resolveParticipantIdFromApiRef(tournament, ref));
+      });
+    };
+
+    const statsEntries = Array.isArray(data?.matchStats) ? data.matchStats : [];
+    statsEntries.forEach((entry) => {
+      collectFrom(entry);
+    });
+    const playerEntries = Array.isArray(data?.players) ? data.players : [];
+    playerEntries.forEach((entry) => {
+      collectFrom(entry);
+    });
+
+    if (participantIds.length < 2) {
+      return null;
+    }
+    return getOpenMatchByPlayers(tournament, participantIds[0], participantIds[1]);
+  }
+
+
+  function extractApiParticipantRefCandidates(value) {
+    const refs = [];
+    const pushRef = (ref) => {
+      const text = normalizeText(ref || "");
+      if (text) {
+        refs.push(text);
+      }
+    };
+
+    if (!value) {
+      return refs;
+    }
+    if (typeof value === "string" || typeof value === "number") {
+      pushRef(value);
+      return refs;
+    }
+    if (typeof value !== "object") {
+      return refs;
+    }
+
+    pushRef(value.id);
+    pushRef(value.playerId);
+    pushRef(value.name);
+    pushRef(value.playerName);
+    pushRef(value.username);
+
+    if (value.player && typeof value.player === "object") {
+      pushRef(value.player.id);
+      pushRef(value.player.name);
+      pushRef(value.player.username);
+    }
+
+    return refs;
+  }
+
+
+  function resolveWinnerIdFromApiRef(tournament, match, winnerRef) {
+    const normalizedRef = normalizeText(winnerRef || "");
+    if (!normalizedRef || !match?.player1Id || !match?.player2Id) {
+      return "";
+    }
+
+    if (normalizedRef === match.player1Id) {
+      return match.player1Id;
+    }
+    if (normalizedRef === match.player2Id) {
+      return match.player2Id;
+    }
+    return resolveWinnerIdFromApiName(tournament, match, normalizedRef);
+  }
+
+
+  function pushWinnerIdCandidate(candidates, seen, winnerId) {
+    const candidate = normalizeText(winnerId || "");
+    if (!candidate || seen.has(candidate)) {
+      return;
+    }
+    seen.add(candidate);
+    candidates.push(candidate);
+  }
+
+
+  function resolveWinnerIdCandidatesFromApiStats(tournament, match, data, winnerIndex) {
+    const candidates = [];
+    const seen = new Set();
+    const tryRefs = (refs) => {
+      refs.forEach((ref) => {
+        const winnerId = resolveWinnerIdFromApiRef(tournament, match, ref);
+        pushWinnerIdCandidate(candidates, seen, winnerId);
+      });
+    };
+
+    if (Number.isInteger(winnerIndex) && winnerIndex >= 0) {
+      tryRefs(extractApiParticipantRefCandidates(data?.matchStats?.[winnerIndex]));
+      tryRefs(extractApiParticipantRefCandidates(data?.players?.[winnerIndex]));
+    }
+
+    tryRefs(extractApiParticipantRefCandidates(data?.winnerPlayer));
+    tryRefs(extractApiParticipantRefCandidates(data?.winnerEntry));
+    tryRefs(extractApiParticipantRefCandidates(data?.winnerData));
+    tryRefs(extractApiParticipantRefCandidates(data?.winnerName));
+    tryRefs(extractApiParticipantRefCandidates(data?.winnerId));
+
+    const matchStats = Array.isArray(data?.matchStats) ? data.matchStats : [];
+    matchStats.forEach((entry) => {
+      const hasWinnerFlag = entry?.winner === true
+        || entry?.isWinner === true
+        || entry?.won === true
+        || entry?.result === "winner"
+        || entry?.result === "win";
+      if (hasWinnerFlag) {
+        tryRefs(extractApiParticipantRefCandidates(entry));
+      }
+    });
+
+    const players = Array.isArray(data?.players) ? data.players : [];
+    players.forEach((entry) => {
+      const hasWinnerFlag = entry?.winner === true
+        || entry?.isWinner === true
+        || entry?.won === true
+        || entry?.result === "winner"
+        || entry?.result === "win";
+      if (hasWinnerFlag) {
+        tryRefs(extractApiParticipantRefCandidates(entry));
+      }
+    });
+
+    return candidates;
   }
 
 
@@ -7000,6 +7210,38 @@
       );
     } catch (error) {
       record("API Sync: vertauschte Legs-Reihenfolge wird korrigiert", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = {
+        participants: [
+          { id: "P1", name: "Sabine" },
+          { id: "P2", name: "Tanja" },
+        ],
+      };
+      const match = {
+        player1Id: "P1",
+        player2Id: "P2",
+      };
+      const apiStats = {
+        winner: 0,
+        players: [
+          { name: "Sabine" },
+          { name: "Tanja" },
+        ],
+        matchStats: [
+          { legsWon: 1, player: { name: "Tanja" } },
+          { legsWon: 0, player: { name: "Sabine" } },
+        ],
+      };
+      const winners = resolveWinnerIdCandidatesFromApiStats(tournament, match, apiStats, 0);
+      record(
+        "API Sync: Winner-Index aus matchStats wird bevorzugt",
+        winners[0] === "P2",
+        `first=${winners[0] || "-"}`,
+      );
+    } catch (error) {
+      record("API Sync: Winner-Index aus matchStats wird bevorzugt", false, String(error?.message || error));
     }
 
     try {

@@ -152,6 +152,38 @@
     }
 
     try {
+      const tournament = {
+        participants: [
+          { id: "P1", name: "Sabine" },
+          { id: "P2", name: "Tanja" },
+        ],
+      };
+      const match = {
+        player1Id: "P1",
+        player2Id: "P2",
+      };
+      const apiStats = {
+        winner: 0,
+        players: [
+          { name: "Sabine" },
+          { name: "Tanja" },
+        ],
+        matchStats: [
+          { legsWon: 1, player: { name: "Tanja" } },
+          { legsWon: 0, player: { name: "Sabine" } },
+        ],
+      };
+      const winners = resolveWinnerIdCandidatesFromApiStats(tournament, match, apiStats, 0);
+      record(
+        "API Sync: Winner-Index aus matchStats wird bevorzugt",
+        winners[0] === "P2",
+        `first=${winners[0] || "-"}`,
+      );
+    } catch (error) {
+      record("API Sync: Winner-Index aus matchStats wird bevorzugt", false, String(error?.message || error));
+    }
+
+    try {
       const rawStoreV2 = {
         schemaVersion: 2,
         settings: { debug: false, featureFlags: { autoLobbyStart: false, randomizeKoRound1: true } },
