@@ -24,8 +24,11 @@ $checks = @(
   @{ Rule = "Globale LegDiff/Legs\+ Fallbacks"; Pattern = "right\.legDiff !== left\.legDiff[\s\S]*right\.legsFor !== left\.legsFor" },
   @{ Rule = "Deadlock-Markierung Playoff erforderlich"; Pattern = "playoff_required" },
   @{ Rule = "Gruppenaufloesung blockiert bei Playoff"; Pattern = 'groupResolution\?\.status === "resolved"' },
-  @{ Rule = "KO Draw basiert auf Seed-Placement"; Pattern = "buildSeedPlacement" },
-  @{ Rule = "Byes nur in KO Runde 1 automatisch"; Pattern = "match\.stage !== MATCH_STAGE_KO \|\| match\.round !== 1" },
+  @{ Rule = "KO Bracketgroesse wird berechnet"; Pattern = "calculateBracketSize" },
+  @{ Rule = "Deterministische Seed-Generierung vorhanden"; Pattern = "generateSeeds" },
+  @{ Rule = "Byes werden strukturell zugewiesen"; Pattern = "assignByes" },
+  @{ Rule = "KO-Struktur trennt Runden und virtuelle Matches"; Pattern = "buildBracketStructure" },
+  @{ Rule = "Keine automatische Bye-Abschluesse mehr"; Pattern = "structuralBye" },
   @{ Rule = "PDC-UI-Begriff Straight Knockout"; Pattern = "Straight Knockout" },
   @{ Rule = "PDC-UI-Begriff Round Robin"; Pattern = "Round Robin" }
 )

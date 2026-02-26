@@ -31,15 +31,20 @@
       const participants = participantList(9, "O");
       const ids = participants.map((item) => item.id);
       const openDrawMatches = buildKoMatchesV2(ids, KO_DRAW_MODE_OPEN_DRAW);
+      const repeatedOpenDrawMatches = buildKoMatchesV2(ids, KO_DRAW_MODE_OPEN_DRAW);
       const roundOne = openDrawMatches.filter((match) => match.round === 1);
-      const slottedPlayers = roundOne.reduce((sum, match) => sum + (match.player1Id ? 1 : 0) + (match.player2Id ? 1 : 0), 0);
+      const openRoundOne = roundOne.filter((match) => match.player1Id && match.player2Id);
+      const toSignature = (matches) => matches
+        .map((match) => `${match.id}:${match.player1Id || "-"}:${match.player2Id || "-"}`)
+        .join("|");
+      const deterministic = toSignature(openDrawMatches) === toSignature(repeatedOpenDrawMatches);
       record(
-        "KO Open Draw: alle Teilnehmer korrekt in R1-Slots",
-        slottedPlayers === participants.length,
-        `R1-Slots belegt: ${slottedPlayers}/${participants.length}`,
+        "KO Open Draw: deterministisch und ohne Bye-Platzhalter",
+        openRoundOne.length === roundOne.length && deterministic,
+        `matches=${roundOne.length}, deterministic=${deterministic}`,
       );
     } catch (error) {
-      record("KO Open Draw: alle Teilnehmer korrekt in R1-Slots", false, String(error?.message || error));
+      record("KO Open Draw: deterministisch und ohne Bye-Platzhalter", false, String(error?.message || error));
     }
 
     try {

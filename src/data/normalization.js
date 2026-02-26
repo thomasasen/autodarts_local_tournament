@@ -263,6 +263,44 @@
   }
 
 
+  function normalizeStoredMatchAverage(value) {
+    if (value === null || value === undefined || value === "") {
+      return null;
+    }
+    const parsed = Number.parseFloat(String(value));
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 200) {
+      return null;
+    }
+    return Math.round(parsed * 100) / 100;
+  }
+
+
+  function normalizeStoredMatchHighFinish(value) {
+    if (value === null || value === undefined || value === "") {
+      return null;
+    }
+    const parsed = clampInt(value, null, 1, 170);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+
+  function normalizeStoredPlayerStats(rawStats) {
+    return {
+      average: normalizeStoredMatchAverage(rawStats?.average),
+      oneEighties: clampInt(rawStats?.oneEighties, 0, 0, 99),
+      highFinish: normalizeStoredMatchHighFinish(rawStats?.highFinish),
+    };
+  }
+
+
+  function normalizeStoredMatchStats(rawStats) {
+    return {
+      p1: normalizeStoredPlayerStats(rawStats?.p1),
+      p2: normalizeStoredPlayerStats(rawStats?.p2),
+    };
+  }
+
+
   function resetMatchAutomationMeta(match) {
     const auto = ensureMatchAutoMeta(match);
     auto.lobbyId = null;
@@ -321,13 +359,94 @@
   }
 
 
+  function normalizeKoVirtualMatch(rawMatch, roundFallback, indexFallback) {
+    return {
+      id: normalizeText(rawMatch?.id || `ko-r${roundFallback}-m${indexFallback}`),
+      round: clampInt(rawMatch?.round, roundFallback, 1, 64),
+      number: clampInt(rawMatch?.number, indexFallback, 1, 256),
+      structuralBye: Boolean(rawMatch?.structuralBye),
+      competitors: {
+        p1: rawMatch?.competitors?.p1 || null,
+        p2: rawMatch?.competitors?.p2 || null,
+      },
+    };
+  }
+
+
+  function normalizeKoRoundStructure(rawRound, roundFallback) {
+    const virtualMatchesRaw = Array.isArray(rawRound?.virtualMatches) ? rawRound.virtualMatches : [];
+    return {
+      round: clampInt(rawRound?.round, roundFallback, 1, 64),
+      label: normalizeText(rawRound?.label || `Round ${roundFallback}`),
+      virtualMatches: virtualMatchesRaw.map((entry, index) => (
+        normalizeKoVirtualMatch(entry, roundFallback, index + 1)
+      )),
+    };
+  }
+
+
+  function normalizeKoSeedEntry(rawSeed, indexFallback) {
+    const participantId = normalizeText(rawSeed?.participantId || rawSeed?.id || "");
+    if (!participantId) {
+      return null;
+    }
+    return {
+      participantId,
+      participantName: normalizeText(rawSeed?.participantName || rawSeed?.name || participantId),
+      seed: clampInt(rawSeed?.seed, indexFallback, 1, TECHNICAL_PARTICIPANT_HARD_MAX),
+      hasBye: Boolean(rawSeed?.hasBye),
+      entryRound: clampInt(rawSeed?.entryRound, rawSeed?.hasBye ? 2 : 1, 1, 64),
+      slot: Number.isFinite(Number(rawSeed?.slot))
+        ? clampInt(rawSeed?.slot, null, 1, TECHNICAL_PARTICIPANT_HARD_MAX)
+        : null,
+    };
+  }
+
+
   function normalizeTournamentKoMeta(rawKo, fallbackDrawMode = KO_DRAW_MODE_SEEDED) {
     const ko = rawKo && typeof rawKo === "object" ? rawKo : {};
     const drawMode = normalizeKoDrawMode(ko.drawMode, fallbackDrawMode);
     const engineVersion = normalizeKoEngineVersion(ko.engineVersion, 0);
+    const seeding = (Array.isArray(ko.seeding) ? ko.seeding : [])
+      .map((entry, index) => normalizeKoSeedEntry(entry, index + 1))
+      .filter(Boolean);
+    const rounds = (Array.isArray(ko.rounds) ? ko.rounds : [])
+      .map((entry, index) => normalizeKoRoundStructure(entry, index + 1));
+    const fallbackBracketSize = nextPowerOfTwo(Math.max(2, seeding.length));
+    const bracketSize = nextPowerOfTwo(clampInt(
+      ko.bracketSize,
+      fallbackBracketSize,
+      2,
+      TECHNICAL_PARTICIPANT_HARD_MAX,
+    ));
     return {
       drawMode,
       engineVersion,
+      bracketSize,
+      seeding,
+      rounds,
+    };
+  }
+
+
+  function normalizeTournamentResultEntry(rawResult, indexFallback) {
+    return {
+      matchId: normalizeText(rawResult?.matchId || rawResult?.id || `result-${indexFallback}`),
+      stage: [MATCH_STAGE_KO, MATCH_STAGE_GROUP, MATCH_STAGE_LEAGUE].includes(rawResult?.stage)
+        ? rawResult.stage
+        : MATCH_STAGE_KO,
+      round: clampInt(rawResult?.round, 1, 1, 64),
+      number: clampInt(rawResult?.number, indexFallback, 1, 256),
+      player1Id: rawResult?.player1Id ? normalizeText(rawResult.player1Id) : null,
+      player2Id: rawResult?.player2Id ? normalizeText(rawResult.player2Id) : null,
+      winnerId: rawResult?.winnerId ? normalizeText(rawResult.winnerId) : null,
+      legs: {
+        p1: clampInt(rawResult?.legs?.p1, 0, 0, 99),
+        p2: clampInt(rawResult?.legs?.p2, 0, 0, 99),
+      },
+      stats: normalizeStoredMatchStats(rawResult?.stats),
+      source: rawResult?.source === "auto" ? "auto" : "manual",
+      updatedAt: normalizeText(rawResult?.updatedAt || nowIso()),
     };
   }
 
@@ -381,9 +500,12 @@
         p1: clampInt(match?.legs?.p1, 0, 0, 50),
         p2: clampInt(match?.legs?.p2, 0, 0, 50),
       },
+      stats: normalizeStoredMatchStats(match?.stats),
       updatedAt: normalizeText(match?.updatedAt || nowIso()),
       meta: normalizeMatchMeta(match?.meta),
     }));
+    const resultsRaw = Array.isArray(rawTournament.results) ? rawTournament.results : [];
+    const results = resultsRaw.map((entry, index) => normalizeTournamentResultEntry(entry, index + 1));
 
     const fallbackStartScore = sanitizeStartScore(rawTournament.startScore);
     const x01 = normalizeTournamentX01Settings(rawTournament.x01, fallbackStartScore);
@@ -403,6 +525,7 @@
       participants,
       groups,
       matches,
+      results,
       createdAt: normalizeText(rawTournament.createdAt || nowIso()),
       updatedAt: normalizeText(rawTournament.updatedAt || nowIso()),
     };

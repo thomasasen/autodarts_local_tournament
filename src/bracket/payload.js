@@ -5,7 +5,9 @@
       return null;
     }
 
-    const bracketSize = tournament.mode === "groups_ko" ? 4 : nextPowerOfTwo(tournament.participants.length);
+    const bracketSize = tournament.mode === "groups_ko"
+      ? 4
+      : nextPowerOfTwo(clampInt(tournament?.ko?.bracketSize, tournament.participants.length, 2, TECHNICAL_PARTICIPANT_HARD_MAX));
     const participants = tournament.participants
       .map((participant) => {
         const participantId = normalizeText(participant?.id);
@@ -34,21 +36,20 @@
       const player1Id = resolveBracketParticipantId(match.player1Id);
       const player2Id = resolveBracketParticipantId(match.player2Id);
       const winnerId = resolveBracketParticipantId(match.winnerId);
-      const byeResult = isByeMatchResult(match);
       const completed = isCompletedMatchResultValid(tournament, match)
         && Boolean(winnerId && (winnerId === player1Id || winnerId === player2Id));
       const status = completed ? 4 : (player1Id && player2Id ? 2 : 1);
       const opponent1 = player1Id
         ? {
             id: player1Id,
-            score: completed && !byeResult ? clampInt(match.legs?.p1, 0, 0, 99) : undefined,
+            score: completed ? clampInt(match.legs?.p1, 0, 0, 99) : undefined,
             result: completed && winnerId ? (winnerId === player1Id ? "win" : "loss") : undefined,
           }
         : null;
       const opponent2 = player2Id
         ? {
             id: player2Id,
-            score: completed && !byeResult ? clampInt(match.legs?.p2, 0, 0, 99) : undefined,
+            score: completed ? clampInt(match.legs?.p2, 0, 0, 99) : undefined,
             result: completed && winnerId ? (winnerId === player2Id ? "win" : "loss") : undefined,
           }
         : null;

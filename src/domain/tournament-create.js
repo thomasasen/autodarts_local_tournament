@@ -1,4 +1,93 @@
-﻿// Auto-generated module split from dist source.
+// Auto-generated module split from dist source.
+  /**
+   * @typedef {Object} KoSeed
+   * @property {string} participantId
+   * @property {string} participantName
+   * @property {number} seed
+   * @property {boolean} hasBye
+   * @property {number} entryRound
+   * @property {number|null} slot
+   */
+
+  /**
+   * @typedef {Object} KoVirtualMatch
+   * @property {string} id
+   * @property {number} round
+   * @property {number} number
+   * @property {boolean} structuralBye
+   * @property {Object} competitors
+   * @property {Object|null} competitors.p1
+   * @property {Object|null} competitors.p2
+   */
+
+  /**
+   * @typedef {Object} KoBracketStructure
+   * @property {number} bracketSize
+   * @property {number} byeCount
+   * @property {number[]} placement
+   * @property {KoSeed[]} seeding
+   * @property {Array<{round:number,label:string,virtualMatches:KoVirtualMatch[]}>} rounds
+   */
+
+  function sanitizeMatchAverage(value) {
+    if (value === null || value === undefined || value === "") {
+      return null;
+    }
+    const parsed = Number.parseFloat(String(value));
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 200) {
+      return null;
+    }
+    return Math.round(parsed * 100) / 100;
+  }
+
+
+  function sanitizeMatchHighFinish(value) {
+    if (value === null || value === undefined || value === "") {
+      return null;
+    }
+    const parsed = clampInt(value, null, 1, 170);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+
+  function normalizePlayerStats(rawStats) {
+    return {
+      average: sanitizeMatchAverage(rawStats?.average),
+      oneEighties: clampInt(rawStats?.oneEighties, 0, 0, 99),
+      highFinish: sanitizeMatchHighFinish(rawStats?.highFinish),
+    };
+  }
+
+
+  function normalizeMatchStats(rawStats) {
+    return {
+      p1: normalizePlayerStats(rawStats?.p1),
+      p2: normalizePlayerStats(rawStats?.p2),
+    };
+  }
+
+
+  function createKoVirtualCompetitorRef(node) {
+    if (!node) {
+      return null;
+    }
+    if (node.kind === "participant") {
+      return {
+        type: "participant",
+        participantId: node.participantId,
+        seed: node.seed,
+      };
+    }
+    if (node.kind === "winner") {
+      return {
+        type: "winner",
+        matchId: node.sourceMatchId,
+      };
+    }
+    return null;
+  }
+
+
   function createMatch({
     id,
     stage,
@@ -7,8 +96,18 @@
     groupId = null,
     player1Id = null,
     player2Id = null,
+    status = STATUS_PENDING,
+    winnerId = null,
+    source = null,
+    legs = null,
+    stats = null,
     meta = {},
   }) {
+    const normalizedStatus = status === STATUS_COMPLETED ? STATUS_COMPLETED : STATUS_PENDING;
+    const normalizedWinnerId = normalizedStatus === STATUS_COMPLETED
+      ? normalizeText(winnerId || "") || null
+      : null;
+    const normalizedSource = source === "auto" || source === "manual" ? source : null;
     return {
       id,
       stage,
@@ -17,10 +116,15 @@
       groupId,
       player1Id,
       player2Id,
-      status: STATUS_PENDING,
-      winnerId: null,
-      source: null,
-      legs: { p1: 0, p2: 0 },
+      status: normalizedStatus,
+      winnerId: normalizedWinnerId,
+      source: normalizedSource,
+      legs: {
+        p1: clampInt(legs?.p1, 0, 0, 99),
+        p2: clampInt(legs?.p2, 0, 0, 99),
+      },
+      // Domain structure for required PDC match stats.
+      stats: normalizeMatchStats(stats),
       updatedAt: nowIso(),
       meta: normalizeMatchMeta(meta),
     };
@@ -78,6 +182,15 @@
   }
 
 
+  function calculateBracketSize(participantCount) {
+    const normalizedCount = clampInt(participantCount, 0, 0, TECHNICAL_PARTICIPANT_HARD_MAX);
+    if (normalizedCount <= 2) {
+      return 2;
+    }
+    return nextPowerOfTwo(normalizedCount);
+  }
+
+
   function buildSeedPlacement(size) {
     if (!Number.isFinite(size) || size < 2 || size % 2 !== 0) {
       return [];
@@ -95,48 +208,224 @@
   }
 
 
-  function buildKoRound1Slots(participantIds, drawMode) {
-    const ids = Array.isArray(participantIds) ? participantIds.slice() : [];
-    if (!ids.length) {
-      return [];
+  function buildDeterministicSeedHash(value) {
+    const token = normalizeLookup(value || "");
+    let hash = 5381;
+    for (let i = 0; i < token.length; i += 1) {
+      hash = ((hash << 5) + hash) + token.charCodeAt(i);
+      hash >>>= 0;
     }
-    const size = nextPowerOfTwo(ids.length);
-    const mode = normalizeKoDrawMode(drawMode, KO_DRAW_MODE_SEEDED);
-    const seedOrderedParticipants = mode === KO_DRAW_MODE_OPEN_DRAW ? shuffleArray(ids) : ids;
-    const placement = buildSeedPlacement(size);
-    const seedToParticipant = new Map();
-    seedOrderedParticipants.forEach((participantId, index) => {
-      seedToParticipant.set(index + 1, participantId);
+    return hash >>> 0;
+  }
+
+
+  function normalizeSeedParticipants(players) {
+    const source = Array.isArray(players) ? players : [];
+    const seen = new Set();
+    const list = [];
+    source.forEach((entry, index) => {
+      const participantId = normalizeText(entry?.id || entry || "");
+      if (!participantId || seen.has(participantId)) {
+        return;
+      }
+      seen.add(participantId);
+      const explicitSeed = Number.parseInt(String(entry?.seed ?? ""), 10);
+      list.push({
+        participantId,
+        participantName: normalizeText(entry?.name || participantId),
+        originalIndex: index,
+        explicitSeed: Number.isFinite(explicitSeed) && explicitSeed > 0 ? explicitSeed : null,
+      });
     });
-    return placement.map((seedNumber) => seedToParticipant.get(seedNumber) || null);
+    return list;
+  }
+
+
+  function generateSeeds(players, drawMode = KO_DRAW_MODE_SEEDED) {
+    const participants = normalizeSeedParticipants(players);
+    const mode = normalizeKoDrawMode(drawMode, KO_DRAW_MODE_SEEDED);
+    const ordered = participants.slice();
+
+    if (mode === KO_DRAW_MODE_OPEN_DRAW) {
+      ordered.sort((left, right) => {
+        const leftHash = buildDeterministicSeedHash(`${left.participantName}|${left.participantId}|${left.originalIndex}`);
+        const rightHash = buildDeterministicSeedHash(`${right.participantName}|${right.participantId}|${right.originalIndex}`);
+        if (leftHash !== rightHash) {
+          return leftHash - rightHash;
+        }
+        return left.originalIndex - right.originalIndex;
+      });
+    } else {
+      // Extension point: replace this comparator when external ranking-based seeding is added.
+      ordered.sort((left, right) => {
+        const leftSeed = Number.isFinite(left.explicitSeed) ? left.explicitSeed : Number.MAX_SAFE_INTEGER;
+        const rightSeed = Number.isFinite(right.explicitSeed) ? right.explicitSeed : Number.MAX_SAFE_INTEGER;
+        if (leftSeed !== rightSeed) {
+          return leftSeed - rightSeed;
+        }
+        return left.originalIndex - right.originalIndex;
+      });
+    }
+
+    return ordered.map((entry, index) => ({
+      participantId: entry.participantId,
+      participantName: entry.participantName,
+      seed: index + 1,
+    }));
+  }
+
+
+  function assignByes(players, bracketSize) {
+    const seeds = Array.isArray(players) ? players.slice() : [];
+    const size = calculateBracketSize(bracketSize || seeds.length);
+    const byeCount = Math.max(0, size - seeds.length);
+    const seededWithByes = seeds.map((seedEntry, index) => ({
+      ...seedEntry,
+      hasBye: index < byeCount,
+      entryRound: index < byeCount ? 2 : 1,
+    }));
+    return {
+      bracketSize: size,
+      byeCount,
+      seeds: seededWithByes,
+    };
+  }
+
+
+  function buildBracketStructure(players, seeds) {
+    const normalizedParticipants = normalizeSeedParticipants(players);
+    const seeded = Array.isArray(seeds) && seeds.length
+      ? seeds.slice()
+      : generateSeeds(normalizedParticipants, KO_DRAW_MODE_SEEDED);
+    const assignedByes = assignByes(seeded, normalizedParticipants.length);
+    const placement = buildSeedPlacement(assignedByes.bracketSize);
+    const seedByNumber = new Map(assignedByes.seeds.map((entry) => [entry.seed, entry]));
+
+    const slotByParticipantId = new Map();
+    const leafNodes = placement.map((seedNumber, slotIndex) => {
+      const seedEntry = seedByNumber.get(seedNumber) || null;
+      if (!seedEntry) {
+        return null;
+      }
+      slotByParticipantId.set(seedEntry.participantId, slotIndex + 1);
+      return {
+        kind: "participant",
+        participantId: seedEntry.participantId,
+        seed: seedEntry.seed,
+      };
+    });
+
+    const seeding = assignedByes.seeds.map((seedEntry) => ({
+      ...seedEntry,
+      slot: slotByParticipantId.get(seedEntry.participantId) || null,
+    }));
+
+    const rounds = [];
+    let currentNodes = leafNodes;
+    const totalRounds = Math.log2(assignedByes.bracketSize);
+    for (let round = 1; round <= totalRounds; round += 1) {
+      const matchesInRound = currentNodes.length / 2;
+      const virtualMatches = [];
+      const nextNodes = [];
+      for (let number = 1; number <= matchesInRound; number += 1) {
+        const idx = (number - 1) * 2;
+        const leftNode = currentNodes[idx] || null;
+        const rightNode = currentNodes[idx + 1] || null;
+        const id = `ko-r${round}-m${number}`;
+        const structuralBye = Boolean((leftNode && !rightNode) || (!leftNode && rightNode));
+
+        virtualMatches.push({
+          id,
+          round,
+          number,
+          structuralBye,
+          competitors: {
+            p1: createKoVirtualCompetitorRef(leftNode),
+            p2: createKoVirtualCompetitorRef(rightNode),
+          },
+        });
+
+        if (!leftNode && !rightNode) {
+          nextNodes.push(null);
+        } else if (structuralBye) {
+          nextNodes.push(leftNode || rightNode);
+        } else {
+          nextNodes.push({
+            kind: "winner",
+            sourceMatchId: id,
+          });
+        }
+      }
+      rounds.push({
+        round,
+        label: round === totalRounds ? "Final" : `Round ${round}`,
+        virtualMatches,
+      });
+      currentNodes = nextNodes;
+    }
+
+    return {
+      bracketSize: assignedByes.bracketSize,
+      byeCount: assignedByes.byeCount,
+      placement,
+      seeding,
+      rounds,
+    };
+  }
+
+
+  function buildKoMatchMetaFromVirtualMatch(virtualMatch) {
+    return {
+      bracket: {
+        p1Source: virtualMatch?.competitors?.p1 || null,
+        p2Source: virtualMatch?.competitors?.p2 || null,
+      },
+    };
+  }
+
+
+  function buildKoMatchesFromStructure(bracketStructure) {
+    const rounds = Array.isArray(bracketStructure?.rounds) ? bracketStructure.rounds : [];
+    const matches = [];
+    rounds.forEach((roundDef) => {
+      roundDef.virtualMatches.forEach((virtualMatch) => {
+        const p1 = virtualMatch?.competitors?.p1 || null;
+        const p2 = virtualMatch?.competitors?.p2 || null;
+        if (virtualMatch.structuralBye) {
+          return;
+        }
+        if (!p1 || !p2) {
+          return;
+        }
+        if (p1.type !== "participant" || p2.type !== "participant") {
+          return;
+        }
+        matches.push(createMatch({
+          id: virtualMatch.id,
+          stage: MATCH_STAGE_KO,
+          round: virtualMatch.round,
+          number: virtualMatch.number,
+          player1Id: p1.participantId,
+          player2Id: p2.participantId,
+          meta: buildKoMatchMetaFromVirtualMatch(virtualMatch),
+        }));
+      });
+    });
+    return matches;
   }
 
 
   function buildKoMatchesV2(participantIds, drawMode = KO_DRAW_MODE_SEEDED) {
-    const roundOneSlots = buildKoRound1Slots(participantIds, drawMode);
-    const size = roundOneSlots.length || nextPowerOfTwo(participantIds.length);
-
-    const matches = [];
-    const rounds = Math.log2(size);
-
-    for (let round = 1; round <= rounds; round += 1) {
-      const matchesInRound = size / (2 ** round);
-      for (let number = 1; number <= matchesInRound; number += 1) {
-        const idx = (number - 1) * 2;
-        const player1Id = round === 1 ? roundOneSlots[idx] || null : null;
-        const player2Id = round === 1 ? roundOneSlots[idx + 1] || null : null;
-        matches.push(createMatch({
-          id: `ko-r${round}-m${number}`,
-          stage: MATCH_STAGE_KO,
-          round,
-          number,
-          player1Id,
-          player2Id,
-        }));
-      }
-    }
-
-    return matches;
+    const participants = (Array.isArray(participantIds) ? participantIds : [])
+      .map((entry) => ({
+        id: normalizeText(entry?.id || entry || ""),
+        name: normalizeText(entry?.name || entry?.id || entry || ""),
+        seed: entry?.seed,
+      }))
+      .filter((entry) => entry.id);
+    const seeds = generateSeeds(participants, drawMode);
+    const structure = buildBracketStructure(participants, seeds);
+    return buildKoMatchesFromStructure(structure);
   }
 
 
@@ -218,7 +507,7 @@
       errors.push("Bitte einen Turniernamen eingeben.");
     }
     if (!["ko", "league", "groups_ko"].includes(config.mode)) {
-      errors.push("Ung\u00fcltiger Modus.");
+      errors.push("Ungültiger Modus.");
     }
     const participantCountError = getParticipantCountError(config.mode, config.participants.length);
     if (participantCountError) {
@@ -249,6 +538,7 @@
 
     let groups = [];
     let matches = [];
+    let koMeta = null;
 
     if (config.mode === "league") {
       matches = buildLeagueMatches(participantIds);
@@ -256,17 +546,23 @@
       groups = buildGroups(participantIds);
       matches = buildGroupMatches(groups).concat(buildGroupsKoMatches());
     } else {
-      matches = buildKoMatchesV2(participantIds, koDrawMode);
+      const koSeeds = generateSeeds(participants, koDrawMode);
+      const koStructure = buildBracketStructure(participants, koSeeds);
+      matches = buildKoMatchesFromStructure(koStructure);
+      koMeta = {
+        drawMode: koDrawMode,
+        engineVersion: KO_ENGINE_VERSION,
+        bracketSize: koStructure.bracketSize,
+        seeding: koStructure.seeding,
+        rounds: koStructure.rounds,
+      };
     }
 
     const tournament = {
       id: uuid("tournament"),
       name: normalizeText(config.name),
       mode: config.mode,
-      ko: config.mode === "ko" ? {
-        drawMode: koDrawMode,
-        engineVersion: KO_ENGINE_VERSION,
-      } : null,
+      ko: koMeta,
       bestOfLegs: sanitizeBestOf(config.bestOfLegs),
       startScore: x01.baseScore,
       x01,
@@ -274,6 +570,7 @@
       participants,
       groups,
       matches,
+      results: [],
       createdAt: nowIso(),
       updatedAt: nowIso(),
     };
@@ -293,5 +590,4 @@
   function findMatch(tournament, matchId) {
     return tournament.matches.find((match) => match.id === matchId) || null;
   }
-
 

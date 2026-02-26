@@ -63,7 +63,7 @@
   const MATCH_STAGE_KO = "ko";
   const MATCH_STAGE_GROUP = "group";
   const MATCH_STAGE_LEAGUE = "league";
-  const KO_ENGINE_VERSION = 2;
+  const KO_ENGINE_VERSION = 3;
   const KO_DRAW_MODE_SEEDED = "seeded";
   const KO_DRAW_MODE_OPEN_DRAW = "open_draw";
   const X01_VARIANT = "X01";
