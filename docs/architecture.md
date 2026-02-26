@@ -25,12 +25,16 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
 
 ## Datenmodell
 - Storage-Key: `ata:tournament:v1`
-- `schemaVersion: 3`
+- `schemaVersion: 4`
 - Neues Regelobjekt pro Turnier:
-  - `tournament.rules.tieBreakMode: "dra_strict" | "legacy"`
+  - `tournament.rules.tieBreakProfile: "promoter_h2h_minitable" | "promoter_points_legdiff"`
+- KO-spezifisch:
+  - `settings.featureFlags.koDrawLockDefault: boolean`
+  - `tournament.ko.drawLocked: boolean`
+  - `tournament.ko.placement: number[]`
 
 ## Regelmodell (DRA/PDC)
-- Standard: `dra_strict` (auch bei Migration von Bestandsdaten).
+- Standard: `promoter_h2h_minitable` (auch bei Migration von Bestandsdaten).
 - Tie-Break-Reihenfolge (Round Robin):
   1. Punkte (2 Sieg, 1 Remis, 0 Niederlage)
   2. Bei 2 Punktgleichen: Direktvergleich
@@ -45,8 +49,12 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
 - Draw-Modi:
   - `seeded`
   - `open_draw`
-- Bye-Handling bleibt DRA-konform:
-  - automatische Bye-Abschlüsse nur in KO-Runde 1
+- vollständige Match-Materialisierung über alle Runden:
+  - offene spätere Runden werden als nicht editierbare Slots geführt
+  - Freilose werden als explizite Bye-Matches gespeichert
+- Draw-Lock:
+  - Standardmäßig bleibt der initiale KO-Draw stabil (`drawLocked = true`)
+  - kann pro aktivem KO-Turnier bewusst umgeschaltet werden
 
 ## Qualitätssicherung
 - `scripts/qa.ps1`: Orchestrierung

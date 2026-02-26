@@ -66,10 +66,13 @@
       row.legDiff = row.legsFor - row.legsAgainst;
     });
 
-    const tieBreakMode = normalizeTieBreakMode(tournament?.rules?.tieBreakMode, TIE_BREAK_MODE_DRA_STRICT);
+    const tieBreakProfile = normalizeTieBreakProfile(
+      tournament?.rules?.tieBreakProfile,
+      TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE,
+    );
     const tiePrimaryById = new Map(rows.map((row) => [row.id, 0]));
 
-    if (tieBreakMode === TIE_BREAK_MODE_DRA_STRICT) {
+    if (tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE) {
       const pointsBuckets = new Map();
       rows.forEach((row) => {
         if (!pointsBuckets.has(row.points)) {
@@ -127,7 +130,7 @@
         return right.points - left.points;
       }
 
-      if (tieBreakMode === TIE_BREAK_MODE_DRA_STRICT) {
+      if (tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE) {
         const rightPrimary = tiePrimaryById.get(right.id) || 0;
         const leftPrimary = tiePrimaryById.get(left.id) || 0;
         if (rightPrimary !== leftPrimary) {
@@ -144,7 +147,7 @@
       return left.name.localeCompare(right.name, "de");
     });
 
-    if (tieBreakMode === TIE_BREAK_MODE_DRA_STRICT) {
+    if (tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE) {
       const unresolvedBuckets = new Map();
       rows.forEach((row) => {
         const key = [

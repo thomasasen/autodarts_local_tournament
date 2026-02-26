@@ -68,6 +68,7 @@
       featureFlags: {
         autoLobbyStart: false,
         randomizeKoRound1: true,
+        koDrawLockDefault: true,
       },
     };
     return {
@@ -185,16 +186,34 @@
   }
 
 
-  function normalizeTieBreakMode(value, fallback = TIE_BREAK_MODE_DRA_STRICT) {
+  function mapLegacyTieBreakModeToProfile(value, fallback = TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE) {
     const mode = normalizeText(value || "").toLowerCase();
-    return TIE_BREAK_MODES.includes(mode) ? mode : fallback;
+    if (mode === LEGACY_TIE_BREAK_MODE_DRA_STRICT) {
+      return TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE;
+    }
+    if (mode === LEGACY_TIE_BREAK_MODE_LEGACY) {
+      return TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF;
+    }
+    return fallback;
+  }
+
+
+  function normalizeTieBreakProfile(value, fallback = TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE) {
+    const profile = normalizeText(value || "").toLowerCase();
+    if (TIE_BREAK_PROFILES.includes(profile)) {
+      return profile;
+    }
+    return mapLegacyTieBreakModeToProfile(value, fallback);
   }
 
 
   function normalizeTournamentRules(rawRules) {
     const rules = rawRules && typeof rawRules === "object" ? rawRules : {};
+    const tieBreakRaw = Object.prototype.hasOwnProperty.call(rules, "tieBreakProfile")
+      ? rules.tieBreakProfile
+      : rules.tieBreakMode;
     return {
-      tieBreakMode: normalizeTieBreakMode(rules.tieBreakMode, TIE_BREAK_MODE_DRA_STRICT),
+      tieBreakProfile: normalizeTieBreakProfile(tieBreakRaw, TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE),
     };
   }
 
@@ -403,9 +422,34 @@
   }
 
 
-  function normalizeTournamentKoMeta(rawKo, fallbackDrawMode = KO_DRAW_MODE_SEEDED) {
+  function normalizeKoDrawLocked(value, fallback = true) {
+    if (typeof value === "boolean") {
+      return value;
+    }
+    return Boolean(fallback);
+  }
+
+
+  function normalizeKoPlacement(placementRaw, bracketSize) {
+    const fallbackPlacement = buildSeedPlacement(bracketSize);
+    if (!Array.isArray(placementRaw) || !placementRaw.length) {
+      return fallbackPlacement;
+    }
+    const used = new Set();
+    const normalized = placementRaw
+      .map((entry) => clampInt(entry, null, 1, bracketSize))
+      .filter((entry) => Number.isInteger(entry) && !used.has(entry) && used.add(entry));
+    if (normalized.length !== bracketSize) {
+      return fallbackPlacement;
+    }
+    return normalized;
+  }
+
+
+  function normalizeTournamentKoMeta(rawKo, fallbackDrawMode = KO_DRAW_MODE_SEEDED, fallbackDrawLocked = true) {
     const ko = rawKo && typeof rawKo === "object" ? rawKo : {};
     const drawMode = normalizeKoDrawMode(ko.drawMode, fallbackDrawMode);
+    const drawLocked = normalizeKoDrawLocked(ko.drawLocked, fallbackDrawLocked);
     const engineVersion = normalizeKoEngineVersion(ko.engineVersion, 0);
     const seeding = (Array.isArray(ko.seeding) ? ko.seeding : [])
       .map((entry, index) => normalizeKoSeedEntry(entry, index + 1))
@@ -419,10 +463,13 @@
       2,
       TECHNICAL_PARTICIPANT_HARD_MAX,
     ));
+    const placement = normalizeKoPlacement(ko.placement, bracketSize);
     return {
       drawMode,
+      drawLocked,
       engineVersion,
       bracketSize,
+      placement,
       seeding,
       rounds,
     };
@@ -451,7 +498,7 @@
   }
 
 
-  function normalizeTournament(rawTournament) {
+  function normalizeTournament(rawTournament, fallbackKoDrawLocked = true) {
     if (!rawTournament || typeof rawTournament !== "object") {
       return null;
     }
@@ -516,7 +563,7 @@
       name: normalizeText(rawTournament.name || "Lokales Turnier"),
       mode,
       ko: mode === "ko"
-        ? normalizeTournamentKoMeta(rawTournament.ko, KO_DRAW_MODE_SEEDED)
+        ? normalizeTournamentKoMeta(rawTournament.ko, KO_DRAW_MODE_SEEDED, fallbackKoDrawLocked)
         : null,
       bestOfLegs: sanitizeBestOf(rawTournament.bestOfLegs),
       startScore: x01.baseScore,
@@ -534,11 +581,13 @@
 
   function normalizeStoreShape(input) {
     const defaults = createDefaultStore();
+    const defaultKoDrawLocked = input?.settings?.featureFlags?.koDrawLockDefault !== false;
     const settings = {
       debug: Boolean(input?.settings?.debug),
       featureFlags: {
         autoLobbyStart: Boolean(input?.settings?.featureFlags?.autoLobbyStart),
         randomizeKoRound1: input?.settings?.featureFlags?.randomizeKoRound1 !== false,
+        koDrawLockDefault: defaultKoDrawLocked,
       },
     };
     return {
@@ -549,7 +598,7 @@
         matchesSortMode: sanitizeMatchesSortMode(input?.ui?.matchesSortMode, defaults.ui.matchesSortMode),
         createDraft: normalizeCreateDraft(input?.ui?.createDraft, settings),
       },
-      tournament: normalizeTournament(input?.tournament),
+      tournament: normalizeTournament(input?.tournament, defaultKoDrawLocked),
     };
   }
 

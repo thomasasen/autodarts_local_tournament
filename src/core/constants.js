@@ -24,7 +24,7 @@
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
   const APP_VERSION = "0.3.3";
   const STORAGE_KEY = "ata:tournament:v1";
-  const STORAGE_SCHEMA_VERSION = 3;
+  const STORAGE_SCHEMA_VERSION = 4;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
   const SAVE_DEBOUNCE_MS = 150;
   const UI_HOST_ID = "ata-ui-host";
@@ -40,7 +40,7 @@
   const README_RULES_URL = `${README_BASE_URL}#regelbasis-und-limits`;
   const README_SETTINGS_URL = `${README_BASE_URL}#einstellungen`;
   const README_INFO_SYMBOLS_URL = `${README_BASE_URL}#info-symbole`;
-  const README_TIE_BREAK_URL = `${README_BASE_URL}#dra-tie-break`;
+  const README_TIE_BREAK_URL = `${README_BASE_URL}#promoter-tie-break-profil`;
   const README_TOURNAMENT_MODES_URL = `${README_BASE_URL}#turniermodi`;
   const README_TOURNAMENT_CREATE_URL = `${README_BASE_URL}#turnier-anlegen`;
   const README_API_AUTOMATION_URL = `${README_BASE_URL}#api-halbautomatik`;
@@ -78,12 +78,14 @@
   const MATCH_SORT_MODE_READY_FIRST = "ready_first";
   const MATCH_SORT_MODE_ROUND = "round";
   const MATCH_SORT_MODE_STATUS = "status";
-  const TIE_BREAK_MODE_DRA_STRICT = "dra_strict";
-  const TIE_BREAK_MODE_LEGACY = "legacy";
-  const TIE_BREAK_MODES = Object.freeze([
-    TIE_BREAK_MODE_DRA_STRICT,
-    TIE_BREAK_MODE_LEGACY,
+  const TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE = "promoter_h2h_minitable";
+  const TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF = "promoter_points_legdiff";
+  const TIE_BREAK_PROFILES = Object.freeze([
+    TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE,
+    TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF,
   ]);
+  const LEGACY_TIE_BREAK_MODE_DRA_STRICT = "dra_strict";
+  const LEGACY_TIE_BREAK_MODE_LEGACY = "legacy";
   const MATCH_SORT_MODES = Object.freeze([
     MATCH_SORT_MODE_READY_FIRST,
     MATCH_SORT_MODE_ROUND,

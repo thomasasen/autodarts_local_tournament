@@ -384,30 +384,40 @@
   }
 
 
+  function resolveInitialVirtualParticipantId(competitorRef) {
+    if (!competitorRef || competitorRef.type !== "participant") {
+      return null;
+    }
+    return normalizeText(competitorRef.participantId || "") || null;
+  }
+
+
   function buildKoMatchesFromStructure(bracketStructure) {
     const rounds = Array.isArray(bracketStructure?.rounds) ? bracketStructure.rounds : [];
     const matches = [];
     rounds.forEach((roundDef) => {
       roundDef.virtualMatches.forEach((virtualMatch) => {
-        const p1 = virtualMatch?.competitors?.p1 || null;
-        const p2 = virtualMatch?.competitors?.p2 || null;
-        if (virtualMatch.structuralBye) {
-          return;
-        }
-        if (!p1 || !p2) {
-          return;
-        }
-        if (p1.type !== "participant" || p2.type !== "participant") {
-          return;
-        }
+        const p1 = resolveInitialVirtualParticipantId(virtualMatch?.competitors?.p1);
+        const p2 = resolveInitialVirtualParticipantId(virtualMatch?.competitors?.p2);
+        const structuralBye = Boolean(virtualMatch?.structuralBye);
+        const advancedParticipantId = structuralBye ? (p1 || p2 || null) : null;
+        const isBye = structuralBye && Boolean(advancedParticipantId);
+        const baseMeta = buildKoMatchMetaFromVirtualMatch(virtualMatch);
+        const meta = isBye
+          ? { ...baseMeta, resultKind: "bye" }
+          : baseMeta;
+
         matches.push(createMatch({
           id: virtualMatch.id,
           stage: MATCH_STAGE_KO,
           round: virtualMatch.round,
           number: virtualMatch.number,
-          player1Id: p1.participantId,
-          player2Id: p2.participantId,
-          meta: buildKoMatchMetaFromVirtualMatch(virtualMatch),
+          player1Id: p1,
+          player2Id: p2,
+          status: isBye ? STATUS_COMPLETED : STATUS_PENDING,
+          winnerId: isBye ? advancedParticipantId : null,
+          legs: isBye ? { p1: 0, p2: 0 } : { p1: 0, p2: 0 },
+          meta,
         }));
       });
     });
@@ -525,6 +535,9 @@
     const koDrawMode = config.mode === "ko" && config.randomizeKoRound1
       ? KO_DRAW_MODE_OPEN_DRAW
       : KO_DRAW_MODE_SEEDED;
+    const koDrawLocked = config.mode === "ko"
+      ? config.koDrawLocked !== false
+      : false;
     const x01 = normalizeTournamentX01Settings({
       presetId: config.x01Preset,
       baseScore: config.startScore,
@@ -551,8 +564,10 @@
       matches = buildKoMatchesFromStructure(koStructure);
       koMeta = {
         drawMode: koDrawMode,
+        drawLocked: koDrawLocked,
         engineVersion: KO_ENGINE_VERSION,
         bracketSize: koStructure.bracketSize,
+        placement: koStructure.placement,
         seeding: koStructure.seeding,
         rounds: koStructure.rounds,
       };
@@ -566,7 +581,7 @@
       bestOfLegs: sanitizeBestOf(config.bestOfLegs),
       startScore: x01.baseScore,
       x01,
-      rules: normalizeTournamentRules({ tieBreakMode: TIE_BREAK_MODE_DRA_STRICT }),
+      rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
       participants,
       groups,
       matches,
@@ -590,4 +605,3 @@
   function findMatch(tournament, matchId) {
     return tournament.matches.find((match) => match.id === matchId) || null;
   }
-

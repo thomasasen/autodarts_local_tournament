@@ -23,7 +23,7 @@
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
   const APP_VERSION = "0.3.3";
   const STORAGE_KEY = "ata:tournament:v1";
-  const STORAGE_SCHEMA_VERSION = 3;
+  const STORAGE_SCHEMA_VERSION = 4;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
   const SAVE_DEBOUNCE_MS = 150;
   const UI_HOST_ID = "ata-ui-host";
@@ -39,7 +39,7 @@
   const README_RULES_URL = `${README_BASE_URL}#regelbasis-und-limits`;
   const README_SETTINGS_URL = `${README_BASE_URL}#einstellungen`;
   const README_INFO_SYMBOLS_URL = `${README_BASE_URL}#info-symbole`;
-  const README_TIE_BREAK_URL = `${README_BASE_URL}#dra-tie-break`;
+  const README_TIE_BREAK_URL = `${README_BASE_URL}#promoter-tie-break-profil`;
   const README_TOURNAMENT_MODES_URL = `${README_BASE_URL}#turniermodi`;
   const README_TOURNAMENT_CREATE_URL = `${README_BASE_URL}#turnier-anlegen`;
   const README_API_AUTOMATION_URL = `${README_BASE_URL}#api-halbautomatik`;
@@ -1362,12 +1362,14 @@
   const MATCH_SORT_MODE_READY_FIRST = "ready_first";
   const MATCH_SORT_MODE_ROUND = "round";
   const MATCH_SORT_MODE_STATUS = "status";
-  const TIE_BREAK_MODE_DRA_STRICT = "dra_strict";
-  const TIE_BREAK_MODE_LEGACY = "legacy";
-  const TIE_BREAK_MODES = Object.freeze([
-    TIE_BREAK_MODE_DRA_STRICT,
-    TIE_BREAK_MODE_LEGACY,
+  const TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE = "promoter_h2h_minitable";
+  const TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF = "promoter_points_legdiff";
+  const TIE_BREAK_PROFILES = Object.freeze([
+    TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE,
+    TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF,
   ]);
+  const LEGACY_TIE_BREAK_MODE_DRA_STRICT = "dra_strict";
+  const LEGACY_TIE_BREAK_MODE_LEGACY = "legacy";
   const MATCH_SORT_MODES = Object.freeze([
     MATCH_SORT_MODE_READY_FIRST,
     MATCH_SORT_MODE_ROUND,
@@ -1842,6 +1844,7 @@
       featureFlags: {
         autoLobbyStart: false,
         randomizeKoRound1: true,
+        koDrawLockDefault: true,
       },
     };
     return {
@@ -1959,16 +1962,34 @@
   }
 
 
-  function normalizeTieBreakMode(value, fallback = TIE_BREAK_MODE_DRA_STRICT) {
+  function mapLegacyTieBreakModeToProfile(value, fallback = TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE) {
     const mode = normalizeText(value || "").toLowerCase();
-    return TIE_BREAK_MODES.includes(mode) ? mode : fallback;
+    if (mode === LEGACY_TIE_BREAK_MODE_DRA_STRICT) {
+      return TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE;
+    }
+    if (mode === LEGACY_TIE_BREAK_MODE_LEGACY) {
+      return TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF;
+    }
+    return fallback;
+  }
+
+
+  function normalizeTieBreakProfile(value, fallback = TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE) {
+    const profile = normalizeText(value || "").toLowerCase();
+    if (TIE_BREAK_PROFILES.includes(profile)) {
+      return profile;
+    }
+    return mapLegacyTieBreakModeToProfile(value, fallback);
   }
 
 
   function normalizeTournamentRules(rawRules) {
     const rules = rawRules && typeof rawRules === "object" ? rawRules : {};
+    const tieBreakRaw = Object.prototype.hasOwnProperty.call(rules, "tieBreakProfile")
+      ? rules.tieBreakProfile
+      : rules.tieBreakMode;
     return {
-      tieBreakMode: normalizeTieBreakMode(rules.tieBreakMode, TIE_BREAK_MODE_DRA_STRICT),
+      tieBreakProfile: normalizeTieBreakProfile(tieBreakRaw, TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE),
     };
   }
 
@@ -2177,9 +2198,34 @@
   }
 
 
-  function normalizeTournamentKoMeta(rawKo, fallbackDrawMode = KO_DRAW_MODE_SEEDED) {
+  function normalizeKoDrawLocked(value, fallback = true) {
+    if (typeof value === "boolean") {
+      return value;
+    }
+    return Boolean(fallback);
+  }
+
+
+  function normalizeKoPlacement(placementRaw, bracketSize) {
+    const fallbackPlacement = buildSeedPlacement(bracketSize);
+    if (!Array.isArray(placementRaw) || !placementRaw.length) {
+      return fallbackPlacement;
+    }
+    const used = new Set();
+    const normalized = placementRaw
+      .map((entry) => clampInt(entry, null, 1, bracketSize))
+      .filter((entry) => Number.isInteger(entry) && !used.has(entry) && used.add(entry));
+    if (normalized.length !== bracketSize) {
+      return fallbackPlacement;
+    }
+    return normalized;
+  }
+
+
+  function normalizeTournamentKoMeta(rawKo, fallbackDrawMode = KO_DRAW_MODE_SEEDED, fallbackDrawLocked = true) {
     const ko = rawKo && typeof rawKo === "object" ? rawKo : {};
     const drawMode = normalizeKoDrawMode(ko.drawMode, fallbackDrawMode);
+    const drawLocked = normalizeKoDrawLocked(ko.drawLocked, fallbackDrawLocked);
     const engineVersion = normalizeKoEngineVersion(ko.engineVersion, 0);
     const seeding = (Array.isArray(ko.seeding) ? ko.seeding : [])
       .map((entry, index) => normalizeKoSeedEntry(entry, index + 1))
@@ -2193,10 +2239,13 @@
       2,
       TECHNICAL_PARTICIPANT_HARD_MAX,
     ));
+    const placement = normalizeKoPlacement(ko.placement, bracketSize);
     return {
       drawMode,
+      drawLocked,
       engineVersion,
       bracketSize,
+      placement,
       seeding,
       rounds,
     };
@@ -2225,7 +2274,7 @@
   }
 
 
-  function normalizeTournament(rawTournament) {
+  function normalizeTournament(rawTournament, fallbackKoDrawLocked = true) {
     if (!rawTournament || typeof rawTournament !== "object") {
       return null;
     }
@@ -2290,7 +2339,7 @@
       name: normalizeText(rawTournament.name || "Lokales Turnier"),
       mode,
       ko: mode === "ko"
-        ? normalizeTournamentKoMeta(rawTournament.ko, KO_DRAW_MODE_SEEDED)
+        ? normalizeTournamentKoMeta(rawTournament.ko, KO_DRAW_MODE_SEEDED, fallbackKoDrawLocked)
         : null,
       bestOfLegs: sanitizeBestOf(rawTournament.bestOfLegs),
       startScore: x01.baseScore,
@@ -2308,11 +2357,13 @@
 
   function normalizeStoreShape(input) {
     const defaults = createDefaultStore();
+    const defaultKoDrawLocked = input?.settings?.featureFlags?.koDrawLockDefault !== false;
     const settings = {
       debug: Boolean(input?.settings?.debug),
       featureFlags: {
         autoLobbyStart: Boolean(input?.settings?.featureFlags?.autoLobbyStart),
         randomizeKoRound1: input?.settings?.featureFlags?.randomizeKoRound1 !== false,
+        koDrawLockDefault: defaultKoDrawLocked,
       },
     };
     return {
@@ -2323,7 +2374,7 @@
         matchesSortMode: sanitizeMatchesSortMode(input?.ui?.matchesSortMode, defaults.ui.matchesSortMode),
         createDraft: normalizeCreateDraft(input?.ui?.createDraft, settings),
       },
-      tournament: normalizeTournament(input?.tournament),
+      tournament: normalizeTournament(input?.tournament, defaultKoDrawLocked),
     };
   }
 
@@ -2426,6 +2477,7 @@
 
     const version = Number(rawValue.schemaVersion || 0);
     switch (version) {
+      case 4:
       case 3:
       case 2:
       case 1:
@@ -2451,20 +2503,48 @@
     }
   }
 
-  function setTournamentTieBreakMode(mode) {
+  function setTournamentTieBreakProfile(profile) {
     const tournament = state.store.tournament;
     if (!tournament) {
       return { ok: false, message: "Kein aktives Turnier vorhanden." };
     }
-    const nextMode = normalizeTieBreakMode(mode, TIE_BREAK_MODE_DRA_STRICT);
-    const currentMode = normalizeTieBreakMode(tournament?.rules?.tieBreakMode, TIE_BREAK_MODE_DRA_STRICT);
-    if (nextMode === currentMode) {
+    const nextProfile = normalizeTieBreakProfile(profile, TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE);
+    const currentProfile = normalizeTieBreakProfile(
+      tournament?.rules?.tieBreakProfile,
+      TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE,
+    );
+    if (nextProfile === currentProfile) {
       return { ok: true, changed: false };
     }
     tournament.rules = normalizeTournamentRules({
       ...(tournament.rules || {}),
-      tieBreakMode: nextMode,
+      tieBreakProfile: nextProfile,
     });
+    refreshDerivedMatches(tournament);
+    tournament.updatedAt = nowIso();
+    schedulePersist();
+    renderShell();
+    return { ok: true, changed: true };
+  }
+
+
+  function setTournamentKoDrawLocked(drawLocked) {
+    const tournament = state.store.tournament;
+    if (!tournament) {
+      return { ok: false, message: "Kein aktives Turnier vorhanden." };
+    }
+    if (tournament.mode !== "ko") {
+      return { ok: false, message: "Draw-Lock ist nur im KO-Modus verfügbar." };
+    }
+    const nextDrawLocked = Boolean(drawLocked);
+    const currentDrawLocked = tournament?.ko?.drawLocked !== false;
+    if (nextDrawLocked === currentDrawLocked) {
+      return { ok: true, changed: false };
+    }
+    tournament.ko = normalizeTournamentKoMeta({
+      ...(tournament.ko || {}),
+      drawLocked: nextDrawLocked,
+    }, normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED), nextDrawLocked);
     refreshDerivedMatches(tournament);
     tournament.updatedAt = nowIso();
     schedulePersist();
@@ -2857,30 +2937,40 @@
   }
 
 
+  function resolveInitialVirtualParticipantId(competitorRef) {
+    if (!competitorRef || competitorRef.type !== "participant") {
+      return null;
+    }
+    return normalizeText(competitorRef.participantId || "") || null;
+  }
+
+
   function buildKoMatchesFromStructure(bracketStructure) {
     const rounds = Array.isArray(bracketStructure?.rounds) ? bracketStructure.rounds : [];
     const matches = [];
     rounds.forEach((roundDef) => {
       roundDef.virtualMatches.forEach((virtualMatch) => {
-        const p1 = virtualMatch?.competitors?.p1 || null;
-        const p2 = virtualMatch?.competitors?.p2 || null;
-        if (virtualMatch.structuralBye) {
-          return;
-        }
-        if (!p1 || !p2) {
-          return;
-        }
-        if (p1.type !== "participant" || p2.type !== "participant") {
-          return;
-        }
+        const p1 = resolveInitialVirtualParticipantId(virtualMatch?.competitors?.p1);
+        const p2 = resolveInitialVirtualParticipantId(virtualMatch?.competitors?.p2);
+        const structuralBye = Boolean(virtualMatch?.structuralBye);
+        const advancedParticipantId = structuralBye ? (p1 || p2 || null) : null;
+        const isBye = structuralBye && Boolean(advancedParticipantId);
+        const baseMeta = buildKoMatchMetaFromVirtualMatch(virtualMatch);
+        const meta = isBye
+          ? { ...baseMeta, resultKind: "bye" }
+          : baseMeta;
+
         matches.push(createMatch({
           id: virtualMatch.id,
           stage: MATCH_STAGE_KO,
           round: virtualMatch.round,
           number: virtualMatch.number,
-          player1Id: p1.participantId,
-          player2Id: p2.participantId,
-          meta: buildKoMatchMetaFromVirtualMatch(virtualMatch),
+          player1Id: p1,
+          player2Id: p2,
+          status: isBye ? STATUS_COMPLETED : STATUS_PENDING,
+          winnerId: isBye ? advancedParticipantId : null,
+          legs: isBye ? { p1: 0, p2: 0 } : { p1: 0, p2: 0 },
+          meta,
         }));
       });
     });
@@ -2998,6 +3088,9 @@
     const koDrawMode = config.mode === "ko" && config.randomizeKoRound1
       ? KO_DRAW_MODE_OPEN_DRAW
       : KO_DRAW_MODE_SEEDED;
+    const koDrawLocked = config.mode === "ko"
+      ? config.koDrawLocked !== false
+      : false;
     const x01 = normalizeTournamentX01Settings({
       presetId: config.x01Preset,
       baseScore: config.startScore,
@@ -3024,8 +3117,10 @@
       matches = buildKoMatchesFromStructure(koStructure);
       koMeta = {
         drawMode: koDrawMode,
+        drawLocked: koDrawLocked,
         engineVersion: KO_ENGINE_VERSION,
         bracketSize: koStructure.bracketSize,
+        placement: koStructure.placement,
         seeding: koStructure.seeding,
         rounds: koStructure.rounds,
       };
@@ -3039,7 +3134,7 @@
       bestOfLegs: sanitizeBestOf(config.bestOfLegs),
       startScore: x01.baseScore,
       x01,
-      rules: normalizeTournamentRules({ tieBreakMode: TIE_BREAK_MODE_DRA_STRICT }),
+      rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
       participants,
       groups,
       matches,
@@ -3131,10 +3226,13 @@
       row.legDiff = row.legsFor - row.legsAgainst;
     });
 
-    const tieBreakMode = normalizeTieBreakMode(tournament?.rules?.tieBreakMode, TIE_BREAK_MODE_DRA_STRICT);
+    const tieBreakProfile = normalizeTieBreakProfile(
+      tournament?.rules?.tieBreakProfile,
+      TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE,
+    );
     const tiePrimaryById = new Map(rows.map((row) => [row.id, 0]));
 
-    if (tieBreakMode === TIE_BREAK_MODE_DRA_STRICT) {
+    if (tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE) {
       const pointsBuckets = new Map();
       rows.forEach((row) => {
         if (!pointsBuckets.has(row.points)) {
@@ -3192,7 +3290,7 @@
         return right.points - left.points;
       }
 
-      if (tieBreakMode === TIE_BREAK_MODE_DRA_STRICT) {
+      if (tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE) {
         const rightPrimary = tiePrimaryById.get(right.id) || 0;
         const leftPrimary = tiePrimaryById.get(left.id) || 0;
         if (rightPrimary !== leftPrimary) {
@@ -3209,7 +3307,7 @@
       return left.name.localeCompare(right.name, "de");
     });
 
-    if (tieBreakMode === TIE_BREAK_MODE_DRA_STRICT) {
+    if (tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE) {
       const unresolvedBuckets = new Map();
       rows.forEach((row) => {
         const key = [
@@ -3406,7 +3504,15 @@
   }
 
 
-  function buildKoMetaSnapshot(drawMode, structure) {
+  function buildKoMetaSnapshot(drawMode, drawLocked, structure) {
+    const bracketSize = clampInt(structure?.bracketSize, 2, 2, TECHNICAL_PARTICIPANT_HARD_MAX);
+    const placement = (Array.isArray(structure?.placement) ? structure.placement : [])
+      .map((slot) => clampInt(slot, null, 1, bracketSize))
+      .filter((slot) => Number.isInteger(slot));
+    const normalizedPlacement = placement.length === bracketSize
+      ? placement
+      : buildSeedPlacement(bracketSize);
+
     const rounds = (Array.isArray(structure?.rounds) ? structure.rounds : []).map((roundDef) => ({
       round: clampInt(roundDef?.round, 1, 1, 64),
       label: normalizeText(roundDef?.label || ""),
@@ -3433,11 +3539,85 @@
 
     return {
       drawMode: normalizeKoDrawMode(drawMode, KO_DRAW_MODE_SEEDED),
+      drawLocked: Boolean(drawLocked),
       engineVersion: KO_ENGINE_VERSION,
-      bracketSize: clampInt(structure?.bracketSize, 2, 2, TECHNICAL_PARTICIPANT_HARD_MAX),
+      bracketSize,
+      placement: normalizedPlacement,
       seeding,
       rounds,
     };
+  }
+
+
+  function buildKoStructureFromMeta(koMeta, fallbackDrawMode = KO_DRAW_MODE_SEEDED) {
+    const normalized = normalizeTournamentKoMeta(koMeta, fallbackDrawMode, koMeta?.drawLocked !== false);
+    if (!Array.isArray(normalized?.rounds) || !normalized.rounds.length) {
+      return null;
+    }
+    return {
+      bracketSize: normalized.bracketSize,
+      placement: normalized.placement,
+      seeding: normalized.seeding,
+      rounds: normalized.rounds,
+    };
+  }
+
+
+  function synchronizeStructuralByeMatch(match, p1, p2) {
+    const hasP1 = Boolean(p1);
+    const hasP2 = Boolean(p2);
+    const hasExactlyOneParticipant = (hasP1 && !hasP2) || (!hasP1 && hasP2);
+    let changed = false;
+
+    if (!hasExactlyOneParticipant) {
+      if (isByeMatchResult(match) || match.status === STATUS_COMPLETED) {
+        clearMatchResult(match);
+        changed = true;
+      }
+      return changed;
+    }
+
+    const expectedWinnerId = p1 || p2;
+    if (match.status !== STATUS_COMPLETED) {
+      match.status = STATUS_COMPLETED;
+      changed = true;
+    }
+    if (match.winnerId !== expectedWinnerId) {
+      match.winnerId = expectedWinnerId;
+      changed = true;
+    }
+    if (match.source !== null) {
+      match.source = null;
+      changed = true;
+    }
+    if (clampInt(match.legs?.p1, 0, 0, 99) !== 0 || clampInt(match.legs?.p2, 0, 0, 99) !== 0) {
+      match.legs = { p1: 0, p2: 0 };
+      changed = true;
+    }
+    const normalizedStats = normalizeMatchStats(match.stats);
+    if (!isSerializableEqual(match.stats, normalizedStats)) {
+      match.stats = normalizedStats;
+      changed = true;
+    }
+    changed = setMatchResultKind(match, "bye") || changed;
+
+    const auto = ensureMatchAutoMeta(match);
+    if (
+      auto.lobbyId
+      || auto.status !== "idle"
+      || auto.startedAt
+      || auto.finishedAt
+      || auto.lastSyncAt
+      || auto.lastError
+    ) {
+      resetMatchAutomationMeta(match);
+      changed = true;
+    }
+
+    if (changed) {
+      match.updatedAt = nowIso();
+    }
+    return changed;
   }
 
 
@@ -3448,6 +3628,7 @@
 
     let changed = false;
     const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED);
+    const drawLocked = tournament?.ko?.drawLocked !== false;
     const participants = (Array.isArray(tournament.participants) ? tournament.participants : [])
       .map((participant) => ({
         id: normalizeText(participant?.id || ""),
@@ -3456,9 +3637,10 @@
       }))
       .filter((participant) => participant.id);
 
-    const seeds = generateSeeds(participants, drawMode);
-    const structure = buildBracketStructure(participants, seeds);
-    const nextKoMeta = buildKoMetaSnapshot(drawMode, structure);
+    const generatedStructure = buildBracketStructure(participants, generateSeeds(participants, drawMode));
+    const lockedStructure = drawLocked ? buildKoStructureFromMeta(tournament?.ko, drawMode) : null;
+    const structure = lockedStructure || generatedStructure;
+    const nextKoMeta = buildKoMetaSnapshot(drawMode, drawLocked, structure);
     if (!isSerializableEqual(tournament.ko, nextKoMeta)) {
       tournament.ko = nextKoMeta;
       changed = true;
@@ -3473,18 +3655,7 @@
       roundDef.virtualMatches.forEach((virtualMatch) => {
         const p1 = resolveVirtualCompetitorParticipantId(virtualMatch?.competitors?.p1, winnerByVirtualMatchId);
         const p2 = resolveVirtualCompetitorParticipantId(virtualMatch?.competitors?.p2, winnerByVirtualMatchId);
-
-        if (virtualMatch.structuralBye) {
-          const advancedParticipant = p1 || p2 || null;
-          if (advancedParticipant) {
-            winnerByVirtualMatchId.set(virtualMatch.id, advancedParticipant);
-          }
-          return;
-        }
-
-        if (!p1 || !p2) {
-          return;
-        }
+        const structuralBye = Boolean(virtualMatch?.structuralBye);
 
         let match = existingKoById.get(virtualMatch.id) || null;
         if (!match) {
@@ -3497,6 +3668,9 @@
             player2Id: p2,
             meta: buildKoMatchMetaFromVirtualMatch(virtualMatch),
           });
+          if (structuralBye) {
+            synchronizeStructuralByeMatch(match, p1, p2);
+          }
           changed = true;
         } else {
           if (match.round !== virtualMatch.round || match.number !== virtualMatch.number) {
@@ -3507,6 +3681,16 @@
           }
           changed = assignPlayerSlot(match, 1, p1) || changed;
           changed = assignPlayerSlot(match, 2, p2) || changed;
+
+          if (structuralBye) {
+            changed = synchronizeStructuralByeMatch(match, p1, p2) || changed;
+          } else if (isByeMatchResult(match)) {
+            const localChanged = setMatchResultKind(match, null);
+            if (localChanged) {
+              match.updatedAt = nowIso();
+            }
+            changed = localChanged || changed;
+          }
 
           const normalizedMeta = normalizeMatchMeta({
             ...(match.meta || {}),
@@ -3519,14 +3703,6 @@
           }
         }
 
-        if (isByeMatchResult(match)) {
-          const localChanged = setMatchResultKind(match, null);
-          if (localChanged) {
-            match.updatedAt = nowIso();
-          }
-          changed = localChanged || changed;
-        }
-
         const normalizedStats = normalizeMatchStats(match.stats);
         if (!isSerializableEqual(match.stats, normalizedStats)) {
           match.stats = normalizedStats;
@@ -3537,14 +3713,21 @@
         nextKoMatches.push(match);
 
         if (match.status === STATUS_COMPLETED) {
-          const derivedWinnerId = deriveWinnerIdFromLegs(tournament, match);
-          if (derivedWinnerId && match.winnerId !== derivedWinnerId) {
-            match.winnerId = derivedWinnerId;
-            match.updatedAt = nowIso();
-            changed = true;
+          if (!isByeMatchResult(match)) {
+            const derivedWinnerId = deriveWinnerIdFromLegs(tournament, match);
+            if (derivedWinnerId && match.winnerId !== derivedWinnerId) {
+              match.winnerId = derivedWinnerId;
+              match.updatedAt = nowIso();
+              changed = true;
+            }
           }
           if (isCompletedMatchResultValid(tournament, match)) {
             winnerByVirtualMatchId.set(match.id, match.winnerId);
+          }
+        } else if (structuralBye) {
+          const advancedParticipant = p1 || p2 || null;
+          if (advancedParticipant) {
+            winnerByVirtualMatchId.set(virtualMatch.id, advancedParticipant);
           }
         }
       });
@@ -3580,13 +3763,16 @@
     }
 
     const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, defaultDrawMode);
+    const drawLocked = tournament?.ko?.drawLocked !== false;
     const engineVersion = normalizeKoEngineVersion(tournament?.ko?.engineVersion, 0);
     const currentKo = tournament.ko && typeof tournament.ko === "object" ? tournament.ko : {};
+    const normalizedKo = normalizeTournamentKoMeta(currentKo, drawMode, drawLocked);
 
     if (engineVersion >= KO_ENGINE_VERSION) {
       const nextKo = {
-        ...currentKo,
+        ...normalizedKo,
         drawMode,
+        drawLocked,
         engineVersion: KO_ENGINE_VERSION,
       };
       if (!isSerializableEqual(currentKo, nextKo)) {
@@ -3604,8 +3790,9 @@
     }
 
     tournament.ko = {
-      ...currentKo,
+      ...normalizedKo,
       drawMode,
+      drawLocked,
       engineVersion: KO_ENGINE_VERSION,
     };
     tournament.updatedAt = nowIso();
@@ -3623,6 +3810,21 @@
     if (!match || match.status !== STATUS_COMPLETED) {
       return true;
     }
+
+    if (isByeMatchResult(match)) {
+      const hasP1 = Boolean(match.player1Id);
+      const hasP2 = Boolean(match.player2Id);
+      if (hasP1 === hasP2) {
+        return false;
+      }
+      const expectedWinnerId = hasP1 ? match.player1Id : match.player2Id;
+      const p1Legs = clampInt(match.legs?.p1, 0, 0, 99);
+      const p2Legs = clampInt(match.legs?.p2, 0, 0, 99);
+      return normalizeText(match.winnerId || "") === normalizeText(expectedWinnerId || "")
+        && p1Legs === 0
+        && p2Legs === 0;
+    }
+
     if (!match.player1Id || !match.player2Id) {
       return false;
     }
@@ -3644,14 +3846,6 @@
     }
     let changed = false;
     tournament.matches.forEach((match) => {
-      if (isByeMatchResult(match)) {
-        const localChanged = setMatchResultKind(match, null);
-        if (localChanged) {
-          match.updatedAt = nowIso();
-        }
-        changed = localChanged || changed;
-      }
-
       const normalizedStats = normalizeMatchStats(match.stats);
       if (!isSerializableEqual(match.stats, normalizedStats)) {
         match.stats = normalizedStats;
@@ -3660,6 +3854,11 @@
       }
 
       if (match.status !== STATUS_COMPLETED) {
+        return;
+      }
+
+      if (isByeMatchResult(match)) {
+        changed = synchronizeStructuralByeMatch(match, match.player1Id || null, match.player2Id || null) || changed;
         return;
       }
 
@@ -5570,11 +5769,17 @@
     const legsToWin = getLegsToWin(tournament.bestOfLegs);
     const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED);
     const drawModeLabel = drawMode === KO_DRAW_MODE_OPEN_DRAW ? "Open Draw" : "Gesetzter Draw";
+    const drawLockLabel = tournament?.ko?.drawLocked !== false ? "Draw-Lock aktiv" : "Draw-Lock aus";
     const primaryTags = [
       { text: `Best of ${tournament.bestOfLegs} Legs`, cls: "ata-info-tag ata-info-tag-key" },
       { text: `First to ${legsToWin} Legs`, cls: "ata-info-tag" },
       { text: `Startpunkte ${tournament.startScore}`, cls: "ata-info-tag" },
-      ...(tournament.mode === "ko" ? [{ text: drawModeLabel, cls: "ata-info-tag ata-info-tag-accent" }] : []),
+      ...(tournament.mode === "ko"
+        ? [
+          { text: drawModeLabel, cls: "ata-info-tag ata-info-tag-accent" },
+          { text: drawLockLabel, cls: "ata-info-tag" },
+        ]
+        : []),
     ];
     const x01Tags = [
       { text: `X01 ${x01PresetLabel}`, cls: "ata-info-tag ata-info-tag-key" },
@@ -6159,8 +6364,16 @@
     const debugEnabled = state.store.settings.debug ? "checked" : "";
     const autoLobbyEnabled = state.store.settings.featureFlags.autoLobbyStart ? "checked" : "";
     const randomizeKoEnabled = state.store.settings.featureFlags.randomizeKoRound1 ? "checked" : "";
+    const koDrawLockDefaultEnabled = state.store.settings.featureFlags.koDrawLockDefault !== false ? "checked" : "";
+    const activeKoDrawLocked = state.store?.tournament?.mode === "ko"
+      ? (state.store?.tournament?.ko?.drawLocked !== false ? "checked" : "")
+      : "";
+    const activeKoDrawLockDisabledAttr = state.store?.tournament?.mode === "ko" ? "" : "disabled";
     const modeLimitSummary = buildModeParticipantLimitSummary();
-    const tieBreakMode = normalizeTieBreakMode(state.store?.tournament?.rules?.tieBreakMode, TIE_BREAK_MODE_DRA_STRICT);
+    const tieBreakProfile = normalizeTieBreakProfile(
+      state.store?.tournament?.rules?.tieBreakProfile,
+      TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE,
+    );
     const tieBreakDisabledAttr = state.store?.tournament ? "" : "disabled";
     const apiSyncHelpLinks = renderInfoLinks([
       { href: README_API_AUTOMATION_URL, kind: "tech", label: "Erklärung zur API-Halbautomatik öffnen", title: "README: API-Halbautomatik" },
@@ -6170,6 +6383,10 @@
       { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Erklärung zu Turniermodi öffnen", title: "README: Turniermodi und Open Draw" },
       { href: DRA_RULEBOOK_FORMATS_URL, kind: "rule", label: "DRA-Referenz zu Turnierformaten öffnen", title: "DRA-RULE_BOOK.pdf, Seite 17, Punkte 6.8/6.10" },
       { href: PDC_OPEN_DRAW_CONTEXT_URL, kind: "rule", label: "PDC-Kontext zu Open Draw öffnen", title: "PDC: Open Draw Kontext" },
+    ]);
+    const koDrawLockHelpLinks = renderInfoLinks([
+      { href: DRA_RULEBOOK_LIMITS_URL, kind: "rule", label: "DRA-Regelstelle 6.12.1 öffnen", title: "DRA-RULE_BOOK.pdf, Seite 18, Punkt 6.12.1" },
+      { href: README_RULES_URL, kind: "tech", label: "Projekt-Regelbasis öffnen", title: "README: Regelbasis und Limits" },
     ]);
 
     return `
@@ -6199,25 +6416,58 @@
           </div>
           <input type="checkbox" id="ata-setting-randomize-ko" data-action="toggle-randomize-ko" ${randomizeKoEnabled}>
         </div>
+        <div class="ata-toggle">
+          <div>
+            <strong>KO-Draw sperren (Standard) ${koDrawLockHelpLinks}</strong>
+            <div class="ata-small">Standard: EIN. Neue KO-Turniere behalten den initialen Draw unverändert (DRA 6.12.1).</div>
+          </div>
+          <input type="checkbox" id="ata-setting-ko-draw-lock-default" data-action="toggle-ko-draw-lock-default" ${koDrawLockDefaultEnabled}>
+        </div>
       </section>
       <section class="ata-card tournamentCard">
-        ${renderSectionHeading("DRA Tie-Break", [
+        ${renderSectionHeading("KO Draw-Lock (aktives Turnier)", [
+          { href: DRA_RULEBOOK_LIMITS_URL, kind: "rule", label: "DRA-Regelstelle 6.12.1 öffnen", title: "DRA-RULE_BOOK.pdf, Seite 18, Punkt 6.12.1" },
+          { href: README_RULES_URL, kind: "tech", label: "Regelbasis im Projekt öffnen", title: "README: Regelbasis und Limits" },
+        ])}
+        <div class="ata-toggle">
+          <div>
+            <strong>Draw unveränderlich halten ${koDrawLockHelpLinks}</strong>
+            <div class="ata-small">Wenn aktiv, bleibt die KO-Struktur dieses Turniers bestehen und wird nicht automatisch neu ausgelost.</div>
+          </div>
+          <input type="checkbox" id="ata-setting-ko-draw-locked" data-action="set-ko-draw-locked" ${activeKoDrawLocked} ${activeKoDrawLockDisabledAttr}>
+        </div>
+        <p class="ata-small">Nur für den Modus KO (Straight Knockout) verfügbar.</p>
+      </section>
+      <section class="ata-card tournamentCard">
+        ${renderSectionHeading("Promoter Tie-Break-Profil", [
           { href: DRA_RULEBOOK_TIEBREAK_URL, kind: "rule", label: "DRA-Regelstelle 6.16 (Tie-Break) öffnen", title: "DRA-RULE_BOOK.pdf, Seite 20, Punkt 6.16" },
           { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Rulebook-Seite öffnen", title: "DRA Rulebook (offiziell)" },
-          { href: README_TIE_BREAK_URL, kind: "tech", label: "Erklärung DRA Strict und Legacy öffnen", title: "README: DRA Tie-Break" },
+          { href: README_TIE_BREAK_URL, kind: "tech", label: "Tie-Break-Erklärung im Projekt öffnen", title: "README: DRA Tie-Break" },
         ])}
         <div class="ata-field">
-          <label for="ata-setting-tiebreak">Regelmodus pro Turnier ${renderInfoLinks([
+          <label for="ata-setting-tiebreak">Profil pro Turnier ${renderInfoLinks([
             { href: DRA_RULEBOOK_TIEBREAK_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 20, Punkt 6.16" },
             { href: README_TIE_BREAK_URL, kind: "tech", label: "Regelstelle im Projektkontext öffnen", title: "README: DRA Tie-Break (mit Seiten-/Punktreferenzen)" },
           ])}</label>
           <select id="ata-setting-tiebreak" data-action="set-tiebreak-mode" ${tieBreakDisabledAttr}>
-            <option value="${TIE_BREAK_MODE_DRA_STRICT}" ${tieBreakMode === TIE_BREAK_MODE_DRA_STRICT ? "selected" : ""}>DRA Strict (empfohlen)</option>
-            <option value="${TIE_BREAK_MODE_LEGACY}" ${tieBreakMode === TIE_BREAK_MODE_LEGACY ? "selected" : ""}>Legacy</option>
+            <option value="${TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE ? "selected" : ""}>Promoter H2H + Mini-Tabelle (empfohlen)</option>
+            <option value="${TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF ? "selected" : ""}>Promoter Punkte + LegDiff</option>
           </select>
         </div>
-        <p class="ata-small"><strong>DRA Strict:</strong> Punkte (2/1/0), danach Direktvergleich (2er-Gleichstand), Teilgruppen-Leg-Differenz (3+), Gesamt-Leg-Differenz, Legs gewonnen; verbleibender Gleichstand = „Playoff erforderlich“.</p>
-        <p class="ata-small"><strong>Legacy:</strong> bisherige, vereinfachte Sortierung (Punkte, Gesamt-Leg-Differenz, Legs gewonnen). Dieser Modus ist für Rückwärtskompatibilität gedacht und nicht DRA-strict.</p>
+        <p class="ata-small"><strong>Promoter H2H + Mini-Tabelle:</strong> Punkte (2/1/0), danach Direktvergleich (2er-Gleichstand), Teilgruppen-Leg-Differenz (3+), Gesamt-Leg-Differenz, Legs gewonnen; verbleibender Gleichstand = „Playoff erforderlich“.</p>
+        <p class="ata-small"><strong>Promoter Punkte + LegDiff:</strong> vereinfachte Sortierung über Punkte, Gesamt-Leg-Differenz und Legs gewonnen (legacy-kompatibel).</p>
+      </section>
+      <section class="ata-card tournamentCard">
+        ${renderSectionHeading("DRA Checkliste (nicht automatisierbar)", [
+          { href: DRA_RULES_URL, kind: "rule", label: "Offizielles DRA-Rulebook öffnen", title: "DRA Rulebook (offiziell)" },
+          { href: DRA_RULEBOOK_BASICS_URL, kind: "rule", label: "Definitionen im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 4" },
+        ])}
+        <ul class="ata-small">
+          <li>Start-/Wurfreihenfolge und Bull-Off-Entscheidungen werden durch den Spielleiter vor Ort bestätigt.</li>
+          <li>Practice/Anspielzeit und Board-Etikette werden organisatorisch durchgesetzt.</li>
+          <li>Tie-Break-Entscheidungen bei verbleibendem Gleichstand erfolgen als Promoter-Entscheidung.</li>
+          <li>Unklare Sonderfälle werden dokumentiert und manuell entschieden, bevor der Turnierfortschritt fortgesetzt wird.</li>
+        </ul>
       </section>
       <section class="ata-card tournamentCard">
         ${renderSectionHeading("Regelbasis und Limits", [
@@ -6431,16 +6681,39 @@
       });
     }
 
-    const tieBreakSelect = shadow.getElementById("ata-setting-tiebreak");
-    if (tieBreakSelect instanceof HTMLSelectElement) {
-      tieBreakSelect.addEventListener("change", () => {
-        const result = setTournamentTieBreakMode(tieBreakSelect.value);
+    const koDrawLockDefaultToggle = shadow.getElementById("ata-setting-ko-draw-lock-default");
+    if (koDrawLockDefaultToggle instanceof HTMLInputElement) {
+      koDrawLockDefaultToggle.addEventListener("change", () => {
+        state.store.settings.featureFlags.koDrawLockDefault = koDrawLockDefaultToggle.checked;
+        schedulePersist();
+        setNotice("info", `KO Draw-Lock (Standard): ${koDrawLockDefaultToggle.checked ? "ON" : "OFF"}.`, 2200);
+      });
+    }
+
+    const koDrawLockedToggle = shadow.getElementById("ata-setting-ko-draw-locked");
+    if (koDrawLockedToggle instanceof HTMLInputElement) {
+      koDrawLockedToggle.addEventListener("change", () => {
+        const result = setTournamentKoDrawLocked(koDrawLockedToggle.checked);
         if (!result.ok) {
-          setNotice("error", result.message || "Tie-Break-Modus konnte nicht gesetzt werden.");
+          setNotice("error", result.message || "KO Draw-Lock konnte nicht gesetzt werden.");
           return;
         }
         if (result.changed) {
-          setNotice("success", "Tie-Break-Modus aktualisiert.", 1800);
+          setNotice("success", `KO Draw-Lock ${koDrawLockedToggle.checked ? "aktiviert" : "deaktiviert"}.`, 1800);
+        }
+      });
+    }
+
+    const tieBreakSelect = shadow.getElementById("ata-setting-tiebreak");
+    if (tieBreakSelect instanceof HTMLSelectElement) {
+      tieBreakSelect.addEventListener("change", () => {
+        const result = setTournamentTieBreakProfile(tieBreakSelect.value);
+        if (!result.ok) {
+          setNotice("error", result.message || "Tie-Break-Profil konnte nicht gesetzt werden.");
+          return;
+        }
+        if (result.changed) {
+          setNotice("success", "Tie-Break-Profil aktualisiert.", 1800);
         }
       });
     }
@@ -6706,6 +6979,7 @@
       x01BullOffMode: draft.x01BullOffMode,
       lobbyVisibility: "private",
       randomizeKoRound1: draft.randomizeKoRound1,
+      koDrawLocked: state.store.settings.featureFlags.koDrawLockDefault !== false,
       participants,
     };
 
@@ -6840,7 +7114,10 @@
       tournament = rawObject;
     }
 
-    const normalizedTournament = normalizeTournament(tournament);
+    const normalizedTournament = normalizeTournament(
+      tournament,
+      state.store.settings.featureFlags.koDrawLockDefault !== false,
+    );
     if (!normalizedTournament) {
       return { ok: false, message: "Turnierdaten konnten nicht validiert werden." };
     }
@@ -6947,21 +7224,29 @@
       const player1Id = resolveBracketParticipantId(match.player1Id);
       const player2Id = resolveBracketParticipantId(match.player2Id);
       const winnerId = resolveBracketParticipantId(match.winnerId);
+      const isBye = isByeMatchResult(match);
       const completed = isCompletedMatchResultValid(tournament, match)
         && Boolean(winnerId && (winnerId === player1Id || winnerId === player2Id));
-      const status = completed ? 4 : (player1Id && player2Id ? 2 : 1);
+      const occupied = Boolean(player1Id || player2Id);
+      const status = completed
+        ? 4
+        : (occupied ? 2 : 1);
       const opponent1 = player1Id
         ? {
             id: player1Id,
             score: completed ? clampInt(match.legs?.p1, 0, 0, 99) : undefined,
-            result: completed && winnerId ? (winnerId === player1Id ? "win" : "loss") : undefined,
+            result: completed && winnerId
+              ? (winnerId === player1Id ? "win" : (isBye ? undefined : "loss"))
+              : undefined,
           }
         : null;
       const opponent2 = player2Id
         ? {
             id: player2Id,
             score: completed ? clampInt(match.legs?.p2, 0, 0, 99) : undefined,
-            result: completed && winnerId ? (winnerId === player2Id ? "win" : "loss") : undefined,
+            result: completed && winnerId
+              ? (winnerId === player2Id ? "win" : (isBye ? undefined : "loss"))
+              : undefined,
           }
         : null;
       return {
@@ -8459,7 +8744,7 @@
       const ids = participants.map((item) => item.id);
       const seededMatches = buildKoMatchesV2(ids, KO_DRAW_MODE_SEEDED);
       const seededRoundOne = seededMatches.filter((match) => match.round === 1);
-      const seededOpenRoundOne = seededRoundOne.filter((match) => match.player1Id && match.player2Id);
+      const seededOpenRoundOne = seededRoundOne.filter((match) => match.player1Id && match.player2Id && !isByeMatchResult(match));
       record(
         "KO Seeded: 9 Teilnehmer -> genau 1 offenes R1-Match",
         seededOpenRoundOne.length === 1,
@@ -8474,60 +8759,200 @@
       const ids = participants.map((item) => item.id);
       const openDrawMatches = buildKoMatchesV2(ids, KO_DRAW_MODE_OPEN_DRAW);
       const repeatedOpenDrawMatches = buildKoMatchesV2(ids, KO_DRAW_MODE_OPEN_DRAW);
-      const roundOne = openDrawMatches.filter((match) => match.round === 1);
-      const openRoundOne = roundOne.filter((match) => match.player1Id && match.player2Id);
       const toSignature = (matches) => matches
-        .map((match) => `${match.id}:${match.player1Id || "-"}:${match.player2Id || "-"}`)
+        .map((match) => `${match.id}:${match.player1Id || "-"}:${match.player2Id || "-"}:${isByeMatchResult(match) ? "bye" : "match"}`)
         .join("|");
       const deterministic = toSignature(openDrawMatches) === toSignature(repeatedOpenDrawMatches);
+      const byeCount = openDrawMatches.filter((match) => isByeMatchResult(match)).length;
       record(
-        "KO Open Draw: deterministisch und ohne Bye-Platzhalter",
-        openRoundOne.length === roundOne.length && deterministic,
-        `matches=${roundOne.length}, deterministic=${deterministic}`,
+        "KO Open Draw: deterministisch mit expliziten Byes",
+        deterministic && byeCount > 0,
+        `matches=${openDrawMatches.length}, byes=${byeCount}, deterministic=${deterministic}`,
       );
     } catch (error) {
-      record("KO Open Draw: deterministisch und ohne Bye-Platzhalter", false, String(error?.message || error));
+      record("KO Open Draw: deterministisch mit expliziten Byes", false, String(error?.message || error));
     }
 
     try {
-      const tournament = {
-        id: "t1",
-        name: "T1",
+      const participants = participantList(6, "K6");
+      const structure = buildBracketStructure(participants, generateSeeds(participants, KO_DRAW_MODE_SEEDED));
+      const matches = buildKoMatchesFromStructure(structure);
+      const expectedTotalMatches = structure.rounds.reduce((sum, roundDef) => sum + roundDef.virtualMatches.length, 0);
+      const byeCount = matches.filter((match) => isByeMatchResult(match)).length;
+      record(
+        "KO 6: vollständiger 8er-Baum mit 2 Byes",
+        matches.length === expectedTotalMatches && expectedTotalMatches === 7 && byeCount === 2,
+        `matches=${matches.length}, expected=${expectedTotalMatches}, byes=${byeCount}`,
+      );
+    } catch (error) {
+      record("KO 6: vollständiger 8er-Baum mit 2 Byes", false, String(error?.message || error));
+    }
+
+    try {
+      const participants = participantList(8, "K8");
+      const structure = buildBracketStructure(participants, generateSeeds(participants, KO_DRAW_MODE_SEEDED));
+      const matches = buildKoMatchesFromStructure(structure);
+      const byeCount = matches.filter((match) => isByeMatchResult(match)).length;
+      record(
+        "KO 8: 7 Match-Knoten von Start an vorhanden",
+        matches.length === 7 && byeCount === 0,
+        `matches=${matches.length}, byes=${byeCount}`,
+      );
+    } catch (error) {
+      record("KO 8: 7 Match-Knoten von Start an vorhanden", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
+        name: "DrawLockOn",
+        mode: "ko",
+        bestOfLegs: 3,
+        startScore: 501,
+        x01Preset: X01_PRESET_PDC_STANDARD,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        koDrawLocked: true,
+        participants: participantList(8, "DL"),
+      });
+      const before = JSON.stringify(tournament.ko?.rounds || []);
+      tournament.participants = tournament.participants.slice().reverse();
+      refreshDerivedMatches(tournament);
+      const after = JSON.stringify(tournament.ko?.rounds || []);
+      record(
+        "Draw-Lock aktiv: KO-Struktur bleibt stabil",
+        before === after,
+        `stable=${before === after}`,
+      );
+    } catch (error) {
+      record("Draw-Lock aktiv: KO-Struktur bleibt stabil", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
+        name: "DrawLockOff",
+        mode: "ko",
+        bestOfLegs: 3,
+        startScore: 501,
+        x01Preset: X01_PRESET_PDC_STANDARD,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        koDrawLocked: false,
+        participants: participantList(8, "DU"),
+      });
+      const before = JSON.stringify(tournament.ko?.rounds || []);
+      tournament.participants = tournament.participants.slice().reverse();
+      refreshDerivedMatches(tournament);
+      const after = JSON.stringify(tournament.ko?.rounds || []);
+      record(
+        "Draw-Lock aus: KO-Struktur kann neu aufgebaut werden",
+        before !== after,
+        `changed=${before !== after}`,
+      );
+    } catch (error) {
+      record("Draw-Lock aus: KO-Struktur kann neu aufgebaut werden", false, String(error?.message || error));
+    }
+
+    try {
+      const matches = [
+        createMatch({ id: "m-ab", stage: MATCH_STAGE_LEAGUE, round: 1, number: 1, player1Id: "A", player2Id: "B", status: STATUS_COMPLETED, winnerId: "A", legs: { p1: 2, p2: 1 } }),
+        createMatch({ id: "m-ac", stage: MATCH_STAGE_LEAGUE, round: 1, number: 2, player1Id: "A", player2Id: "C", status: STATUS_COMPLETED, winnerId: "A", legs: { p1: 2, p2: 1 } }),
+        createMatch({ id: "m-ad", stage: MATCH_STAGE_LEAGUE, round: 1, number: 3, player1Id: "A", player2Id: "D", status: STATUS_COMPLETED, winnerId: "D", legs: { p1: 0, p2: 2 } }),
+        createMatch({ id: "m-bc", stage: MATCH_STAGE_LEAGUE, round: 2, number: 1, player1Id: "B", player2Id: "C", status: STATUS_COMPLETED, winnerId: "B", legs: { p1: 2, p2: 0 } }),
+        createMatch({ id: "m-bd", stage: MATCH_STAGE_LEAGUE, round: 2, number: 2, player1Id: "B", player2Id: "D", status: STATUS_COMPLETED, winnerId: "B", legs: { p1: 2, p2: 0 } }),
+        createMatch({ id: "m-cd", stage: MATCH_STAGE_LEAGUE, round: 2, number: 3, player1Id: "C", player2Id: "D", status: STATUS_COMPLETED, winnerId: "C", legs: { p1: 2, p2: 1 } }),
+      ];
+
+      const h2hTournament = {
+        id: "tb1",
+        name: "TB1",
         mode: "league",
         ko: null,
         bestOfLegs: 3,
         startScore: 501,
         x01: buildPdcX01Settings(),
-        rules: normalizeTournamentRules({ tieBreakMode: TIE_BREAK_MODE_DRA_STRICT }),
+        rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
         participants: [
           { id: "A", name: "A" },
           { id: "B", name: "B" },
+          { id: "C", name: "C" },
+          { id: "D", name: "D" },
         ],
         groups: [],
-        matches: [
-          createMatch({
-            id: "m1",
-            stage: MATCH_STAGE_LEAGUE,
-            round: 1,
-            number: 1,
-            player1Id: "A",
-            player2Id: "B",
-            status: STATUS_COMPLETED,
-            winnerId: "A",
-            legs: { p1: 2, p2: 1 },
-          }),
-        ],
+        matches: cloneSerializable(matches),
         createdAt: nowIso(),
         updatedAt: nowIso(),
       };
-      const rows = standingsForMatches(tournament, tournament.matches);
+      const pointsLegDiffTournament = {
+        ...h2hTournament,
+        id: "tb2",
+        rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF }),
+        matches: cloneSerializable(matches),
+      };
+      const h2hRows = standingsForMatches(h2hTournament, h2hTournament.matches);
+      const legacyRows = standingsForMatches(pointsLegDiffTournament, pointsLegDiffTournament.matches);
       record(
-        "DRA Strict: Direktvergleich bei 2 punktgleichen Spielern",
-        rows[0]?.id === "A" && rows[0]?.tiebreakState === "resolved",
-        rows.map((row) => `${row.id}:${row.points}/${row.tiebreakState}`).join(", "),
+        "Tie-Break-Profile: H2H und Punkte+LegDiff liefern unterschiedliche Reihenfolge",
+        h2hRows[0]?.id === "A" && legacyRows[0]?.id === "B",
+        `h2h=${h2hRows[0]?.id || "-"}, legacy=${legacyRows[0]?.id || "-"}`,
       );
     } catch (error) {
-      record("DRA Strict: Direktvergleich bei 2 punktgleichen Spielern", false, String(error?.message || error));
+      record("Tie-Break-Profile: H2H und Punkte+LegDiff liefern unterschiedliche Reihenfolge", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
+        name: "GroupsKo",
+        mode: "groups_ko",
+        bestOfLegs: 3,
+        startScore: 501,
+        x01Preset: X01_PRESET_PDC_STANDARD,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        participants: participantList(4, "G"),
+      });
+      const groupA = findMatch(tournament, "group-A-r1-m1");
+      const groupB = findMatch(tournament, "group-B-r1-m1");
+      groupA.status = STATUS_COMPLETED;
+      groupA.winnerId = groupA.player1Id;
+      groupA.legs = { p1: 2, p2: 0 };
+      groupB.status = STATUS_COMPLETED;
+      groupB.winnerId = groupB.player1Id;
+      groupB.legs = { p1: 2, p2: 1 };
+      refreshDerivedMatches(tournament);
+
+      const semi1 = findMatch(tournament, "ko-r1-m1");
+      const semi2 = findMatch(tournament, "ko-r1-m2");
+      semi1.status = STATUS_COMPLETED;
+      semi1.winnerId = semi1.player1Id;
+      semi1.legs = { p1: 2, p2: 0 };
+      semi2.status = STATUS_COMPLETED;
+      semi2.winnerId = semi2.player1Id;
+      semi2.legs = { p1: 2, p2: 1 };
+      refreshDerivedMatches(tournament);
+
+      const final = findMatch(tournament, "ko-r2-m1");
+      record(
+        "Groups+KO Regression: Finale wird korrekt aus Semis belegt",
+        Boolean(final?.player1Id && final?.player2Id),
+        `final=${final?.player1Id || "-"}:${final?.player2Id || "-"}`,
+      );
+    } catch (error) {
+      record("Groups+KO Regression: Finale wird korrekt aus Semis belegt", false, String(error?.message || error));
     }
 
     try {
@@ -8539,7 +8964,7 @@
         bestOfLegs: 3,
         startScore: 501,
         x01: buildPdcX01Settings(),
-        rules: normalizeTournamentRules({ tieBreakMode: TIE_BREAK_MODE_DRA_STRICT }),
+        rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
         participants: [
           { id: "A", name: "A" },
           { id: "B", name: "B" },
@@ -8557,12 +8982,12 @@
       const rows = standingsForMatches(tournament, tournament.matches, ["A", "B", "C"]);
       const blocked = rows.filter((row) => row.tiebreakState === "playoff_required").length;
       record(
-        "DRA Strict: Deadlock -> Playoff erforderlich",
+        "Promoter H2H: Deadlock -> Playoff erforderlich",
         blocked === 3,
         rows.map((row) => `${row.id}:${row.tiebreakState}`).join(", "),
       );
     } catch (error) {
-      record("DRA Strict: Deadlock -> Playoff erforderlich", false, String(error?.message || error));
+      record("Promoter H2H: Deadlock -> Playoff erforderlich", false, String(error?.message || error));
     }
 
     try {
@@ -8689,7 +9114,7 @@
           bestOfLegs: 3,
           startScore: 501,
           x01: buildPdcX01Settings(),
-          rules: normalizeTournamentRules({ tieBreakMode: TIE_BREAK_MODE_DRA_STRICT }),
+          rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
           participants: [
             { id: "P1", name: "Tanja Mueller" },
             { id: "P2", name: "Simon Stark" },
@@ -8758,7 +9183,7 @@
           bestOfLegs: 1,
           startScore: 501,
           x01: buildPdcX01Settings(),
-          rules: normalizeTournamentRules({ tieBreakMode: TIE_BREAK_MODE_DRA_STRICT }),
+          rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
           participants: [
             { id: "P1", name: "Tommy" },
             { id: "P2", name: "Hans" },
@@ -8844,9 +9269,11 @@
       };
       const migrated = migrateStorage(rawStoreV2);
       record(
-        "Migration: v2 -> v3 setzt Tie-Break-Regeln",
-        migrated.schemaVersion === 3 && migrated.tournament?.rules?.tieBreakMode === TIE_BREAK_MODE_DRA_STRICT,
-        `schema=${migrated.schemaVersion}, mode=${migrated.tournament?.rules?.tieBreakMode}`,
+        "Migration: v2 -> v4 setzt Tie-Break-Profil",
+        migrated.schemaVersion === 4
+          && migrated.tournament?.rules?.tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE
+          && migrated.settings?.featureFlags?.koDrawLockDefault === true,
+        `schema=${migrated.schemaVersion}, profile=${migrated.tournament?.rules?.tieBreakProfile}`,
       );
     } catch (error) {
       record("Migration: v2 -> v3 setzt Tie-Break-Regeln", false, String(error?.message || error));

@@ -172,11 +172,17 @@
     const legsToWin = getLegsToWin(tournament.bestOfLegs);
     const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED);
     const drawModeLabel = drawMode === KO_DRAW_MODE_OPEN_DRAW ? "Open Draw" : "Gesetzter Draw";
+    const drawLockLabel = tournament?.ko?.drawLocked !== false ? "Draw-Lock aktiv" : "Draw-Lock aus";
     const primaryTags = [
       { text: `Best of ${tournament.bestOfLegs} Legs`, cls: "ata-info-tag ata-info-tag-key" },
       { text: `First to ${legsToWin} Legs`, cls: "ata-info-tag" },
       { text: `Startpunkte ${tournament.startScore}`, cls: "ata-info-tag" },
-      ...(tournament.mode === "ko" ? [{ text: drawModeLabel, cls: "ata-info-tag ata-info-tag-accent" }] : []),
+      ...(tournament.mode === "ko"
+        ? [
+          { text: drawModeLabel, cls: "ata-info-tag ata-info-tag-accent" },
+          { text: drawLockLabel, cls: "ata-info-tag" },
+        ]
+        : []),
     ];
     const x01Tags = [
       { text: `X01 ${x01PresetLabel}`, cls: "ata-info-tag ata-info-tag-key" },

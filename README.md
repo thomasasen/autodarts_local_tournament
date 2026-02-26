@@ -146,17 +146,22 @@ Tab: `Einstellungen`
 - Bei deaktiviertem Schalter wird `seeded` verwendet (Eingabereihenfolge als Seed-Rang).
 - Zusätzlich gibt es im Turnier-Formular den Button `Teilnehmer mischen`.
 
-### DRA Tie-Break
-- `DRA Strict` (empfohlen):
+### KO Draw-Lock (Standard)
+- Standard: `EIN`.
+- Neue KO-Turniere übernehmen damit das Initial-Draw unverändert (`drawLocked = true`).
+- Bezug: DRA `6.12.1` (Draw bleibt bestehen).
+- Im Tab `Einstellungen` kann das aktive KO-Turnier bei Bedarf explizit entsperrt werden.
+
+### Promoter Tie-Break-Profil
+- `Promoter H2H + Mini-Tabelle` (empfohlen):
   - Punkte (2 Sieg, 1 Unentschieden, 0 Niederlage)
   - Direktvergleich bei 2 Punktgleichen
   - Teilgruppen-Leg-Differenz bei 3+ Punktgleichen
   - danach Gesamt-Leg-Differenz und Legs gewonnen
   - bei weiterem Gleichstand: `Playoff erforderlich`
-- `Legacy`:
-  - Bisheriges ATA-Verhalten mit vereinfachter Sortierung
+- `Promoter Punkte + LegDiff`:
+  - Vereinfachte, legacy-kompatible Sortierung
   - Reihenfolge: Punkte -> Gesamt-Leg-Differenz -> Legs gewonnen
-  - Dient nur der Rückwärtskompatibilität alter Daten
 - Offizielle Regelbasis (DRA): https://www.thedra.co.uk/dra-rulebook
 - Relevante Regelstelle: `6.16.1` (Seite 20) im DRA-Rulebook-PDF
   - [DRA-RULE_BOOK.pdf#page=20](docs/DRA-RULE_BOOK.pdf#page=20)
@@ -237,11 +242,11 @@ Tab: `Import/Export`
 - JSON direkt in ein Textfeld einfügen
 
 ### Hinweise
-- Das Persistenzschema ist `schemaVersion: 3`.
+- Das Persistenzschema ist `schemaVersion: 4`.
 - Beim Import werden Daten defensiv normalisiert.
-- Legacy-KO-Turniere werden auf KO-Engine v2 migriert.
+- Legacy-KO-Turniere werden auf KO-Engine v3 migriert.
 - Vor KO-Migration wird ein Backup unter `ata:tournament:ko-migration-backups:v2` abgelegt.
-- Bestehende Turniere werden auf `tournament.rules.tieBreakMode = dra_strict` normalisiert.
+- Bestehende Turniere werden auf `tournament.rules.tieBreakProfile = promoter_h2h_minitable` normalisiert.
 
 ## Troubleshooting
 ### "Match ist abgeschlossen", obwohl neu

@@ -1,5 +1,32 @@
 ﻿# Changelog
 
+## 0.3.4
+- DRA-Compliance-Hardening umgesetzt:
+  - Storage auf `schemaVersion: 4` angehoben.
+  - Regelmodell auf `tournament.rules.tieBreakProfile` umgestellt:
+    - `promoter_h2h_minitable`
+    - `promoter_points_legdiff`
+  - Legacy-Mapping ergänzt:
+    - `dra_strict -> promoter_h2h_minitable`
+    - `legacy -> promoter_points_legdiff`
+- KO-Engine verfeinert:
+  - vollständige Match-Materialisierung über alle KO-Runden
+  - Freilose als explizite Bye-Matches (`meta.resultKind = bye`)
+  - zukünftige KO-Slots bleiben als nicht editierbare offene Paarungen sichtbar
+- Draw-Lock eingeführt:
+  - neues Feature-Flag `settings.featureFlags.koDrawLockDefault` (Standard `true`)
+  - neues Turnierfeld `tournament.ko.drawLocked`
+  - neues Turnierfeld `tournament.ko.placement`
+  - UI-Toggle für aktives KO-Turnier in den Einstellungen
+- Bracket-Payload korrigiert:
+  - Vollbaum-Darstellung auch bei frühem Turnierstand
+  - Bye-/Completion-Kennzeichnung konsistent
+- QA erweitert:
+  - neue Regelcheck-Marker für KO-Materialisierung, Bye-Handling, Draw-Lock und Promoter-Tie-Break-Profile
+  - Selftests um KO-Struktur-, Draw-Lock- und Profilszenarien erweitert
+- Neue Compliance-Dokumentation:
+  - `docs/dra-compliance-matrix.md`
+
 ## 0.3.3
 - History-Import gehärtet:
   - Ergebnis wird bevorzugt in das bereits per `lobbyId` verknüpfte offene Turnier-Match geschrieben.

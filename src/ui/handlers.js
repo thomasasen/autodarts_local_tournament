@@ -192,16 +192,39 @@
       });
     }
 
-    const tieBreakSelect = shadow.getElementById("ata-setting-tiebreak");
-    if (tieBreakSelect instanceof HTMLSelectElement) {
-      tieBreakSelect.addEventListener("change", () => {
-        const result = setTournamentTieBreakMode(tieBreakSelect.value);
+    const koDrawLockDefaultToggle = shadow.getElementById("ata-setting-ko-draw-lock-default");
+    if (koDrawLockDefaultToggle instanceof HTMLInputElement) {
+      koDrawLockDefaultToggle.addEventListener("change", () => {
+        state.store.settings.featureFlags.koDrawLockDefault = koDrawLockDefaultToggle.checked;
+        schedulePersist();
+        setNotice("info", `KO Draw-Lock (Standard): ${koDrawLockDefaultToggle.checked ? "ON" : "OFF"}.`, 2200);
+      });
+    }
+
+    const koDrawLockedToggle = shadow.getElementById("ata-setting-ko-draw-locked");
+    if (koDrawLockedToggle instanceof HTMLInputElement) {
+      koDrawLockedToggle.addEventListener("change", () => {
+        const result = setTournamentKoDrawLocked(koDrawLockedToggle.checked);
         if (!result.ok) {
-          setNotice("error", result.message || "Tie-Break-Modus konnte nicht gesetzt werden.");
+          setNotice("error", result.message || "KO Draw-Lock konnte nicht gesetzt werden.");
           return;
         }
         if (result.changed) {
-          setNotice("success", "Tie-Break-Modus aktualisiert.", 1800);
+          setNotice("success", `KO Draw-Lock ${koDrawLockedToggle.checked ? "aktiviert" : "deaktiviert"}.`, 1800);
+        }
+      });
+    }
+
+    const tieBreakSelect = shadow.getElementById("ata-setting-tiebreak");
+    if (tieBreakSelect instanceof HTMLSelectElement) {
+      tieBreakSelect.addEventListener("change", () => {
+        const result = setTournamentTieBreakProfile(tieBreakSelect.value);
+        if (!result.ok) {
+          setNotice("error", result.message || "Tie-Break-Profil konnte nicht gesetzt werden.");
+          return;
+        }
+        if (result.changed) {
+          setNotice("success", "Tie-Break-Profil aktualisiert.", 1800);
         }
       });
     }
@@ -467,6 +490,7 @@
       x01BullOffMode: draft.x01BullOffMode,
       lobbyVisibility: "private",
       randomizeKoRound1: draft.randomizeKoRound1,
+      koDrawLocked: state.store.settings.featureFlags.koDrawLockDefault !== false,
       participants,
     };
 
@@ -601,7 +625,10 @@
       tournament = rawObject;
     }
 
-    const normalizedTournament = normalizeTournament(tournament);
+    const normalizedTournament = normalizeTournament(
+      tournament,
+      state.store.settings.featureFlags.koDrawLockDefault !== false,
+    );
     if (!normalizedTournament) {
       return { ok: false, message: "Turnierdaten konnten nicht validiert werden." };
     }

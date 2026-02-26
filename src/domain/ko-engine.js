@@ -108,7 +108,15 @@
   }
 
 
-  function buildKoMetaSnapshot(drawMode, structure) {
+  function buildKoMetaSnapshot(drawMode, drawLocked, structure) {
+    const bracketSize = clampInt(structure?.bracketSize, 2, 2, TECHNICAL_PARTICIPANT_HARD_MAX);
+    const placement = (Array.isArray(structure?.placement) ? structure.placement : [])
+      .map((slot) => clampInt(slot, null, 1, bracketSize))
+      .filter((slot) => Number.isInteger(slot));
+    const normalizedPlacement = placement.length === bracketSize
+      ? placement
+      : buildSeedPlacement(bracketSize);
+
     const rounds = (Array.isArray(structure?.rounds) ? structure.rounds : []).map((roundDef) => ({
       round: clampInt(roundDef?.round, 1, 1, 64),
       label: normalizeText(roundDef?.label || ""),
@@ -135,11 +143,85 @@
 
     return {
       drawMode: normalizeKoDrawMode(drawMode, KO_DRAW_MODE_SEEDED),
+      drawLocked: Boolean(drawLocked),
       engineVersion: KO_ENGINE_VERSION,
-      bracketSize: clampInt(structure?.bracketSize, 2, 2, TECHNICAL_PARTICIPANT_HARD_MAX),
+      bracketSize,
+      placement: normalizedPlacement,
       seeding,
       rounds,
     };
+  }
+
+
+  function buildKoStructureFromMeta(koMeta, fallbackDrawMode = KO_DRAW_MODE_SEEDED) {
+    const normalized = normalizeTournamentKoMeta(koMeta, fallbackDrawMode, koMeta?.drawLocked !== false);
+    if (!Array.isArray(normalized?.rounds) || !normalized.rounds.length) {
+      return null;
+    }
+    return {
+      bracketSize: normalized.bracketSize,
+      placement: normalized.placement,
+      seeding: normalized.seeding,
+      rounds: normalized.rounds,
+    };
+  }
+
+
+  function synchronizeStructuralByeMatch(match, p1, p2) {
+    const hasP1 = Boolean(p1);
+    const hasP2 = Boolean(p2);
+    const hasExactlyOneParticipant = (hasP1 && !hasP2) || (!hasP1 && hasP2);
+    let changed = false;
+
+    if (!hasExactlyOneParticipant) {
+      if (isByeMatchResult(match) || match.status === STATUS_COMPLETED) {
+        clearMatchResult(match);
+        changed = true;
+      }
+      return changed;
+    }
+
+    const expectedWinnerId = p1 || p2;
+    if (match.status !== STATUS_COMPLETED) {
+      match.status = STATUS_COMPLETED;
+      changed = true;
+    }
+    if (match.winnerId !== expectedWinnerId) {
+      match.winnerId = expectedWinnerId;
+      changed = true;
+    }
+    if (match.source !== null) {
+      match.source = null;
+      changed = true;
+    }
+    if (clampInt(match.legs?.p1, 0, 0, 99) !== 0 || clampInt(match.legs?.p2, 0, 0, 99) !== 0) {
+      match.legs = { p1: 0, p2: 0 };
+      changed = true;
+    }
+    const normalizedStats = normalizeMatchStats(match.stats);
+    if (!isSerializableEqual(match.stats, normalizedStats)) {
+      match.stats = normalizedStats;
+      changed = true;
+    }
+    changed = setMatchResultKind(match, "bye") || changed;
+
+    const auto = ensureMatchAutoMeta(match);
+    if (
+      auto.lobbyId
+      || auto.status !== "idle"
+      || auto.startedAt
+      || auto.finishedAt
+      || auto.lastSyncAt
+      || auto.lastError
+    ) {
+      resetMatchAutomationMeta(match);
+      changed = true;
+    }
+
+    if (changed) {
+      match.updatedAt = nowIso();
+    }
+    return changed;
   }
 
 
@@ -150,6 +232,7 @@
 
     let changed = false;
     const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED);
+    const drawLocked = tournament?.ko?.drawLocked !== false;
     const participants = (Array.isArray(tournament.participants) ? tournament.participants : [])
       .map((participant) => ({
         id: normalizeText(participant?.id || ""),
@@ -158,9 +241,10 @@
       }))
       .filter((participant) => participant.id);
 
-    const seeds = generateSeeds(participants, drawMode);
-    const structure = buildBracketStructure(participants, seeds);
-    const nextKoMeta = buildKoMetaSnapshot(drawMode, structure);
+    const generatedStructure = buildBracketStructure(participants, generateSeeds(participants, drawMode));
+    const lockedStructure = drawLocked ? buildKoStructureFromMeta(tournament?.ko, drawMode) : null;
+    const structure = lockedStructure || generatedStructure;
+    const nextKoMeta = buildKoMetaSnapshot(drawMode, drawLocked, structure);
     if (!isSerializableEqual(tournament.ko, nextKoMeta)) {
       tournament.ko = nextKoMeta;
       changed = true;
@@ -175,18 +259,7 @@
       roundDef.virtualMatches.forEach((virtualMatch) => {
         const p1 = resolveVirtualCompetitorParticipantId(virtualMatch?.competitors?.p1, winnerByVirtualMatchId);
         const p2 = resolveVirtualCompetitorParticipantId(virtualMatch?.competitors?.p2, winnerByVirtualMatchId);
-
-        if (virtualMatch.structuralBye) {
-          const advancedParticipant = p1 || p2 || null;
-          if (advancedParticipant) {
-            winnerByVirtualMatchId.set(virtualMatch.id, advancedParticipant);
-          }
-          return;
-        }
-
-        if (!p1 || !p2) {
-          return;
-        }
+        const structuralBye = Boolean(virtualMatch?.structuralBye);
 
         let match = existingKoById.get(virtualMatch.id) || null;
         if (!match) {
@@ -199,6 +272,9 @@
             player2Id: p2,
             meta: buildKoMatchMetaFromVirtualMatch(virtualMatch),
           });
+          if (structuralBye) {
+            synchronizeStructuralByeMatch(match, p1, p2);
+          }
           changed = true;
         } else {
           if (match.round !== virtualMatch.round || match.number !== virtualMatch.number) {
@@ -209,6 +285,16 @@
           }
           changed = assignPlayerSlot(match, 1, p1) || changed;
           changed = assignPlayerSlot(match, 2, p2) || changed;
+
+          if (structuralBye) {
+            changed = synchronizeStructuralByeMatch(match, p1, p2) || changed;
+          } else if (isByeMatchResult(match)) {
+            const localChanged = setMatchResultKind(match, null);
+            if (localChanged) {
+              match.updatedAt = nowIso();
+            }
+            changed = localChanged || changed;
+          }
 
           const normalizedMeta = normalizeMatchMeta({
             ...(match.meta || {}),
@@ -221,14 +307,6 @@
           }
         }
 
-        if (isByeMatchResult(match)) {
-          const localChanged = setMatchResultKind(match, null);
-          if (localChanged) {
-            match.updatedAt = nowIso();
-          }
-          changed = localChanged || changed;
-        }
-
         const normalizedStats = normalizeMatchStats(match.stats);
         if (!isSerializableEqual(match.stats, normalizedStats)) {
           match.stats = normalizedStats;
@@ -239,14 +317,21 @@
         nextKoMatches.push(match);
 
         if (match.status === STATUS_COMPLETED) {
-          const derivedWinnerId = deriveWinnerIdFromLegs(tournament, match);
-          if (derivedWinnerId && match.winnerId !== derivedWinnerId) {
-            match.winnerId = derivedWinnerId;
-            match.updatedAt = nowIso();
-            changed = true;
+          if (!isByeMatchResult(match)) {
+            const derivedWinnerId = deriveWinnerIdFromLegs(tournament, match);
+            if (derivedWinnerId && match.winnerId !== derivedWinnerId) {
+              match.winnerId = derivedWinnerId;
+              match.updatedAt = nowIso();
+              changed = true;
+            }
           }
           if (isCompletedMatchResultValid(tournament, match)) {
             winnerByVirtualMatchId.set(match.id, match.winnerId);
+          }
+        } else if (structuralBye) {
+          const advancedParticipant = p1 || p2 || null;
+          if (advancedParticipant) {
+            winnerByVirtualMatchId.set(virtualMatch.id, advancedParticipant);
           }
         }
       });
@@ -282,13 +367,16 @@
     }
 
     const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, defaultDrawMode);
+    const drawLocked = tournament?.ko?.drawLocked !== false;
     const engineVersion = normalizeKoEngineVersion(tournament?.ko?.engineVersion, 0);
     const currentKo = tournament.ko && typeof tournament.ko === "object" ? tournament.ko : {};
+    const normalizedKo = normalizeTournamentKoMeta(currentKo, drawMode, drawLocked);
 
     if (engineVersion >= KO_ENGINE_VERSION) {
       const nextKo = {
-        ...currentKo,
+        ...normalizedKo,
         drawMode,
+        drawLocked,
         engineVersion: KO_ENGINE_VERSION,
       };
       if (!isSerializableEqual(currentKo, nextKo)) {
@@ -306,8 +394,9 @@
     }
 
     tournament.ko = {
-      ...currentKo,
+      ...normalizedKo,
       drawMode,
+      drawLocked,
       engineVersion: KO_ENGINE_VERSION,
     };
     tournament.updatedAt = nowIso();
@@ -325,6 +414,21 @@
     if (!match || match.status !== STATUS_COMPLETED) {
       return true;
     }
+
+    if (isByeMatchResult(match)) {
+      const hasP1 = Boolean(match.player1Id);
+      const hasP2 = Boolean(match.player2Id);
+      if (hasP1 === hasP2) {
+        return false;
+      }
+      const expectedWinnerId = hasP1 ? match.player1Id : match.player2Id;
+      const p1Legs = clampInt(match.legs?.p1, 0, 0, 99);
+      const p2Legs = clampInt(match.legs?.p2, 0, 0, 99);
+      return normalizeText(match.winnerId || "") === normalizeText(expectedWinnerId || "")
+        && p1Legs === 0
+        && p2Legs === 0;
+    }
+
     if (!match.player1Id || !match.player2Id) {
       return false;
     }
@@ -346,14 +450,6 @@
     }
     let changed = false;
     tournament.matches.forEach((match) => {
-      if (isByeMatchResult(match)) {
-        const localChanged = setMatchResultKind(match, null);
-        if (localChanged) {
-          match.updatedAt = nowIso();
-        }
-        changed = localChanged || changed;
-      }
-
       const normalizedStats = normalizeMatchStats(match.stats);
       if (!isSerializableEqual(match.stats, normalizedStats)) {
         match.stats = normalizedStats;
@@ -362,6 +458,11 @@
       }
 
       if (match.status !== STATUS_COMPLETED) {
+        return;
+      }
+
+      if (isByeMatchResult(match)) {
+        changed = synchronizeStructuralByeMatch(match, match.player1Id || null, match.player2Id || null) || changed;
         return;
       }
 
@@ -451,4 +552,3 @@
     }
     return changedAny;
   }
-
