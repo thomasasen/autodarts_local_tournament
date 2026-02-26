@@ -539,25 +539,34 @@
         white-space: nowrap;
       }
 
+      .ata-pdc-badge-host {
+        display: inline-flex;
+      }
+
+      .ata-pdc-badge-host[data-visible="0"] {
+        display: none;
+      }
+
       .ata-pdc-badge,
       .ata-pdc-pill {
         display: inline-flex;
         align-items: center;
         gap: 7px;
-        border: 1px solid rgba(113, 213, 168, 0.48);
+        border: 1px solid rgba(214, 226, 245, 0.96);
         border-radius: 999px;
-        padding: 4px 10px;
-        background: rgba(90, 210, 153, 0.16);
-        color: #d5ffeb;
+        padding: 5px 11px;
+        background: linear-gradient(130deg, rgba(246, 250, 255, 0.98) 0%, rgba(232, 242, 255, 0.98) 62%, rgba(255, 236, 242, 0.95) 100%);
+        color: #1d3f74;
         font-size: 13px;
         line-height: 1.1;
         font-weight: 700;
         white-space: nowrap;
+        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.42) inset, 0 0 0 1px rgba(19, 41, 84, 0.18);
       }
 
       .ata-pdc-logo {
-        width: 42px;
-        height: 16px;
+        width: 54px;
+        height: 20px;
         object-fit: contain;
         object-position: center;
         display: block;
@@ -5701,7 +5710,7 @@
       const bullModeHiddenInput = bullModeDisabled
         ? `<input type="hidden" id="ata-x01-bullmode-hidden" name="x01BullMode" value="${escapeHtml(draft.x01BullMode)}">`
         : "";
-      const pdcBadgeHtml = pdcCompliantSetup ? renderPdcBadge("PDC-konform") : "";
+      const pdcBadgeHtml = renderPdcBadge("PDC-konform");
       const createHeadingLinks = [
         { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erklärung zur Turniererstellung öffnen", title: "README: Turnier anlegen" },
         { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole öffnen", title: "README: Info-Symbole" },
@@ -5801,7 +5810,7 @@
                     <div class="ata-form-inline-actions">
                       <button id="ata-apply-pdc-preset" type="button" class="ata-btn ata-btn-sm" data-action="apply-pdc-preset">PDC-Preset anwenden</button>
                       <span class="ata-preset-pill">${escapeHtml(presetStatusLabel)}</span>
-                      ${pdcBadgeHtml}
+                      <span id="ata-pdc-badge-create" class="ata-pdc-badge-host" data-visible="${pdcCompliantSetup ? "1" : "0"}">${pdcBadgeHtml}</span>
                     </div>
                   </div>
                 </div>
@@ -6923,6 +6932,20 @@
   }
 
 
+  function refreshCreateFormPdcBadge(form) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const pdcBadgeHost = form.querySelector("#ata-pdc-badge-create");
+    if (!(pdcBadgeHost instanceof HTMLElement)) {
+      return;
+    }
+    const formData = new FormData(form);
+    const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
+    pdcBadgeHost.setAttribute("data-visible", isPdcCompliantMatchSetup(draft) ? "1" : "0");
+  }
+
+
   function syncCreateFormDependencies(form) {
     if (!(form instanceof HTMLFormElement)) {
       return;
@@ -6931,6 +6954,7 @@
     const bullModeSelect = form.querySelector("#ata-x01-bullmode");
     if (!(bullOffSelect instanceof HTMLSelectElement) || !(bullModeSelect instanceof HTMLSelectElement)) {
       refreshCreateFormPresetBadge(form);
+      refreshCreateFormPdcBadge(form);
       return;
     }
 
@@ -6955,6 +6979,7 @@
     }
 
     refreshCreateFormPresetBadge(form);
+    refreshCreateFormPdcBadge(form);
   }
 
 

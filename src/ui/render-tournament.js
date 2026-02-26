@@ -32,7 +32,7 @@
       const bullModeHiddenInput = bullModeDisabled
         ? `<input type="hidden" id="ata-x01-bullmode-hidden" name="x01BullMode" value="${escapeHtml(draft.x01BullMode)}">`
         : "";
-      const pdcBadgeHtml = pdcCompliantSetup ? renderPdcBadge("PDC-konform") : "";
+      const pdcBadgeHtml = renderPdcBadge("PDC-konform");
       const createHeadingLinks = [
         { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erklärung zur Turniererstellung öffnen", title: "README: Turnier anlegen" },
         { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole öffnen", title: "README: Info-Symbole" },
@@ -132,7 +132,7 @@
                     <div class="ata-form-inline-actions">
                       <button id="ata-apply-pdc-preset" type="button" class="ata-btn ata-btn-sm" data-action="apply-pdc-preset">PDC-Preset anwenden</button>
                       <span class="ata-preset-pill">${escapeHtml(presetStatusLabel)}</span>
-                      ${pdcBadgeHtml}
+                      <span id="ata-pdc-badge-create" class="ata-pdc-badge-host" data-visible="${pdcCompliantSetup ? "1" : "0"}">${pdcBadgeHtml}</span>
                     </div>
                   </div>
                 </div>
