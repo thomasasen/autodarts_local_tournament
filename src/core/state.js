@@ -36,6 +36,7 @@
       root: null,
       syncing: false,
       inlineSyncingByLobby: {},
+      inlineOutcomeByLobby: {},
     },
     runtimeStatusSignature: "",
     cleanupStack: [],

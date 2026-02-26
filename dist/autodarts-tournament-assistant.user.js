@@ -1443,6 +1443,7 @@
       root: null,
       syncing: false,
       inlineSyncingByLobby: {},
+      inlineOutcomeByLobby: {},
     },
     runtimeStatusSignature: "",
     cleanupStack: [],
@@ -7019,6 +7020,7 @@
     state.matchReturnShortcut.root = null;
     state.matchReturnShortcut.syncing = false;
     state.matchReturnShortcut.inlineSyncingByLobby = {};
+    state.matchReturnShortcut.inlineOutcomeByLobby = {};
   }
 
 
@@ -7072,6 +7074,42 @@
   }
 
 
+  function setHistoryInlineOutcome(lobbyId, type, message) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    if (!targetLobbyId) {
+      return;
+    }
+    if (!state.matchReturnShortcut.inlineOutcomeByLobby || typeof state.matchReturnShortcut.inlineOutcomeByLobby !== "object") {
+      state.matchReturnShortcut.inlineOutcomeByLobby = {};
+    }
+    const normalizedType = normalizeText(type || "info");
+    const normalizedMessage = normalizeText(message || "");
+    if (!normalizedMessage) {
+      delete state.matchReturnShortcut.inlineOutcomeByLobby[targetLobbyId];
+      return;
+    }
+    state.matchReturnShortcut.inlineOutcomeByLobby[targetLobbyId] = {
+      type: normalizedType || "info",
+      message: normalizedMessage,
+      updatedAt: Date.now(),
+    };
+  }
+
+
+  function getHistoryInlineOutcome(lobbyId) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    if (!targetLobbyId) {
+      return null;
+    }
+    const map = state.matchReturnShortcut.inlineOutcomeByLobby || {};
+    const entry = map[targetLobbyId];
+    if (!entry || !normalizeText(entry.message || "")) {
+      return null;
+    }
+    return entry;
+  }
+
+
   function cleanupStaleHistoryImportButtons(activeLobbyId = "") {
     const nodes = Array.from(document.querySelectorAll("[data-ata-history-import-root='1']"));
     nodes.forEach((node) => {
@@ -7081,6 +7119,9 @@
       const nodeLobbyId = normalizeText(node.getAttribute("data-lobby-id") || "");
       if (!activeLobbyId || nodeLobbyId !== activeLobbyId) {
         node.remove();
+        if (nodeLobbyId && state.matchReturnShortcut.inlineOutcomeByLobby?.[nodeLobbyId]) {
+          delete state.matchReturnShortcut.inlineOutcomeByLobby[nodeLobbyId];
+        }
       }
     });
   }
@@ -7205,10 +7246,10 @@
     }
 
     let winnerIndex = -1;
-    if (p1HasTrophy !== p2HasTrophy) {
-      winnerIndex = p1HasTrophy ? 0 : 1;
-    } else if (p1Legs !== p2Legs) {
+    if (p1Legs !== p2Legs) {
       winnerIndex = p1Legs > p2Legs ? 0 : 1;
+    } else if (p1HasTrophy !== p2HasTrophy) {
+      winnerIndex = p1HasTrophy ? 0 : 1;
     }
 
     return {
@@ -7425,6 +7466,7 @@
     const parsedScoreText = parsedStats
       ? `${parsedStats.p1Name} ${parsedStats.p1Legs}:${parsedStats.p2Legs} ${parsedStats.p2Name}`
       : "";
+    const inlineOutcome = getHistoryInlineOutcome(lobbyId);
 
     let statusText = "";
     if (isAlreadyCompleted) {
@@ -7447,6 +7489,23 @@
       ? "Turnierassistent öffnen"
       : (isSyncing ? "\u00dcbernehme..." : "Ergebnis aus Statistik \u00fcbernehmen & Turnier \u00f6ffnen");
     const disabledAttr = isSyncing || (!autoEnabled && !isAlreadyCompleted) ? "disabled" : "";
+    const outcomeType = normalizeText(inlineOutcome?.type || "info");
+    const outcomeMessage = normalizeText(inlineOutcome?.message || "");
+    const outcomeColor = outcomeType === "success"
+      ? "#d8ffe7"
+      : outcomeType === "error"
+        ? "#ffd9dc"
+        : "#dbe8ff";
+    const outcomeBg = outcomeType === "success"
+      ? "rgba(73, 205, 138, 0.16)"
+      : outcomeType === "error"
+        ? "rgba(214, 74, 105, 0.18)"
+        : "rgba(119, 167, 255, 0.14)";
+    const outcomeBorder = outcomeType === "success"
+      ? "rgba(95, 220, 154, 0.5)"
+      : outcomeType === "error"
+        ? "rgba(245, 123, 143, 0.52)"
+        : "rgba(142, 188, 255, 0.48)";
 
     root.innerHTML = `
       <div style="margin:10px 0 14px 0;padding:14px;border-radius:12px;border:1px solid rgba(120,203,255,0.45);background:linear-gradient(180deg, rgba(54,70,145,0.92), rgba(34,80,136,0.9));color:#f4f7ff;box-shadow:0 10px 24px rgba(7,11,25,0.28);">
@@ -7456,6 +7515,7 @@
         </div>
         <div style="font-size:13px;line-height:1.45;color:rgba(240,246,255,0.95);margin-bottom:8px;">${escapeHtml(statusText)}</div>
         ${parsedScoreText ? `<div style="font-size:12px;line-height:1.4;color:rgba(220,236,255,0.88);margin-bottom:10px;">Statistik: ${escapeHtml(parsedScoreText)}</div>` : ""}
+        ${outcomeMessage ? `<div style="font-size:12px;line-height:1.4;color:${outcomeColor};background:${outcomeBg};border:1px solid ${outcomeBorder};padding:7px 9px;border-radius:8px;margin-bottom:10px;">${escapeHtml(outcomeMessage)}</div>` : ""}
         <button type="button" data-action="ata-history-sync" style="display:block;width:100%;border:1px solid rgba(99,231,173,0.7);background:linear-gradient(180deg, rgba(83,221,163,0.36), rgba(58,197,141,0.36));color:#ecfff6;border-radius:10px;padding:12px 14px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:0.2px;" ${disabledAttr}>${escapeHtml(primaryLabel)}</button>
       </div>
     `;
@@ -7496,6 +7556,7 @@
     if (!targetLobbyId || isLobbySyncing(targetLobbyId)) {
       return;
     }
+    setHistoryInlineOutcome(targetLobbyId, "info", "Übernehme Ergebnis...");
     setLobbySyncing(targetLobbyId, true);
     renderHistoryImportButton();
     try {
@@ -7515,6 +7576,7 @@
 
       if (syncOutcome.reasonCode === "completed" || syncOutcome.completed) {
         openAssistantMatchesTab();
+        setHistoryInlineOutcome(targetLobbyId, "success", syncOutcome.message || "Ergebnis wurde übernommen.");
         const alreadyStored = normalizeText(syncOutcome.message || "").includes("bereits");
         if (alreadyStored) {
           setNotice("info", syncOutcome.message || "Ergebnis war bereits im Turnier gespeichert.", 2600);
@@ -7522,13 +7584,16 @@
           setNotice("success", syncOutcome.message || "Ergebnis wurde in xLokale Turniere \u00fcbernommen.", 2600);
         }
       } else if (!syncOutcome.ok && syncOutcome.message) {
+        setHistoryInlineOutcome(targetLobbyId, syncOutcome.reasonCode === "ambiguous" ? "error" : "info", syncOutcome.message);
         const noticeType = syncOutcome.reasonCode === "ambiguous" ? "error" : "info";
         setNotice(noticeType, syncOutcome.message, 3200);
       } else if (syncOutcome.ok && !syncOutcome.completed) {
+        setHistoryInlineOutcome(targetLobbyId, "info", "Noch kein finales Ergebnis verfügbar.");
         setNotice("info", "Noch kein finales Ergebnis verf\u00fcgbar. Match l\u00e4uft ggf. noch.", 2600);
       }
     } catch (error) {
       logWarn("api", "Manual shortcut sync failed.", error);
+      setHistoryInlineOutcome(targetLobbyId, "error", "Ergebnisübernahme fehlgeschlagen. Bitte erneut versuchen.");
       setNotice("error", "Ergebnis\u00fcbernahme fehlgeschlagen. Bitte sp\u00e4ter erneut versuchen.");
     } finally {
       setLobbySyncing(targetLobbyId, false);
