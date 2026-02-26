@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.3.1
+// @version      0.3.2
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,7 +21,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.3.1";
+  const APP_VERSION = "0.3.2";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 3;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
@@ -4659,7 +4659,6 @@
     logDebug("route", `Route changed to ${current}`);
     ensureHost();
     renderShell();
-    renderMatchReturnShortcut();
     renderHistoryImportButton();
   }
 
@@ -4703,7 +4702,6 @@
         ensureHost();
       }
       onRouteChange();
-      renderMatchReturnShortcut();
       renderHistoryImportButton();
     }, 1000);
   }
@@ -7143,6 +7141,251 @@
   }
 
 
+  function extractHistoryHeaderName(cell) {
+    if (!(cell instanceof HTMLElement)) {
+      return "";
+    }
+    const namedNode = cell.querySelector(".ad-ext-player-name p, .ad-ext-player-name, p, span");
+    if (namedNode instanceof HTMLElement) {
+      return normalizeText(namedNode.textContent || "");
+    }
+    const fallbackText = normalizeText(cell.textContent || "");
+    if (!fallbackText) {
+      return "";
+    }
+    const parts = fallbackText.split(/\s+/).filter(Boolean);
+    return normalizeText(parts[parts.length - 1] || fallbackText);
+  }
+
+
+  function parseHistoryStatsTable(table) {
+    if (!(table instanceof HTMLTableElement)) {
+      return null;
+    }
+    const headerCells = Array.from(table.querySelectorAll("thead tr td"));
+    if (headerCells.length < 2) {
+      return null;
+    }
+
+    const p1Cell = headerCells[0];
+    const p2Cell = headerCells[1];
+    const p1Name = extractHistoryHeaderName(p1Cell);
+    const p2Name = extractHistoryHeaderName(p2Cell);
+    if (!p1Name || !p2Name) {
+      return null;
+    }
+
+    const p1HasTrophy = Boolean(p1Cell?.querySelector("svg[data-icon='trophy'], [data-icon='trophy'], .fa-trophy"));
+    const p2HasTrophy = Boolean(p2Cell?.querySelector("svg[data-icon='trophy'], [data-icon='trophy'], .fa-trophy"));
+
+    let p1Legs = null;
+    let p2Legs = null;
+    const rows = Array.from(table.querySelectorAll("tbody tr"));
+    rows.forEach((row) => {
+      if (!(row instanceof HTMLTableRowElement)) {
+        return;
+      }
+      const cells = Array.from(row.querySelectorAll("td"));
+      if (cells.length < 3) {
+        return;
+      }
+      const label = normalizeLookup(cells[0].textContent || "");
+      const isLegsRow = label.includes("gewonnene legs")
+        || label.includes("legs won")
+        || label === "legs";
+      if (!isLegsRow) {
+        return;
+      }
+      p1Legs = clampInt(cells[1].textContent, 0, 0, 50);
+      p2Legs = clampInt(cells[2].textContent, 0, 0, 50);
+    });
+
+    if (!Number.isInteger(p1Legs) || !Number.isInteger(p2Legs)) {
+      return null;
+    }
+
+    let winnerIndex = -1;
+    if (p1HasTrophy !== p2HasTrophy) {
+      winnerIndex = p1HasTrophy ? 0 : 1;
+    } else if (p1Legs !== p2Legs) {
+      winnerIndex = p1Legs > p2Legs ? 0 : 1;
+    }
+
+    return {
+      p1Name,
+      p2Name,
+      p1Legs,
+      p2Legs,
+      winnerIndex,
+    };
+  }
+
+
+  function getParsedHistoryWinnerName(parsed) {
+    if (!parsed) {
+      return "";
+    }
+    if (parsed.winnerIndex === 0) {
+      return parsed.p1Name;
+    }
+    if (parsed.winnerIndex === 1) {
+      return parsed.p2Name;
+    }
+    if (Number.isInteger(parsed.p1Legs) && Number.isInteger(parsed.p2Legs) && parsed.p1Legs !== parsed.p2Legs) {
+      return parsed.p1Legs > parsed.p2Legs ? parsed.p1Name : parsed.p2Name;
+    }
+    return "";
+  }
+
+
+  function participantIdsByName(tournament, name) {
+    const key = normalizeLookup(name || "");
+    if (!key) {
+      return [];
+    }
+    return (tournament?.participants || [])
+      .filter((participant) => normalizeLookup(participant?.name || "") === key)
+      .map((participant) => participant.id);
+  }
+
+
+  function getOpenMatchCandidatesByParticipantIds(tournament, idA, idB) {
+    const left = normalizeText(idA || "");
+    const right = normalizeText(idB || "");
+    if (!left || !right || left === right) {
+      return [];
+    }
+    const key = new Set([left, right]);
+    return (tournament?.matches || [])
+      .filter((match) => {
+        if (!match || match.status !== STATUS_PENDING || !match.player1Id || !match.player2Id) {
+          return false;
+        }
+        const set = new Set([normalizeText(match.player1Id), normalizeText(match.player2Id)]);
+        return key.size === set.size && [...key].every((entry) => set.has(entry));
+      })
+      .sort((a, b) => {
+        if (a.round !== b.round) {
+          return a.round - b.round;
+        }
+        return a.number - b.number;
+      });
+  }
+
+
+  function importHistoryStatsTableResult(lobbyId, hostInfo) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    const tournament = state.store.tournament;
+    if (!tournament || !targetLobbyId) {
+      return null;
+    }
+    const parsed = parseHistoryStatsTable(hostInfo?.table);
+    if (!parsed) {
+      logDebug("api", "History table import skipped: stats table not parsable.", {
+        lobbyId: targetLobbyId,
+      });
+      return null;
+    }
+
+    const p1Ids = participantIdsByName(tournament, parsed.p1Name);
+    const p2Ids = participantIdsByName(tournament, parsed.p2Name);
+    const matchCandidates = [];
+    const seenMatches = new Set();
+    p1Ids.forEach((p1Id) => {
+      p2Ids.forEach((p2Id) => {
+        getOpenMatchCandidatesByParticipantIds(tournament, p1Id, p2Id).forEach((match) => {
+          if (!seenMatches.has(match.id)) {
+            seenMatches.add(match.id);
+            matchCandidates.push(match);
+          }
+        });
+      });
+    });
+
+    if (!matchCandidates.length) {
+      return {
+        ok: false,
+        completed: false,
+        reasonCode: "not_found",
+        message: "Kein offenes Turnier-Match für die Spieler aus der Statistik gefunden.",
+      };
+    }
+    if (matchCandidates.length > 1) {
+      return {
+        ok: false,
+        completed: false,
+        reasonCode: "ambiguous",
+        message: "Mehrdeutige Zuordnung: mehrere offene Turnier-Matches passen zu diesen Spielern.",
+      };
+    }
+
+    const match = matchCandidates[0];
+    const p1Lookup = normalizeLookup(parsed.p1Name);
+    const matchP1Name = normalizeLookup(participantNameById(tournament, match.player1Id));
+    const tableMapsDirect = p1Lookup && matchP1Name === p1Lookup;
+
+    const legs = tableMapsDirect
+      ? { p1: parsed.p1Legs, p2: parsed.p2Legs }
+      : { p1: parsed.p2Legs, p2: parsed.p1Legs };
+
+    let winnerId = "";
+    if (parsed.winnerIndex === 0) {
+      winnerId = tableMapsDirect ? match.player1Id : match.player2Id;
+    } else if (parsed.winnerIndex === 1) {
+      winnerId = tableMapsDirect ? match.player2Id : match.player1Id;
+    } else if (legs.p1 !== legs.p2) {
+      winnerId = legs.p1 > legs.p2 ? match.player1Id : match.player2Id;
+    }
+
+    if (!winnerId) {
+      return {
+        ok: false,
+        completed: false,
+        reasonCode: "error",
+        message: "Sieger konnte aus der Statistik nicht eindeutig bestimmt werden.",
+      };
+    }
+
+    const result = updateMatchResult(match.id, winnerId, legs, "auto");
+    if (!result.ok) {
+      return {
+        ok: false,
+        completed: false,
+        reasonCode: "error",
+        message: result.message || "Ergebnis konnte nicht aus der Statistik gespeichert werden.",
+      };
+    }
+
+    const updatedMatch = findMatch(tournament, match.id);
+    if (updatedMatch) {
+      const auto = ensureMatchAutoMeta(updatedMatch);
+      const now = nowIso();
+      auto.provider = API_PROVIDER;
+      auto.lobbyId = auto.lobbyId || targetLobbyId;
+      auto.status = "completed";
+      auto.finishedAt = auto.finishedAt || now;
+      auto.lastSyncAt = now;
+      auto.lastError = null;
+      updatedMatch.updatedAt = now;
+      tournament.updatedAt = now;
+      schedulePersist();
+    }
+
+    logDebug("api", "History table result imported.", {
+      lobbyId: targetLobbyId,
+      matchId: match.id,
+      winnerId,
+      legs,
+    });
+    return {
+      ok: true,
+      completed: true,
+      reasonCode: "completed",
+      message: "Ergebnis wurde aus der Match-Statistik übernommen.",
+    };
+  }
+
+
   function renderHistoryImportButton() {
     const lobbyId = getHistoryRouteLobbyId();
     if (!lobbyId) {
@@ -7177,35 +7420,49 @@
     const autoEnabled = Boolean(state.store.settings.featureFlags.autoLobbyStart);
     const isSyncing = isLobbySyncing(lobbyId);
     const isAlreadyCompleted = linkedMatchAny?.status === STATUS_COMPLETED;
+    const parsedStats = parseHistoryStatsTable(hostInfo.table);
+    const parsedWinnerName = getParsedHistoryWinnerName(parsedStats);
+    const parsedScoreText = parsedStats
+      ? `${parsedStats.p1Name} ${parsedStats.p1Legs}:${parsedStats.p2Legs} ${parsedStats.p2Name}`
+      : "";
 
     let statusText = "";
-    if (!autoEnabled) {
-      statusText = "Auto-Lobby ist deaktiviert. Aktivieren Sie die Funktion im Tab Einstellungen.";
-    } else if (isAlreadyCompleted) {
+    if (isAlreadyCompleted) {
       statusText = "Ergebnis bereits im Turnier gespeichert.";
+    } else if (!autoEnabled) {
+      statusText = "Auto-Lobby ist deaktiviert. Aktivieren Sie die Funktion im Tab Einstellungen.";
+    } else if (!parsedStats) {
+      statusText = "Statistik konnte nicht vollständig gelesen werden. Beim Klick wird API-Fallback genutzt.";
+    } else if (parsedWinnerName) {
+      statusText = `Import bereit. Sieger laut Statistik: ${parsedWinnerName}.`;
     } else if (linkedMatchAny && auto?.status === "error") {
       statusText = `Letzter Sync-Fehler: ${normalizeText(auto.lastError || "Unbekannt") || "Unbekannt"}`;
     } else if (linkedMatchAny && auto?.status === "started") {
-      statusText = "Match verknüpft. Ergebnis kann übernommen werden.";
+      statusText = "Match verknüpft. Ergebnis kann jetzt übernommen werden.";
     } else {
-      statusText = "Kein direkt verknüpftes Match gefunden. Ergebnisübernahme versucht API-Zuordnung über Stats.";
+      statusText = "Kein direkt verknüpftes Match gefunden. Ergebnisübernahme versucht Zuordnung über die Statistik.";
     }
 
     const primaryLabel = isAlreadyCompleted
       ? "Turnierassistent öffnen"
-      : (isSyncing ? "\u00dcbernehme..." : "Ergebnis \u00fcbernehmen & Turnier \u00f6ffnen");
-    const disabledAttr = isSyncing || !autoEnabled ? "disabled" : "";
+      : (isSyncing ? "\u00dcbernehme..." : "Ergebnis aus Statistik \u00fcbernehmen & Turnier \u00f6ffnen");
+    const disabledAttr = isSyncing || (!autoEnabled && !isAlreadyCompleted) ? "disabled" : "";
 
     root.innerHTML = `
-      <div style="margin:8px 0 10px 0;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.22);background:linear-gradient(180deg, rgba(44,50,109,0.85), rgba(31,63,113,0.85));color:#f4f7ff;">
-        <div style="font-size:12px;line-height:1.35;color:rgba(232,237,255,0.86);margin-bottom:8px;">${escapeHtml(statusText)}</div>
-        <button type="button" data-action="ata-history-sync" style="border:1px solid rgba(90,210,153,0.55);background:rgba(90,210,153,0.24);color:#dcffe8;border-radius:8px;padding:8px 10px;font-size:13px;font-weight:700;cursor:pointer;" ${disabledAttr}>${escapeHtml(primaryLabel)}</button>
+      <div style="margin:10px 0 14px 0;padding:14px;border-radius:12px;border:1px solid rgba(120,203,255,0.45);background:linear-gradient(180deg, rgba(54,70,145,0.92), rgba(34,80,136,0.9));color:#f4f7ff;box-shadow:0 10px 24px rgba(7,11,25,0.28);">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
+          <div style="font-size:15px;line-height:1.2;font-weight:800;letter-spacing:0.25px;">xLokale Turniere</div>
+          <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;color:#d5ebff;background:rgba(31,175,198,0.32);border:1px solid rgba(133,219,255,0.42);padding:3px 8px;border-radius:999px;">Match-Import</div>
+        </div>
+        <div style="font-size:13px;line-height:1.45;color:rgba(240,246,255,0.95);margin-bottom:8px;">${escapeHtml(statusText)}</div>
+        ${parsedScoreText ? `<div style="font-size:12px;line-height:1.4;color:rgba(220,236,255,0.88);margin-bottom:10px;">Statistik: ${escapeHtml(parsedScoreText)}</div>` : ""}
+        <button type="button" data-action="ata-history-sync" style="display:block;width:100%;border:1px solid rgba(99,231,173,0.7);background:linear-gradient(180deg, rgba(83,221,163,0.36), rgba(58,197,141,0.36));color:#ecfff6;border-radius:10px;padding:12px 14px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:0.2px;" ${disabledAttr}>${escapeHtml(primaryLabel)}</button>
       </div>
     `;
 
     const syncButton = root.querySelector("[data-action='ata-history-sync']");
     if (syncButton instanceof HTMLButtonElement) {
-      if (!autoEnabled || isSyncing) {
+      if (isSyncing || (!autoEnabled && !isAlreadyCompleted)) {
         syncButton.onclick = null;
       } else if (isAlreadyCompleted) {
         syncButton.onclick = () => {
@@ -7219,31 +7476,6 @@
         };
       }
     }
-  }
-
-
-  function ensureMatchReturnShortcutRoot() {
-    if (state.matchReturnShortcut.root instanceof HTMLElement && document.body?.contains(state.matchReturnShortcut.root)) {
-      return state.matchReturnShortcut.root;
-    }
-    const root = document.createElement("div");
-    root.id = "ata-match-return-shortcut";
-    root.style.position = "fixed";
-    root.style.right = "18px";
-    root.style.bottom = "18px";
-    root.style.zIndex = "2147482990";
-    root.style.minWidth = "280px";
-    root.style.maxWidth = "340px";
-    root.style.borderRadius = "10px";
-    root.style.border = "1px solid rgba(255,255,255,0.25)";
-    root.style.background = "linear-gradient(180deg, rgba(44,50,109,0.94), rgba(31,63,113,0.94))";
-    root.style.color = "#f4f7ff";
-    root.style.padding = "10px";
-    root.style.boxShadow = "0 12px 24px rgba(7,11,25,0.45)";
-    root.style.fontFamily = "\"Open Sans\", \"Segoe UI\", Tahoma, sans-serif";
-    document.body.appendChild(root);
-    state.matchReturnShortcut.root = root;
-    return root;
   }
 
 
@@ -7265,21 +7497,29 @@
       return;
     }
     setLobbySyncing(targetLobbyId, true);
-    renderMatchReturnShortcut();
     renderHistoryImportButton();
     try {
-      const syncOutcome = await syncResultForLobbyId(targetLobbyId, {
-        notifyErrors: true,
-        notifyNotReady: true,
-        trigger,
-      });
+      let syncOutcome = null;
+      if (trigger === "inline-history") {
+        const hostInfo = findHistoryImportHost(targetLobbyId);
+        syncOutcome = importHistoryStatsTableResult(targetLobbyId, hostInfo);
+      }
+
+      if (!syncOutcome) {
+        syncOutcome = await syncResultForLobbyId(targetLobbyId, {
+          notifyErrors: true,
+          notifyNotReady: true,
+          trigger,
+        });
+      }
+
       if (syncOutcome.reasonCode === "completed" || syncOutcome.completed) {
         openAssistantMatchesTab();
         const alreadyStored = normalizeText(syncOutcome.message || "").includes("bereits");
         if (alreadyStored) {
           setNotice("info", syncOutcome.message || "Ergebnis war bereits im Turnier gespeichert.", 2600);
         } else {
-          setNotice("success", "Ergebnis wurde in xLokale Turniere \u00fcbernommen.", 2400);
+          setNotice("success", syncOutcome.message || "Ergebnis wurde in xLokale Turniere \u00fcbernommen.", 2600);
         }
       } else if (!syncOutcome.ok && syncOutcome.message) {
         const noticeType = syncOutcome.reasonCode === "ambiguous" ? "error" : "info";
@@ -7292,14 +7532,8 @@
       setNotice("error", "Ergebnis\u00fcbernahme fehlgeschlagen. Bitte sp\u00e4ter erneut versuchen.");
     } finally {
       setLobbySyncing(targetLobbyId, false);
-      renderMatchReturnShortcut();
       renderHistoryImportButton();
     }
-  }
-
-
-  async function handleMatchShortcutSyncAndOpen(lobbyId) {
-    return handleLobbySyncAndOpen(lobbyId, "floating-shortcut");
   }
 
 
@@ -7309,78 +7543,7 @@
 
 
   function renderMatchReturnShortcut() {
-    const lobbyId = getRouteLobbyId();
-    if (!lobbyId) {
-      removeMatchReturnShortcut();
-      return;
-    }
-
-    const tournament = state.store.tournament;
-    if (!tournament) {
-      removeMatchReturnShortcut();
-      return;
-    }
-
-    const linkedMatchAny = findTournamentMatchByLobbyId(tournament, lobbyId, true);
-    const linkedMatchOpen = linkedMatchAny?.status === STATUS_PENDING ? linkedMatchAny : null;
-    const auto = linkedMatchAny ? ensureMatchAutoMeta(linkedMatchAny) : null;
-    const root = ensureMatchReturnShortcutRoot();
-    const isSyncing = isLobbySyncing(lobbyId);
-    const autoEnabled = Boolean(state.store.settings.featureFlags.autoLobbyStart);
-    const isAlreadyCompleted = linkedMatchAny?.status === STATUS_COMPLETED;
-    const hasOpenMatch = Boolean(linkedMatchOpen || !linkedMatchAny);
-
-    const statusText = !autoEnabled
-      ? "Auto-Lobby ist deaktiviert. Aktivieren Sie die Funktion im Tab Einstellungen."
-      : isAlreadyCompleted
-        ? "Ergebnis bereits im Turnier gespeichert."
-        : linkedMatchAny && auto?.status === "error"
-          ? `Letzter Sync-Fehler: ${normalizeText(auto.lastError || "Unbekannt") || "Unbekannt"}`
-          : linkedMatchAny && auto?.status === "started"
-            ? "Match verkn\u00fcpft. Ergebnis kann \u00fcbernommen werden."
-            : "Kein direkt verkn\u00fcpftes Match gefunden. Ergebnis\u00fcbernahme versucht API-Zuordnung.";
-
-    const primaryLabel = isAlreadyCompleted
-      ? "Turnierassistent \u00f6ffnen"
-      : hasOpenMatch
-        ? (isSyncing ? "\u00dcbernehme..." : "Ergebnis \u00fcbernehmen & Turnier \u00f6ffnen")
-        : "Turnierassistent \u00f6ffnen";
-    const canSync = autoEnabled && !isAlreadyCompleted && hasOpenMatch;
-
-    const secondaryButtonHtml = canSync
-      ? `<button type="button" data-action="open-assistant" style="flex:1 1 auto;border:1px solid rgba(255,255,255,0.28);background:rgba(255,255,255,0.1);color:#f4f7ff;border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer;">Nur Turnierassistent</button>`
-      : "";
-
-    root.innerHTML = `
-      <div style="font-size:13px;font-weight:700;letter-spacing:0.3px;margin-bottom:6px;">xLokale Turniere</div>
-      <div style="font-size:12px;line-height:1.35;color:rgba(232,237,255,0.86);margin-bottom:8px;">${escapeHtml(statusText)}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button type="button" data-action="sync-open" style="flex:1 1 auto;border:1px solid rgba(90,210,153,0.55);background:rgba(90,210,153,0.24);color:#dcffe8;border-radius:8px;padding:8px 10px;font-size:13px;font-weight:700;cursor:pointer;" ${(isSyncing || !autoEnabled) ? "disabled" : ""}>${escapeHtml(primaryLabel)}</button>
-        ${secondaryButtonHtml}
-      </div>
-    `;
-
-    const syncButton = root.querySelector("[data-action='sync-open']");
-    if (syncButton instanceof HTMLButtonElement) {
-      if (canSync) {
-        syncButton.onclick = () => {
-          handleMatchShortcutSyncAndOpen(lobbyId).catch((error) => {
-            logWarn("api", "Shortcut action failed.", error);
-          });
-        };
-      } else {
-        syncButton.onclick = () => {
-          openAssistantMatchesTab();
-        };
-      }
-    }
-
-    const openAssistantButton = root.querySelector("[data-action='open-assistant']");
-    if (openAssistantButton instanceof HTMLButtonElement) {
-      openAssistantButton.onclick = () => {
-        openAssistantMatchesTab();
-      };
-    }
+    removeMatchReturnShortcut();
   }
 
 
@@ -7698,7 +7861,7 @@
     state.runtimeStatusSignature = runtimeStatusSignature();
     ensureHost();
     renderShell();
-    renderMatchReturnShortcut();
+    removeMatchReturnShortcut();
     renderHistoryImportButton();
 
     initEventBridge();
@@ -7712,7 +7875,6 @@
     }, API_SYNC_INTERVAL_MS);
     addInterval(() => {
       refreshRuntimeStatusUi();
-      renderMatchReturnShortcut();
       renderHistoryImportButton();
     }, 1200);
 

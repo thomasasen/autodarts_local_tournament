@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## 0.3.2
+- Match-Statistik-Import überarbeitet:
+  - Floating-Shortcut unten rechts entfernt.
+  - Inline-Import auf `/history/matches/{id}` visuell präsenter gestaltet.
+  - Klick übernimmt Ergebnis primär direkt aus der Statistik-Tabelle (Spieler, Gewinner, Legs).
+  - API-Sync wird nur noch als Fallback genutzt, wenn die Tabelle nicht parsbar ist.
+
 ## 0.3.1
 - Ergebnisübernahme erweitert:
   - neuer Inline-Button auf `/history/matches/{id}`: `Ergebnis übernehmen & Turnier öffnen`

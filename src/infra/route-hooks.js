@@ -8,7 +8,6 @@
     logDebug("route", `Route changed to ${current}`);
     ensureHost();
     renderShell();
-    renderMatchReturnShortcut();
     renderHistoryImportButton();
   }
 
@@ -52,7 +51,6 @@
         ensureHost();
       }
       onRouteChange();
-      renderMatchReturnShortcut();
       renderHistoryImportButton();
     }, 1000);
   }

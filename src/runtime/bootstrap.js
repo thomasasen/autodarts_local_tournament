@@ -4,7 +4,7 @@
     state.runtimeStatusSignature = runtimeStatusSignature();
     ensureHost();
     renderShell();
-    renderMatchReturnShortcut();
+    removeMatchReturnShortcut();
     renderHistoryImportButton();
 
     initEventBridge();
@@ -18,7 +18,6 @@
     }, API_SYNC_INTERVAL_MS);
     addInterval(() => {
       refreshRuntimeStatusUi();
-      renderMatchReturnShortcut();
       renderHistoryImportButton();
     }, 1200);
 

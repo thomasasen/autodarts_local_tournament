@@ -38,8 +38,7 @@ Der Assistent erweitert die Autodarts-Oberfläche um einen eigenen Bereich für:
   - Manuelles Speichern pro Match
   - API-Matchstart per Klick
   - API-Sync für Ergebnisse
-  - Match-Seiten-Shortcut: `Ergebnis übernehmen & Turnier öffnen`
-  - Inline-Button auf `/history/matches/{id}`: `Ergebnis übernehmen & Turnier öffnen`
+  - Präsenter Inline-Button auf `/history/matches/{id}`: `Ergebnis aus Statistik übernehmen & Turnier öffnen`
 - KO-Ansicht:
   - Bracket via `brackets-viewer` (primär)
   - HTML-Fallback bei CDN-Fehler/Timeout
