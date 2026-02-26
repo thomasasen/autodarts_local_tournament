@@ -362,20 +362,6 @@
   }
 
 
-  function refreshCreateFormPdcBadge(form) {
-    if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
-    const pdcBadgeHost = form.querySelector("#ata-pdc-badge-create");
-    if (!(pdcBadgeHost instanceof HTMLElement)) {
-      return;
-    }
-    const formData = new FormData(form);
-    const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
-    pdcBadgeHost.setAttribute("data-visible", isPdcCompliantMatchSetup(draft) ? "1" : "0");
-  }
-
-
   function syncCreateFormDependencies(form) {
     if (!(form instanceof HTMLFormElement)) {
       return;
@@ -384,7 +370,6 @@
     const bullModeSelect = form.querySelector("#ata-x01-bullmode");
     if (!(bullOffSelect instanceof HTMLSelectElement) || !(bullModeSelect instanceof HTMLSelectElement)) {
       refreshCreateFormPresetBadge(form);
-      refreshCreateFormPdcBadge(form);
       return;
     }
 
@@ -409,7 +394,6 @@
     }
 
     refreshCreateFormPresetBadge(form);
-    refreshCreateFormPdcBadge(form);
   }
 
 

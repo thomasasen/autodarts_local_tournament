@@ -539,39 +539,6 @@
         white-space: nowrap;
       }
 
-      .ata-pdc-badge-host {
-        display: inline-flex;
-      }
-
-      .ata-pdc-badge-host[data-visible="0"] {
-        display: none;
-      }
-
-      .ata-pdc-badge,
-      .ata-pdc-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        border: 1px solid rgba(214, 226, 245, 0.96);
-        border-radius: 999px;
-        padding: 5px 11px;
-        background: linear-gradient(130deg, rgba(246, 250, 255, 0.98) 0%, rgba(232, 242, 255, 0.98) 62%, rgba(255, 236, 242, 0.95) 100%);
-        color: #1d3f74;
-        font-size: 13px;
-        line-height: 1.1;
-        font-weight: 700;
-        white-space: nowrap;
-        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.42) inset, 0 0 0 1px rgba(19, 41, 84, 0.18);
-      }
-
-      .ata-pdc-logo {
-        width: 54px;
-        height: 20px;
-        object-fit: contain;
-        object-position: center;
-        display: block;
-      }
-
       .ata-score-grid select,
       .ata-score-grid input[type="number"] {
         border-radius: 8px;
@@ -5678,21 +5645,6 @@
   }
 
   function renderTournamentTab() {
-    const pdcLogoAvailable = typeof ATA_PDC_LOGO_DATA_URI === "string" && ATA_PDC_LOGO_DATA_URI.startsWith("data:image/");
-    const renderPdcBadge = (label) => {
-      const title = "PDC-konform: KO, Best of mindestens 3 Legs, 501 Straight In, Double Out, Bull-off Normal, Bull 25/50, Max. Runden 50.";
-      const safeLabel = escapeHtml(normalizeText(label || "PDC-konform") || "PDC-konform");
-      if (!pdcLogoAvailable) {
-        return `<span class="ata-pdc-pill" title="${escapeHtml(title)}">${safeLabel}</span>`;
-      }
-      return `
-        <span class="ata-pdc-badge" title="${escapeHtml(title)}">
-          <img class="ata-pdc-logo" src="${ATA_PDC_LOGO_DATA_URI}" alt="PDC Logo">
-          <span>${safeLabel}</span>
-        </span>
-      `;
-    };
-
     const tournament = state.store.tournament;
     if (!tournament) {
       const draft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store?.settings);
@@ -5710,7 +5662,6 @@
       const bullModeHiddenInput = bullModeDisabled
         ? `<input type="hidden" id="ata-x01-bullmode-hidden" name="x01BullMode" value="${escapeHtml(draft.x01BullMode)}">`
         : "";
-      const pdcBadgeHtml = renderPdcBadge("PDC-konform");
       const createHeadingLinks = [
         { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erklärung zur Turniererstellung öffnen", title: "README: Turnier anlegen" },
         { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole öffnen", title: "README: Info-Symbole" },
@@ -5810,7 +5761,6 @@
                     <div class="ata-form-inline-actions">
                       <button id="ata-apply-pdc-preset" type="button" class="ata-btn ata-btn-sm" data-action="apply-pdc-preset">PDC-Preset anwenden</button>
                       <span class="ata-preset-pill">${escapeHtml(presetStatusLabel)}</span>
-                      <span id="ata-pdc-badge-create" class="ata-pdc-badge-host" data-visible="${pdcCompliantSetup ? "1" : "0"}">${pdcBadgeHtml}</span>
                     </div>
                   </div>
                 </div>
@@ -5858,12 +5808,6 @@
     const x01BullModeLabel = x01Settings.bullOffMode === "Off"
       ? "Bull-Modus deaktiviert"
       : `Bull-Modus ${x01Settings.bullMode}`;
-    const pdcCompliantSetup = isPdcCompliantMatchSetup({
-      mode: tournament.mode,
-      bestOfLegs: tournament.bestOfLegs,
-      x01: x01Settings,
-    });
-    const activePdcBadgeHtml = pdcCompliantSetup ? renderPdcBadge("PDC-konform gespielt") : "";
     const legsToWin = getLegsToWin(tournament.bestOfLegs);
     const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED);
     const drawModeLabel = drawMode === KO_DRAW_MODE_OPEN_DRAW ? "Open Draw" : "Gesetzter Draw";
@@ -5902,7 +5846,6 @@
         <p class="ata-tournament-title">
           <b>${escapeHtml(tournament.name)}</b>
           <span class="ata-tournament-mode-pill">${escapeHtml(modeLabel)}</span>
-          ${activePdcBadgeHtml}
         </p>
         <div class="ata-tournament-meta">
           <div class="ata-meta-block">
@@ -6932,20 +6875,6 @@
   }
 
 
-  function refreshCreateFormPdcBadge(form) {
-    if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
-    const pdcBadgeHost = form.querySelector("#ata-pdc-badge-create");
-    if (!(pdcBadgeHost instanceof HTMLElement)) {
-      return;
-    }
-    const formData = new FormData(form);
-    const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
-    pdcBadgeHost.setAttribute("data-visible", isPdcCompliantMatchSetup(draft) ? "1" : "0");
-  }
-
-
   function syncCreateFormDependencies(form) {
     if (!(form instanceof HTMLFormElement)) {
       return;
@@ -6954,7 +6883,6 @@
     const bullModeSelect = form.querySelector("#ata-x01-bullmode");
     if (!(bullOffSelect instanceof HTMLSelectElement) || !(bullModeSelect instanceof HTMLSelectElement)) {
       refreshCreateFormPresetBadge(form);
-      refreshCreateFormPdcBadge(form);
       return;
     }
 
@@ -6979,7 +6907,6 @@
     }
 
     refreshCreateFormPresetBadge(form);
-    refreshCreateFormPdcBadge(form);
   }
 
 

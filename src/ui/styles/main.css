@@ -484,39 +484,6 @@
         white-space: nowrap;
       }
 
-      .ata-pdc-badge-host {
-        display: inline-flex;
-      }
-
-      .ata-pdc-badge-host[data-visible="0"] {
-        display: none;
-      }
-
-      .ata-pdc-badge,
-      .ata-pdc-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        border: 1px solid rgba(214, 226, 245, 0.96);
-        border-radius: 999px;
-        padding: 5px 11px;
-        background: linear-gradient(130deg, rgba(246, 250, 255, 0.98) 0%, rgba(232, 242, 255, 0.98) 62%, rgba(255, 236, 242, 0.95) 100%);
-        color: #1d3f74;
-        font-size: 13px;
-        line-height: 1.1;
-        font-weight: 700;
-        white-space: nowrap;
-        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.42) inset, 0 0 0 1px rgba(19, 41, 84, 0.18);
-      }
-
-      .ata-pdc-logo {
-        width: 54px;
-        height: 20px;
-        object-fit: contain;
-        object-position: center;
-        display: block;
-      }
-
       .ata-score-grid select,
       .ata-score-grid input[type="number"] {
         border-radius: 8px;
