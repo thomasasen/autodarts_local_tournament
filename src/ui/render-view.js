@@ -144,9 +144,7 @@
     if (tournament.mode === "league") {
       const standings = standingsForMatches(tournament, getMatchesByStage(tournament, MATCH_STAGE_LEAGUE));
       html += renderStandingsTable(standings, "Liga-Tabelle", [
-        { href: DRA_RULEBOOK_TIEBREAK_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 20, Punkt 6.16" },
-        { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
-        { href: README_TIE_BREAK_URL, kind: "tech", label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
+        { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
       ]);
       html += renderLeagueSchedule(tournament);
     } else if (tournament.mode === "groups_ko") {
@@ -155,9 +153,7 @@
       const blockedGroups = [];
       standingsMap.forEach((entry) => {
         groupCards.push(renderStandingsTable(entry.rows, `Tabelle ${entry.group.name}`, [
-          { href: DRA_RULEBOOK_TIEBREAK_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 20, Punkt 6.16" },
-          { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
-          { href: README_TIE_BREAK_URL, kind: "tech", label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
+          { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
         ]));
         if (entry.groupResolution?.status === "playoff_required") {
           blockedGroups.push(`${entry.group.name}: ${entry.groupResolution.reason}`);
@@ -168,9 +164,7 @@
         html += `
           <section class="ata-card tournamentCard">
             ${renderSectionHeading("Gruppenentscheidung offen", [
-              { href: DRA_RULEBOOK_TIEBREAK_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 20, Punkt 6.16" },
-              { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
-              { href: README_TIE_BREAK_URL, kind: "tech", label: "Tie-Break-Erklärung öffnen", title: "README: DRA Tie-Break" },
+              { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
             ])}
             <p class="ata-small">KO-Qualifikation ist blockiert, bis folgende DRA-Entscheidungen geklärt sind:</p>
             <ul class="ata-small">
@@ -184,7 +178,9 @@
     if (tournament.mode === "ko" || tournament.mode === "groups_ko") {
       html += `
         <section class="ata-card tournamentCard">
-          <h3>KO-Turnierbaum</h3>
+          ${renderSectionHeading("KO-Turnierbaum", [
+            { href: DRA_GUI_RULE_BYE_URL, kind: "rule", label: "DRA-Regelerklärung zu Freilosen öffnen", title: "DRA-Regeln in der GUI: Freilos (Bye)" },
+          ])}
           <div class="ata-bracket-dock" id="ata-bracket-dock">
             <div class="ata-bracket-shell">
               <iframe id="ata-bracket-frame" class="ata-bracket-frame" title="Turnierbaum" sandbox="allow-scripts allow-same-origin"></iframe>

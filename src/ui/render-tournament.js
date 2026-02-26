@@ -18,26 +18,18 @@
         : "";
       const createHeadingLinks = [
         { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erklärung zur Turniererstellung öffnen", title: "README: Turnier anlegen" },
-        { href: README_RULES_URL, kind: "tech", label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
         { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole öffnen", title: "README: Info-Symbole" },
       ];
       const modeHelpLinks = renderInfoLinks([
         { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Erklärung der Modi öffnen", title: "README: Turniermodi" },
-        { href: DRA_RULEBOOK_FORMATS_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 17, Punkte 6.8/6.10" },
-        { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zu Turnierformaten öffnen", title: "DRA Rulebook (offiziell)" },
-        { href: README_RULES_URL, kind: "tech", label: "Regelstellen mit Seiten-/Punktangaben öffnen", title: "README: Regelbasis und Limits" },
+        { href: DRA_GUI_RULE_MODE_FORMATS_URL, kind: "rule", label: "DRA-Regelerklärung zu Modus und Format öffnen", title: "DRA-Regeln in der GUI: Modus und Format" },
       ]);
       const drawHelpLinks = renderInfoLinks([
         { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Open Draw und gesetzter Draw erklärt", title: "README: KO-Modus" },
-        { href: DRA_RULEBOOK_LIMITS_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 18, Punkt 6.12.1" },
-        { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zur Draw-Stabilität öffnen", title: "DRA Rulebook (offiziell)" },
-        { href: README_RULES_URL, kind: "tech", label: "Regelstellen mit Seiten-/Punktangaben öffnen", title: "README: Regelbasis und Limits" },
-        { href: PDC_OPEN_DRAW_CONTEXT_URL, kind: "rule", label: "PDC-Kontext zu Open Draw öffnen", title: "PDC: Open Draw Kontext" },
+        { href: DRA_GUI_RULE_OPEN_DRAW_URL, kind: "rule", label: "DRA-Regelerklärung zu Open Draw öffnen", title: "DRA-Regeln in der GUI: Open Draw" },
       ]);
       const modeLimitHelpLinks = renderInfoLinks([
-        { href: README_RULES_URL, kind: "tech", label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
-        { href: DRA_RULEBOOK_LIMITS_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 18, Punkte 6.10.5.2/6.12.1" },
-        { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zu Limits und Draw öffnen", title: "DRA Rulebook (offiziell)" },
+        { href: DRA_GUI_RULE_PARTICIPANT_LIMITS_URL, kind: "rule", label: "DRA-Regelerklärung zu Limits öffnen", title: "DRA-Regeln in der GUI: Teilnehmerlimits" },
       ]);
       return `
         <section class="ata-card tournamentCard">
@@ -148,7 +140,7 @@
                 <p class="ata-small">Modus-Limits ${modeLimitHelpLinks}: ${escapeHtml(modeLimitSummary)}.</p>
               </aside>
             </div>
-            <p class="ata-small">Bei Moduswechsel gelten die jeweiligen Grenzen sofort. Regelbasis und Begr\u00fcndung ${modeLimitHelpLinks}.</p>
+            <p class="ata-small">Bei Moduswechsel gelten die jeweiligen Grenzen sofort.</p>
           </form>
         </section>
       `;
@@ -196,10 +188,10 @@
     const x01TagsHtml = x01Tags.map((tag) => `<span class="${tag.cls}">${escapeHtml(tag.text)}</span>`).join("");
     const activeTournamentHeadingLinks = [
       { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Turniermodus-Erklärung öffnen", title: "README: Turniermodi" },
-      { href: README_RULES_URL, kind: "tech", label: "Regelbasis und Limits öffnen", title: "README: Regelbasis und Limits" },
-      { href: DRA_RULEBOOK_FORMATS_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 17, Punkte 6.8/6.10" },
-      { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regeln zu Turnierformaten öffnen", title: "DRA Rulebook (offiziell)" },
     ];
+    const activeFormatHelpLinks = renderInfoLinks([
+      { href: DRA_GUI_RULE_MODE_FORMATS_URL, kind: "rule", label: "DRA-Regelerklärung zu Modus und Format öffnen", title: "DRA-Regeln in der GUI: Modus und Format" },
+    ]);
 
     return `
       <section class="ata-card tournamentCard">
@@ -210,7 +202,7 @@
         </p>
         <div class="ata-tournament-meta">
           <div class="ata-meta-block">
-            <div class="ata-meta-heading">Format</div>
+            <div class="ata-meta-heading">Format ${activeFormatHelpLinks}</div>
             <div class="ata-info-tag-cloud">${primaryTagsHtml}</div>
           </div>
           <div class="ata-meta-block">

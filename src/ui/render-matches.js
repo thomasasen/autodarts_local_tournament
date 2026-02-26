@@ -255,9 +255,7 @@
     const cardsHtml = cards || `<p class="ata-small">Keine Matches vorhanden.</p>`;
     const resultHeadingLinks = [
       { href: README_API_AUTOMATION_URL, kind: "tech", label: "Erklärung zur API-Halbautomatik öffnen", title: "README: API-Halbautomatik" },
-      { href: README_TIE_BREAK_URL, kind: "tech", label: "Erklärung zum Tie-Break und Playoff öffnen", title: "README: DRA Tie-Break" },
-      { href: DRA_RULEBOOK_TIEBREAK_URL, kind: "rule", label: "Regelstelle im DRA-RULE_BOOK.pdf öffnen", title: "DRA-RULE_BOOK.pdf, Seite 20, Punkt 6.16" },
-      { href: DRA_RULES_URL, kind: "rule", label: "Offizielle DRA-Regelstelle zum Tie-Break öffnen", title: "DRA Rulebook (offiziell)" },
+      { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
     ];
     const nextMatchHelpLinks = renderInfoLinks([
       { href: README_API_AUTOMATION_URL, kind: "tech", label: "Ablauf der Ergebnisführung öffnen", title: "README: API-Halbautomatik und Ergebnisführung" },

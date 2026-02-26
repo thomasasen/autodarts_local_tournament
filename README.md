@@ -119,7 +119,7 @@ Priorisierung für Limits in diesem Projekt:
 
 Hinweis:
 - Es gibt zusätzlich ein technisches Hard-Cap bei `128` Teilnehmern, um Browser-Last und UI-Stabilität zu schützen.
-- Die GUI verweist direkt auf diesen Abschnitt.
+- Die GUI verweist für Regelhintergründe über `§` auf [docs/dra-regeln-gui.md](docs/dra-regeln-gui.md).
 
 ## Einstellungen
 Tab: `Einstellungen`
@@ -128,8 +128,8 @@ Tab: `Einstellungen`
 - `ⓘ` = **Technische Information**
   - Verweist auf Bedienung, Implementierung und interne Projektdokumentation (README).
 - `§` = **Regelwerk**
-  - Verweist auf offizielle Regelstellen (DRA/PDC).
-  - Primär wird auf die passende Stelle in [docs/DRA-RULE_BOOK.pdf](docs/DRA-RULE_BOOK.pdf) (inkl. `#page=`) verlinkt.
+  - Verweist auf die zentrale Regelerklärung in [docs/dra-regeln-gui.md](docs/dra-regeln-gui.md).
+  - Dort sind die DRA-Regeln didaktisch auf Deutsch erklärt und mit Kapitel/Punkt/Seite sowie PDF-Link hinterlegt.
 
 ### Debug-Mode
 - Aktiviert ausführliche Logs in der Browser-Konsole.
