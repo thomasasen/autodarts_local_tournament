@@ -189,6 +189,8 @@ Weitere Felder:
 - Bei Neuanlage ist standardmäßig `PDC Standard` aktiv.
 - Das Preset wird per Button auf die Felder angewendet (kein Dropdown-Select).
 - Das Preset setzt:
+  - Turniermodus `KO`
+  - `Best of Legs` auf `5`
   - Matchart `X01`
   - X01 501
   - Straight In
@@ -198,6 +200,11 @@ Weitere Felder:
   - Max Runden `50`
   - Lobby `Privat` (fix)
 - Der Spielmodus bleibt `Legs`; `Best-of Legs` ist führend für die Matchlänge und wird API-seitig als `First to N Legs` umgesetzt.
+- `Best of 1` gilt nicht als PDC-Standardprofil im Tool.
+- Das PDC-Logo-Badge erscheint, wenn das Setup vollständig passt:
+  - KO
+  - Best of mindestens 3 Legs
+  - 501 Straight In, Double Out, Bull 25/50, Bull-off Normal, Max Runden 50
 - Formularlogik:
   - Wenn `Bull-off = Off`, wird `Bull mode` read-only ausgegraut.
   - Bei jeder manuellen Änderung der X01-Felder wird der Preset-Status auf `Custom` gesetzt.

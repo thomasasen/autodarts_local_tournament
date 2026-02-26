@@ -1,5 +1,20 @@
 ﻿// Auto-generated module split from dist source.
   function renderTournamentTab() {
+    const pdcLogoAvailable = typeof ATA_PDC_LOGO_DATA_URI === "string" && ATA_PDC_LOGO_DATA_URI.startsWith("data:image/");
+    const renderPdcBadge = (label) => {
+      const title = "PDC-konform: KO, Best of mindestens 3 Legs, 501 Straight In, Double Out, Bull-off Normal, Bull 25/50, Max. Runden 50.";
+      const safeLabel = escapeHtml(normalizeText(label || "PDC-konform") || "PDC-konform");
+      if (!pdcLogoAvailable) {
+        return `<span class="ata-pdc-pill" title="${escapeHtml(title)}">${safeLabel}</span>`;
+      }
+      return `
+        <span class="ata-pdc-badge" title="${escapeHtml(title)}">
+          <img class="ata-pdc-logo" src="${ATA_PDC_LOGO_DATA_URI}" alt="PDC Logo">
+          <span>${safeLabel}</span>
+        </span>
+      `;
+    };
+
     const tournament = state.store.tournament;
     if (!tournament) {
       const draft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store?.settings);
@@ -8,14 +23,16 @@
       const startScoreOptions = X01_START_SCORE_OPTIONS.map((score) => (
         `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${score}</option>`
       )).join("");
-      const pdcPresetActive = draft.x01Preset === X01_PRESET_PDC_STANDARD;
+      const pdcCompliantSetup = isPdcCompliantMatchSetup(draft);
+      const pdcPresetActive = draft.x01Preset === X01_PRESET_PDC_STANDARD && pdcCompliantSetup;
       const presetStatusLabel = pdcPresetActive ? "Preset aktiv: PDC-Standard" : "Preset aktiv: Individuell";
-      const pdcPresetHint = "PDC-Preset setzt 501, Straight In, Double Out, Bull-off Normal, Bull 25/50 und Max. Runden 50.";
+      const pdcPresetHint = "PDC-Preset setzt KO, Best of 5, 501, Straight In, Double Out, Bull-off Normal, Bull 25/50 und Max. Runden 50.";
       const bullModeDisabled = draft.x01BullOffMode === "Off";
       const bullModeDisabledAttr = bullModeDisabled ? "disabled" : "";
       const bullModeHiddenInput = bullModeDisabled
         ? `<input type="hidden" id="ata-x01-bullmode-hidden" name="x01BullMode" value="${escapeHtml(draft.x01BullMode)}">`
         : "";
+      const pdcBadgeHtml = pdcCompliantSetup ? renderPdcBadge("PDC-konform") : "";
       const createHeadingLinks = [
         { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erklärung zur Turniererstellung öffnen", title: "README: Turnier anlegen" },
         { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole öffnen", title: "README: Info-Symbole" },
@@ -115,6 +132,7 @@
                     <div class="ata-form-inline-actions">
                       <button id="ata-apply-pdc-preset" type="button" class="ata-btn ata-btn-sm" data-action="apply-pdc-preset">PDC-Preset anwenden</button>
                       <span class="ata-preset-pill">${escapeHtml(presetStatusLabel)}</span>
+                      ${pdcBadgeHtml}
                     </div>
                   </div>
                 </div>
@@ -126,6 +144,7 @@
                   <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
                 </div>
                 <p class="ata-small ata-create-help">${escapeHtml(pdcPresetHint)}</p>
+                <p class="ata-small ata-create-help">Best of 1 ist kein PDC-Standardprofil; für das Badge gilt Best of mindestens 3 Legs.</p>
                 <p class="ata-small ata-create-help">Bull-off = Off deaktiviert Bull-Modus automatisch (schreibgesch\u00fctzt).</p>
               </div>
               <aside class="ata-create-side">
@@ -161,6 +180,12 @@
     const x01BullModeLabel = x01Settings.bullOffMode === "Off"
       ? "Bull-Modus deaktiviert"
       : `Bull-Modus ${x01Settings.bullMode}`;
+    const pdcCompliantSetup = isPdcCompliantMatchSetup({
+      mode: tournament.mode,
+      bestOfLegs: tournament.bestOfLegs,
+      x01: x01Settings,
+    });
+    const activePdcBadgeHtml = pdcCompliantSetup ? renderPdcBadge("PDC-konform gespielt") : "";
     const legsToWin = getLegsToWin(tournament.bestOfLegs);
     const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED);
     const drawModeLabel = drawMode === KO_DRAW_MODE_OPEN_DRAW ? "Open Draw" : "Gesetzter Draw";
@@ -199,6 +224,7 @@
         <p class="ata-tournament-title">
           <b>${escapeHtml(tournament.name)}</b>
           <span class="ata-tournament-mode-pill">${escapeHtml(modeLabel)}</span>
+          ${activePdcBadgeHtml}
         </p>
         <div class="ata-tournament-meta">
           <div class="ata-meta-block">

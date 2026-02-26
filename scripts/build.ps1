@@ -1,6 +1,7 @@
 param(
   [string]$ManifestPath = "build/manifest.json",
   [string]$CssPath = "src/ui/styles/main.css",
+  [string]$LogoPath = "assets/pdc_logo.png",
   [string]$OutputPath = "dist/autodarts-tournament-assistant.user.js"
 )
 
@@ -14,6 +15,7 @@ function Resolve-RepoPath([string]$RelativePath) {
 
 $manifestFull = Resolve-RepoPath $ManifestPath
 $cssFull = Resolve-RepoPath $CssPath
+$logoFull = Resolve-RepoPath $LogoPath
 $outputFull = Resolve-RepoPath $OutputPath
 
 if (-not (Test-Path $manifestFull)) {
@@ -21,6 +23,9 @@ if (-not (Test-Path $manifestFull)) {
 }
 if (-not (Test-Path $cssFull)) {
   throw "CSS file not found: $cssFull"
+}
+if (-not (Test-Path $logoFull)) {
+  throw "Logo file not found: $logoFull"
 }
 
 $manifest = Get-Content $manifestFull -Raw -Encoding utf8 | ConvertFrom-Json
@@ -45,9 +50,17 @@ $cssRaw = Get-Content $cssFull -Raw -Encoding utf8
 $cssRaw = $cssRaw.Trim("`r", "`n")
 $cssEscaped = $cssRaw.Replace('`', '``').Replace('${', '\${')
 $bundle = $bundle.Replace('__ATA_UI_MAIN_CSS__', $cssEscaped)
+$logoBytes = [System.IO.File]::ReadAllBytes($logoFull)
+$logoBase64 = [Convert]::ToBase64String($logoBytes)
+$logoDataUri = "data:image/png;base64,$logoBase64"
+$logoEscaped = $logoDataUri.Replace('`', '``').Replace('${', '\${')
+$bundle = $bundle.Replace('__ATA_PDC_LOGO_DATA_URI__', $logoEscaped)
 
 if ($bundle.Contains('__ATA_UI_MAIN_CSS__')) {
   throw "CSS placeholder replacement failed."
+}
+if ($bundle.Contains('__ATA_PDC_LOGO_DATA_URI__')) {
+  throw "Logo placeholder replacement failed."
 }
 
 $bundle = $bundle -replace "`r`n", "`n"

@@ -56,6 +56,7 @@
   const BRACKETS_VIEWER_JS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.js";
   const I18NEXT_JS = "https://cdn.jsdelivr.net/npm/i18next@23.16.8/dist/umd/i18next.min.js";
   const ATA_UI_MAIN_CSS = `__ATA_UI_MAIN_CSS__`;
+  const ATA_PDC_LOGO_DATA_URI = "__ATA_PDC_LOGO_DATA_URI__";
 
   const STATUS_COMPLETED = "completed";
   const STATUS_PENDING = "pending";

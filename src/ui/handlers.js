@@ -71,7 +71,7 @@
         const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
           ? normalizeText(target.name || "")
           : "";
-        if (isCreateDraftX01Field(fieldName)) {
+        if (isCreateDraftPresetField(fieldName)) {
           setCreateFormPresetValue(createForm, X01_PRESET_CUSTOM);
         }
         syncCreateFormDependencies(createForm);
@@ -311,8 +311,10 @@
   }
 
 
-  function isCreateDraftX01Field(fieldName) {
+  function isCreateDraftPresetField(fieldName) {
     return [
+      "mode",
+      "bestOfLegs",
       "startScore",
       "x01InMode",
       "x01OutMode",
@@ -345,7 +347,15 @@
     if (!(presetInput instanceof HTMLInputElement) || !(presetBadge instanceof HTMLElement)) {
       return;
     }
-    const presetId = sanitizeX01Preset(presetInput.value, X01_PRESET_CUSTOM);
+    let presetId = sanitizeX01Preset(presetInput.value, X01_PRESET_CUSTOM);
+    if (presetId === X01_PRESET_PDC_STANDARD) {
+      const formData = new FormData(form);
+      const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
+      if (!isPdcCompliantMatchSetup(draft)) {
+        presetId = X01_PRESET_CUSTOM;
+        presetInput.value = presetId;
+      }
+    }
     presetBadge.textContent = presetId === X01_PRESET_PDC_STANDARD
       ? "Preset aktiv: PDC-Standard"
       : "Preset aktiv: Individuell";
@@ -392,7 +402,11 @@
       return;
     }
     const pdcSettings = buildPdcX01Settings();
+    const pdcMode = "ko";
+    const pdcBestOfLegs = 5;
     const assignments = [
+      ["#ata-mode", pdcMode],
+      ["#ata-bestof", String(pdcBestOfLegs)],
       ["#ata-startscore", String(pdcSettings.baseScore)],
       ["#ata-x01-inmode", pdcSettings.inMode],
       ["#ata-x01-outmode", pdcSettings.outMode],
@@ -411,7 +425,7 @@
     setCreateFormPresetValue(form, X01_PRESET_PDC_STANDARD);
     syncCreateFormDependencies(form);
     updateCreateDraftFromForm(form, true);
-    setNotice("info", "PDC-Preset wurde auf die X01-Felder angewendet.", 2200);
+    setNotice("info", "PDC-Preset wurde auf KO, Best of 5 und die X01-Felder angewendet.", 2400);
   }
 
 

@@ -450,16 +450,18 @@
       }
 
       .ata-field-readonly {
-        display: inline-flex;
+        display: flex;
         align-items: center;
-        min-height: 42px;
+        width: 100%;
         border-radius: var(--ata-radius-sm);
         border: 1px solid rgba(185, 199, 236, 0.22);
         background: var(--ata-control-bg-disabled);
         color: rgba(232, 237, 255, 0.78);
         padding: 9px 10px;
-        font-size: 15px;
+        font-size: 16px;
+        line-height: 1.25;
         font-weight: 600;
+        box-sizing: border-box;
       }
 
       .ata-form-inline-actions {
@@ -480,6 +482,30 @@
         font-size: 14px;
         line-height: 1.1;
         white-space: nowrap;
+      }
+
+      .ata-pdc-badge,
+      .ata-pdc-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        border: 1px solid rgba(113, 213, 168, 0.48);
+        border-radius: 999px;
+        padding: 4px 10px;
+        background: rgba(90, 210, 153, 0.16);
+        color: #d5ffeb;
+        font-size: 13px;
+        line-height: 1.1;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .ata-pdc-logo {
+        width: 42px;
+        height: 16px;
+        object-fit: contain;
+        object-position: center;
+        display: block;
       }
 
       .ata-score-grid select,

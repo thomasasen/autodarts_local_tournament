@@ -258,6 +258,52 @@
   }
 
 
+  function isPdcX01Settings(input) {
+    const pdc = buildPdcX01Settings();
+    const fallbackStartScore = input?.baseScore ?? input?.startScore ?? pdc.baseScore;
+    const normalized = normalizeTournamentX01Settings({
+      presetId: X01_PRESET_CUSTOM,
+      baseScore: fallbackStartScore,
+      inMode: input?.inMode ?? input?.x01InMode,
+      outMode: input?.outMode ?? input?.x01OutMode,
+      bullMode: input?.bullMode ?? input?.x01BullMode,
+      maxRounds: input?.maxRounds ?? input?.x01MaxRounds,
+      bullOffMode: input?.bullOffMode ?? input?.x01BullOffMode,
+      lobbyVisibility: input?.lobbyVisibility,
+    }, fallbackStartScore);
+    return normalized.baseScore === pdc.baseScore
+      && normalized.inMode === pdc.inMode
+      && normalized.outMode === pdc.outMode
+      && normalized.bullMode === pdc.bullMode
+      && normalized.maxRounds === pdc.maxRounds
+      && normalized.bullOffMode === pdc.bullOffMode
+      && normalized.lobbyVisibility === pdc.lobbyVisibility;
+  }
+
+
+  function isPdcCompliantMatchSetup(input) {
+    const mode = normalizeText(input?.mode || "").toLowerCase();
+    if (mode !== "ko") {
+      return false;
+    }
+    if (sanitizeBestOf(input?.bestOfLegs) < 3) {
+      return false;
+    }
+    const x01Input = input?.x01 && typeof input.x01 === "object"
+      ? input.x01
+      : {
+        baseScore: input?.startScore ?? input?.baseScore,
+        inMode: input?.x01InMode ?? input?.inMode,
+        outMode: input?.x01OutMode ?? input?.outMode,
+        bullMode: input?.x01BullMode ?? input?.bullMode,
+        maxRounds: input?.x01MaxRounds ?? input?.maxRounds,
+        bullOffMode: input?.x01BullOffMode ?? input?.bullOffMode,
+        lobbyVisibility: input?.lobbyVisibility,
+      };
+    return isPdcX01Settings(x01Input);
+  }
+
+
   function normalizeAutomationStatus(value, fallback = "idle") {
     return ["idle", "started", "completed", "error"].includes(value) ? value : fallback;
   }

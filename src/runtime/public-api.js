@@ -76,6 +76,38 @@
     }
 
     try {
+      const compliant = isPdcCompliantMatchSetup({
+        mode: "ko",
+        bestOfLegs: 5,
+        startScore: 501,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+      });
+      const notCompliantBestOfOne = isPdcCompliantMatchSetup({
+        mode: "ko",
+        bestOfLegs: 1,
+        startScore: 501,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+      });
+      record(
+        "PDC-Setup: KO + Best of >=3 + PDC-X01 erforderlich",
+        compliant && !notCompliantBestOfOne,
+        `compliant=${compliant}, bo1=${notCompliantBestOfOne}`,
+      );
+    } catch (error) {
+      record("PDC-Setup: KO + Best of >=3 + PDC-X01 erforderlich", false, String(error?.message || error));
+    }
+
+    try {
       const tournament = createTournament({
         name: "DrawLockOn",
         mode: "ko",
