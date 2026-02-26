@@ -215,6 +215,168 @@
     }
 
     try {
+      const tournament = {
+        participants: [
+          { id: "P1", name: "Tanja Mueller" },
+          { id: "P2", name: "Simon Stark" },
+        ],
+      };
+      const ids = participantIdsByName(tournament, "TANJA");
+      record(
+        "History Import: Namens-Matching erkennt Teilnamen",
+        ids.includes("P1"),
+        `ids=${ids.join(",")}`,
+      );
+    } catch (error) {
+      record("History Import: Namens-Matching erkennt Teilnamen", false, String(error?.message || error));
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      try {
+        const tournament = {
+          id: "history-test-lobby",
+          name: "History",
+          mode: "league",
+          ko: null,
+          bestOfLegs: 3,
+          startScore: 501,
+          x01: buildPdcX01Settings(),
+          rules: normalizeTournamentRules({ tieBreakMode: TIE_BREAK_MODE_DRA_STRICT }),
+          participants: [
+            { id: "P1", name: "Tanja Mueller" },
+            { id: "P2", name: "Simon Stark" },
+          ],
+          groups: [],
+          matches: [
+            createMatch({
+              id: "m-history-lobby",
+              stage: MATCH_STAGE_LEAGUE,
+              round: 1,
+              number: 1,
+              player1Id: "P1",
+              player2Id: "P2",
+              meta: {
+                auto: {
+                  lobbyId: "lobby-history-1",
+                  status: "started",
+                },
+              },
+            }),
+          ],
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        };
+        state.store.tournament = tournament;
+        const table = document.createElement("table");
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th>Stats</th>
+              <td><span class="ad-ext-player-name"><p>TANJA</p></span></td>
+              <td><span class="ad-ext-player-name"><p>SIMON</p></span><svg data-icon="trophy"></svg></td>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Gewonnene Legs</td><td>1</td><td>0</td></tr>
+          </tbody>
+        `;
+        const outcome = importHistoryStatsTableResult("lobby-history-1", { table });
+        const updated = findMatch(tournament, "m-history-lobby");
+        record(
+          "History Import: Lobby-Mapping priorisiert + Legs normalisiert",
+          Boolean(outcome?.ok)
+            && outcome.reasonCode === "completed"
+            && updated?.status === STATUS_COMPLETED
+            && updated?.winnerId === "P1"
+            && updated?.legs?.p1 === 2
+            && updated?.legs?.p2 === 0,
+          `reason=${outcome?.reasonCode || "-"}, winner=${updated?.winnerId || "-"}, legs=${updated?.legs?.p1}:${updated?.legs?.p2}`,
+        );
+      } catch (error) {
+        record("History Import: Lobby-Mapping priorisiert + Legs normalisiert", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+      }
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      try {
+        const tournament = {
+          id: "history-test-ambiguous",
+          name: "History",
+          mode: "league",
+          ko: null,
+          bestOfLegs: 1,
+          startScore: 501,
+          x01: buildPdcX01Settings(),
+          rules: normalizeTournamentRules({ tieBreakMode: TIE_BREAK_MODE_DRA_STRICT }),
+          participants: [
+            { id: "P1", name: "Tommy" },
+            { id: "P2", name: "Hans" },
+          ],
+          groups: [],
+          matches: [
+            createMatch({
+              id: "m-history-a",
+              stage: MATCH_STAGE_LEAGUE,
+              round: 1,
+              number: 1,
+              player1Id: "P1",
+              player2Id: "P2",
+            }),
+            createMatch({
+              id: "m-history-b",
+              stage: MATCH_STAGE_KO,
+              round: 2,
+              number: 1,
+              player1Id: "P1",
+              player2Id: "P2",
+              meta: {
+                auto: {
+                  lobbyId: "lobby-history-2",
+                  status: "started",
+                },
+              },
+            }),
+          ],
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        };
+        state.store.tournament = tournament;
+        const table = document.createElement("table");
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th>Stats</th>
+              <td><span class="ad-ext-player-name"><p>TOMMY</p></span></td>
+              <td><span class="ad-ext-player-name"><p>HANS</p></span></td>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Gewonnene Legs</td><td>1</td><td>0</td></tr>
+          </tbody>
+        `;
+        const outcome = importHistoryStatsTableResult("lobby-history-2", { table });
+        const matchA = findMatch(tournament, "m-history-a");
+        const matchB = findMatch(tournament, "m-history-b");
+        record(
+          "History Import: bei Mehrdeutigkeit gewinnt verknüpfte Lobby",
+          Boolean(outcome?.ok)
+            && matchA?.status === STATUS_PENDING
+            && matchB?.status === STATUS_COMPLETED
+            && matchB?.winnerId === "P1",
+          `reason=${outcome?.reasonCode || "-"}, A=${matchA?.status || "-"}, B=${matchB?.status || "-"}:${matchB?.winnerId || "-"}`,
+        );
+      } catch (error) {
+        record("History Import: bei Mehrdeutigkeit gewinnt verknüpfte Lobby", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+      }
+    }
+
+    try {
       const rawStoreV2 = {
         schemaVersion: 2,
         settings: { debug: false, featureFlags: { autoLobbyStart: false, randomizeKoRound1: true } },

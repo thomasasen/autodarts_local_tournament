@@ -481,14 +481,83 @@
   }
 
 
+  function scoreParticipantNameMatch(participantName, tableName) {
+    const participantLookup = normalizeLookup(participantName || "");
+    const tableLookup = normalizeLookup(tableName || "");
+    if (!participantLookup || !tableLookup) {
+      return 0;
+    }
+    if (participantLookup === tableLookup) {
+      return 400;
+    }
+
+    const participantToken = normalizeToken(participantLookup);
+    const tableToken = normalizeToken(tableLookup);
+    if (participantToken && tableToken && participantToken === tableToken) {
+      return 360;
+    }
+
+    const participantWords = participantLookup.split(/\s+/).filter(Boolean);
+    const tableWords = tableLookup.split(/\s+/).filter(Boolean);
+    if (participantWords.includes(tableLookup) || tableWords.includes(participantLookup)) {
+      return 300;
+    }
+    if (
+      participantLookup.startsWith(`${tableLookup} `)
+      || participantLookup.endsWith(` ${tableLookup}`)
+      || tableLookup.startsWith(`${participantLookup} `)
+      || tableLookup.endsWith(` ${participantLookup}`)
+    ) {
+      return 280;
+    }
+
+    if (participantToken && tableToken && participantToken.includes(tableToken)) {
+      return 240;
+    }
+    if (participantToken && tableToken && tableToken.includes(participantToken)) {
+      return 200;
+    }
+    if (participantLookup.includes(tableLookup)) {
+      return 170;
+    }
+    if (tableLookup.includes(participantLookup)) {
+      return 140;
+    }
+    return 0;
+  }
+
+
   function participantIdsByName(tournament, name) {
-    const key = normalizeLookup(name || "");
-    if (!key) {
+    const tableName = normalizeText(name || "");
+    if (!tableName) {
       return [];
     }
-    return (tournament?.participants || [])
-      .filter((participant) => normalizeLookup(participant?.name || "") === key)
-      .map((participant) => participant.id);
+    const scored = (tournament?.participants || [])
+      .map((participant) => ({
+        id: participant?.id,
+        score: scoreParticipantNameMatch(participant?.name || "", tableName),
+      }))
+      .filter((entry) => entry.id && entry.score > 0)
+      .sort((left, right) => right.score - left.score);
+    if (!scored.length) {
+      return [];
+    }
+
+    const exact = scored.filter((entry) => entry.score >= 360);
+    if (exact.length) {
+      return exact.map((entry) => entry.id);
+    }
+
+    const strong = scored.filter((entry) => entry.score >= 280);
+    if (strong.length) {
+      return strong.map((entry) => entry.id);
+    }
+
+    const medium = scored.filter((entry) => entry.score >= 200);
+    if (medium.length === 1) {
+      return [medium[0].id];
+    }
+    return medium.map((entry) => entry.id);
   }
 
 
@@ -516,6 +585,97 @@
   }
 
 
+  function resolveTableToMatchOrder(tournament, match, parsed) {
+    const matchP1Name = participantNameById(tournament, match?.player1Id);
+    const matchP2Name = participantNameById(tournament, match?.player2Id);
+    const directScore = scoreParticipantNameMatch(matchP1Name, parsed?.p1Name)
+      + scoreParticipantNameMatch(matchP2Name, parsed?.p2Name);
+    const swappedScore = scoreParticipantNameMatch(matchP1Name, parsed?.p2Name)
+      + scoreParticipantNameMatch(matchP2Name, parsed?.p1Name);
+    if (swappedScore > directScore) {
+      return false;
+    }
+    if (directScore > swappedScore) {
+      return true;
+    }
+    const parsedP1Lookup = normalizeLookup(parsed?.p1Name || "");
+    const matchP1Lookup = normalizeLookup(matchP1Name || "");
+    if (parsedP1Lookup && matchP1Lookup && parsedP1Lookup === matchP1Lookup) {
+      return true;
+    }
+    return true;
+  }
+
+
+  function normalizeHistoryLegsForTournament(tournament, match, winnerId, legsRaw) {
+    const legsToWin = getLegsToWin(tournament?.bestOfLegs);
+    const winnerIsP1 = winnerId === match?.player1Id;
+    let p1 = clampInt(legsRaw?.p1, 0, 0, 99);
+    let p2 = clampInt(legsRaw?.p2, 0, 0, 99);
+    let winnerLegs = winnerIsP1 ? p1 : p2;
+    let loserLegs = winnerIsP1 ? p2 : p1;
+    let adjusted = false;
+
+    if (winnerLegs <= loserLegs) {
+      winnerLegs = loserLegs + 1;
+      adjusted = true;
+    }
+
+    if (winnerLegs !== legsToWin) {
+      winnerLegs = legsToWin;
+      adjusted = true;
+    }
+
+    loserLegs = clampInt(loserLegs, 0, 0, Math.max(0, legsToWin - 1));
+    if (loserLegs >= winnerLegs) {
+      loserLegs = Math.max(0, winnerLegs - 1);
+      adjusted = true;
+    }
+
+    p1 = winnerIsP1 ? winnerLegs : loserLegs;
+    p2 = winnerIsP1 ? loserLegs : winnerLegs;
+    return {
+      legs: { p1, p2 },
+      adjusted,
+      legsToWin,
+    };
+  }
+
+
+  function findHistoryImportMatchCandidates(tournament, lobbyId, parsed) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    const linkedByLobby = findTournamentMatchByLobbyId(tournament, targetLobbyId, false);
+    const seenMatches = new Set();
+    const matchCandidates = [];
+    const pushMatch = (match) => {
+      if (!match?.id || seenMatches.has(match.id)) {
+        return;
+      }
+      seenMatches.add(match.id);
+      matchCandidates.push(match);
+    };
+
+    if (linkedByLobby?.status === STATUS_PENDING && linkedByLobby.player1Id && linkedByLobby.player2Id) {
+      pushMatch(linkedByLobby);
+    }
+
+    const p1Ids = participantIdsByName(tournament, parsed?.p1Name);
+    const p2Ids = participantIdsByName(tournament, parsed?.p2Name);
+    p1Ids.forEach((p1Id) => {
+      p2Ids.forEach((p2Id) => {
+        getOpenMatchCandidatesByParticipantIds(tournament, p1Id, p2Id).forEach((match) => {
+          pushMatch(match);
+        });
+      });
+    });
+
+    return {
+      linkedByLobby: linkedByLobby && linkedByLobby.status === STATUS_PENDING ? linkedByLobby : null,
+      matchCandidates,
+    };
+  }
+
+
   function importHistoryStatsTableResult(lobbyId, hostInfo) {
     const targetLobbyId = normalizeText(lobbyId || "");
     const tournament = state.store.tournament;
@@ -530,44 +690,33 @@
       return null;
     }
 
-    const p1Ids = participantIdsByName(tournament, parsed.p1Name);
-    const p2Ids = participantIdsByName(tournament, parsed.p2Name);
-    const matchCandidates = [];
-    const seenMatches = new Set();
-    p1Ids.forEach((p1Id) => {
-      p2Ids.forEach((p2Id) => {
-        getOpenMatchCandidatesByParticipantIds(tournament, p1Id, p2Id).forEach((match) => {
-          if (!seenMatches.has(match.id)) {
-            seenMatches.add(match.id);
-            matchCandidates.push(match);
-          }
-        });
-      });
-    });
-
-    if (!matchCandidates.length) {
+    const selection = findHistoryImportMatchCandidates(tournament, targetLobbyId, parsed);
+    const linkedByLobby = selection.linkedByLobby;
+    const matchCandidates = selection.matchCandidates;
+    let match = null;
+    if (linkedByLobby?.player1Id && linkedByLobby?.player2Id) {
+      match = linkedByLobby;
+    } else if (!matchCandidates.length) {
       return {
         ok: false,
         completed: false,
         reasonCode: "not_found",
-        message: "Kein offenes Turnier-Match für die Spieler aus der Statistik gefunden.",
+        message: "Kein offenes Turnier-Match aus Lobby-ID oder Statistik-Spielern gefunden.",
       };
-    }
-    if (matchCandidates.length > 1) {
+    } else if (matchCandidates.length > 1) {
       return {
         ok: false,
         completed: false,
         reasonCode: "ambiguous",
         message: "Mehrdeutige Zuordnung: mehrere offene Turnier-Matches passen zu diesen Spielern.",
       };
+    } else {
+      match = matchCandidates[0];
     }
 
-    const match = matchCandidates[0];
-    const p1Lookup = normalizeLookup(parsed.p1Name);
-    const matchP1Name = normalizeLookup(participantNameById(tournament, match.player1Id));
-    const tableMapsDirect = p1Lookup && matchP1Name === p1Lookup;
+    const tableMapsDirect = resolveTableToMatchOrder(tournament, match, parsed);
 
-    const legs = tableMapsDirect
+    const legsRaw = tableMapsDirect
       ? { p1: parsed.p1Legs, p2: parsed.p2Legs }
       : { p1: parsed.p2Legs, p2: parsed.p1Legs };
 
@@ -576,8 +725,8 @@
       winnerId = tableMapsDirect ? match.player1Id : match.player2Id;
     } else if (parsed.winnerIndex === 1) {
       winnerId = tableMapsDirect ? match.player2Id : match.player1Id;
-    } else if (legs.p1 !== legs.p2) {
-      winnerId = legs.p1 > legs.p2 ? match.player1Id : match.player2Id;
+    } else if (legsRaw.p1 !== legsRaw.p2) {
+      winnerId = legsRaw.p1 > legsRaw.p2 ? match.player1Id : match.player2Id;
     }
 
     if (!winnerId) {
@@ -589,7 +738,8 @@
       };
     }
 
-    const result = updateMatchResult(match.id, winnerId, legs, "auto");
+    const normalizedLegs = normalizeHistoryLegsForTournament(tournament, match, winnerId, legsRaw);
+    const result = updateMatchResult(match.id, winnerId, normalizedLegs.legs, "auto");
     if (!result.ok) {
       return {
         ok: false,
@@ -618,13 +768,18 @@
       lobbyId: targetLobbyId,
       matchId: match.id,
       winnerId,
-      legs,
+      legs: normalizedLegs.legs,
+      adjustedLegs: normalizedLegs.adjusted,
+      linkedByLobby: Boolean(linkedByLobby?.id),
     });
+    const successMessage = normalizedLegs.adjusted
+      ? `Ergebnis übernommen. Legs wurden auf Turniermodus (First to ${normalizedLegs.legsToWin}) normalisiert.`
+      : "Ergebnis wurde aus der Match-Statistik übernommen.";
     return {
       ok: true,
       completed: true,
       reasonCode: "completed",
-      message: "Ergebnis wurde aus der Match-Statistik übernommen.",
+      message: successMessage,
     };
   }
 

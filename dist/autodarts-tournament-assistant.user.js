@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.3.2
+// @version      0.3.3
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -21,7 +21,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.3.2";
+  const APP_VERSION = "0.3.3";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 3;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
@@ -7279,14 +7279,83 @@
   }
 
 
+  function scoreParticipantNameMatch(participantName, tableName) {
+    const participantLookup = normalizeLookup(participantName || "");
+    const tableLookup = normalizeLookup(tableName || "");
+    if (!participantLookup || !tableLookup) {
+      return 0;
+    }
+    if (participantLookup === tableLookup) {
+      return 400;
+    }
+
+    const participantToken = normalizeToken(participantLookup);
+    const tableToken = normalizeToken(tableLookup);
+    if (participantToken && tableToken && participantToken === tableToken) {
+      return 360;
+    }
+
+    const participantWords = participantLookup.split(/\s+/).filter(Boolean);
+    const tableWords = tableLookup.split(/\s+/).filter(Boolean);
+    if (participantWords.includes(tableLookup) || tableWords.includes(participantLookup)) {
+      return 300;
+    }
+    if (
+      participantLookup.startsWith(`${tableLookup} `)
+      || participantLookup.endsWith(` ${tableLookup}`)
+      || tableLookup.startsWith(`${participantLookup} `)
+      || tableLookup.endsWith(` ${participantLookup}`)
+    ) {
+      return 280;
+    }
+
+    if (participantToken && tableToken && participantToken.includes(tableToken)) {
+      return 240;
+    }
+    if (participantToken && tableToken && tableToken.includes(participantToken)) {
+      return 200;
+    }
+    if (participantLookup.includes(tableLookup)) {
+      return 170;
+    }
+    if (tableLookup.includes(participantLookup)) {
+      return 140;
+    }
+    return 0;
+  }
+
+
   function participantIdsByName(tournament, name) {
-    const key = normalizeLookup(name || "");
-    if (!key) {
+    const tableName = normalizeText(name || "");
+    if (!tableName) {
       return [];
     }
-    return (tournament?.participants || [])
-      .filter((participant) => normalizeLookup(participant?.name || "") === key)
-      .map((participant) => participant.id);
+    const scored = (tournament?.participants || [])
+      .map((participant) => ({
+        id: participant?.id,
+        score: scoreParticipantNameMatch(participant?.name || "", tableName),
+      }))
+      .filter((entry) => entry.id && entry.score > 0)
+      .sort((left, right) => right.score - left.score);
+    if (!scored.length) {
+      return [];
+    }
+
+    const exact = scored.filter((entry) => entry.score >= 360);
+    if (exact.length) {
+      return exact.map((entry) => entry.id);
+    }
+
+    const strong = scored.filter((entry) => entry.score >= 280);
+    if (strong.length) {
+      return strong.map((entry) => entry.id);
+    }
+
+    const medium = scored.filter((entry) => entry.score >= 200);
+    if (medium.length === 1) {
+      return [medium[0].id];
+    }
+    return medium.map((entry) => entry.id);
   }
 
 
@@ -7314,6 +7383,97 @@
   }
 
 
+  function resolveTableToMatchOrder(tournament, match, parsed) {
+    const matchP1Name = participantNameById(tournament, match?.player1Id);
+    const matchP2Name = participantNameById(tournament, match?.player2Id);
+    const directScore = scoreParticipantNameMatch(matchP1Name, parsed?.p1Name)
+      + scoreParticipantNameMatch(matchP2Name, parsed?.p2Name);
+    const swappedScore = scoreParticipantNameMatch(matchP1Name, parsed?.p2Name)
+      + scoreParticipantNameMatch(matchP2Name, parsed?.p1Name);
+    if (swappedScore > directScore) {
+      return false;
+    }
+    if (directScore > swappedScore) {
+      return true;
+    }
+    const parsedP1Lookup = normalizeLookup(parsed?.p1Name || "");
+    const matchP1Lookup = normalizeLookup(matchP1Name || "");
+    if (parsedP1Lookup && matchP1Lookup && parsedP1Lookup === matchP1Lookup) {
+      return true;
+    }
+    return true;
+  }
+
+
+  function normalizeHistoryLegsForTournament(tournament, match, winnerId, legsRaw) {
+    const legsToWin = getLegsToWin(tournament?.bestOfLegs);
+    const winnerIsP1 = winnerId === match?.player1Id;
+    let p1 = clampInt(legsRaw?.p1, 0, 0, 99);
+    let p2 = clampInt(legsRaw?.p2, 0, 0, 99);
+    let winnerLegs = winnerIsP1 ? p1 : p2;
+    let loserLegs = winnerIsP1 ? p2 : p1;
+    let adjusted = false;
+
+    if (winnerLegs <= loserLegs) {
+      winnerLegs = loserLegs + 1;
+      adjusted = true;
+    }
+
+    if (winnerLegs !== legsToWin) {
+      winnerLegs = legsToWin;
+      adjusted = true;
+    }
+
+    loserLegs = clampInt(loserLegs, 0, 0, Math.max(0, legsToWin - 1));
+    if (loserLegs >= winnerLegs) {
+      loserLegs = Math.max(0, winnerLegs - 1);
+      adjusted = true;
+    }
+
+    p1 = winnerIsP1 ? winnerLegs : loserLegs;
+    p2 = winnerIsP1 ? loserLegs : winnerLegs;
+    return {
+      legs: { p1, p2 },
+      adjusted,
+      legsToWin,
+    };
+  }
+
+
+  function findHistoryImportMatchCandidates(tournament, lobbyId, parsed) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    const linkedByLobby = findTournamentMatchByLobbyId(tournament, targetLobbyId, false);
+    const seenMatches = new Set();
+    const matchCandidates = [];
+    const pushMatch = (match) => {
+      if (!match?.id || seenMatches.has(match.id)) {
+        return;
+      }
+      seenMatches.add(match.id);
+      matchCandidates.push(match);
+    };
+
+    if (linkedByLobby?.status === STATUS_PENDING && linkedByLobby.player1Id && linkedByLobby.player2Id) {
+      pushMatch(linkedByLobby);
+    }
+
+    const p1Ids = participantIdsByName(tournament, parsed?.p1Name);
+    const p2Ids = participantIdsByName(tournament, parsed?.p2Name);
+    p1Ids.forEach((p1Id) => {
+      p2Ids.forEach((p2Id) => {
+        getOpenMatchCandidatesByParticipantIds(tournament, p1Id, p2Id).forEach((match) => {
+          pushMatch(match);
+        });
+      });
+    });
+
+    return {
+      linkedByLobby: linkedByLobby && linkedByLobby.status === STATUS_PENDING ? linkedByLobby : null,
+      matchCandidates,
+    };
+  }
+
+
   function importHistoryStatsTableResult(lobbyId, hostInfo) {
     const targetLobbyId = normalizeText(lobbyId || "");
     const tournament = state.store.tournament;
@@ -7328,44 +7488,33 @@
       return null;
     }
 
-    const p1Ids = participantIdsByName(tournament, parsed.p1Name);
-    const p2Ids = participantIdsByName(tournament, parsed.p2Name);
-    const matchCandidates = [];
-    const seenMatches = new Set();
-    p1Ids.forEach((p1Id) => {
-      p2Ids.forEach((p2Id) => {
-        getOpenMatchCandidatesByParticipantIds(tournament, p1Id, p2Id).forEach((match) => {
-          if (!seenMatches.has(match.id)) {
-            seenMatches.add(match.id);
-            matchCandidates.push(match);
-          }
-        });
-      });
-    });
-
-    if (!matchCandidates.length) {
+    const selection = findHistoryImportMatchCandidates(tournament, targetLobbyId, parsed);
+    const linkedByLobby = selection.linkedByLobby;
+    const matchCandidates = selection.matchCandidates;
+    let match = null;
+    if (linkedByLobby?.player1Id && linkedByLobby?.player2Id) {
+      match = linkedByLobby;
+    } else if (!matchCandidates.length) {
       return {
         ok: false,
         completed: false,
         reasonCode: "not_found",
-        message: "Kein offenes Turnier-Match für die Spieler aus der Statistik gefunden.",
+        message: "Kein offenes Turnier-Match aus Lobby-ID oder Statistik-Spielern gefunden.",
       };
-    }
-    if (matchCandidates.length > 1) {
+    } else if (matchCandidates.length > 1) {
       return {
         ok: false,
         completed: false,
         reasonCode: "ambiguous",
         message: "Mehrdeutige Zuordnung: mehrere offene Turnier-Matches passen zu diesen Spielern.",
       };
+    } else {
+      match = matchCandidates[0];
     }
 
-    const match = matchCandidates[0];
-    const p1Lookup = normalizeLookup(parsed.p1Name);
-    const matchP1Name = normalizeLookup(participantNameById(tournament, match.player1Id));
-    const tableMapsDirect = p1Lookup && matchP1Name === p1Lookup;
+    const tableMapsDirect = resolveTableToMatchOrder(tournament, match, parsed);
 
-    const legs = tableMapsDirect
+    const legsRaw = tableMapsDirect
       ? { p1: parsed.p1Legs, p2: parsed.p2Legs }
       : { p1: parsed.p2Legs, p2: parsed.p1Legs };
 
@@ -7374,8 +7523,8 @@
       winnerId = tableMapsDirect ? match.player1Id : match.player2Id;
     } else if (parsed.winnerIndex === 1) {
       winnerId = tableMapsDirect ? match.player2Id : match.player1Id;
-    } else if (legs.p1 !== legs.p2) {
-      winnerId = legs.p1 > legs.p2 ? match.player1Id : match.player2Id;
+    } else if (legsRaw.p1 !== legsRaw.p2) {
+      winnerId = legsRaw.p1 > legsRaw.p2 ? match.player1Id : match.player2Id;
     }
 
     if (!winnerId) {
@@ -7387,7 +7536,8 @@
       };
     }
 
-    const result = updateMatchResult(match.id, winnerId, legs, "auto");
+    const normalizedLegs = normalizeHistoryLegsForTournament(tournament, match, winnerId, legsRaw);
+    const result = updateMatchResult(match.id, winnerId, normalizedLegs.legs, "auto");
     if (!result.ok) {
       return {
         ok: false,
@@ -7416,13 +7566,18 @@
       lobbyId: targetLobbyId,
       matchId: match.id,
       winnerId,
-      legs,
+      legs: normalizedLegs.legs,
+      adjustedLegs: normalizedLegs.adjusted,
+      linkedByLobby: Boolean(linkedByLobby?.id),
     });
+    const successMessage = normalizedLegs.adjusted
+      ? `Ergebnis übernommen. Legs wurden auf Turniermodus (First to ${normalizedLegs.legsToWin}) normalisiert.`
+      : "Ergebnis wurde aus der Match-Statistik übernommen.";
     return {
       ok: true,
       completed: true,
       reasonCode: "completed",
-      message: "Ergebnis wurde aus der Match-Statistik übernommen.",
+      message: successMessage,
     };
   }
 
@@ -7860,6 +8015,168 @@
       );
     } catch (error) {
       record("API Sync: Recovery erkennt mehrdeutige Match-Zuordnung", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = {
+        participants: [
+          { id: "P1", name: "Tanja Mueller" },
+          { id: "P2", name: "Simon Stark" },
+        ],
+      };
+      const ids = participantIdsByName(tournament, "TANJA");
+      record(
+        "History Import: Namens-Matching erkennt Teilnamen",
+        ids.includes("P1"),
+        `ids=${ids.join(",")}`,
+      );
+    } catch (error) {
+      record("History Import: Namens-Matching erkennt Teilnamen", false, String(error?.message || error));
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      try {
+        const tournament = {
+          id: "history-test-lobby",
+          name: "History",
+          mode: "league",
+          ko: null,
+          bestOfLegs: 3,
+          startScore: 501,
+          x01: buildPdcX01Settings(),
+          rules: normalizeTournamentRules({ tieBreakMode: TIE_BREAK_MODE_DRA_STRICT }),
+          participants: [
+            { id: "P1", name: "Tanja Mueller" },
+            { id: "P2", name: "Simon Stark" },
+          ],
+          groups: [],
+          matches: [
+            createMatch({
+              id: "m-history-lobby",
+              stage: MATCH_STAGE_LEAGUE,
+              round: 1,
+              number: 1,
+              player1Id: "P1",
+              player2Id: "P2",
+              meta: {
+                auto: {
+                  lobbyId: "lobby-history-1",
+                  status: "started",
+                },
+              },
+            }),
+          ],
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        };
+        state.store.tournament = tournament;
+        const table = document.createElement("table");
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th>Stats</th>
+              <td><span class="ad-ext-player-name"><p>TANJA</p></span></td>
+              <td><span class="ad-ext-player-name"><p>SIMON</p></span><svg data-icon="trophy"></svg></td>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Gewonnene Legs</td><td>1</td><td>0</td></tr>
+          </tbody>
+        `;
+        const outcome = importHistoryStatsTableResult("lobby-history-1", { table });
+        const updated = findMatch(tournament, "m-history-lobby");
+        record(
+          "History Import: Lobby-Mapping priorisiert + Legs normalisiert",
+          Boolean(outcome?.ok)
+            && outcome.reasonCode === "completed"
+            && updated?.status === STATUS_COMPLETED
+            && updated?.winnerId === "P1"
+            && updated?.legs?.p1 === 2
+            && updated?.legs?.p2 === 0,
+          `reason=${outcome?.reasonCode || "-"}, winner=${updated?.winnerId || "-"}, legs=${updated?.legs?.p1}:${updated?.legs?.p2}`,
+        );
+      } catch (error) {
+        record("History Import: Lobby-Mapping priorisiert + Legs normalisiert", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+      }
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      try {
+        const tournament = {
+          id: "history-test-ambiguous",
+          name: "History",
+          mode: "league",
+          ko: null,
+          bestOfLegs: 1,
+          startScore: 501,
+          x01: buildPdcX01Settings(),
+          rules: normalizeTournamentRules({ tieBreakMode: TIE_BREAK_MODE_DRA_STRICT }),
+          participants: [
+            { id: "P1", name: "Tommy" },
+            { id: "P2", name: "Hans" },
+          ],
+          groups: [],
+          matches: [
+            createMatch({
+              id: "m-history-a",
+              stage: MATCH_STAGE_LEAGUE,
+              round: 1,
+              number: 1,
+              player1Id: "P1",
+              player2Id: "P2",
+            }),
+            createMatch({
+              id: "m-history-b",
+              stage: MATCH_STAGE_KO,
+              round: 2,
+              number: 1,
+              player1Id: "P1",
+              player2Id: "P2",
+              meta: {
+                auto: {
+                  lobbyId: "lobby-history-2",
+                  status: "started",
+                },
+              },
+            }),
+          ],
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        };
+        state.store.tournament = tournament;
+        const table = document.createElement("table");
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th>Stats</th>
+              <td><span class="ad-ext-player-name"><p>TOMMY</p></span></td>
+              <td><span class="ad-ext-player-name"><p>HANS</p></span></td>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Gewonnene Legs</td><td>1</td><td>0</td></tr>
+          </tbody>
+        `;
+        const outcome = importHistoryStatsTableResult("lobby-history-2", { table });
+        const matchA = findMatch(tournament, "m-history-a");
+        const matchB = findMatch(tournament, "m-history-b");
+        record(
+          "History Import: bei Mehrdeutigkeit gewinnt verknüpfte Lobby",
+          Boolean(outcome?.ok)
+            && matchA?.status === STATUS_PENDING
+            && matchB?.status === STATUS_COMPLETED
+            && matchB?.winnerId === "P1",
+          `reason=${outcome?.reasonCode || "-"}, A=${matchA?.status || "-"}, B=${matchB?.status || "-"}:${matchB?.winnerId || "-"}`,
+        );
+      } catch (error) {
+        record("History Import: bei Mehrdeutigkeit gewinnt verknüpfte Lobby", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+      }
     }
 
     try {

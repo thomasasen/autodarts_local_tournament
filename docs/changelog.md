@@ -1,11 +1,21 @@
 ﻿# Changelog
 
+## 0.3.3
+- History-Import gehärtet:
+  - Ergebnis wird bevorzugt in das bereits per `lobbyId` verknüpfte offene Turnier-Match geschrieben.
+  - Namenszuordnung robust erweitert (Teilnamen/Varianten), falls Tabellenanzeige vom Turniernamen abweicht.
+  - Legs werden bei abweichenden Match-Settings sicher auf den Turniermodus normalisiert, damit das Ergebnis in `Ergebnisführung` gespeichert wird.
+  - Zusätzliche Selftests für History-Import ergänzt.
+
 ## 0.3.2
 - Match-Statistik-Import überarbeitet:
   - Floating-Shortcut unten rechts entfernt.
   - Inline-Import auf `/history/matches/{id}` visuell präsenter gestaltet.
   - Klick übernimmt Ergebnis primär direkt aus der Statistik-Tabelle (Spieler, Gewinner, Legs).
   - API-Sync wird nur noch als Fallback genutzt, wenn die Tabelle nicht parsbar ist.
+  - Import priorisiert jetzt ein bereits verknüpftes Lobby-Match, um die Ergebnisführung sicher im richtigen Spiel zu aktualisieren.
+  - Namenszuordnung wurde toleranter gemacht (Teilename/Varianten).
+  - Legs werden bei abweichenden Match-Einstellungen kontrolliert auf den Turniermodus normalisiert.
 
 ## 0.3.1
 - Ergebnisübernahme erweitert:
