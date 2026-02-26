@@ -5,6 +5,7 @@
     ensureHost();
     renderShell();
     renderMatchReturnShortcut();
+    renderHistoryImportButton();
 
     initEventBridge();
     installRouteHooks();
@@ -18,6 +19,7 @@
     addInterval(() => {
       refreshRuntimeStatusUi();
       renderMatchReturnShortcut();
+      renderHistoryImportButton();
     }, 1200);
 
     state.ready = true;

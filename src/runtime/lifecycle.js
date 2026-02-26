@@ -221,6 +221,205 @@
     }
     state.matchReturnShortcut.root = null;
     state.matchReturnShortcut.syncing = false;
+    state.matchReturnShortcut.inlineSyncingByLobby = {};
+  }
+
+
+  function removeHistoryImportButton() {
+    const nodes = Array.from(document.querySelectorAll("[data-ata-history-import-root='1']"));
+    nodes.forEach((node) => {
+      if (node instanceof HTMLElement) {
+        node.remove();
+      }
+    });
+  }
+
+
+  function isHistoryMatchRoute(pathname = location.pathname) {
+    return /^\/history\/matches\/[^/?#]+/i.test(normalizeText(pathname || ""));
+  }
+
+
+  function getHistoryRouteLobbyId(pathname = location.pathname) {
+    if (!isHistoryMatchRoute(pathname)) {
+      return "";
+    }
+    return getRouteLobbyId(pathname);
+  }
+
+
+  function isLobbySyncing(lobbyId) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    if (!targetLobbyId) {
+      return false;
+    }
+    const map = state.matchReturnShortcut.inlineSyncingByLobby || {};
+    return Boolean(map[targetLobbyId]);
+  }
+
+
+  function setLobbySyncing(lobbyId, syncing) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    if (!targetLobbyId) {
+      return;
+    }
+    if (!state.matchReturnShortcut.inlineSyncingByLobby || typeof state.matchReturnShortcut.inlineSyncingByLobby !== "object") {
+      state.matchReturnShortcut.inlineSyncingByLobby = {};
+    }
+    if (syncing) {
+      state.matchReturnShortcut.inlineSyncingByLobby[targetLobbyId] = true;
+    } else {
+      delete state.matchReturnShortcut.inlineSyncingByLobby[targetLobbyId];
+    }
+    state.matchReturnShortcut.syncing = Object.keys(state.matchReturnShortcut.inlineSyncingByLobby).length > 0;
+  }
+
+
+  function cleanupStaleHistoryImportButtons(activeLobbyId = "") {
+    const nodes = Array.from(document.querySelectorAll("[data-ata-history-import-root='1']"));
+    nodes.forEach((node) => {
+      if (!(node instanceof HTMLElement)) {
+        return;
+      }
+      const nodeLobbyId = normalizeText(node.getAttribute("data-lobby-id") || "");
+      if (!activeLobbyId || nodeLobbyId !== activeLobbyId) {
+        node.remove();
+      }
+    });
+  }
+
+
+  function findHistoryImportHost(lobbyId) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    if (!targetLobbyId) {
+      return null;
+    }
+    const routeLinks = Array.from(document.querySelectorAll(`a[href^="/history/matches/${targetLobbyId}"]`));
+    const links = routeLinks.filter((link) => link instanceof HTMLAnchorElement);
+    for (const link of links) {
+      const card = link.closest(".chakra-card, [class*='chakra-card'], article, section, [class*='card']");
+      if (!(card instanceof HTMLElement)) {
+        continue;
+      }
+      const table = card.querySelector("table");
+      if (table instanceof HTMLElement) {
+        return { card, table };
+      }
+      return { card, table: null };
+    }
+
+    const firstTable = document.querySelector("table");
+    if (firstTable instanceof HTMLElement) {
+      const card = firstTable.closest(".chakra-card, [class*='chakra-card'], article, section, [class*='card']");
+      if (card instanceof HTMLElement) {
+        return { card, table: firstTable };
+      }
+      if (firstTable.parentElement instanceof HTMLElement) {
+        return { card: firstTable.parentElement, table: firstTable };
+      }
+    }
+
+    return null;
+  }
+
+
+  function ensureHistoryImportRoot(host, lobbyId) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    if (!(host instanceof HTMLElement) || !targetLobbyId) {
+      return null;
+    }
+    let root = host.querySelector(`[data-ata-history-import-root='1'][data-lobby-id='${targetLobbyId}']`);
+    if (root instanceof HTMLElement) {
+      return root;
+    }
+    root = document.createElement("div");
+    root.setAttribute("data-ata-history-import-root", "1");
+    root.setAttribute("data-lobby-id", targetLobbyId);
+    if (host.firstChild) {
+      host.insertBefore(root, host.firstChild);
+    } else {
+      host.appendChild(root);
+    }
+    return root;
+  }
+
+
+  function renderHistoryImportButton() {
+    const lobbyId = getHistoryRouteLobbyId();
+    if (!lobbyId) {
+      removeHistoryImportButton();
+      return;
+    }
+
+    const tournament = state.store.tournament;
+    if (!tournament) {
+      removeHistoryImportButton();
+      return;
+    }
+
+    const hostInfo = findHistoryImportHost(lobbyId);
+    if (!hostInfo?.card) {
+      removeHistoryImportButton();
+      return;
+    }
+
+    cleanupStaleHistoryImportButtons(lobbyId);
+    const root = ensureHistoryImportRoot(hostInfo.card, lobbyId);
+    if (!(root instanceof HTMLElement)) {
+      return;
+    }
+
+    if (hostInfo.table instanceof HTMLElement && root.nextSibling !== hostInfo.table) {
+      hostInfo.card.insertBefore(root, hostInfo.table);
+    }
+
+    const linkedMatchAny = findTournamentMatchByLobbyId(tournament, lobbyId, true);
+    const auto = linkedMatchAny ? ensureMatchAutoMeta(linkedMatchAny) : null;
+    const autoEnabled = Boolean(state.store.settings.featureFlags.autoLobbyStart);
+    const isSyncing = isLobbySyncing(lobbyId);
+    const isAlreadyCompleted = linkedMatchAny?.status === STATUS_COMPLETED;
+
+    let statusText = "";
+    if (!autoEnabled) {
+      statusText = "Auto-Lobby ist deaktiviert. Aktivieren Sie die Funktion im Tab Einstellungen.";
+    } else if (isAlreadyCompleted) {
+      statusText = "Ergebnis bereits im Turnier gespeichert.";
+    } else if (linkedMatchAny && auto?.status === "error") {
+      statusText = `Letzter Sync-Fehler: ${normalizeText(auto.lastError || "Unbekannt") || "Unbekannt"}`;
+    } else if (linkedMatchAny && auto?.status === "started") {
+      statusText = "Match verknüpft. Ergebnis kann übernommen werden.";
+    } else {
+      statusText = "Kein direkt verknüpftes Match gefunden. Ergebnisübernahme versucht API-Zuordnung über Stats.";
+    }
+
+    const primaryLabel = isAlreadyCompleted
+      ? "Turnierassistent öffnen"
+      : (isSyncing ? "\u00dcbernehme..." : "Ergebnis \u00fcbernehmen & Turnier \u00f6ffnen");
+    const disabledAttr = isSyncing || !autoEnabled ? "disabled" : "";
+
+    root.innerHTML = `
+      <div style="margin:8px 0 10px 0;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.22);background:linear-gradient(180deg, rgba(44,50,109,0.85), rgba(31,63,113,0.85));color:#f4f7ff;">
+        <div style="font-size:12px;line-height:1.35;color:rgba(232,237,255,0.86);margin-bottom:8px;">${escapeHtml(statusText)}</div>
+        <button type="button" data-action="ata-history-sync" style="border:1px solid rgba(90,210,153,0.55);background:rgba(90,210,153,0.24);color:#dcffe8;border-radius:8px;padding:8px 10px;font-size:13px;font-weight:700;cursor:pointer;" ${disabledAttr}>${escapeHtml(primaryLabel)}</button>
+      </div>
+    `;
+
+    const syncButton = root.querySelector("[data-action='ata-history-sync']");
+    if (syncButton instanceof HTMLButtonElement) {
+      if (!autoEnabled || isSyncing) {
+        syncButton.onclick = null;
+      } else if (isAlreadyCompleted) {
+        syncButton.onclick = () => {
+          openAssistantMatchesTab();
+        };
+      } else {
+        syncButton.onclick = () => {
+          handleHistoryImportClick(lobbyId).catch((error) => {
+            logWarn("api", "Inline history import action failed.", error);
+          });
+        };
+      }
+    }
   }
 
 
@@ -261,23 +460,31 @@
   }
 
 
-  async function handleMatchShortcutSyncAndOpen(lobbyId) {
+  async function handleLobbySyncAndOpen(lobbyId, trigger = "manual") {
     const targetLobbyId = normalizeText(lobbyId || "");
-    if (!targetLobbyId || state.matchReturnShortcut.syncing) {
+    if (!targetLobbyId || isLobbySyncing(targetLobbyId)) {
       return;
     }
-    state.matchReturnShortcut.syncing = true;
+    setLobbySyncing(targetLobbyId, true);
     renderMatchReturnShortcut();
+    renderHistoryImportButton();
     try {
       const syncOutcome = await syncResultForLobbyId(targetLobbyId, {
         notifyErrors: true,
         notifyNotReady: true,
+        trigger,
       });
-      openAssistantMatchesTab();
-      if (syncOutcome.completed) {
-        setNotice("success", "Ergebnis wurde in xLokale Turniere \u00fcbernommen.", 2400);
+      if (syncOutcome.reasonCode === "completed" || syncOutcome.completed) {
+        openAssistantMatchesTab();
+        const alreadyStored = normalizeText(syncOutcome.message || "").includes("bereits");
+        if (alreadyStored) {
+          setNotice("info", syncOutcome.message || "Ergebnis war bereits im Turnier gespeichert.", 2600);
+        } else {
+          setNotice("success", "Ergebnis wurde in xLokale Turniere \u00fcbernommen.", 2400);
+        }
       } else if (!syncOutcome.ok && syncOutcome.message) {
-        setNotice("info", syncOutcome.message, 3200);
+        const noticeType = syncOutcome.reasonCode === "ambiguous" ? "error" : "info";
+        setNotice(noticeType, syncOutcome.message, 3200);
       } else if (syncOutcome.ok && !syncOutcome.completed) {
         setNotice("info", "Noch kein finales Ergebnis verf\u00fcgbar. Match l\u00e4uft ggf. noch.", 2600);
       }
@@ -285,9 +492,20 @@
       logWarn("api", "Manual shortcut sync failed.", error);
       setNotice("error", "Ergebnis\u00fcbernahme fehlgeschlagen. Bitte sp\u00e4ter erneut versuchen.");
     } finally {
-      state.matchReturnShortcut.syncing = false;
+      setLobbySyncing(targetLobbyId, false);
       renderMatchReturnShortcut();
+      renderHistoryImportButton();
     }
+  }
+
+
+  async function handleMatchShortcutSyncAndOpen(lobbyId) {
+    return handleLobbySyncAndOpen(lobbyId, "floating-shortcut");
+  }
+
+
+  async function handleHistoryImportClick(lobbyId) {
+    return handleLobbySyncAndOpen(lobbyId, "inline-history");
   }
 
 
@@ -305,30 +523,32 @@
     }
 
     const linkedMatchAny = findTournamentMatchByLobbyId(tournament, lobbyId, true);
-    if (!linkedMatchAny) {
-      removeMatchReturnShortcut();
-      return;
-    }
-
-    const linkedMatchOpen = linkedMatchAny.status === STATUS_PENDING ? linkedMatchAny : null;
-    const auto = ensureMatchAutoMeta(linkedMatchAny);
+    const linkedMatchOpen = linkedMatchAny?.status === STATUS_PENDING ? linkedMatchAny : null;
+    const auto = linkedMatchAny ? ensureMatchAutoMeta(linkedMatchAny) : null;
     const root = ensureMatchReturnShortcutRoot();
-    const isSyncing = state.matchReturnShortcut.syncing;
-    const hasOpenMatch = Boolean(linkedMatchOpen);
+    const isSyncing = isLobbySyncing(lobbyId);
+    const autoEnabled = Boolean(state.store.settings.featureFlags.autoLobbyStart);
+    const isAlreadyCompleted = linkedMatchAny?.status === STATUS_COMPLETED;
+    const hasOpenMatch = Boolean(linkedMatchOpen || !linkedMatchAny);
 
-    const statusText = linkedMatchAny.status === STATUS_COMPLETED
-      ? "Ergebnis bereits im Turnier gespeichert."
-      : auto.status === "error"
-        ? `Letzter Sync-Fehler: ${normalizeText(auto.lastError || "Unbekannt") || "Unbekannt"}`
-        : auto.status === "started"
-          ? "Match verkn\u00fcpft. Ergebnis kann \u00fcbernommen werden."
-          : "API-Sync wartet auf Match-Start.";
+    const statusText = !autoEnabled
+      ? "Auto-Lobby ist deaktiviert. Aktivieren Sie die Funktion im Tab Einstellungen."
+      : isAlreadyCompleted
+        ? "Ergebnis bereits im Turnier gespeichert."
+        : linkedMatchAny && auto?.status === "error"
+          ? `Letzter Sync-Fehler: ${normalizeText(auto.lastError || "Unbekannt") || "Unbekannt"}`
+          : linkedMatchAny && auto?.status === "started"
+            ? "Match verkn\u00fcpft. Ergebnis kann \u00fcbernommen werden."
+            : "Kein direkt verkn\u00fcpftes Match gefunden. Ergebnis\u00fcbernahme versucht API-Zuordnung.";
 
-    const primaryLabel = hasOpenMatch
-      ? (isSyncing ? "\u00dcbernehme..." : "Ergebnis \u00fcbernehmen & Turnier \u00f6ffnen")
-      : "Turnierassistent \u00f6ffnen";
+    const primaryLabel = isAlreadyCompleted
+      ? "Turnierassistent \u00f6ffnen"
+      : hasOpenMatch
+        ? (isSyncing ? "\u00dcbernehme..." : "Ergebnis \u00fcbernehmen & Turnier \u00f6ffnen")
+        : "Turnierassistent \u00f6ffnen";
+    const canSync = autoEnabled && !isAlreadyCompleted && hasOpenMatch;
 
-    const secondaryButtonHtml = hasOpenMatch
+    const secondaryButtonHtml = canSync
       ? `<button type="button" data-action="open-assistant" style="flex:1 1 auto;border:1px solid rgba(255,255,255,0.28);background:rgba(255,255,255,0.1);color:#f4f7ff;border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer;">Nur Turnierassistent</button>`
       : "";
 
@@ -336,14 +556,14 @@
       <div style="font-size:13px;font-weight:700;letter-spacing:0.3px;margin-bottom:6px;">xLokale Turniere</div>
       <div style="font-size:12px;line-height:1.35;color:rgba(232,237,255,0.86);margin-bottom:8px;">${escapeHtml(statusText)}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button type="button" data-action="sync-open" style="flex:1 1 auto;border:1px solid rgba(90,210,153,0.55);background:rgba(90,210,153,0.24);color:#dcffe8;border-radius:8px;padding:8px 10px;font-size:13px;font-weight:700;cursor:pointer;" ${isSyncing ? "disabled" : ""}>${escapeHtml(primaryLabel)}</button>
+        <button type="button" data-action="sync-open" style="flex:1 1 auto;border:1px solid rgba(90,210,153,0.55);background:rgba(90,210,153,0.24);color:#dcffe8;border-radius:8px;padding:8px 10px;font-size:13px;font-weight:700;cursor:pointer;" ${(isSyncing || !autoEnabled) ? "disabled" : ""}>${escapeHtml(primaryLabel)}</button>
         ${secondaryButtonHtml}
       </div>
     `;
 
     const syncButton = root.querySelector("[data-action='sync-open']");
     if (syncButton instanceof HTMLButtonElement) {
-      if (hasOpenMatch) {
+      if (canSync) {
         syncButton.onclick = () => {
           handleMatchShortcutSyncAndOpen(lobbyId).catch((error) => {
             logWarn("api", "Shortcut action failed.", error);
@@ -379,6 +599,7 @@
       state.bracket.timeoutHandle = null;
     }
     removeMatchReturnShortcut();
+    removeHistoryImportButton();
     while (state.cleanupStack.length) {
       const cleanup = state.cleanupStack.pop();
       try {

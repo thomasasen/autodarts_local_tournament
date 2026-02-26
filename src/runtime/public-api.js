@@ -184,6 +184,37 @@
     }
 
     try {
+      const tournament = {
+        participants: [
+          { id: "P1", name: "Tommy" },
+          { id: "P2", name: "Hans" },
+        ],
+        matches: [
+          createMatch({ id: "m1", stage: MATCH_STAGE_GROUP, round: 1, number: 1, player1Id: "P1", player2Id: "P2", status: STATUS_PENDING }),
+          createMatch({ id: "m2", stage: MATCH_STAGE_KO, round: 2, number: 1, player1Id: "P1", player2Id: "P2", status: STATUS_PENDING }),
+        ],
+      };
+      const apiStats = {
+        players: [
+          { name: "Tommy" },
+          { name: "Hans" },
+        ],
+        matchStats: [
+          { player: { name: "Tommy" }, legsWon: 1 },
+          { player: { name: "Hans" }, legsWon: 0 },
+        ],
+      };
+      const recovered = findOpenMatchCandidatesByApiStats(tournament, apiStats);
+      record(
+        "API Sync: Recovery erkennt mehrdeutige Match-Zuordnung",
+        recovered.length === 2,
+        `candidates=${recovered.length}`,
+      );
+    } catch (error) {
+      record("API Sync: Recovery erkennt mehrdeutige Match-Zuordnung", false, String(error?.message || error));
+    }
+
+    try {
       const rawStoreV2 = {
         schemaVersion: 2,
         settings: { debug: false, featureFlags: { autoLobbyStart: false, randomizeKoRound1: true } },

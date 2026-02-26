@@ -9,6 +9,7 @@
     ensureHost();
     renderShell();
     renderMatchReturnShortcut();
+    renderHistoryImportButton();
   }
 
 
@@ -51,6 +52,8 @@
         ensureHost();
       }
       onRouteChange();
+      renderMatchReturnShortcut();
+      renderHistoryImportButton();
     }, 1000);
   }
 

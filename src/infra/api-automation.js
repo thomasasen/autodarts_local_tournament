@@ -3,13 +3,28 @@
     const notifyErrors = Boolean(options.notifyErrors);
     const notifyNotReady = Boolean(options.notifyNotReady);
     const includeErrorRetry = options.includeErrorRetry !== false;
+    const trigger = normalizeText(options.trigger || "background");
     const auto = ensureMatchAutoMeta(match);
     const lobbyId = normalizeText(auto.lobbyId || "");
     if (!lobbyId) {
-      return { ok: false, updated: false, completed: false, pending: true, message: "Keine Lobby-ID vorhanden." };
+      return {
+        ok: false,
+        updated: false,
+        completed: false,
+        pending: true,
+        reasonCode: "not_found",
+        message: "Keine Lobby-ID vorhanden.",
+      };
     }
     if (!includeErrorRetry && auto.status === "error") {
-      return { ok: false, updated: false, completed: false, pending: true, message: "Match ist im Fehlerstatus." };
+      return {
+        ok: false,
+        updated: false,
+        completed: false,
+        pending: true,
+        reasonCode: "error",
+        message: "Match ist im Fehlerstatus.",
+      };
     }
 
     let updated = false;
@@ -49,12 +64,14 @@
           completed: false,
           pending: true,
           recoverable: true,
+          reasonCode: "pending",
           message: "API-Ergebnis ist noch nicht final verf\u00fcgbar.",
         };
       }
 
       const winnerCandidates = resolveWinnerIdCandidatesFromApiStats(tournament, match, stats, winnerIndex);
       logDebug("api", "Auto-sync winner candidates resolved.", {
+        trigger,
         matchId: match.id,
         lobbyId,
         winnerIndex,
@@ -71,13 +88,22 @@
         if (notifyErrors && changedError) {
           setNotice("error", `Auto-Sync Fehler bei ${match.id}: Gewinner nicht zuordenbar.`);
         }
-        return { ok: false, updated, completed: false, pending: true, recoverable: false, message: mappingError };
+        return {
+          ok: false,
+          updated,
+          completed: false,
+          pending: true,
+          recoverable: false,
+          reasonCode: "error",
+          message: mappingError,
+        };
       }
 
       let result = { ok: false, message: "Auto-Sync konnte Ergebnis nicht speichern." };
       for (const winnerId of winnerCandidates) {
         const legCandidates = getApiMatchLegCandidatesFromStats(tournament, match, stats, winnerId);
         logDebug("api", "Auto-sync leg candidates resolved.", {
+          trigger,
           matchId: match.id,
           winnerId,
           legCandidates,
@@ -94,6 +120,7 @@
       }
       if (!result.ok) {
         logWarn("api", "Auto-sync could not persist result with resolved winner/legs candidates.", {
+          trigger,
           matchId: match.id,
           winnerCandidates,
           winnerIndex,
@@ -108,7 +135,15 @@
         if (notifyErrors && changedError) {
           setNotice("error", `Auto-Sync Fehler bei ${match.id}: ${saveError}`);
         }
-        return { ok: false, updated, completed: false, pending: true, recoverable: false, message: saveError };
+        return {
+          ok: false,
+          updated,
+          completed: false,
+          pending: true,
+          recoverable: false,
+          reasonCode: "error",
+          message: saveError,
+        };
       }
 
       const updatedMatch = findMatch(tournament, match.id);
@@ -123,11 +158,26 @@
         updatedMatch.updatedAt = finishedAt;
       }
 
-      return { ok: true, updated: true, completed: true, pending: false, message: "Ergebnis \u00fcbernommen." };
+      return {
+        ok: true,
+        updated: true,
+        completed: true,
+        pending: false,
+        reasonCode: "completed",
+        message: "Ergebnis \u00fcbernommen.",
+      };
     } catch (error) {
       const status = Number(error?.status || 0);
       if (status === 401 || status === 403) {
-        return { ok: false, updated, completed: false, pending: true, authError: true, message: "Auth abgelaufen." };
+        return {
+          ok: false,
+          updated,
+          completed: false,
+          pending: true,
+          authError: true,
+          reasonCode: "auth",
+          message: "Auth abgelaufen.",
+        };
       }
       if (status === 404) {
         return {
@@ -136,6 +186,7 @@
           completed: false,
           pending: true,
           recoverable: true,
+          reasonCode: "pending",
           message: "Match-Stats noch nicht verf\u00fcgbar.",
         };
       }
@@ -155,41 +206,67 @@
       if (notifyErrors && shouldPersistError) {
         setNotice("error", `Auto-Sync Fehler bei ${match.id}: ${errorMessage}`);
       }
-      return { ok: false, updated, completed: false, pending: true, recoverable: false, message: errorMessage };
+      return {
+        ok: false,
+        updated,
+        completed: false,
+        pending: true,
+        recoverable: false,
+        reasonCode: "error",
+        message: errorMessage,
+      };
     }
   }
 
 
   async function syncResultForLobbyId(lobbyId, options = {}) {
     const targetLobbyId = normalizeText(lobbyId || "");
+    const trigger = normalizeText(options.trigger || "manual");
     const tournament = state.store.tournament;
+    logDebug("api", "Lobby sync requested.", {
+      trigger,
+      lobbyId: targetLobbyId,
+    });
     if (!targetLobbyId) {
-      return { ok: false, message: "Keine Lobby-ID erkannt." };
+      return { ok: false, reasonCode: "not_found", message: "Keine Lobby-ID erkannt." };
     }
     if (!tournament) {
-      return { ok: false, message: "Kein aktives Turnier vorhanden." };
+      return { ok: false, reasonCode: "error", message: "Kein aktives Turnier vorhanden." };
     }
     if (!state.store.settings.featureFlags.autoLobbyStart) {
-      return { ok: false, message: "Auto-Lobby ist deaktiviert." };
+      return { ok: false, reasonCode: "error", message: "Auto-Lobby ist deaktiviert." };
     }
 
     const token = getAuthTokenFromCookie();
     if (!token) {
-      return { ok: false, message: "Kein Auth-Token gefunden. Bitte neu einloggen." };
+      return { ok: false, reasonCode: "auth", message: "Kein Auth-Token gefunden. Bitte neu einloggen." };
     }
 
     let openMatch = findTournamentMatchByLobbyId(tournament, targetLobbyId, false);
     const completedMatch = openMatch ? null : findTournamentMatchByLobbyId(tournament, targetLobbyId, true);
     if (!openMatch && completedMatch?.status === STATUS_COMPLETED) {
-      return { ok: true, completed: true, message: "Ergebnis war bereits \u00fcbernommen." };
+      return { ok: true, completed: true, reasonCode: "completed", message: "Ergebnis war bereits \u00fcbernommen." };
     }
     let prefetchedStats = null;
     if (!openMatch) {
       try {
         prefetchedStats = await fetchMatchStats(targetLobbyId, token);
-        const recoveredMatch = findOpenMatchByApiStats(tournament, prefetchedStats);
-        if (recoveredMatch) {
-          openMatch = recoveredMatch;
+        const recoveredMatches = findOpenMatchCandidatesByApiStats(tournament, prefetchedStats);
+        logDebug("api", "Recovery match candidates resolved.", {
+          trigger,
+          lobbyId: targetLobbyId,
+          candidateCount: recoveredMatches.length,
+          candidateMatchIds: recoveredMatches.map((match) => match.id),
+        });
+        if (recoveredMatches.length > 1) {
+          return {
+            ok: false,
+            reasonCode: "ambiguous",
+            message: "Mehrdeutige Zuordnung: mehrere offene Turnier-Matches passen zur Lobby. Bitte in der Ergebnisf\u00fchrung manuell speichern.",
+          };
+        }
+        if (recoveredMatches.length === 1) {
+          openMatch = recoveredMatches[0];
           const auto = ensureMatchAutoMeta(openMatch);
           const now = nowIso();
           auto.provider = API_PROVIDER;
@@ -199,13 +276,22 @@
           auto.lastSyncAt = now;
           auto.lastError = null;
           openMatch.updatedAt = now;
+          tournament.updatedAt = now;
+          try {
+            await persistStore();
+          } catch (persistError) {
+            schedulePersist();
+            logWarn("storage", "Immediate persist after recovery link failed; scheduled retry.", persistError);
+          }
+          renderShell();
         }
-      } catch (_) {
+      } catch (error) {
+        logWarn("api", "Recovery lookup via stats failed.", error);
         // Fallback keeps original behavior when stats are not yet available.
       }
     }
     if (!openMatch) {
-      return { ok: false, message: "Kein offenes Turnier-Match f\u00fcr diese Lobby gefunden." };
+      return { ok: false, reasonCode: "not_found", message: "Kein offenes Turnier-Match f\u00fcr diese Lobby gefunden." };
     }
 
     const syncOutcome = await syncApiMatchResult(tournament, openMatch, token, {
@@ -213,11 +299,12 @@
       notifyNotReady: Boolean(options.notifyNotReady),
       includeErrorRetry: true,
       prefetchedStats,
+      trigger,
     });
 
     if (syncOutcome.authError) {
       state.apiAutomation.authBackoffUntil = Date.now() + API_AUTH_NOTICE_THROTTLE_MS;
-      return { ok: false, message: "Auth abgelaufen. Bitte neu einloggen." };
+      return { ok: false, reasonCode: "auth", message: "Auth abgelaufen. Bitte neu einloggen." };
     }
 
     if (syncOutcome.updated) {
@@ -228,7 +315,18 @@
       renderShell();
     }
 
-    return syncOutcome;
+    const normalizedOutcome = {
+      ...syncOutcome,
+      reasonCode: syncOutcome.reasonCode || (syncOutcome.completed ? "completed" : (syncOutcome.pending ? "pending" : "error")),
+    };
+    logDebug("api", "Lobby sync finished.", {
+      trigger,
+      lobbyId: targetLobbyId,
+      reasonCode: normalizedOutcome.reasonCode,
+      ok: normalizedOutcome.ok,
+      completed: Boolean(normalizedOutcome.completed),
+    });
+    return normalizedOutcome;
   }
 
 
@@ -338,18 +436,33 @@
   }
 
 
-  function findOpenMatchByApiStats(tournament, data) {
+  function getOpenMatchesByPlayersPair(tournament, player1Id, player2Id) {
+    const key = new Set([normalizeText(player1Id || ""), normalizeText(player2Id || "")]);
+    if (key.size !== 2 || key.has("")) {
+      return [];
+    }
+    return (tournament?.matches || []).filter((match) => {
+      if (!match || match.status !== STATUS_PENDING || !match.player1Id || !match.player2Id) {
+        return false;
+      }
+      const set = new Set([normalizeText(match.player1Id), normalizeText(match.player2Id)]);
+      return key.size === set.size && [...key].every((id) => set.has(id));
+    });
+  }
+
+
+  function findOpenMatchCandidatesByApiStats(tournament, data) {
     if (!tournament || !data) {
-      return null;
+      return [];
     }
     const participantIds = [];
-    const seen = new Set();
+    const seenParticipants = new Set();
     const pushId = (participantId) => {
       const id = normalizeText(participantId || "");
-      if (!id || seen.has(id)) {
+      if (!id || seenParticipants.has(id)) {
         return;
       }
-      seen.add(id);
+      seenParticipants.add(id);
       participantIds.push(id);
     };
 
@@ -370,9 +483,29 @@
     });
 
     if (participantIds.length < 2) {
-      return null;
+      return [];
     }
-    return getOpenMatchByPlayers(tournament, participantIds[0], participantIds[1]);
+
+    const matches = [];
+    const seenMatches = new Set();
+    for (let left = 0; left < participantIds.length; left += 1) {
+      for (let right = left + 1; right < participantIds.length; right += 1) {
+        const candidates = getOpenMatchesByPlayersPair(tournament, participantIds[left], participantIds[right]);
+        candidates.forEach((match) => {
+          if (!seenMatches.has(match.id)) {
+            seenMatches.add(match.id);
+            matches.push(match);
+          }
+        });
+      }
+    }
+
+    return matches.sort((left, right) => {
+      if (left.round !== right.round) {
+        return left.round - right.round;
+      }
+      return left.number - right.number;
+    });
   }
 
 
@@ -859,6 +992,7 @@
           notifyErrors: false,
           notifyNotReady: false,
           includeErrorRetry: true,
+          trigger: "background",
         });
 
         if (syncOutcome.authError) {

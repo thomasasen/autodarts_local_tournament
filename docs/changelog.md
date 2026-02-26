@@ -1,5 +1,19 @@
 ﻿# Changelog
 
+## 0.3.1
+- Ergebnisübernahme erweitert:
+  - neuer Inline-Button auf `/history/matches/{id}`: `Ergebnis übernehmen & Turnier öffnen`
+  - bestehender Floating-Shortcut bleibt als Fallback aktiv.
+- API-Sync robuster gemacht:
+  - Recovery kann offene Turnier-Matches auch ohne gespeicherte `lobbyId` über API-Stats/Spielernamen wiederfinden
+  - bei mehrdeutiger Zuordnung wird mit klarer Meldung abgebrochen (kein unsicheres Auto-Write).
+- Sync-Transparenz erhöht:
+  - `syncResultForLobbyId` unterstützt `trigger` (`inline-history`, `floating-shortcut`, `background`)
+  - Rückgaben enthalten `reasonCode` (`not_found`, `ambiguous`, `pending`, `completed`, `auth`, `error`)
+  - zusätzliche `[ATA][api]`-Logs für Trigger, Recovery-Kandidaten und Sync-Ausgang.
+- Persistenz gehärtet:
+  - Recovery-Verknüpfung speichert sofort (mit Fallback auf Debounce), damit F5 die Zuordnung nicht verliert.
+
 ## 0.3.0
 - Codebasis in Schichten aufgeteilt (`src/core`, `src/data`, `src/domain`, `src/infra`, `src/ui`, `src/bracket`, `src/runtime`).
 - Build-Pipeline ohne npm/Node eingeführt:

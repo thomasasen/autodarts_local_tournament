@@ -35,6 +35,7 @@
     matchReturnShortcut: {
       root: null,
       syncing: false,
+      inlineSyncingByLobby: {},
     },
     runtimeStatusSignature: "",
     cleanupStack: [],

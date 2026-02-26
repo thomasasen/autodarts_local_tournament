@@ -39,6 +39,7 @@ Der Assistent erweitert die Autodarts-Oberfläche um einen eigenen Bereich für:
   - API-Matchstart per Klick
   - API-Sync für Ergebnisse
   - Match-Seiten-Shortcut: `Ergebnis übernehmen & Turnier öffnen`
+  - Inline-Button auf `/history/matches/{id}`: `Ergebnis übernehmen & Turnier öffnen`
 - KO-Ansicht:
   - Bracket via `brackets-viewer` (primär)
   - HTML-Fallback bei CDN-Fehler/Timeout
@@ -218,6 +219,7 @@ Tab: `Spiele`
 1. Match per `Match starten` auslösen.
 2. Eine Lobby wird mit den Turnier-Settings erstellt (X01-Preset/Felder + Legs aus `Best-of Legs`), immer als private Lobby. Spieler werden hinzugefügt und das Match wird gestartet.
 3. Das Match-Ergebnis wird per API geholt und gespeichert.
+4. Nach dem Finish steht auf der Statistikseite (`/history/matches/{id}`) zusätzlich ein direkter Import-Button bereit.
 
 ### Schutzmechanismen
 - Nur ein aktives API-Match gleichzeitig (Single-Board-Flow).
@@ -258,6 +260,7 @@ Tab: `Import/Export`
 - Login prüfen (Token vorhanden?).
 - Feature-Flag aktiv?
 - Eindeutige Teilnehmernamen verwenden.
+- Bei mehreren offenen Matches mit derselben Paarung wird absichtlich nicht automatisch übernommen (`Mehrdeutige Zuordnung`), um falsche Ergebnisse zu vermeiden.
 
 ### Bracket wird nicht gerendert
 - Das CDN kann temporär nicht erreichbar sein.
