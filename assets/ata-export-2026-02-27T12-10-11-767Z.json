@@ -1,0 +1,824 @@
+{
+  "schemaVersion": 4,
+  "exportedAt": "2026-02-27T12:10:11.766Z",
+  "tournament": {
+    "id": "tournament-mm4tviza-aia0y1",
+    "name": "TestTurnier2",
+    "mode": "ko",
+    "ko": {
+      "drawMode": "open_draw",
+      "drawLocked": true,
+      "engineVersion": 3,
+      "bracketSize": 8,
+      "placement": [
+        1,
+        8,
+        4,
+        5,
+        2,
+        7,
+        3,
+        6
+      ],
+      "seeding": [
+        {
+          "participantId": "p-mm4tviza-rrhd4g",
+          "participantName": "Simon",
+          "seed": 1,
+          "hasBye": true,
+          "entryRound": 2,
+          "slot": 1
+        },
+        {
+          "participantId": "p-mm4tviza-9oz7wq",
+          "participantName": "Tanja",
+          "seed": 2,
+          "hasBye": false,
+          "entryRound": 1,
+          "slot": 5
+        },
+        {
+          "participantId": "p-mm4tviza-8f7yl7",
+          "participantName": "Klaus",
+          "seed": 3,
+          "hasBye": false,
+          "entryRound": 1,
+          "slot": 7
+        },
+        {
+          "participantId": "p-mm4tviza-13r878",
+          "participantName": "Hans",
+          "seed": 4,
+          "hasBye": false,
+          "entryRound": 1,
+          "slot": 3
+        },
+        {
+          "participantId": "p-mm4tviza-a0ayuy",
+          "participantName": "Tommy",
+          "seed": 5,
+          "hasBye": false,
+          "entryRound": 1,
+          "slot": 4
+        },
+        {
+          "participantId": "p-mm4tviza-jjls9z",
+          "participantName": "Andrea",
+          "seed": 6,
+          "hasBye": false,
+          "entryRound": 1,
+          "slot": 8
+        },
+        {
+          "participantId": "p-mm4tviza-p9oev5",
+          "participantName": "Sabine",
+          "seed": 7,
+          "hasBye": false,
+          "entryRound": 1,
+          "slot": 6
+        }
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "label": "Round 1",
+          "virtualMatches": [
+            {
+              "id": "ko-r1-m1",
+              "round": 1,
+              "number": 1,
+              "structuralBye": true,
+              "competitors": {
+                "p1": {
+                  "type": "participant",
+                  "participantId": "p-mm4tviza-rrhd4g",
+                  "seed": 1
+                },
+                "p2": null
+              }
+            },
+            {
+              "id": "ko-r1-m2",
+              "round": 1,
+              "number": 2,
+              "structuralBye": false,
+              "competitors": {
+                "p1": {
+                  "type": "participant",
+                  "participantId": "p-mm4tviza-13r878",
+                  "seed": 4
+                },
+                "p2": {
+                  "type": "participant",
+                  "participantId": "p-mm4tviza-a0ayuy",
+                  "seed": 5
+                }
+              }
+            },
+            {
+              "id": "ko-r1-m3",
+              "round": 1,
+              "number": 3,
+              "structuralBye": false,
+              "competitors": {
+                "p1": {
+                  "type": "participant",
+                  "participantId": "p-mm4tviza-9oz7wq",
+                  "seed": 2
+                },
+                "p2": {
+                  "type": "participant",
+                  "participantId": "p-mm4tviza-p9oev5",
+                  "seed": 7
+                }
+              }
+            },
+            {
+              "id": "ko-r1-m4",
+              "round": 1,
+              "number": 4,
+              "structuralBye": false,
+              "competitors": {
+                "p1": {
+                  "type": "participant",
+                  "participantId": "p-mm4tviza-8f7yl7",
+                  "seed": 3
+                },
+                "p2": {
+                  "type": "participant",
+                  "participantId": "p-mm4tviza-jjls9z",
+                  "seed": 6
+                }
+              }
+            }
+          ]
+        },
+        {
+          "round": 2,
+          "label": "Round 2",
+          "virtualMatches": [
+            {
+              "id": "ko-r2-m1",
+              "round": 2,
+              "number": 1,
+              "structuralBye": false,
+              "competitors": {
+                "p1": {
+                  "type": "participant",
+                  "participantId": "p-mm4tviza-rrhd4g",
+                  "seed": 1
+                },
+                "p2": {
+                  "type": "winner",
+                  "matchId": "ko-r1-m2"
+                }
+              }
+            },
+            {
+              "id": "ko-r2-m2",
+              "round": 2,
+              "number": 2,
+              "structuralBye": false,
+              "competitors": {
+                "p1": {
+                  "type": "winner",
+                  "matchId": "ko-r1-m3"
+                },
+                "p2": {
+                  "type": "winner",
+                  "matchId": "ko-r1-m4"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "round": 3,
+          "label": "Final",
+          "virtualMatches": [
+            {
+              "id": "ko-r3-m1",
+              "round": 3,
+              "number": 1,
+              "structuralBye": false,
+              "competitors": {
+                "p1": {
+                  "type": "winner",
+                  "matchId": "ko-r2-m1"
+                },
+                "p2": {
+                  "type": "winner",
+                  "matchId": "ko-r2-m2"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "bestOfLegs": 3,
+    "startScore": 121,
+    "x01": {
+      "presetId": "custom",
+      "variant": "X01",
+      "baseScore": 121,
+      "inMode": "Straight",
+      "outMode": "Double",
+      "bullMode": "25/50",
+      "maxRounds": 50,
+      "bullOffMode": "Off",
+      "lobbyVisibility": "private"
+    },
+    "rules": {
+      "tieBreakProfile": "promoter_h2h_minitable"
+    },
+    "participants": [
+      {
+        "id": "p-mm4tviza-rrhd4g",
+        "name": "Simon"
+      },
+      {
+        "id": "p-mm4tviza-13r878",
+        "name": "Hans"
+      },
+      {
+        "id": "p-mm4tviza-9oz7wq",
+        "name": "Tanja"
+      },
+      {
+        "id": "p-mm4tviza-a0ayuy",
+        "name": "Tommy"
+      },
+      {
+        "id": "p-mm4tviza-p9oev5",
+        "name": "Sabine"
+      },
+      {
+        "id": "p-mm4tviza-8f7yl7",
+        "name": "Klaus"
+      },
+      {
+        "id": "p-mm4tviza-jjls9z",
+        "name": "Andrea"
+      }
+    ],
+    "groups": [],
+    "matches": [
+      {
+        "id": "ko-r1-m1",
+        "stage": "ko",
+        "round": 1,
+        "number": 1,
+        "groupId": null,
+        "player1Id": "p-mm4tviza-rrhd4g",
+        "player2Id": null,
+        "status": "completed",
+        "winnerId": "p-mm4tviza-rrhd4g",
+        "source": null,
+        "legs": {
+          "p1": 0,
+          "p2": 0
+        },
+        "stats": {
+          "p1": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          },
+          "p2": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          }
+        },
+        "updatedAt": "2026-02-27T11:47:46.006Z",
+        "meta": {
+          "bracket": {
+            "p1Source": {
+              "type": "participant",
+              "participantId": "p-mm4tviza-rrhd4g",
+              "seed": 1
+            },
+            "p2Source": null
+          },
+          "resultKind": "bye",
+          "auto": {
+            "provider": "api.autodarts.io",
+            "lobbyId": null,
+            "status": "idle",
+            "startedAt": null,
+            "finishedAt": null,
+            "lastSyncAt": null,
+            "lastError": null
+          }
+        }
+      },
+      {
+        "id": "ko-r1-m2",
+        "stage": "ko",
+        "round": 1,
+        "number": 2,
+        "groupId": null,
+        "player1Id": "p-mm4tviza-13r878",
+        "player2Id": "p-mm4tviza-a0ayuy",
+        "status": "completed",
+        "winnerId": "p-mm4tviza-13r878",
+        "source": "auto",
+        "legs": {
+          "p1": 2,
+          "p2": 0
+        },
+        "stats": {
+          "p1": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          },
+          "p2": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          }
+        },
+        "updatedAt": "2026-02-27T11:58:30.077Z",
+        "meta": {
+          "bracket": {
+            "p1Source": {
+              "type": "participant",
+              "participantId": "p-mm4tviza-13r878",
+              "seed": 4
+            },
+            "p2Source": {
+              "type": "participant",
+              "participantId": "p-mm4tviza-a0ayuy",
+              "seed": 5
+            }
+          },
+          "resultKind": null,
+          "auto": {
+            "provider": "api.autodarts.io",
+            "lobbyId": "019c9ef6-601a-7581-8950-5619d26401f6",
+            "status": "completed",
+            "startedAt": null,
+            "finishedAt": "2026-02-27T11:58:30.075Z",
+            "lastSyncAt": "2026-02-27T11:58:30.077Z",
+            "lastError": null
+          }
+        }
+      },
+      {
+        "id": "ko-r1-m3",
+        "stage": "ko",
+        "round": 1,
+        "number": 3,
+        "groupId": null,
+        "player1Id": "p-mm4tviza-9oz7wq",
+        "player2Id": "p-mm4tviza-p9oev5",
+        "status": "completed",
+        "winnerId": "p-mm4tviza-9oz7wq",
+        "source": "auto",
+        "legs": {
+          "p1": 2,
+          "p2": 0
+        },
+        "stats": {
+          "p1": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          },
+          "p2": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          }
+        },
+        "updatedAt": "2026-02-27T12:04:40.456Z",
+        "meta": {
+          "bracket": {
+            "p1Source": {
+              "type": "participant",
+              "participantId": "p-mm4tviza-9oz7wq",
+              "seed": 2
+            },
+            "p2Source": {
+              "type": "participant",
+              "participantId": "p-mm4tviza-p9oev5",
+              "seed": 7
+            }
+          },
+          "resultKind": null,
+          "auto": {
+            "provider": "api.autodarts.io",
+            "lobbyId": "019c9efc-1e75-7880-bebc-a03d63159781",
+            "status": "completed",
+            "startedAt": null,
+            "finishedAt": "2026-02-27T12:04:40.454Z",
+            "lastSyncAt": "2026-02-27T12:04:40.456Z",
+            "lastError": null
+          }
+        }
+      },
+      {
+        "id": "ko-r1-m4",
+        "stage": "ko",
+        "round": 1,
+        "number": 4,
+        "groupId": null,
+        "player1Id": "p-mm4tviza-8f7yl7",
+        "player2Id": "p-mm4tviza-jjls9z",
+        "status": "completed",
+        "winnerId": "p-mm4tviza-8f7yl7",
+        "source": "auto",
+        "legs": {
+          "p1": 2,
+          "p2": 0
+        },
+        "stats": {
+          "p1": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          },
+          "p2": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          }
+        },
+        "updatedAt": "2026-02-27T12:05:19.127Z",
+        "meta": {
+          "bracket": {
+            "p1Source": {
+              "type": "participant",
+              "participantId": "p-mm4tviza-8f7yl7",
+              "seed": 3
+            },
+            "p2Source": {
+              "type": "participant",
+              "participantId": "p-mm4tviza-jjls9z",
+              "seed": 6
+            }
+          },
+          "resultKind": null,
+          "auto": {
+            "provider": "api.autodarts.io",
+            "lobbyId": "019c9efc-c733-7580-b506-d0b9ccaba113",
+            "status": "completed",
+            "startedAt": null,
+            "finishedAt": "2026-02-27T12:05:19.125Z",
+            "lastSyncAt": "2026-02-27T12:05:19.127Z",
+            "lastError": null
+          }
+        }
+      },
+      {
+        "id": "ko-r2-m1",
+        "stage": "ko",
+        "round": 2,
+        "number": 1,
+        "groupId": null,
+        "player1Id": "p-mm4tviza-rrhd4g",
+        "player2Id": "p-mm4tviza-13r878",
+        "status": "completed",
+        "winnerId": "p-mm4tviza-rrhd4g",
+        "source": "auto",
+        "legs": {
+          "p1": 2,
+          "p2": 0
+        },
+        "stats": {
+          "p1": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          },
+          "p2": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          }
+        },
+        "updatedAt": "2026-02-27T12:05:49.035Z",
+        "meta": {
+          "bracket": {
+            "p1Source": {
+              "type": "participant",
+              "participantId": "p-mm4tviza-rrhd4g",
+              "seed": 1
+            },
+            "p2Source": {
+              "type": "winner",
+              "matchId": "ko-r1-m2"
+            }
+          },
+          "resultKind": null,
+          "auto": {
+            "provider": "api.autodarts.io",
+            "lobbyId": "019c9efd-62d2-72f8-ac54-1653c4859ac1",
+            "status": "completed",
+            "startedAt": null,
+            "finishedAt": "2026-02-27T12:05:49.034Z",
+            "lastSyncAt": "2026-02-27T12:05:49.035Z",
+            "lastError": null
+          }
+        }
+      },
+      {
+        "id": "ko-r2-m2",
+        "stage": "ko",
+        "round": 2,
+        "number": 2,
+        "groupId": null,
+        "player1Id": "p-mm4tviza-9oz7wq",
+        "player2Id": "p-mm4tviza-8f7yl7",
+        "status": "completed",
+        "winnerId": "p-mm4tviza-9oz7wq",
+        "source": "auto",
+        "legs": {
+          "p1": 2,
+          "p2": 0
+        },
+        "stats": {
+          "p1": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          },
+          "p2": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          }
+        },
+        "updatedAt": "2026-02-27T12:06:21.485Z",
+        "meta": {
+          "bracket": {
+            "p1Source": {
+              "type": "winner",
+              "matchId": "ko-r1-m3"
+            },
+            "p2Source": {
+              "type": "winner",
+              "matchId": "ko-r1-m4"
+            }
+          },
+          "resultKind": null,
+          "auto": {
+            "provider": "api.autodarts.io",
+            "lobbyId": "019c9efd-ca2d-75a9-8d98-432bfdb125ab",
+            "status": "completed",
+            "startedAt": null,
+            "finishedAt": "2026-02-27T12:06:21.483Z",
+            "lastSyncAt": "2026-02-27T12:06:21.485Z",
+            "lastError": null
+          }
+        }
+      },
+      {
+        "id": "ko-r3-m1",
+        "stage": "ko",
+        "round": 3,
+        "number": 1,
+        "groupId": null,
+        "player1Id": "p-mm4tviza-rrhd4g",
+        "player2Id": "p-mm4tviza-9oz7wq",
+        "status": "completed",
+        "winnerId": "p-mm4tviza-rrhd4g",
+        "source": "auto",
+        "legs": {
+          "p1": 2,
+          "p2": 1
+        },
+        "stats": {
+          "p1": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          },
+          "p2": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          }
+        },
+        "updatedAt": "2026-02-27T12:08:33.629Z",
+        "meta": {
+          "bracket": {
+            "p1Source": {
+              "type": "winner",
+              "matchId": "ko-r2-m1"
+            },
+            "p2Source": {
+              "type": "winner",
+              "matchId": "ko-r2-m2"
+            }
+          },
+          "resultKind": null,
+          "auto": {
+            "provider": "api.autodarts.io",
+            "lobbyId": "019c9eff-cb22-7c9d-8f9b-6a109c0bd4e7",
+            "status": "completed",
+            "startedAt": null,
+            "finishedAt": "2026-02-27T12:08:33.628Z",
+            "lastSyncAt": "2026-02-27T12:08:33.629Z",
+            "lastError": null
+          }
+        }
+      }
+    ],
+    "results": [
+      {
+        "matchId": "ko-r1-m1",
+        "stage": "ko",
+        "round": 1,
+        "number": 1,
+        "player1Id": "p-mm4tviza-rrhd4g",
+        "player2Id": null,
+        "winnerId": "p-mm4tviza-rrhd4g",
+        "legs": {
+          "p1": 0,
+          "p2": 0
+        },
+        "stats": {
+          "p1": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          },
+          "p2": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          }
+        },
+        "source": "manual",
+        "updatedAt": "2026-02-27T11:47:46.006Z"
+      },
+      {
+        "matchId": "ko-r1-m2",
+        "stage": "ko",
+        "round": 1,
+        "number": 2,
+        "player1Id": "p-mm4tviza-13r878",
+        "player2Id": "p-mm4tviza-a0ayuy",
+        "winnerId": "p-mm4tviza-13r878",
+        "legs": {
+          "p1": 2,
+          "p2": 0
+        },
+        "stats": {
+          "p1": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          },
+          "p2": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          }
+        },
+        "source": "auto",
+        "updatedAt": "2026-02-27T11:58:30.077Z"
+      },
+      {
+        "matchId": "ko-r1-m3",
+        "stage": "ko",
+        "round": 1,
+        "number": 3,
+        "player1Id": "p-mm4tviza-9oz7wq",
+        "player2Id": "p-mm4tviza-p9oev5",
+        "winnerId": "p-mm4tviza-9oz7wq",
+        "legs": {
+          "p1": 2,
+          "p2": 0
+        },
+        "stats": {
+          "p1": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          },
+          "p2": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          }
+        },
+        "source": "auto",
+        "updatedAt": "2026-02-27T12:04:40.456Z"
+      },
+      {
+        "matchId": "ko-r1-m4",
+        "stage": "ko",
+        "round": 1,
+        "number": 4,
+        "player1Id": "p-mm4tviza-8f7yl7",
+        "player2Id": "p-mm4tviza-jjls9z",
+        "winnerId": "p-mm4tviza-8f7yl7",
+        "legs": {
+          "p1": 2,
+          "p2": 0
+        },
+        "stats": {
+          "p1": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          },
+          "p2": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          }
+        },
+        "source": "auto",
+        "updatedAt": "2026-02-27T12:05:19.127Z"
+      },
+      {
+        "matchId": "ko-r2-m1",
+        "stage": "ko",
+        "round": 2,
+        "number": 1,
+        "player1Id": "p-mm4tviza-rrhd4g",
+        "player2Id": "p-mm4tviza-13r878",
+        "winnerId": "p-mm4tviza-rrhd4g",
+        "legs": {
+          "p1": 2,
+          "p2": 0
+        },
+        "stats": {
+          "p1": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          },
+          "p2": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          }
+        },
+        "source": "auto",
+        "updatedAt": "2026-02-27T12:05:49.035Z"
+      },
+      {
+        "matchId": "ko-r2-m2",
+        "stage": "ko",
+        "round": 2,
+        "number": 2,
+        "player1Id": "p-mm4tviza-9oz7wq",
+        "player2Id": "p-mm4tviza-8f7yl7",
+        "winnerId": "p-mm4tviza-9oz7wq",
+        "legs": {
+          "p1": 2,
+          "p2": 0
+        },
+        "stats": {
+          "p1": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          },
+          "p2": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          }
+        },
+        "source": "auto",
+        "updatedAt": "2026-02-27T12:06:21.485Z"
+      },
+      {
+        "matchId": "ko-r3-m1",
+        "stage": "ko",
+        "round": 3,
+        "number": 1,
+        "player1Id": "p-mm4tviza-rrhd4g",
+        "player2Id": "p-mm4tviza-9oz7wq",
+        "winnerId": "p-mm4tviza-rrhd4g",
+        "legs": {
+          "p1": 2,
+          "p2": 1
+        },
+        "stats": {
+          "p1": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          },
+          "p2": {
+            "average": null,
+            "oneEighties": 0,
+            "highFinish": null
+          }
+        },
+        "source": "auto",
+        "updatedAt": "2026-02-27T12:08:33.628Z"
+      }
+    ],
+    "createdAt": "2026-02-27T11:47:46.006Z",
+    "updatedAt": "2026-02-27T12:08:33.629Z"
+  }
+}

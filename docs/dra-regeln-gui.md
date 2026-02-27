@@ -1,11 +1,22 @@
-# DRA-Regelerklärungen für die GUI
+# DRA-Regelerklaerungen fuer die GUI
 
-Diese Datei ist die zentrale Regelhilfe für die `§`-Buttons in der Oberfläche.
-Jeder Abschnitt enthält:
+Diese Datei ist die zentrale Regelhilfe fuer die Regel-Icons in der Oberflaeche.
+Jeder Abschnitt enthaelt:
 1. GUI-Stellen
 2. DRA-Referenz (Kapitel/Punkt/Seite)
-3. Deutsche Erklärung
-4. Nachprüfen im PDF
+3. Deutsche Erklaerung
+4. Warum das fuer Spieler/Turnierleitung wichtig ist
+5. Nachpruefen im PDF
+
+## Symbol-Legende in der GUI
+| Symbol | Bedeutung | Typischer Link-Zweck |
+|---|---|---|
+| ![Info-Symbol](../assets/ss_info.png) | `Info-Icon` = technische Information | Bedienung, Workflow, Projektdoku |
+| ![Regel-Symbol](../assets/ss_regeln.png) | `Regel-Icon` = Regelwerk | DRA-Bezug mit Kapitel/Punkt/Seite |
+
+Screenshot-Kontext:
+
+![Einstellungen mit Regel- und Info-Hilfelinks](../assets/ss_Einstellungen.png)
 
 <a id="dra-gui-rule-mode-formats"></a>
 ## Modus und Format
@@ -18,46 +29,43 @@ Jeder Abschnitt enthält:
 - `6.8.1`, Seite `17`
 - `6.8.2`, Seite `17`
 
-### Deutsche Erklärung
-- `6.8.1`: Das Grundprinzip ist das KO-Format.
-- `6.8.2`: Round Robin ist ebenfalls zulässig.
-- Einfach erklärt:
-  - **KO (Knockout)**: Wer ein Match verliert, scheidet aus. Der Gewinner geht in die nächste Runde.
-  - **Round Robin (Liga)**: Jeder spielt gegen jeden. Danach wird über die Tabelle entschieden.
-- Für die GUI bedeutet das:
-  - `KO`, `Liga` und `Gruppenphase + KO` sind regelkonforme Modi.
-  - Der gewählte Modus steuert die komplette Turnierlogik (Spielplan, Tabelle, KO-Pfade).
-- Beispiel:
-  - KO mit 8 Spielern: Viertelfinale -> Halbfinale -> Finale.
-  - Liga mit 4 Spielern: Jeder spielt gegen jeden, am Ende entscheidet die Tabelle.
+### Deutsche Erklaerung
+- `6.8.1`: Das Grundprinzip ist KO (Straight Knockout).
+- `6.8.2`: Round Robin ist ebenfalls zulaessig.
+- In der App bedeutet das:
+  - `KO`, `Liga` und `Gruppenphase + KO` sind regelkonforme Turniermodelle.
+  - Der Modus steuert automatisch Spielplan, Fortschrittslogik und Turnieransicht.
 
-### Nachprüfen im PDF
+### Warum wichtig
+- Spieler sehen frueh, wie sie weiterkommen (KO) oder wie gewertet wird (Liga).
+- Turnierleitung kann den Ablauf vor Start klar festlegen und spaeter konsistent halten.
+
+### Nachpruefen im PDF
 - [DRA-RULE_BOOK.pdf#page=17](DRA-RULE_BOOK.pdf#page=17)
+
+![Turnieranlage mit Moduswahl](../assets/ss_Turnier_anlage-neu.png)
 
 <a id="dra-gui-rule-open-draw"></a>
 ## Open Draw
 
 ### GUI-Stellen
-- Turnier > KO-Erstrunde zufällig mischen
-- Einstellungen > KO-Erstrunde zufällig mischen (Standard)
+- Turnier > KO-Erstrunde zufaellig mischen
+- Einstellungen > KO-Erstrunde zufaellig mischen (Standard)
 
 ### DRA-Referenz (Kapitel/Punkt/Seite)
 - `6.12.1`, Seite `18`
 
-### Deutsche Erklärung
-- `6.12.1`: Ein veröffentlichter Draw bleibt bestehen.
-- Einfach erklärt:
-  - Der Schalter `KO-Erstrunde zufällig mischen` legt fest, **wie der erste Draw erzeugt wird**.
-  - Danach darf die ausgeloste Struktur nicht beliebig neu gemischt werden.
-- Für die GUI bedeutet das:
-  - `open_draw`: zufällige Reihenfolge für Runde 1.
+### Deutsche Erklaerung
+- Der Schalter bestimmt nur, **wie Runde 1 erzeugt wird**:
+  - `open_draw`: zufaellige Reihenfolge fuer Runde 1.
   - `seeded`: feste Reihenfolge nach Eingabe.
-  - Beide Wege sind vor dem Start möglich, aber der veröffentlichte Draw bleibt danach stabil.
-- Beispiel:
-  - Du startest mit `open_draw` und erzeugst den KO-Baum.
-  - Nach Veröffentlichung bleibt diese Paarung bestehen, auch wenn später Spieler ausfallen.
+- Nach Veroeffentlichung des Draws bleibt die Struktur bestehen (`6.12.1`).
 
-### Nachprüfen im PDF
+### Warum wichtig
+- Die Entscheidung zwischen Zufallsdraw und Setzlogik ist vor Start transparent.
+- Nach Start gibt es keine "heimliche" Neuverteilung durch Bedienfehler.
+
+### Nachpruefen im PDF
 - [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
 
 <a id="dra-gui-rule-draw-lock"></a>
@@ -70,19 +78,16 @@ Jeder Abschnitt enthält:
 ### DRA-Referenz (Kapitel/Punkt/Seite)
 - `6.12.1`, Seite `18`
 
-### Deutsche Erklärung
-- `6.12.1`: Der veröffentlichte Draw soll unverändert bleiben.
-- Einfach erklärt:
-  - `Draw-Lock` ist die technische Sicherung genau dieser Regel.
-  - Aktiv = keine automatische Neuverteilung der KO-Struktur.
-- Für die GUI bedeutet das:
-  - Standardmäßig ist `Draw-Lock` aktiv, damit die Turnierstruktur stabil bleibt.
-  - Nur bei bewusster Veranstalterentscheidung sollte entsperrt werden.
-- Beispiel:
-  - Turnier ist gestartet, ein Spieler tritt nicht an.
-  - Mit aktivem Draw-Lock wird nicht neu gelost, sondern der bestehende Baum bleibt erhalten.
+### Deutsche Erklaerung
+- Draw-Lock ist die technische Absicherung der Regel:
+  - Aktiv: KO-Struktur bleibt unveraendert.
+  - Inaktiv: Turnierleitung kann bewusst entsperren.
 
-### Nachprüfen im PDF
+### Warum wichtig
+- Verhindert unfaire Nachauslosungen im laufenden Turnier.
+- Macht Entscheidungen der Turnierleitung nachvollziehbar und dokumentierbar.
+
+### Nachpruefen im PDF
 - [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
 
 <a id="dra-gui-rule-participant-limits"></a>
@@ -96,19 +101,19 @@ Jeder Abschnitt enthält:
 - `6.10.1`, Seite `17`
 - `6.10.5.2`, Seite `18`
 
-### Deutsche Erklärung
-- `6.10.1` und `6.10.5.2` geben dem Veranstalter organisatorischen Ermessensspielraum.
-- Einfach erklärt:
-  - Das DRA-Rulebook setzt kein fixes, allgemeines Teilnehmermaximum für jede Software.
-  - Der Veranstalter entscheidet über Ablauf, Boards, Sessions und praktikable Turniergröße.
-- Für die GUI bedeutet das:
-  - Die angezeigten Limits (`ko`, `league`, `groups_ko`) sind bewusst gewählte Leitplanken für faire Dauer und stabile Bedienung.
-  - Diese Grenzen sind organisatorisch/technisch motiviert und mit dem Veranstalter-Ermessen vereinbar.
-- Beispiel:
-  - Ein lokales Liga-Turnier mit sehr vielen Spielern wird organisatorisch schnell unübersichtlich.
-  - Deshalb begrenzt die Software die Liga-Größe, obwohl die DRA-Regel hier kein starres Global-Limit vorgibt.
+### Deutsche Erklaerung
+- Das DRA-Rulebook setzt kein fixes globales Software-Maximum.
+- Es gibt Veranstalter-Ermessen fuer Organisation und Ablauf.
+- Die App setzt daher bewusste Leitplanken:
+  - `ko`: `2..128`
+  - `league`: `2..16`
+  - `groups_ko`: `4..16`
 
-### Nachprüfen im PDF
+### Warum wichtig
+- Schuetzt vor Formaten, die lokal organisatorisch kaum sauber zu spielen sind.
+- Erhoeht Stabilitaet (Rendering, Browserlast, Bedienbarkeit).
+
+### Nachpruefen im PDF
 - [DRA-RULE_BOOK.pdf#page=17](DRA-RULE_BOOK.pdf#page=17)
 - [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
 
@@ -117,53 +122,52 @@ Jeder Abschnitt enthält:
 
 ### GUI-Stellen
 - Turnierbaum > KO-Turnierbaum
+- Spiele > Ergebnisfuehrung (Freilos-Markierungen)
 
 ### DRA-Referenz (Kapitel/Punkt/Seite)
 - Abschnitt `2` (Definition `Bye`), Seite `4`
 - `6.12.1`, Seite `18`
 
-### Deutsche Erklärung
-- Abschnitt `2`: Ein `Bye` ist ein Freilos für eine Runde.
-- Einfach erklärt:
-  - Ein Spieler mit Bye muss in dieser Runde nicht spielen und rückt regulär weiter.
-  - Das ist kein Sondertrick, sondern ein normaler Bestandteil des Draws.
-- Für die GUI bedeutet das:
-  - Byes werden sichtbar als `Freilos (Bye)` angezeigt.
-  - Byes sind Teil des veröffentlichten KO-Baums und bleiben damit stabil (`6.12.1`).
-- Beispiel:
-  - Es sind weniger Teilnehmer als Bracket-Plätze vorhanden.
-  - Dann entstehen Freilose, damit der Baum mathematisch sauber funktioniert.
+### Deutsche Erklaerung
+- Ein `Bye` ist ein regulaeres Freilos fuer eine Runde.
+- Spieler mit Bye ruecken ohne Match in die naechste Runde vor.
+- Byes sind Teil des Draws und werden als `Freilos (Bye)` angezeigt.
 
-### Nachprüfen im PDF
+### Warum wichtig
+- Verhindert Missverstaendnis "Ghost-Spieler" vs. echtes Freilos.
+- Sichert faire Bracket-Mathematik bei Teilnehmerzahlen ohne 2er-Potenz.
+
+### Nachpruefen im PDF
 - [DRA-RULE_BOOK.pdf#page=4](DRA-RULE_BOOK.pdf#page=4)
 - [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
+
+![Turnierbaum mit Freilos-Markierung](../assets/ss_Turnierbaum_neu-gestartet.png)
 
 <a id="dra-gui-rule-tie-break"></a>
 ## Tie-Break
 
 ### GUI-Stellen
 - Einstellungen > Promoter Tie-Break-Profil
-- Spiele > Ergebnisführung
-- Turnierbaum > Liga-Tabelle
-- Turnierbaum > Gruppentabellen
+- Turnierbaum > Liga-Tabelle / Gruppentabellen
 - Turnierbaum > Gruppenentscheidung offen
 
 ### DRA-Referenz (Kapitel/Punkt/Seite)
 - `6.16.1`, Seite `20`
 
-### Deutsche Erklärung
-- `6.16.1`: Tie-Breaks dürfen nach Ermessen des Veranstalters eingesetzt werden.
-- Einfach erklärt:
-  - Wenn Spieler nach den normalen Wertungen gleich stehen, braucht es eine definierte Entscheidungskette.
-  - Welche Kette verwendet wird, entscheidet der Veranstalter.
-- Für die GUI bedeutet das:
-  - Das `Promoter Tie-Break-Profil` bildet genau diese Veranstalterentscheidung ab.
-  - Wenn danach immer noch Gleichstand besteht, zeigt die GUI korrekt `Playoff erforderlich`.
-- Beispiel:
-  - Nach Abschluss aller Gruppenspiele haben zwei Spieler dieselben Kernwerte.
-  - Dann greift das gewählte Tie-Break-Profil Schritt für Schritt; bei weiterhin gleichem Stand wird ein Playoff nötig.
+### Deutsche Erklaerung
+- DRA erlaubt Tie-Breaks nach Ermessen des Veranstalters.
+- Die App bildet dieses Ermessen als waehlbares Profil ab:
+  - `Promoter H2H + Mini-Tabelle` (empfohlen)
+  - `Promoter Punkte + LegDiff`
+- Falls ein Gleichstand damit nicht aufloesbar ist:
+  - Status `Playoff erforderlich`
+  - KO-Qualifikation bleibt bis zur Entscheidung blockiert
 
-### Nachprüfen im PDF
+### Warum wichtig
+- Keine stillen, zufaelligen oder intransparenten Tabellenentscheidungen.
+- Spieler und Turnierleitung sehen eindeutig, wann eine manuelle Entscheidung noetig ist.
+
+### Nachpruefen im PDF
 - [DRA-RULE_BOOK.pdf#page=20](DRA-RULE_BOOK.pdf#page=20)
 
 <a id="dra-gui-rule-checklist"></a>
@@ -179,23 +183,18 @@ Jeder Abschnitt enthält:
 - `12.1`, Seite `27`
 - `12.2`, Seite `27`
 
-### Deutsche Erklärung
-- Diese Punkte betreffen Entscheidungen, die vor Ort oder disziplinarisch getroffen werden.
-- Einfach erklärt:
-  - Software kann Ergebnisse und Status abbilden.
-  - Offizielle Beschwerden, Reviews und Disziplinarmaßnahmen müssen trotzdem vom zuständigen Offiziellen/Veranstalter entschieden werden.
-- Für die GUI bedeutet das:
-  - Die Checkliste erinnert an diese Pflichtpunkte.
-  - Das Tool unterstützt den Ablauf, ersetzt aber keine offiziellen Entscheidungen.
-- Hinweis zu `5.14`:
-  - Die Referenz ist auf Seite 15 hinterlegt.
-  - In der Projektkopie ist dieser Punkt nicht als klarer Hauptabschnitt hervorgehoben, daher bitte direkt im PDF gegenprüfen.
-- Beispiel:
-  - Bei einem strittigen Vorfall im Match darf die Software den Fall dokumentieren.
-  - Die verbindliche Entscheidung trifft die zuständige Turnierleitung nach Regelwerk.
+### Deutsche Erklaerung
+- Einige Punkte sind absichtlich nicht automatisiert:
+  - Start-/Wurfreihenfolge, Bull-Off-Entscheidungen
+  - Disziplinarische und organisatorische Entscheidungen
+  - Strittige Sonderfaelle
+- Die Software dokumentiert und unterstuetzt, ersetzt aber keine offizielle Turnierentscheidung.
 
-### Nachprüfen im PDF
+### Warum wichtig
+- Klare Trennung zwischen Software-Automation und offizieller Turnierhoheit.
+- Verhindert falsche Erwartung, dass jeder Regelfall algorithmisch "automatisch richtig" entschieden wird.
+
+### Nachpruefen im PDF
 - [DRA-RULE_BOOK.pdf#page=15](DRA-RULE_BOOK.pdf#page=15)
 - [DRA-RULE_BOOK.pdf#page=26](DRA-RULE_BOOK.pdf#page=26)
 - [DRA-RULE_BOOK.pdf#page=27](DRA-RULE_BOOK.pdf#page=27)
-
