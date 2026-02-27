@@ -867,7 +867,7 @@
     root.innerHTML = `
       <div style="margin:10px 0 14px 0;padding:14px;border-radius:12px;border:1px solid rgba(120,203,255,0.45);background:linear-gradient(180deg, rgba(54,70,145,0.92), rgba(34,80,136,0.9));color:#f4f7ff;box-shadow:0 10px 24px rgba(7,11,25,0.28);">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
-          <div style="font-size:15px;line-height:1.2;font-weight:800;letter-spacing:0.25px;">xLokale Turniere</div>
+          <div style="font-size:15px;line-height:1.2;font-weight:800;letter-spacing:0.25px;">xLokales Turnier</div>
           <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;color:#d5ebff;background:rgba(31,175,198,0.32);border:1px solid rgba(133,219,255,0.42);padding:3px 8px;border-radius:999px;">Match-Import</div>
         </div>
         <div style="font-size:13px;line-height:1.45;color:rgba(240,246,255,0.95);margin-bottom:8px;">${escapeHtml(statusText)}</div>
@@ -938,7 +938,7 @@
         if (alreadyStored) {
           setNotice("info", syncOutcome.message || "Ergebnis war bereits im Turnier gespeichert.", 2600);
         } else {
-          setNotice("success", syncOutcome.message || "Ergebnis wurde in xLokale Turniere \u00fcbernommen.", 2600);
+          setNotice("success", syncOutcome.message || "Ergebnis wurde in xLokales Turnier \u00fcbernommen.", 2600);
         }
       } else if (!syncOutcome.ok && syncOutcome.message) {
         setHistoryInlineOutcome(targetLobbyId, syncOutcome.reasonCode === "ambiguous" ? "error" : "info", syncOutcome.message);

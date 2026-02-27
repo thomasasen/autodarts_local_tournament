@@ -27,7 +27,7 @@ Der Assistent erweitert die Autodarts-Oberfläche um einen eigenen Bereich für:
 2. Loader installieren:
    - `https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js`
 3. `https://play.autodarts.io` neu laden.
-4. Im linken Menü auf **xLokale Turniere** klicken.
+4. Im linken Menü auf **xLokales Turnier** klicken.
 
 ## Funktionen
 - Turniermodi:

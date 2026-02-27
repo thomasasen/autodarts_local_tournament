@@ -28,7 +28,7 @@
   const REMOTE_SOURCE_URL = "https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.user.js";
 
   const MENU_ITEM_ID = "ata-loader-menu-item";
-  const MENU_LABEL = "xLokale Turniere";
+  const MENU_LABEL = "xLokales Turnier";
   const TOGGLE_EVENT = "ata:toggle-request";
   const READY_EVENT = "ata:ready";
   const MENU_LABEL_COLLAPSE_WIDTH = 120;
@@ -349,14 +349,17 @@
 
   function buildMenuIconElement(template) {
     if (template instanceof HTMLElement) {
-      const icon = template.querySelector("svg, img, [data-icon], .icon");
-      if (icon) {
-        return icon.cloneNode(true);
+      const iconContainer = template.querySelector(".chakra-button__icon, [class*='button__icon']");
+      if (iconContainer instanceof HTMLElement) {
+        const cloned = iconContainer.cloneNode(false);
+        cloned.textContent = "🏆";
+        cloned.setAttribute("aria-hidden", "true");
+        return cloned;
       }
     }
 
     const fallback = document.createElement("span");
-    fallback.textContent = "T";
+    fallback.textContent = "🏆";
     fallback.style.display = "inline-flex";
     fallback.style.alignItems = "center";
     fallback.style.justifyContent = "center";
@@ -436,6 +439,16 @@
     return text.includes("meine boards") || text === "boards" || text.endsWith(" boards");
   }
 
+  function isOnlineTournamentsElement(element) {
+    const routePath = getElementRoutePath(element);
+    if (routePath === "/tournaments" || routePath.startsWith("/tournaments/")) {
+      return true;
+    }
+
+    const text = getElementTextLabel(element);
+    return text.includes("online turniere") || text === "tournaments";
+  }
+
   function isMenuHintElement(element) {
     const routePath = getElementRoutePath(element);
     if (isSidebarRouteHint(routePath)) {
@@ -474,8 +487,10 @@
     }
 
     const sidebarEntries = getSidebarInteractiveElements(sidebar);
+    const onlineTournamentsButton = sidebarEntries.find((entry) => isOnlineTournamentsElement(entry)) || null;
     const boardsButton = sidebarEntries.find((entry) => isBoardsElement(entry)) || null;
-    const insertionAnchor = boardsButton
+    const insertionAnchor = onlineTournamentsButton
+      || boardsButton
       || sidebarEntries.find((entry) => isMenuHintElement(entry))
       || null;
 
