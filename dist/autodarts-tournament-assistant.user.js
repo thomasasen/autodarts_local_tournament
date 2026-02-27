@@ -4878,15 +4878,17 @@
   function buildLobbyCreatePayload(tournament) {
     const legsToWin = getLegsToWin(tournament.bestOfLegs);
     const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
+    const bullOffMode = sanitizeX01BullOffMode(x01Settings.bullOffMode);
     const settings = {
       baseScore: x01Settings.baseScore,
       inMode: x01Settings.inMode,
       outMode: x01Settings.outMode,
       maxRounds: x01Settings.maxRounds,
-      bullOffMode: x01Settings.bullOffMode,
-      // API expects a valid bullMode even when bull-off is "Off".
-      bullMode: sanitizeX01BullMode(x01Settings.bullMode),
+      bullOffMode,
     };
+    if (bullOffMode !== "Off") {
+      settings.bullMode = sanitizeX01BullMode(x01Settings.bullMode);
+    }
     return {
       variant: x01Settings.variant,
       isPrivate: true,
@@ -8870,6 +8872,67 @@
       );
     } catch (error) {
       record("PDC-Setup: KO + Best of >=3 + PDC-X01 erforderlich", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
+        name: "PayloadMapping",
+        mode: "league",
+        bestOfLegs: 7,
+        startScore: 701,
+        x01Preset: X01_PRESET_CUSTOM,
+        x01InMode: "Double",
+        x01OutMode: "Master",
+        x01BullMode: "50/50",
+        x01MaxRounds: 20,
+        x01BullOffMode: "Official",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        participants: participantList(2, "PM"),
+      });
+      const payload = buildLobbyCreatePayload(tournament);
+      record(
+        "Turnieranlage -> Matchstart-Payload übernimmt X01 + Best-of konsistent",
+        payload?.variant === X01_VARIANT
+          && payload?.isPrivate === true
+          && payload?.legs === 4
+          && payload?.settings?.baseScore === 701
+          && payload?.settings?.inMode === "Double"
+          && payload?.settings?.outMode === "Master"
+          && payload?.settings?.maxRounds === 20
+          && payload?.settings?.bullOffMode === "Official"
+          && payload?.settings?.bullMode === "50/50",
+        `legs=${payload?.legs}, settings=${JSON.stringify(payload?.settings || {})}`,
+      );
+    } catch (error) {
+      record("Turnieranlage -> Matchstart-Payload übernimmt X01 + Best-of konsistent", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
+        name: "BullOffOff",
+        mode: "league",
+        bestOfLegs: 5,
+        startScore: 501,
+        x01Preset: X01_PRESET_CUSTOM,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "50/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Off",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        participants: participantList(2, "BO"),
+      });
+      const payload = buildLobbyCreatePayload(tournament);
+      const hasBullMode = Object.prototype.hasOwnProperty.call(payload?.settings || {}, "bullMode");
+      record(
+        "Bull-off Off: Matchstart-Payload sendet kein bullMode",
+        payload?.settings?.bullOffMode === "Off" && !hasBullMode,
+        `bullOff=${payload?.settings?.bullOffMode || "-"}, hasBullMode=${hasBullMode}`,
+      );
+    } catch (error) {
+      record("Bull-off Off: Matchstart-Payload sendet kein bullMode", false, String(error?.message || error));
     }
 
     try {

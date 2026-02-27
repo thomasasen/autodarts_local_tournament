@@ -368,15 +368,17 @@
   function buildLobbyCreatePayload(tournament) {
     const legsToWin = getLegsToWin(tournament.bestOfLegs);
     const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
+    const bullOffMode = sanitizeX01BullOffMode(x01Settings.bullOffMode);
     const settings = {
       baseScore: x01Settings.baseScore,
       inMode: x01Settings.inMode,
       outMode: x01Settings.outMode,
       maxRounds: x01Settings.maxRounds,
-      bullOffMode: x01Settings.bullOffMode,
-      // API expects a valid bullMode even when bull-off is "Off".
-      bullMode: sanitizeX01BullMode(x01Settings.bullMode),
+      bullOffMode,
     };
+    if (bullOffMode !== "Off") {
+      settings.bullMode = sanitizeX01BullMode(x01Settings.bullMode);
+    }
     return {
       variant: x01Settings.variant,
       isPrivate: true,
