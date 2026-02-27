@@ -374,14 +374,12 @@
       inMode: x01Settings.inMode,
       outMode: x01Settings.outMode,
       maxRounds: x01Settings.maxRounds,
-      // Compatibility: keep both keys because API variants may expect either.
-      bullOffMode,
-      bullOff: bullOffMode,
       bullMode: sanitizeX01BullMode(x01Settings.bullMode),
     };
     return {
       variant: x01Settings.variant,
       isPrivate: true,
+      bullOffMode,
       legs: legsToWin,
       settings,
     };

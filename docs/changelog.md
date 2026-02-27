@@ -108,7 +108,7 @@
   - bei `Bull-off = Off` wird `Bull mode` read-only deaktiviert
   - Persistenz bleibt stabil durch Hidden-Fallback für deaktivierte Felder.
 - Match-Create-Payload verfeinert:
-  - `bullOffMode` wird API-kompatibel übertragen (`bullOffMode` + `bullOff`).
+  - `bullOffMode` wird beim Lobby-Create auf Top-Level übertragen (wie in `play.autodarts.io`).
   - `bullMode` bleibt gesetzt (mit Fallback), damit Matchstart nicht an Backend-Validierungen scheitert.
 - Legacy-Startscores (`101`, `201`) aus der X01-Auswahl und Sanitization entfernt.
 
