@@ -825,6 +825,21 @@
         font-weight: 700;
       }
 
+      @keyframes ataFinalCardPulse {
+        0%, 100% {
+          box-shadow: 0 0 0 1px rgba(255, 224, 140, 0.38), 0 8px 18px rgba(46, 30, 8, 0.24);
+        }
+        50% {
+          box-shadow: 0 0 0 1px rgba(255, 224, 140, 0.62), 0 12px 24px rgba(61, 37, 8, 0.38);
+        }
+      }
+
+      @keyframes ataFinalBorderOrbit {
+        to {
+          transform: rotate(1turn);
+        }
+      }
+
       .ata-match-card {
         border: 1px solid rgba(255, 255, 255, 0.2);
         border-radius: var(--ata-radius-md);
@@ -876,6 +891,52 @@
       .ata-match-card.ata-row-bye {
         background: rgba(255, 211, 79, 0.09);
         border-color: rgba(255, 211, 79, 0.42);
+      }
+
+      .ata-match-card.ata-row-final {
+        position: relative;
+        isolation: isolate;
+        border-color: rgba(255, 224, 140, 0.72);
+        background:
+          radial-gradient(circle at 88% -66%, rgba(255, 231, 158, 0.26), transparent 52%),
+          linear-gradient(180deg, rgba(255, 211, 79, 0.12), rgba(255, 255, 255, 0.06));
+        animation: ataFinalCardPulse 2.6s ease-in-out infinite;
+      }
+
+      .ata-match-card.ata-row-final::before {
+        content: "";
+        position: absolute;
+        inset: -1px;
+        border-radius: inherit;
+        padding: 2px;
+        pointer-events: none;
+        background: conic-gradient(from 0deg, rgba(255, 244, 202, 0) 0deg, rgba(255, 244, 202, 0) 270deg, rgba(255, 244, 202, 0.92) 330deg, rgba(255, 244, 202, 0) 360deg);
+        -webkit-mask:
+          linear-gradient(#000 0 0) content-box,
+          linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        transform-origin: center center;
+        animation: ataFinalBorderOrbit 2s linear infinite;
+      }
+
+      .ata-match-card.ata-row-final::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+        background: radial-gradient(circle at 50% 0%, rgba(255, 228, 146, 0.2), transparent 62%);
+        opacity: 0.82;
+      }
+
+      .ata-match-card.ata-row-final > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      .ata-match-card.ata-row-final:hover {
+        border-color: rgba(255, 229, 150, 0.9);
       }
 
       .ata-match-card-head {
@@ -966,6 +1027,21 @@
         letter-spacing: 0.01em;
       }
 
+      .ata-match-final-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 224, 140, 0.85);
+        background: rgba(98, 74, 18, 0.88);
+        color: #fff1c5;
+        padding: 1px 8px;
+        font-size: 11px;
+        line-height: 1.2;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+        text-shadow: 0 1px 0 rgba(63, 40, 8, 0.52);
+      }
+
       .ata-next-hint {
         margin: 8px 0 2px 0;
         color: rgba(235, 239, 255, 0.82);
@@ -994,6 +1070,16 @@
 
       .ata-pairing-player.is-winner {
         color: #72e5b0;
+      }
+
+      .ata-pairing-player.is-champion {
+        color: #ffefb9;
+        border: 1px solid rgba(255, 224, 140, 0.76);
+        background: rgba(98, 74, 18, 0.62);
+        border-radius: 999px;
+        padding: 1px 8px;
+        text-shadow: 0 1px 0 rgba(57, 35, 8, 0.58);
+        box-shadow: 0 0 0 1px rgba(255, 224, 140, 0.18);
       }
 
       .ata-pairing-player.is-loser {
@@ -1031,6 +1117,13 @@
         border-color: rgba(255, 211, 79, 0.55);
         background: rgba(255, 211, 79, 0.16);
         color: #ffd34f;
+      }
+
+      .ata-match-advance-pill.ata-match-advance-final {
+        border-color: rgba(255, 224, 140, 0.82);
+        background: rgba(98, 74, 18, 0.86);
+        color: #fff1c5;
+        box-shadow: 0 0 0 1px rgba(255, 224, 140, 0.28) inset;
       }
 
       .ata-score-grid {
@@ -1122,6 +1215,13 @@
 
       .ata-bracket-fallback[data-visible="1"] {
         display: block;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .ata-match-card.ata-row-final,
+        .ata-match-card.ata-row-final::before {
+          animation: none;
+        }
       }
 
       .ata-bracket-grid {

@@ -101,45 +101,38 @@
 
     @keyframes ataFinalPulse {
       0%, 100% {
-        box-shadow: 0 0 0 1px rgba(255, 211, 79, 0.34), 0 8px 20px rgba(30, 21, 6, 0.3);
+        box-shadow: 0 0 0 1px rgba(255, 224, 140, 0.42), 0 8px 20px rgba(32, 22, 8, 0.3);
       }
       50% {
-        box-shadow: 0 0 0 1px rgba(255, 211, 79, 0.56), 0 12px 24px rgba(60, 38, 8, 0.46);
+        box-shadow: 0 0 0 1px rgba(255, 224, 140, 0.68), 0 12px 26px rgba(60, 38, 8, 0.46);
       }
     }
 
-    @keyframes ataFinalSheen {
-      from {
-        transform: translateX(-130%);
-      }
+    @keyframes ataFinalBorderOrbit {
       to {
-        transform: translateX(130%);
+        transform: rotate(1turn);
       }
     }
 
     #ata-brackets-viewer .round.ata-final-round {
       position: relative;
-      border-radius: 14px;
-      padding: 6px;
-      background: linear-gradient(180deg, rgba(255, 211, 79, 0.14), rgba(255, 211, 79, 0.03) 42%, rgba(255, 255, 255, 0.01));
-      box-shadow: inset 0 0 0 1px rgba(255, 224, 140, 0.24);
     }
 
     #ata-brackets-viewer .round.ata-final-round h3 {
-      background: linear-gradient(180deg, rgba(255, 211, 79, 0.24), rgba(255, 211, 79, 0.08));
-      border-color: rgba(255, 224, 140, 0.75);
+      background: linear-gradient(180deg, rgba(255, 211, 79, 0.28), rgba(255, 211, 79, 0.08));
+      border-color: rgba(255, 224, 140, 0.84);
       color: #fff4cb;
       text-shadow: 0 1px 0 rgba(58, 36, 8, 0.45);
-      box-shadow: 0 0 0 1px rgba(255, 211, 79, 0.33), 0 8px 18px rgba(47, 31, 8, 0.28);
+      box-shadow: 0 0 0 1px rgba(255, 211, 79, 0.36), 0 8px 18px rgba(47, 31, 8, 0.28);
       position: relative;
-      overflow: hidden;
+      padding-right: 104px;
     }
 
     #ata-brackets-viewer .round.ata-final-round h3::after {
-      content: "🏆 Titelduell";
+      content: "🏆 Finale";
       position: absolute;
       right: 8px;
-      top: -10px;
+      top: 6px;
       border-radius: 999px;
       font-size: 0.65em;
       font-weight: 700;
@@ -149,6 +142,7 @@
       border: 1px solid rgba(255, 224, 140, 0.82);
       padding: 2px 7px;
       line-height: 1.2;
+      text-transform: uppercase;
     }
 
     #ata-brackets-viewer .match {
@@ -159,25 +153,31 @@
       margin: 16px 0;
     }
 
-    #ata-brackets-viewer .round.ata-final-round .match .opponents {
+    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .opponents {
       position: relative;
       overflow: hidden;
-      border-color: rgba(255, 214, 107, 0.74);
+      border-color: rgba(255, 224, 140, 0.86);
       background:
         radial-gradient(circle at 88% -22%, rgba(255, 228, 146, 0.27), transparent 54%),
         linear-gradient(180deg, rgba(255, 211, 79, 0.15), rgba(59, 84, 136, 0.95));
       animation: ataFinalPulse 2.6s ease-in-out infinite;
     }
 
-    #ata-brackets-viewer .round.ata-final-round .match .opponents::before {
+    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .opponents::before {
       content: "";
       position: absolute;
-      inset: 0;
+      inset: -1px;
       border-radius: inherit;
+      padding: 2px;
       pointer-events: none;
-      background: linear-gradient(120deg, transparent 12%, rgba(255, 255, 255, 0.22) 46%, transparent 80%);
-      transform: translateX(-130%);
-      animation: ataFinalSheen 3.8s linear infinite;
+      background: conic-gradient(from 0deg, rgba(255, 244, 202, 0) 0deg, rgba(255, 244, 202, 0) 274deg, rgba(255, 244, 202, 0.92) 334deg, rgba(255, 244, 202, 0) 360deg);
+      -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      transform-origin: center center;
+      animation: ataFinalBorderOrbit 2s linear infinite;
     }
 
     #ata-brackets-viewer .match[data-match-status="4"] .opponents {
@@ -217,7 +217,7 @@
       border-color: rgba(255, 224, 140, 0.72);
     }
 
-    #ata-brackets-viewer .round.ata-final-round .match[data-match-status="4"] .opponents {
+    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match[data-match-status="4"] .opponents {
       border-color: rgba(255, 224, 140, 0.92);
       box-shadow: 0 0 0 1px rgba(255, 224, 140, 0.52), 0 10px 22px rgba(50, 31, 8, 0.44);
       background:
@@ -225,18 +225,39 @@
         linear-gradient(180deg, rgba(255, 211, 79, 0.25), rgba(90, 210, 153, 0.2), rgba(59, 84, 136, 0.96));
     }
 
-    #ata-brackets-viewer .round.ata-final-round .match[data-match-status="4"] .opponents::after {
-      content: "Sieger steht fest";
+    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match[data-match-status="4"] .opponents::after {
+      content: "Champion";
       color: #fff3c7;
       background: rgba(98, 74, 18, 0.96);
       border-color: rgba(255, 224, 140, 0.8);
     }
 
-    #ata-brackets-viewer .round.ata-final-round .match[data-match-status="4"].ata-bye .opponents::after {
+    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match[data-match-status="4"].ata-bye .opponents::after {
       content: "Freilos";
       color: #ffe39a;
       background: rgba(89, 68, 16, 0.95);
       border-color: rgba(255, 224, 140, 0.72);
+    }
+
+    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-winner {
+      background: rgba(98, 74, 18, 0.45);
+      border-radius: 8px;
+      box-shadow: inset 0 0 0 1px rgba(255, 224, 140, 0.48);
+    }
+
+    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-winner .name {
+      color: #ffefb9;
+      text-shadow: 0 1px 0 rgba(57, 35, 8, 0.56);
+      font-weight: 800;
+    }
+
+    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-winner .name::after {
+      content: "  🏆";
+      font-size: 0.88em;
+    }
+
+    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-loser .name {
+      color: rgba(229, 237, 255, 0.72);
     }
 
     #ata-brackets-viewer .match[data-match-status="4"] .participant .name:not(.ata-open-slot) {
@@ -281,8 +302,8 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
-      #ata-brackets-viewer .round.ata-final-round .match .opponents,
-      #ata-brackets-viewer .round.ata-final-round .match .opponents::before {
+      #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .opponents,
+      #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .opponents::before {
         animation: none;
       }
     }
@@ -354,12 +375,21 @@
         });
       }
 
-      function decorateFinalRound() {
+      function decorateFinalRound(payload) {
         if (!viewerEl) {
           return;
         }
 
         var roundNodes = viewerEl.querySelectorAll(".round");
+        var matchNodes = viewerEl.querySelectorAll(".match");
+        var participantNodes = viewerEl.querySelectorAll(".participant");
+        matchNodes.forEach(function (node) {
+          node.classList.remove("ata-final-match");
+        });
+        participantNodes.forEach(function (node) {
+          node.classList.remove("ata-final-winner");
+          node.classList.remove("ata-final-loser");
+        });
         if (!roundNodes || !roundNodes.length) {
           return;
         }
@@ -387,6 +417,50 @@
         if (finalRoundNode) {
           finalRoundNode.classList.add("ata-final-round");
         }
+
+        if (!finalRoundNode) {
+          return;
+        }
+
+        var winnerSideByMatchId = {};
+        if (payload && Array.isArray(payload.matches)) {
+          payload.matches.forEach(function (match) {
+            if (!match) {
+              return;
+            }
+            var matchId = String(match.id || "");
+            if (!matchId) {
+              return;
+            }
+            var winnerSide = 0;
+            if (match.opponent1 && String(match.opponent1.result || "").toLowerCase() === "win") {
+              winnerSide = 1;
+            } else if (match.opponent2 && String(match.opponent2.result || "").toLowerCase() === "win") {
+              winnerSide = 2;
+            }
+            winnerSideByMatchId[matchId] = winnerSide;
+          });
+        }
+
+        var finalMatchNodes = finalRoundNode.querySelectorAll(".match");
+        finalMatchNodes.forEach(function (node) {
+          node.classList.add("ata-final-match");
+          var matchId = String(node.getAttribute("data-match-id") || "");
+          var winnerSide = matchId && Object.prototype.hasOwnProperty.call(winnerSideByMatchId, matchId)
+            ? winnerSideByMatchId[matchId]
+            : 0;
+          if (!winnerSide) {
+            return;
+          }
+          var participants = node.querySelectorAll(".participant");
+          participants.forEach(function (participantNode, index) {
+            if (index === winnerSide - 1) {
+              participantNode.classList.add("ata-final-winner");
+            } else if (index === 0 || index === 1) {
+              participantNode.classList.add("ata-final-loser");
+            }
+          });
+        });
       }
 
       function pxToNumber(value) {
@@ -430,7 +504,7 @@
         });
         normalizeOpenSlotLabels();
         decorateCompletedMatchBadges(safePayload);
-        decorateFinalRound();
+        decorateFinalRound(safePayload);
         if (msgEl) {
           msgEl.style.display = "none";
         }

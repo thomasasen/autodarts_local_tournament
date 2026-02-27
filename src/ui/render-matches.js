@@ -108,6 +108,10 @@
     const legsToWin = getLegsToWin(tournament.bestOfLegs);
     const suggestedNextMatch = findSuggestedNextMatch(tournament);
     const suggestedNextMatchId = suggestedNextMatch?.id || "";
+    const koFinalRound = getMatchesByStage(tournament, MATCH_STAGE_KO).reduce((maxRound, koMatch) => {
+      const roundNumber = Number.parseInt(String(koMatch?.round || "0"), 10);
+      return Number.isFinite(roundNumber) && roundNumber > maxRound ? roundNumber : maxRound;
+    }, 0);
 
     const cards = matches.map((match) => {
       const player1 = participantNameById(tournament, match.player1Id);
@@ -123,6 +127,7 @@
       const isBlockedPending = match.status === STATUS_PENDING && !editable;
       const isReadyPending = match.status === STATUS_PENDING && editable;
       const isSuggestedNext = Boolean(suggestedNextMatchId) && match.id === suggestedNextMatchId;
+      const isKoFinal = match.stage === MATCH_STAGE_KO && koFinalRound > 0 && Number(match.round) === koFinalRound;
       const stageLabel = match.stage === MATCH_STAGE_GROUP
         ? `Gruppe ${match.groupId || "?"}`
         : match.stage === MATCH_STAGE_LEAGUE
@@ -156,6 +161,7 @@
         isAutoStarted ? "ata-row-live" : "",
         isReadyPending ? "ata-row-ready" : "",
         isSuggestedNext ? "ata-row-next" : "",
+        isKoFinal ? "ata-row-final" : "",
         isBlockedPending ? "ata-row-blocked" : "",
         !editable ? "ata-row-inactive" : "",
       ].filter(Boolean).join(" ");
@@ -165,11 +171,14 @@
         : (isCompleted ? "ata-match-context-pill ata-match-context-completed" : "ata-match-context-pill ata-match-context-open");
       const contextText = `${stageLabel}, ${matchCellText}, ${statusBadgeText}`;
       const summaryText = isCompleted
-        ? (isByeCompletion ? `Weiter (Bye): ${winner}` : `Sieger: ${winner} (${match.legs.p1}:${match.legs.p2})`)
+        ? (isByeCompletion
+          ? `Weiter (Bye): ${winner}`
+          : (isKoFinal ? `Champion: ${winner} (${match.legs.p1}:${match.legs.p2})` : `Sieger: ${winner} (${match.legs.p1}:${match.legs.p2})`))
         : "";
       const advanceClasses = [
         "ata-match-advance-pill",
         isByeCompletion ? "ata-match-advance-bye" : "",
+        isKoFinal ? "ata-match-advance-final" : "",
       ].filter(Boolean).join(" ");
 
       const buildPairingPlayerHtml = (name, participantId) => {
@@ -181,6 +190,9 @@
         if (isCompleted && match.winnerId) {
           if (participantId === match.winnerId) {
             classes.push("is-winner");
+            if (isKoFinal) {
+              classes.push("is-champion");
+            }
           } else if (participantId === match.player1Id || participantId === match.player2Id) {
             classes.push("is-loser");
           }
@@ -230,6 +242,9 @@
       const nextPillHtml = isSuggestedNext
         ? `<span class="ata-match-next-pill" title="Empfohlene n\u00e4chste Paarung (PDC: Next Match)">N\u00e4chstes Match</span>`
         : "";
+      const finalPillHtml = isKoFinal
+        ? `<span class="ata-match-final-pill" title="Finale">🏆 Finale</span>`
+        : "";
       const statusLineHtml = statusLine
         ? `<div class="ata-match-note">${escapeHtml(statusLine)}</div>`
         : "";
@@ -240,6 +255,7 @@
             <div class="ata-match-title-row">
               <div class="ata-match-pairing">${player1PairingHtml} <span class="ata-vs">vs</span> ${player2PairingHtml}</div>
               <div class="ata-match-meta-inline">
+                ${finalPillHtml}
                 ${nextPillHtml}
                 <span class="${contextPillClass}" title="${escapeHtml(matchCellHelpText)}">${escapeHtml(contextText)}</span>
               </div>
