@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant Loader
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.1.3
+// @version      0.1.4
 // @description  Loads the latest Autodarts Tournament Assistant userscript with cache fallback.
 // @author       Thomas Asen
 // @license      MIT
@@ -29,6 +29,7 @@
 
   const MENU_ITEM_ID = "ata-loader-menu-item";
   const MENU_LABEL = "xLokales Turnier";
+  const MENU_ICON = "\uD83C\uDFC6";
   const TOGGLE_EVENT = "ata:toggle-request";
   const READY_EVENT = "ata:ready";
   const MENU_LABEL_COLLAPSE_WIDTH = 120;
@@ -352,14 +353,14 @@
       const iconContainer = template.querySelector(".chakra-button__icon, [class*='button__icon']");
       if (iconContainer instanceof HTMLElement) {
         const cloned = iconContainer.cloneNode(false);
-        cloned.textContent = "🏆";
+        cloned.textContent = MENU_ICON;
         cloned.setAttribute("aria-hidden", "true");
         return cloned;
       }
     }
 
     const fallback = document.createElement("span");
-    fallback.textContent = "🏆";
+    fallback.textContent = MENU_ICON;
     fallback.style.display = "inline-flex";
     fallback.style.alignItems = "center";
     fallback.style.justifyContent = "center";
@@ -367,6 +368,34 @@
     fallback.style.width = "1.4em";
     fallback.style.height = "1.4em";
     return fallback;
+  }
+
+  function buildMenuLabelElement(template) {
+    const label = document.createElement("span");
+    if (template instanceof HTMLElement) {
+      const templateLabel = template.querySelector(".chakra-button__label, [class*='button__label']");
+      if (templateLabel instanceof HTMLElement && templateLabel.className) {
+        label.className = templateLabel.className;
+      }
+    }
+    label.classList.add("ata-loader-menu-label");
+    label.textContent = MENU_LABEL;
+    return label;
+  }
+
+  function buildMenuButtonElement(template) {
+    const button = document.createElement("button");
+    if (template instanceof HTMLElement) {
+      if (template.className) {
+        button.className = template.className;
+      }
+      const styleAttr = template.getAttribute("style");
+      if (styleAttr) {
+        button.setAttribute("style", styleAttr);
+      }
+    }
+    button.setAttribute("type", "button");
+    return button;
   }
 
   function queueToggleWhenReady() {
@@ -495,14 +524,17 @@
       || null;
 
     let item = document.getElementById(MENU_ITEM_ID);
+    if (item && item.tagName.toLowerCase() !== "button") {
+      item.remove();
+      item = null;
+    }
+
     if (!item) {
       const template = insertionAnchor || sidebarEntries[0] || sidebar.lastElementChild;
-      item = template ? template.cloneNode(true) : document.createElement("button");
+      item = buildMenuButtonElement(template);
       item.id = MENU_ITEM_ID;
       const icon = buildMenuIconElement(template);
-      const label = document.createElement("span");
-      label.className = "ata-loader-menu-label";
-      label.textContent = MENU_LABEL;
+      const label = buildMenuLabelElement(template);
       item.replaceChildren(icon, label);
 
       item.setAttribute("role", "button");
@@ -510,27 +542,30 @@
       item.setAttribute("aria-label", MENU_LABEL);
       item.setAttribute("title", MENU_LABEL);
       item.style.cursor = "pointer";
-
-      if (item.tagName.toLowerCase() === "a") {
-        item.removeAttribute("href");
+    } else {
+      const label = item.querySelector(".ata-loader-menu-label");
+      if (label) {
+        label.textContent = MENU_LABEL;
       }
-      if (item.tagName.toLowerCase() === "button") {
-        item.setAttribute("type", "button");
-      }
+      item.setAttribute("aria-label", MENU_LABEL);
+      item.setAttribute("title", MENU_LABEL);
+      item.style.cursor = "pointer";
     }
 
     if (item.dataset.ataBound !== "1") {
       item.dataset.ataBound = "1";
       item.addEventListener("click", (event) => {
         event.preventDefault();
+        event.stopPropagation();
         triggerTournamentDrawer();
-      });
+      }, { capture: true });
       item.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
+          event.stopPropagation();
           triggerTournamentDrawer();
         }
-      });
+      }, { capture: true });
     }
 
     if (insertionAnchor && insertionAnchor.isConnected) {
