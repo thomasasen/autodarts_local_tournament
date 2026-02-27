@@ -1226,6 +1226,41 @@
         gap: 4px;
       }
 
+      .ata-bracket-player {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        color: #edf3ff;
+        font-weight: 700;
+      }
+
+      .ata-bracket-player.is-winner {
+        color: #72e5b0;
+      }
+
+      .ata-bracket-player.is-loser {
+        color: rgba(229, 237, 255, 0.72);
+      }
+
+      .ata-bracket-player.ata-open-slot {
+        color: #ffd34f;
+      }
+
+      .ata-bracket-score {
+        min-width: 18px;
+        text-align: right;
+        font-weight: 800;
+      }
+
+      .ata-bracket-score.is-win {
+        color: #72e5b0;
+      }
+
+      .ata-bracket-score.is-loss {
+        color: #ff9a9a;
+      }
+
       .ata-bracket-round:last-child .ata-bracket-match {
         border-color: rgba(255, 224, 140, 0.62);
         background:

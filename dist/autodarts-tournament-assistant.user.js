@@ -1281,6 +1281,41 @@
         gap: 4px;
       }
 
+      .ata-bracket-player {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        color: #edf3ff;
+        font-weight: 700;
+      }
+
+      .ata-bracket-player.is-winner {
+        color: #72e5b0;
+      }
+
+      .ata-bracket-player.is-loser {
+        color: rgba(229, 237, 255, 0.72);
+      }
+
+      .ata-bracket-player.ata-open-slot {
+        color: #ffd34f;
+      }
+
+      .ata-bracket-score {
+        min-width: 18px;
+        text-align: right;
+        font-weight: 800;
+      }
+
+      .ata-bracket-score.is-win {
+        color: #72e5b0;
+      }
+
+      .ata-bracket-score.is-loss {
+        color: #ff9a9a;
+      }
+
       .ata-bracket-round:last-child .ata-bracket-match {
         border-color: rgba(255, 224, 140, 0.62);
         background:
@@ -6391,19 +6426,43 @@
           .map((match) => {
             const isCompleted = isCompletedMatchResultValid(tournament, match);
             const isBye = isCompleted && isByeMatchResult(match);
+            const player1Name = participantNameById(tournament, match.player1Id);
+            const player2Name = participantNameById(tournament, match.player2Id);
+            const hasLegScores = isCompleted && Number.isFinite(match?.legs?.p1) && Number.isFinite(match?.legs?.p2);
+            const winnerId = isCompleted ? normalizeText(match.winnerId) : "";
+            const player1IsWinner = Boolean(winnerId) && normalizeText(match.player1Id) === winnerId;
+            const player2IsWinner = Boolean(winnerId) && normalizeText(match.player2Id) === winnerId;
+            const player1Classes = [
+              "ata-bracket-player",
+              player1Name === "\u2205 offen" ? "ata-open-slot" : "",
+              player1IsWinner ? "is-winner" : "",
+              (isCompleted && !isBye && !player1IsWinner && normalizeText(match.player1Id)) ? "is-loser" : "",
+            ].filter(Boolean).join(" ");
+            const player2Classes = [
+              "ata-bracket-player",
+              player2Name === "\u2205 offen" ? "ata-open-slot" : "",
+              player2IsWinner ? "is-winner" : "",
+              (isCompleted && !isBye && !player2IsWinner && normalizeText(match.player2Id)) ? "is-loser" : "",
+            ].filter(Boolean).join(" ");
             const statusBadgeClass = isBye
               ? "ata-match-status ata-match-status-bye"
               : (isCompleted ? "ata-match-status ata-match-status-completed" : "ata-match-status ata-match-status-open");
             const statusBadgeText = isBye ? "Freilos (Bye)" : (isCompleted ? "Abgeschlossen" : "Offen");
             const statusText = !isCompleted
               ? "Noch nicht abgeschlossen."
-              : isBye
+                : isBye
                 ? `Freilos (Bye): ${escapeHtml(participantNameById(tournament, match.winnerId))}`
-                : `Gewinner: ${escapeHtml(participantNameById(tournament, match.winnerId))}`;
+                : `Gewinner: ${escapeHtml(participantNameById(tournament, match.winnerId))} (${match.legs.p1}:${match.legs.p2})`;
             return `
               <div class="ata-bracket-match">
-                <div>${escapeHtml(participantNameById(tournament, match.player1Id))}</div>
-                <div>${escapeHtml(participantNameById(tournament, match.player2Id))}</div>
+                <div class="${player1Classes}">
+                  <span>${escapeHtml(player1Name)}</span>
+                  ${hasLegScores ? `<span class="ata-bracket-score ${player1IsWinner ? "is-win" : (isBye ? "" : "is-loss")}">${match.legs.p1}</span>` : ""}
+                </div>
+                <div class="${player2Classes}">
+                  <span>${escapeHtml(player2Name)}</span>
+                  ${hasLegScores ? `<span class="ata-bracket-score ${player2IsWinner ? "is-win" : (isBye ? "" : "is-loss")}">${match.legs.p2}</span>` : ""}
+                </div>
                 <div><span class="${statusBadgeClass}">${statusBadgeText}</span></div>
                 <div class="ata-small">${statusText}</div>
               </div>
@@ -7589,7 +7648,7 @@
 
     #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .opponents {
       position: relative;
-      overflow: hidden;
+      overflow: visible;
       border-color: rgba(255, 224, 140, 0.86);
       background:
         radial-gradient(circle at 88% -22%, rgba(255, 228, 146, 0.27), transparent 54%),
@@ -7663,14 +7722,15 @@
     }
 
     #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-winner .name {
-      color: #ffefb9;
-      text-shadow: 0 1px 0 rgba(57, 35, 8, 0.56);
+      color: #72e5b0;
+      text-shadow: 0 1px 0 rgba(8, 33, 25, 0.58);
       font-weight: 800;
     }
 
     #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-winner .name::after {
       content: "  🏆";
       font-size: 0.88em;
+      color: #fff1c5;
     }
 
     #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-loser .name {
@@ -7679,6 +7739,15 @@
 
     #ata-brackets-viewer .match[data-match-status="4"] .participant .name:not(.ata-open-slot) {
       font-weight: 700;
+    }
+
+    #ata-brackets-viewer .match[data-match-status="4"] .participant.win .name:not(.ata-open-slot) {
+      color: #72e5b0;
+      text-shadow: 0 1px 0 rgba(8, 33, 25, 0.5);
+    }
+
+    #ata-brackets-viewer .match[data-match-status="4"] .participant.loss .name:not(.ata-open-slot) {
+      color: rgba(229, 237, 255, 0.72);
     }
 
     #ata-brackets-viewer .participant {

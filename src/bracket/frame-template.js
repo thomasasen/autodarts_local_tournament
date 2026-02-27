@@ -140,7 +140,7 @@
 
     #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .opponents {
       position: relative;
-      overflow: hidden;
+      overflow: visible;
       border-color: rgba(255, 224, 140, 0.86);
       background:
         radial-gradient(circle at 88% -22%, rgba(255, 228, 146, 0.27), transparent 54%),
@@ -214,14 +214,15 @@
     }
 
     #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-winner .name {
-      color: #ffefb9;
-      text-shadow: 0 1px 0 rgba(57, 35, 8, 0.56);
+      color: #72e5b0;
+      text-shadow: 0 1px 0 rgba(8, 33, 25, 0.58);
       font-weight: 800;
     }
 
     #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-winner .name::after {
       content: "  🏆";
       font-size: 0.88em;
+      color: #fff1c5;
     }
 
     #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-loser .name {
@@ -230,6 +231,15 @@
 
     #ata-brackets-viewer .match[data-match-status="4"] .participant .name:not(.ata-open-slot) {
       font-weight: 700;
+    }
+
+    #ata-brackets-viewer .match[data-match-status="4"] .participant.win .name:not(.ata-open-slot) {
+      color: #72e5b0;
+      text-shadow: 0 1px 0 rgba(8, 33, 25, 0.5);
+    }
+
+    #ata-brackets-viewer .match[data-match-status="4"] .participant.loss .name:not(.ata-open-slot) {
+      color: rgba(229, 237, 255, 0.72);
     }
 
     #ata-brackets-viewer .participant {

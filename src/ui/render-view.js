@@ -101,19 +101,43 @@
           .map((match) => {
             const isCompleted = isCompletedMatchResultValid(tournament, match);
             const isBye = isCompleted && isByeMatchResult(match);
+            const player1Name = participantNameById(tournament, match.player1Id);
+            const player2Name = participantNameById(tournament, match.player2Id);
+            const hasLegScores = isCompleted && Number.isFinite(match?.legs?.p1) && Number.isFinite(match?.legs?.p2);
+            const winnerId = isCompleted ? normalizeText(match.winnerId) : "";
+            const player1IsWinner = Boolean(winnerId) && normalizeText(match.player1Id) === winnerId;
+            const player2IsWinner = Boolean(winnerId) && normalizeText(match.player2Id) === winnerId;
+            const player1Classes = [
+              "ata-bracket-player",
+              player1Name === "\u2205 offen" ? "ata-open-slot" : "",
+              player1IsWinner ? "is-winner" : "",
+              (isCompleted && !isBye && !player1IsWinner && normalizeText(match.player1Id)) ? "is-loser" : "",
+            ].filter(Boolean).join(" ");
+            const player2Classes = [
+              "ata-bracket-player",
+              player2Name === "\u2205 offen" ? "ata-open-slot" : "",
+              player2IsWinner ? "is-winner" : "",
+              (isCompleted && !isBye && !player2IsWinner && normalizeText(match.player2Id)) ? "is-loser" : "",
+            ].filter(Boolean).join(" ");
             const statusBadgeClass = isBye
               ? "ata-match-status ata-match-status-bye"
               : (isCompleted ? "ata-match-status ata-match-status-completed" : "ata-match-status ata-match-status-open");
             const statusBadgeText = isBye ? "Freilos (Bye)" : (isCompleted ? "Abgeschlossen" : "Offen");
             const statusText = !isCompleted
               ? "Noch nicht abgeschlossen."
-              : isBye
+                : isBye
                 ? `Freilos (Bye): ${escapeHtml(participantNameById(tournament, match.winnerId))}`
-                : `Gewinner: ${escapeHtml(participantNameById(tournament, match.winnerId))}`;
+                : `Gewinner: ${escapeHtml(participantNameById(tournament, match.winnerId))} (${match.legs.p1}:${match.legs.p2})`;
             return `
               <div class="ata-bracket-match">
-                <div>${escapeHtml(participantNameById(tournament, match.player1Id))}</div>
-                <div>${escapeHtml(participantNameById(tournament, match.player2Id))}</div>
+                <div class="${player1Classes}">
+                  <span>${escapeHtml(player1Name)}</span>
+                  ${hasLegScores ? `<span class="ata-bracket-score ${player1IsWinner ? "is-win" : (isBye ? "" : "is-loss")}">${match.legs.p1}</span>` : ""}
+                </div>
+                <div class="${player2Classes}">
+                  <span>${escapeHtml(player2Name)}</span>
+                  ${hasLegScores ? `<span class="ata-bracket-score ${player2IsWinner ? "is-win" : (isBye ? "" : "is-loss")}">${match.legs.p2}</span>` : ""}
+                </div>
                 <div><span class="${statusBadgeClass}">${statusBadgeText}</span></div>
                 <div class="ata-small">${statusText}</div>
               </div>
