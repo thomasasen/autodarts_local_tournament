@@ -880,21 +880,6 @@
         font-weight: 700;
       }
 
-      @keyframes ataFinalCardPulse {
-        0%, 100% {
-          box-shadow: 0 0 0 1px rgba(255, 224, 140, 0.38), 0 8px 18px rgba(46, 30, 8, 0.24);
-        }
-        50% {
-          box-shadow: 0 0 0 1px rgba(255, 224, 140, 0.62), 0 12px 24px rgba(61, 37, 8, 0.38);
-        }
-      }
-
-      @keyframes ataFinalBorderOrbit {
-        to {
-          transform: rotate(1turn);
-        }
-      }
-
       .ata-match-card {
         border: 1px solid rgba(255, 255, 255, 0.2);
         border-radius: var(--ata-radius-md);
@@ -951,28 +936,12 @@
       .ata-match-card.ata-row-final {
         position: relative;
         isolation: isolate;
+        overflow: hidden;
         border-color: rgba(255, 224, 140, 0.72);
         background:
           radial-gradient(circle at 88% -66%, rgba(255, 231, 158, 0.26), transparent 52%),
           linear-gradient(180deg, rgba(255, 211, 79, 0.12), rgba(255, 255, 255, 0.06));
-        animation: ataFinalCardPulse 2.6s ease-in-out infinite;
-      }
-
-      .ata-match-card.ata-row-final::before {
-        content: "";
-        position: absolute;
-        inset: -1px;
-        border-radius: inherit;
-        padding: 2px;
-        pointer-events: none;
-        background: conic-gradient(from 0deg, rgba(255, 244, 202, 0) 0deg, rgba(255, 244, 202, 0) 270deg, rgba(255, 244, 202, 0.92) 330deg, rgba(255, 244, 202, 0) 360deg);
-        -webkit-mask:
-          linear-gradient(#000 0 0) content-box,
-          linear-gradient(#000 0 0);
-        -webkit-mask-composite: xor;
-        mask-composite: exclude;
-        transform-origin: center center;
-        animation: ataFinalBorderOrbit 2s linear infinite;
+        box-shadow: 0 0 0 1px rgba(255, 224, 140, 0.38), 0 8px 18px rgba(46, 30, 8, 0.24);
       }
 
       .ata-match-card.ata-row-final::after {
@@ -1270,13 +1239,6 @@
 
       .ata-bracket-fallback[data-visible="1"] {
         display: block;
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        .ata-match-card.ata-row-final,
-        .ata-match-card.ata-row-final::before {
-          animation: none;
-        }
       }
 
       .ata-bracket-grid {
@@ -7586,21 +7548,6 @@
       padding: 9px 10px;
     }
 
-    @keyframes ataFinalPulse {
-      0%, 100% {
-        box-shadow: 0 0 0 1px rgba(255, 224, 140, 0.42), 0 8px 20px rgba(32, 22, 8, 0.3);
-      }
-      50% {
-        box-shadow: 0 0 0 1px rgba(255, 224, 140, 0.68), 0 12px 26px rgba(60, 38, 8, 0.46);
-      }
-    }
-
-    @keyframes ataFinalBorderOrbit {
-      to {
-        transform: rotate(1turn);
-      }
-    }
-
     #ata-brackets-viewer .round.ata-final-round {
       position: relative;
     }
@@ -7647,24 +7594,7 @@
       background:
         radial-gradient(circle at 88% -22%, rgba(255, 228, 146, 0.27), transparent 54%),
         linear-gradient(180deg, rgba(255, 211, 79, 0.15), rgba(59, 84, 136, 0.95));
-      animation: ataFinalPulse 2.6s ease-in-out infinite;
-    }
-
-    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .opponents::before {
-      content: "";
-      position: absolute;
-      inset: -1px;
-      border-radius: inherit;
-      padding: 2px;
-      pointer-events: none;
-      background: conic-gradient(from 0deg, rgba(255, 244, 202, 0) 0deg, rgba(255, 244, 202, 0) 274deg, rgba(255, 244, 202, 0.92) 334deg, rgba(255, 244, 202, 0) 360deg);
-      -webkit-mask:
-        linear-gradient(#000 0 0) content-box,
-        linear-gradient(#000 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-      transform-origin: center center;
-      animation: ataFinalBorderOrbit 2s linear infinite;
+      box-shadow: 0 0 0 1px rgba(255, 224, 140, 0.38), 0 8px 20px rgba(35, 22, 8, 0.3);
     }
 
     #ata-brackets-viewer .match[data-match-status="4"] .opponents {
@@ -7788,12 +7718,6 @@
       border-radius: 999px;
     }
 
-    @media (prefers-reduced-motion: reduce) {
-      #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .opponents,
-      #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .opponents::before {
-        animation: none;
-      }
-    }
   </style>
 </head>
 <body>
