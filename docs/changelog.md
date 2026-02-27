@@ -108,7 +108,8 @@
   - bei `Bull-off = Off` wird `Bull mode` read-only deaktiviert
   - Persistenz bleibt stabil durch Hidden-Fallback für deaktivierte Felder.
 - Match-Create-Payload verfeinert:
-  - wenn `Bull-off = Off`, wird `bullMode` nicht mehr in den API-Settings gesendet.
+  - `bullOffMode` wird API-kompatibel übertragen (`bullOffMode` + `bullOff`).
+  - `bullMode` bleibt gesetzt (mit Fallback), damit Matchstart nicht an Backend-Validierungen scheitert.
 - Legacy-Startscores (`101`, `201`) aus der X01-Auswahl und Sanitization entfernt.
 
 ## 0.2.15

@@ -374,11 +374,11 @@
       inMode: x01Settings.inMode,
       outMode: x01Settings.outMode,
       maxRounds: x01Settings.maxRounds,
+      // Compatibility: keep both keys because API variants may expect either.
       bullOffMode,
+      bullOff: bullOffMode,
+      bullMode: sanitizeX01BullMode(x01Settings.bullMode),
     };
-    if (bullOffMode !== "Off") {
-      settings.bullMode = sanitizeX01BullMode(x01Settings.bullMode);
-    }
     return {
       variant: x01Settings.variant,
       isPrivate: true,
@@ -901,7 +901,36 @@
     renderShell();
 
     try {
-      const lobby = await createLobby(buildLobbyCreatePayload(tournament), token);
+      let lobbyPayload = buildLobbyCreatePayload(tournament);
+      let lobby = null;
+      try {
+        logDebug("api", "Creating lobby with tournament payload.", {
+          matchId: match.id,
+          legs: lobbyPayload.legs,
+          settings: lobbyPayload.settings,
+        });
+        lobby = await createLobby(lobbyPayload, token);
+      } catch (createError) {
+        const errorStatus = Number(createError?.status || 0);
+        const errorText = normalizeLookup(createError?.message || apiBodyToErrorText(createError?.body) || "");
+        const shouldRetryWithBullFallback = errorStatus === 400 && errorText.includes("bull mode");
+        if (!shouldRetryWithBullFallback) {
+          throw createError;
+        }
+
+        // Fallback for backend validation variants that reject selected bullMode values.
+        lobbyPayload = cloneSerializable(lobbyPayload) || buildLobbyCreatePayload(tournament);
+        if (!lobbyPayload.settings || typeof lobbyPayload.settings !== "object") {
+          lobbyPayload.settings = {};
+        }
+        lobbyPayload.settings.bullMode = "25/50";
+        logWarn("api", "Retrying lobby create with bullMode fallback 25/50.", {
+          matchId: match.id,
+          legs: lobbyPayload.legs,
+          settings: lobbyPayload.settings,
+        });
+        lobby = await createLobby(lobbyPayload, token);
+      }
       createdLobbyId = normalizeText(lobby?.id || lobby?.uuid || "");
       if (!createdLobbyId) {
         throw createApiError(0, "Lobby konnte nicht erstellt werden (keine Lobby-ID).", lobby);

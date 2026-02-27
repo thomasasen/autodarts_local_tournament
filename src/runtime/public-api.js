@@ -134,6 +134,7 @@
           && payload?.settings?.outMode === "Master"
           && payload?.settings?.maxRounds === 20
           && payload?.settings?.bullOffMode === "Official"
+          && payload?.settings?.bullOff === "Official"
           && payload?.settings?.bullMode === "50/50",
         `legs=${payload?.legs}, settings=${JSON.stringify(payload?.settings || {})}`,
       );
@@ -160,12 +161,14 @@
       const payload = buildLobbyCreatePayload(tournament);
       const hasBullMode = Object.prototype.hasOwnProperty.call(payload?.settings || {}, "bullMode");
       record(
-        "Bull-off Off: Matchstart-Payload sendet kein bullMode",
-        payload?.settings?.bullOffMode === "Off" && !hasBullMode,
-        `bullOff=${payload?.settings?.bullOffMode || "-"}, hasBullMode=${hasBullMode}`,
+        "Bull-off Off: Matchstart-Payload führt beide Bull-off Keys + bullMode",
+        payload?.settings?.bullOffMode === "Off"
+          && payload?.settings?.bullOff === "Off"
+          && hasBullMode,
+        `bullOffMode=${payload?.settings?.bullOffMode || "-"}, bullOff=${payload?.settings?.bullOff || "-"}, hasBullMode=${hasBullMode}`,
       );
     } catch (error) {
-      record("Bull-off Off: Matchstart-Payload sendet kein bullMode", false, String(error?.message || error));
+      record("Bull-off Off: Matchstart-Payload führt beide Bull-off Keys + bullMode", false, String(error?.message || error));
     }
 
     try {
