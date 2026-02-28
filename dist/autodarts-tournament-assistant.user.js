@@ -1625,57 +1625,6 @@
   }
 
 
-  function renderInfoLinks(links) {
-    if (!Array.isArray(links) || !links.length) {
-      return "";
-    }
-
-    const linksHtml = links
-      .map((entry) => {
-        const href = String(entry?.href || "").trim();
-        if (!href) {
-          return "";
-        }
-        const kind = normalizeToken(entry?.kind || "tech");
-        const isRuleLink = kind === "rule" || kind === "rules" || kind === "regel";
-        const symbol = isRuleLink ? "§" : "ⓘ";
-        const className = isRuleLink
-          ? "ata-help-link ata-help-link-rule"
-          : "ata-help-link ata-help-link-tech";
-        const label = normalizeText(entry?.label) || "Mehr Informationen";
-        const title = normalizeText(entry?.title) || label;
-        return `
-          <a
-            class="${className}"
-            href="${escapeHtml(href)}"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="${escapeHtml(label)}"
-            title="${escapeHtml(title)}"
-          >${symbol}</a>
-        `;
-      })
-      .filter(Boolean)
-      .join("");
-
-    if (!linksHtml) {
-      return "";
-    }
-
-    return `<span class="ata-help-links">${linksHtml}</span>`;
-  }
-
-
-  function renderSectionHeading(title, links = []) {
-    return `
-      <div class="ata-heading-row">
-        <h3>${escapeHtml(title)}</h3>
-        ${renderInfoLinks(links)}
-      </div>
-    `;
-  }
-
-
   function toPromise(value) {
     return value && typeof value.then === "function" ? value : Promise.resolve(value);
   }
@@ -1839,64 +1788,6 @@
       localStorage.setItem(key, JSON.stringify(value));
     } catch (error) {
       logWarn("storage", `localStorage write failed for ${key}.`, error);
-    }
-  }
-
-
-  async function loadPersistedStore() {
-    const raw = await readStoreValue(STORAGE_KEY, createDefaultStore());
-    state.store = migrateStorage(raw);
-    state.activeTab = state.store.ui.activeTab;
-    const needsSchemaWriteback = Number(raw?.schemaVersion || 0) !== STORAGE_SCHEMA_VERSION;
-    if (state.store.tournament) {
-      const changed = refreshDerivedMatches(state.store.tournament);
-      if (changed || needsSchemaWriteback) {
-        state.store.tournament.updatedAt = nowIso();
-        schedulePersist();
-      }
-    } else if (needsSchemaWriteback) {
-      schedulePersist();
-    }
-    logDebug("storage", "Store loaded", state.store);
-  }
-
-
-  function schedulePersist() {
-    if (state.saveTimer) {
-      clearTimeout(state.saveTimer);
-      state.saveTimer = null;
-    }
-
-    state.saveTimer = window.setTimeout(() => {
-      state.saveTimer = null;
-      persistStore().catch((error) => {
-        logError("storage", "Persisting store failed.", error);
-      });
-    }, SAVE_DEBOUNCE_MS);
-  }
-
-
-  async function persistStore() {
-    state.store.schemaVersion = STORAGE_SCHEMA_VERSION;
-    state.store.ui.activeTab = state.activeTab;
-    await writeStoreValue(STORAGE_KEY, state.store);
-  }
-
-
-  function setNotice(type, message, timeoutMs = 4500) {
-    state.notice = { type, message: String(message || "") };
-    renderShell();
-
-    if (state.noticeTimer) {
-      clearTimeout(state.noticeTimer);
-      state.noticeTimer = null;
-    }
-
-    if (timeoutMs > 0 && state.notice.message) {
-      state.noticeTimer = window.setTimeout(() => {
-        state.notice = { type: "info", message: "" };
-        renderShell();
-      }, timeoutMs);
     }
   }
 
@@ -2674,8 +2565,37 @@
     }
   }
 
-  function setTournamentTieBreakProfile(profile) {
-    const tournament = state.store.tournament;
+
+  function clearMatchResult(match) {
+    match.status = STATUS_PENDING;
+    match.winnerId = null;
+    match.source = null;
+    match.legs = { p1: 0, p2: 0 };
+    match.stats = normalizeMatchStats(null);
+    setMatchResultKind(match, null);
+    resetMatchAutomationMeta(match);
+    match.updatedAt = nowIso();
+  }
+
+
+  function assignPlayerSlot(match, slot, participantId) {
+    const field = slot === 1 ? "player1Id" : "player2Id";
+    const currentValue = match[field] || null;
+    const nextValue = participantId || null;
+    if (currentValue === nextValue) {
+      return false;
+    }
+    match[field] = nextValue;
+    const hasStoredResult = match.status === STATUS_COMPLETED
+      || Boolean(match.winnerId || match.source || match.legs?.p1 || match.legs?.p2);
+    if (hasStoredResult) {
+      clearMatchResult(match);
+    }
+    match.updatedAt = nowIso();
+    return true;
+  }
+
+  function applyTournamentTieBreakProfile(tournament, profile) {
     if (!tournament) {
       return { ok: false, message: "Kein aktives Turnier vorhanden." };
     }
@@ -2691,16 +2611,11 @@
       ...(tournament.rules || {}),
       tieBreakProfile: nextProfile,
     });
-    refreshDerivedMatches(tournament);
-    tournament.updatedAt = nowIso();
-    schedulePersist();
-    renderShell();
     return { ok: true, changed: true };
   }
 
 
-  function setTournamentKoDrawLocked(drawLocked) {
-    const tournament = state.store.tournament;
+  function applyTournamentKoDrawLocked(tournament, drawLocked) {
     if (!tournament) {
       return { ok: false, message: "Kein aktives Turnier vorhanden." };
     }
@@ -2716,10 +2631,6 @@
       ...(tournament.ko || {}),
       drawLocked: nextDrawLocked,
     }, normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED), nextDrawLocked);
-    refreshDerivedMatches(tournament);
-    tournament.updatedAt = nowIso();
-    schedulePersist();
-    renderShell();
     return { ok: true, changed: true };
   }
 
@@ -3314,7 +3225,6 @@
       updatedAt: nowIso(),
     };
 
-    refreshDerivedMatches(tournament);
     return tournament;
   }
 
@@ -3565,36 +3475,6 @@
 
     return changed;
   }
-
-  function clearMatchResult(match) {
-    match.status = STATUS_PENDING;
-    match.winnerId = null;
-    match.source = null;
-    match.legs = { p1: 0, p2: 0 };
-    match.stats = normalizeMatchStats(null);
-    setMatchResultKind(match, null);
-    resetMatchAutomationMeta(match);
-    match.updatedAt = nowIso();
-  }
-
-
-  function assignPlayerSlot(match, slot, participantId) {
-    const field = slot === 1 ? "player1Id" : "player2Id";
-    const currentValue = match[field] || null;
-    const nextValue = participantId || null;
-    if (currentValue === nextValue) {
-      return false;
-    }
-    match[field] = nextValue;
-    const hasStoredResult = match.status === STATUS_COMPLETED
-      || Boolean(match.winnerId || match.source || match.legs?.p1 || match.legs?.p2);
-    if (hasStoredResult) {
-      clearMatchResult(match);
-    }
-    match.updatedAt = nowIso();
-    return true;
-  }
-
 
   function findKoNextMatch(tournament, match) {
     const nextRound = match.round + 1;
@@ -3953,13 +3833,6 @@
       return false;
     }
 
-    const backupSnapshot = cloneSerializable(tournament);
-    if (backupSnapshot) {
-      persistKoMigrationBackup(backupSnapshot, "ko-engine-v3-migration").catch((error) => {
-        logWarn("storage", "KO migration backup write failed.", error);
-      });
-    }
-
     tournament.ko = {
       ...normalizedKo,
       drawMode,
@@ -3967,11 +3840,6 @@
       engineVersion: KO_ENGINE_VERSION,
     };
     tournament.updatedAt = nowIso();
-
-    logDebug("ko", "KO tournament migrated to engine v3.", {
-      drawMode,
-      participantCount: Array.isArray(tournament.participants) ? tournament.participants.length : 0,
-    });
 
     return true;
   }
@@ -4094,32 +3962,6 @@
     return true;
   }
 
-
-  function refreshDerivedMatches(tournament) {
-    if (!tournament) {
-      return false;
-    }
-
-    let changedAny = false;
-    for (let i = 0; i < 8; i += 1) {
-      let changed = false;
-      changed = migrateKoTournamentToV3(tournament, KO_DRAW_MODE_SEEDED) || changed;
-      changed = resolveGroupsToKoAssignments(tournament) || changed;
-      changed = synchronizeKoBracketState(tournament) || changed;
-      changed = normalizeCompletedMatchResults(tournament) || changed;
-      changed = synchronizeKoBracketState(tournament) || changed;
-      if (tournament.mode === "groups_ko") {
-        changed = advanceKoWinners(tournament) || changed;
-      }
-      changed = refreshTournamentResultsIndex(tournament) || changed;
-      changedAny = changedAny || changed;
-      if (!changed) {
-        break;
-      }
-    }
-    return changedAny;
-  }
-
   function getOpenMatchByPlayers(tournament, player1Id, player2Id) {
     const key = new Set([player1Id, player2Id]);
     const candidates = tournament.matches.filter((match) => {
@@ -4156,8 +3998,7 @@
   }
 
 
-  function updateMatchResult(matchId, winnerId, legs, source, stats = null) {
-    const tournament = state.store.tournament;
+  function applyMatchResultToTournament(tournament, matchId, winnerId, legs, source, stats = null) {
     if (!tournament) {
       return { ok: false, message: "Kein aktives Turnier vorhanden." };
     }
@@ -4223,11 +4064,6 @@
       auto.lastError = null;
     }
     match.updatedAt = now;
-
-    refreshDerivedMatches(tournament);
-    tournament.updatedAt = now;
-    schedulePersist();
-    renderShell();
     return { ok: true };
   }
 
@@ -4279,6 +4115,1847 @@
     }
 
     return { editable: true, reason: "" };
+  }
+
+  function buildBracketPayload(tournament) {
+    const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
+    if (!koMatches.length) {
+      return null;
+    }
+
+    const bracketSize = tournament.mode === "groups_ko"
+      ? 4
+      : nextPowerOfTwo(clampInt(tournament?.ko?.bracketSize, tournament.participants.length, 2, TECHNICAL_PARTICIPANT_HARD_MAX));
+    const participants = tournament.participants
+      .map((participant) => {
+        const participantId = normalizeText(participant?.id);
+        if (!participantId) {
+          return null;
+        }
+        return {
+          id: participantId,
+          tournament_id: 1,
+          name: normalizeText(participant?.name) || participantId,
+        };
+      })
+      .filter(Boolean);
+    const participantIdSet = new Set(participants.map((participant) => participant.id));
+    const participantIndexes = buildParticipantIndexes(tournament);
+    const resolveBracketParticipantId = (slotId) => {
+      const resolved = resolveParticipantSlotId(tournament, slotId, participantIndexes);
+      if (!resolved) {
+        return null;
+      }
+      const participantId = normalizeText(resolved);
+      return participantIdSet.has(participantId) ? participantId : null;
+    };
+
+    const matches = koMatches.map((match) => {
+      const player1Id = resolveBracketParticipantId(match.player1Id);
+      const player2Id = resolveBracketParticipantId(match.player2Id);
+      const winnerId = resolveBracketParticipantId(match.winnerId);
+      const isBye = isByeMatchResult(match);
+      const completed = isCompletedMatchResultValid(tournament, match)
+        && Boolean(winnerId && (winnerId === player1Id || winnerId === player2Id));
+      const occupied = Boolean(player1Id || player2Id);
+      const status = completed
+        ? 4
+        : (occupied ? 2 : 1);
+      const opponent1 = player1Id
+        ? {
+            id: player1Id,
+            score: completed ? clampInt(match.legs?.p1, 0, 0, 99) : undefined,
+            result: completed && winnerId
+              ? (winnerId === player1Id ? "win" : (isBye ? undefined : "loss"))
+              : undefined,
+          }
+        : null;
+      const opponent2 = player2Id
+        ? {
+            id: player2Id,
+            score: completed ? clampInt(match.legs?.p2, 0, 0, 99) : undefined,
+            result: completed && winnerId
+              ? (winnerId === player2Id ? "win" : (isBye ? undefined : "loss"))
+              : undefined,
+          }
+        : null;
+      return {
+        id: match.id,
+        stage_id: 1,
+        group_id: 1,
+        round_id: match.round,
+        number: match.number,
+        child_count: 0,
+        status,
+        opponent1,
+        opponent2,
+      };
+    });
+
+    return {
+      stages: [{
+        id: 1,
+        tournament_id: 1,
+        name: tournament.mode === "groups_ko" ? "KO-Phase" : "KO",
+        type: "single_elimination",
+        settings: { size: bracketSize },
+        number: 1,
+      }],
+      matches,
+      matchGames: [],
+      participants,
+    };
+  }
+
+  function buildBracketFrameSrcdoc() {
+    return `
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="${BRACKETS_VIEWER_CSS}">
+  <style>
+    :root {
+      --tb-bg-1: #2b356f;
+      --tb-bg-2: #1f3f72;
+      --tb-panel-border: rgba(255, 255, 255, 0.2);
+      --tb-text: #f4f7ff;
+      --tb-muted: rgba(232, 237, 255, 0.78);
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden !important;
+      color: var(--tb-text);
+      font-family: "Open Sans", "Segoe UI", Tahoma, sans-serif !important;
+      background: linear-gradient(180deg, var(--tb-bg-1), var(--tb-bg-2));
+    }
+
+    #msg {
+      padding: 12px 16px;
+      font-size: 16px;
+      color: var(--tb-muted);
+      border-bottom: 1px solid var(--tb-panel-border);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    #brackets-root {
+      width: 100%;
+      flex: 1 1 auto;
+      overflow-x: auto;
+      overflow-y: hidden;
+      min-height: 420px;
+      box-sizing: border-box;
+      padding: 10px;
+      background:
+        radial-gradient(circle at 14% 8%, rgba(90, 210, 153, 0.07), transparent 45%),
+        radial-gradient(circle at 82% 10%, rgba(114, 121, 224, 0.18), transparent 52%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+    }
+
+    #ata-brackets-viewer {
+      --primary-background: transparent;
+      --secondary-background: rgba(255, 255, 255, 0.11);
+      --match-background: rgba(59, 84, 136, 0.93);
+      --font-color: #f4f7ff;
+      --win-color: #5ad299;
+      --loss-color: #ff8787;
+      --label-color: rgba(226, 234, 255, 0.82);
+      --hint-color: rgba(205, 217, 248, 0.75);
+      --connector-color: rgba(183, 198, 236, 0.8);
+      --border-color: rgba(255, 255, 255, 0.28);
+      --border-hover-color: rgba(255, 255, 255, 0.46);
+      --border-selected-color: rgba(255, 255, 255, 0.66);
+      --text-size: 16px;
+      --round-margin: 78px;
+      --match-width: 256px;
+      --match-horizontal-padding: 14px;
+      --match-vertical-padding: 10px;
+      --connector-border-width: 2px;
+      --match-border-width: 1px;
+      --match-border-radius: 10px;
+      --participant-image-size: 1.1em;
+      width: max-content;
+      min-width: 100%;
+      min-height: 0;
+      margin: 0;
+      padding: 12px 20px 22px;
+    }
+
+    #ata-brackets-viewer.brackets-viewer {
+      align-items: flex-start;
+      margin: 0;
+    }
+
+    #ata-brackets-viewer h1,
+    #ata-brackets-viewer .bracket h2 {
+      display: none;
+    }
+
+    #ata-brackets-viewer h3 {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.26);
+      border-radius: 10px;
+      font-size: 1em;
+      font-weight: 700;
+      color: #f2f6ff;
+      padding: 9px 10px;
+    }
+
+    #ata-brackets-viewer .round.ata-final-round {
+      position: relative;
+    }
+
+    #ata-brackets-viewer .round.ata-final-round h3 {
+      background: linear-gradient(180deg, rgba(255, 211, 79, 0.28), rgba(255, 211, 79, 0.08));
+      border-color: rgba(255, 224, 140, 0.84);
+      color: #fff4cb;
+      text-shadow: 0 1px 0 rgba(58, 36, 8, 0.45);
+      box-shadow: 0 0 0 1px rgba(255, 211, 79, 0.36), 0 8px 18px rgba(47, 31, 8, 0.28);
+      position: relative;
+      padding-right: 104px;
+    }
+
+    #ata-brackets-viewer .round.ata-final-round h3::after {
+      content: "🏆 Finale";
+      position: absolute;
+      right: 8px;
+      top: 6px;
+      border-radius: 999px;
+      font-size: 0.65em;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #fff1c5;
+      background: rgba(98, 74, 18, 0.95);
+      border: 1px solid rgba(255, 224, 140, 0.82);
+      padding: 2px 7px;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+
+    #ata-brackets-viewer .match {
+      margin: 12px 0;
+    }
+
+    #ata-brackets-viewer .round.ata-final-round .match {
+      margin: 16px 0;
+    }
+
+    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .opponents {
+      position: relative;
+      overflow: visible;
+      border-color: rgba(255, 224, 140, 0.86);
+      background:
+        radial-gradient(circle at 88% -22%, rgba(255, 228, 146, 0.27), transparent 54%),
+        linear-gradient(180deg, rgba(255, 211, 79, 0.15), rgba(59, 84, 136, 0.95));
+      box-shadow: 0 0 0 1px rgba(255, 224, 140, 0.38), 0 8px 20px rgba(35, 22, 8, 0.3);
+    }
+
+    #ata-brackets-viewer .match[data-match-status="4"] .opponents {
+      border-color: rgba(90, 210, 153, 0.9);
+      box-shadow: 0 0 0 1px rgba(90, 210, 153, 0.35), 0 6px 16px rgba(8, 30, 24, 0.35);
+      background: linear-gradient(180deg, rgba(90, 210, 153, 0.16), rgba(59, 84, 136, 0.94));
+    }
+
+    #ata-brackets-viewer .match[data-match-status="4"] .opponents::after {
+      content: "Abgeschlossen";
+      position: absolute;
+      top: -11px;
+      right: 8px;
+      font-size: 0.69em;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #aef4ce;
+      background: rgba(32, 88, 68, 0.94);
+      border: 1px solid rgba(110, 231, 183, 0.66);
+      border-radius: 999px;
+      padding: 2px 7px;
+      line-height: 1.2;
+      pointer-events: none;
+      text-transform: uppercase;
+    }
+
+    #ata-brackets-viewer .match[data-match-status="4"].ata-bye .opponents {
+      border-color: rgba(255, 211, 79, 0.9);
+      box-shadow: 0 0 0 1px rgba(255, 211, 79, 0.38), 0 6px 16px rgba(56, 36, 8, 0.35);
+      background: linear-gradient(180deg, rgba(255, 211, 79, 0.16), rgba(59, 84, 136, 0.94));
+    }
+
+    #ata-brackets-viewer .match[data-match-status="4"].ata-bye .opponents::after {
+      content: "Freilos";
+      color: #ffe39a;
+      background: rgba(89, 68, 16, 0.95);
+      border-color: rgba(255, 224, 140, 0.72);
+    }
+
+    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match[data-match-status="4"] .opponents {
+      border-color: rgba(255, 224, 140, 0.92);
+      box-shadow: 0 0 0 1px rgba(255, 224, 140, 0.52), 0 10px 22px rgba(50, 31, 8, 0.44);
+      background:
+        radial-gradient(circle at 84% -14%, rgba(255, 241, 198, 0.22), transparent 56%),
+        linear-gradient(180deg, rgba(255, 211, 79, 0.25), rgba(90, 210, 153, 0.2), rgba(59, 84, 136, 0.96));
+    }
+
+    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match[data-match-status="4"] .opponents::after {
+      content: "Champion";
+      color: #fff3c7;
+      background: rgba(98, 74, 18, 0.96);
+      border-color: rgba(255, 224, 140, 0.8);
+    }
+
+    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match[data-match-status="4"].ata-bye .opponents::after {
+      content: "Freilos";
+      color: #ffe39a;
+      background: rgba(89, 68, 16, 0.95);
+      border-color: rgba(255, 224, 140, 0.72);
+    }
+
+    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-winner {
+      background: rgba(98, 74, 18, 0.45);
+      border-radius: 8px;
+      box-shadow: inset 0 0 0 1px rgba(255, 224, 140, 0.48);
+    }
+
+    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-winner .name {
+      color: #72e5b0;
+      text-shadow: 0 1px 0 rgba(8, 33, 25, 0.58);
+      font-weight: 800;
+    }
+
+    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-winner .name::after {
+      content: "  🏆";
+      font-size: 0.88em;
+      color: #fff1c5;
+    }
+
+    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-loser .name {
+      color: rgba(229, 237, 255, 0.72);
+    }
+
+    #ata-brackets-viewer .match[data-match-status="4"] .participant .name:not(.ata-open-slot) {
+      font-weight: 700;
+    }
+
+    #ata-brackets-viewer .match[data-match-status="4"] .participant.win .name:not(.ata-open-slot) {
+      color: #72e5b0;
+      text-shadow: 0 1px 0 rgba(8, 33, 25, 0.5);
+    }
+
+    #ata-brackets-viewer .match[data-match-status="4"] .participant.loss .name:not(.ata-open-slot) {
+      color: rgba(229, 237, 255, 0.72);
+    }
+
+    #ata-brackets-viewer .participant {
+      align-items: center;
+      min-height: 42px;
+      font-size: 1em;
+    }
+
+    #ata-brackets-viewer .participant .name {
+      width: 78%;
+      font-weight: 600;
+    }
+
+    #ata-brackets-viewer .participant .name.ata-open-slot {
+      color: #ffd34f;
+      font-weight: 700;
+    }
+
+    #ata-brackets-viewer .participant .result {
+      width: 22%;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    #brackets-root::-webkit-scrollbar {
+      width: 11px;
+      height: 11px;
+    }
+
+    #brackets-root::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+    }
+
+    #brackets-root::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.28);
+      border-radius: 999px;
+    }
+
+  </style>
+</head>
+<body>
+  <div id="msg">Turnierbaum wird geladen ...</div>
+  <div id="brackets-root">
+    <div id="ata-brackets-viewer" class="brackets-viewer"></div>
+  </div>
+  <script src="${I18NEXT_JS}"></script>
+  <script src="${BRACKETS_VIEWER_JS}"></script>
+  <script>
+    (function () {
+      var msgEl = document.getElementById("msg");
+      var rootEl = document.getElementById("brackets-root");
+      var viewerEl = document.getElementById("ata-brackets-viewer");
+
+      function post(data) { window.parent.postMessage(data, "*"); }
+
+      function ensurePayload(payload) {
+        var safePayload = payload && typeof payload === "object" ? payload : {};
+        if (!Array.isArray(safePayload.stages) || !Array.isArray(safePayload.matches) || !Array.isArray(safePayload.participants)) {
+          throw new Error("invalid bracket payload");
+        }
+        return safePayload;
+      }
+
+      function normalizeOpenSlotLabels() {
+        if (!viewerEl) {
+          return;
+        }
+        var nodes = viewerEl.querySelectorAll(".participant .name");
+        nodes.forEach(function (node) {
+          var value = String(node.textContent || "").trim();
+          if (/^(bye|tbd)$/i.test(value)) {
+            node.textContent = "\\u2205 offen";
+            node.classList.add("ata-open-slot");
+          }
+        });
+      }
+
+      function decorateCompletedMatchBadges(payload) {
+        if (!viewerEl || !payload || !Array.isArray(payload.matches)) {
+          return;
+        }
+
+        var byeMatchById = {};
+        payload.matches.forEach(function (match) {
+          if (!match || Number(match.status) !== 4) {
+            return;
+          }
+          var matchId = String(match.id || "");
+          if (!matchId) {
+            return;
+          }
+          byeMatchById[matchId] = !match.opponent1 || !match.opponent2;
+        });
+
+        var matchNodes = viewerEl.querySelectorAll(".match[data-match-status='4']");
+        matchNodes.forEach(function (node) {
+          var matchId = String(node.getAttribute("data-match-id") || "");
+          var isByeByPayload = matchId && Object.prototype.hasOwnProperty.call(byeMatchById, matchId)
+            ? byeMatchById[matchId]
+            : false;
+          var isByeByDom = Boolean(node.querySelector(".participant .name.ata-open-slot"));
+          var isBye = isByeByPayload || isByeByDom;
+          node.classList.toggle("ata-bye", isBye);
+        });
+      }
+
+      function decorateFinalRound(payload) {
+        if (!viewerEl) {
+          return;
+        }
+
+        var roundNodes = viewerEl.querySelectorAll(".round");
+        var matchNodes = viewerEl.querySelectorAll(".match");
+        var participantNodes = viewerEl.querySelectorAll(".participant");
+        matchNodes.forEach(function (node) {
+          node.classList.remove("ata-final-match");
+        });
+        participantNodes.forEach(function (node) {
+          node.classList.remove("ata-final-winner");
+          node.classList.remove("ata-final-loser");
+        });
+        if (!roundNodes || !roundNodes.length) {
+          return;
+        }
+
+        roundNodes.forEach(function (node) {
+          node.classList.remove("ata-final-round");
+        });
+
+        var finalRoundNode = null;
+        roundNodes.forEach(function (node) {
+          if (finalRoundNode) {
+            return;
+          }
+          var titleEl = node.querySelector("h3");
+          var title = titleEl ? String(titleEl.textContent || "").trim() : "";
+          if (/(^|\\s)(final|finale|endspiel|grand\\s*final|championship)(\\s|$)/i.test(title)) {
+            finalRoundNode = node;
+          }
+        });
+
+        if (!finalRoundNode) {
+          finalRoundNode = roundNodes[roundNodes.length - 1];
+        }
+
+        if (finalRoundNode) {
+          finalRoundNode.classList.add("ata-final-round");
+        }
+
+        if (!finalRoundNode) {
+          return;
+        }
+
+        var winnerSideByMatchId = {};
+        if (payload && Array.isArray(payload.matches)) {
+          payload.matches.forEach(function (match) {
+            if (!match) {
+              return;
+            }
+            var matchId = String(match.id || "");
+            if (!matchId) {
+              return;
+            }
+            var winnerSide = 0;
+            if (match.opponent1 && String(match.opponent1.result || "").toLowerCase() === "win") {
+              winnerSide = 1;
+            } else if (match.opponent2 && String(match.opponent2.result || "").toLowerCase() === "win") {
+              winnerSide = 2;
+            }
+            winnerSideByMatchId[matchId] = winnerSide;
+          });
+        }
+
+        var finalMatchNodes = finalRoundNode.querySelectorAll(".match");
+        finalMatchNodes.forEach(function (node) {
+          node.classList.add("ata-final-match");
+          var matchId = String(node.getAttribute("data-match-id") || "");
+          var winnerSide = matchId && Object.prototype.hasOwnProperty.call(winnerSideByMatchId, matchId)
+            ? winnerSideByMatchId[matchId]
+            : 0;
+          if (!winnerSide) {
+            return;
+          }
+          var participants = node.querySelectorAll(".participant");
+          participants.forEach(function (participantNode, index) {
+            if (index === winnerSide - 1) {
+              participantNode.classList.add("ata-final-winner");
+            } else if (index === 0 || index === 1) {
+              participantNode.classList.add("ata-final-loser");
+            }
+          });
+        });
+      }
+
+      function pxToNumber(value) {
+        var num = Number.parseFloat(String(value || "0"));
+        return Number.isFinite(num) ? num : 0;
+      }
+
+      function computeFrameHeight() {
+        var msgHeight = msgEl && msgEl.style.display !== "none" ? msgEl.offsetHeight : 0;
+        var rootStyles = rootEl ? window.getComputedStyle(rootEl) : null;
+        var rootPadding = rootStyles
+          ? pxToNumber(rootStyles.paddingTop) + pxToNumber(rootStyles.paddingBottom)
+          : 0;
+        var viewerHeight = viewerEl ? Math.ceil(viewerEl.getBoundingClientRect().height) : 0;
+        return Math.max(420, msgHeight + rootPadding + viewerHeight);
+      }
+
+      function scheduleHeightReport() {
+        window.requestAnimationFrame(function () {
+          post({ type: "ata:bracket-frame-height", height: computeFrameHeight() });
+          window.setTimeout(function () {
+            post({ type: "ata:bracket-frame-height", height: computeFrameHeight() });
+          }, 100);
+          window.setTimeout(function () {
+            post({ type: "ata:bracket-frame-height", height: computeFrameHeight() });
+          }, 320);
+        });
+      }
+
+      function render(payload) {
+        if (!window.bracketsViewer || typeof window.bracketsViewer.render !== "function") {
+          throw new Error("brackets-viewer not found");
+        }
+        if (!viewerEl) {
+          throw new Error("bracket root not found");
+        }
+        var safePayload = ensurePayload(payload);
+        window.bracketsViewer.render(safePayload, {
+          selector: "#ata-brackets-viewer",
+          clear: true,
+        });
+        normalizeOpenSlotLabels();
+        decorateCompletedMatchBadges(safePayload);
+        decorateFinalRound(safePayload);
+        if (msgEl) {
+          msgEl.style.display = "none";
+        }
+        scheduleHeightReport();
+      }
+
+      window.addEventListener("message", function (event) {
+        var data = event.data;
+        if (!data || data.type !== "ata:render-bracket") {
+          return;
+        }
+        try {
+          render(data.payload || {});
+          post({ type: "ata:bracket-rendered" });
+        } catch (error) {
+          post({
+            type: "ata:bracket-error",
+            message: error && error.message ? error.message : String(error),
+          });
+        }
+      });
+
+      window.addEventListener("resize", scheduleHeightReport);
+
+      if (window.ResizeObserver && viewerEl) {
+        var resizeObserver = new window.ResizeObserver(scheduleHeightReport);
+        resizeObserver.observe(viewerEl);
+        if (rootEl) {
+          resizeObserver.observe(rootEl);
+        }
+      }
+
+      post({ type: "ata:bracket-frame-ready" });
+      scheduleHeightReport();
+    })();
+  </script>
+</body>
+</html>
+    `;
+  }
+
+  function applyBracketFrameHeight(frame, bracketState, height) {
+    if (!(frame instanceof HTMLIFrameElement)) {
+      return;
+    }
+    const nextHeight = clampInt(height, 0, 420, 12000);
+    if (!nextHeight || Math.abs(nextHeight - bracketState.frameHeight) < 2) {
+      return;
+    }
+    bracketState.frameHeight = nextHeight;
+    frame.style.height = `${nextHeight}px`;
+  }
+
+
+  function resolveBracketFrameElement(shadowRoot) {
+    if (!shadowRoot) {
+      return null;
+    }
+    const frame = shadowRoot.getElementById("ata-bracket-frame");
+    return frame instanceof HTMLIFrameElement ? frame : null;
+  }
+
+
+  function resetBracketFrameState(bracketState, frame, srcdoc) {
+    bracketState.ready = false;
+    bracketState.failed = false;
+    bracketState.frameHeight = 0;
+    bracketState.lastError = "";
+    frame.style.removeProperty("height");
+    frame.srcdoc = srcdoc;
+  }
+
+
+  function clearBracketFrameTimeout(bracketState) {
+    if (bracketState.timeoutHandle) {
+      clearTimeout(bracketState.timeoutHandle);
+      bracketState.timeoutHandle = null;
+    }
+  }
+
+
+  function armBracketFrameTimeout(bracketState, onTimeout, timeoutMs) {
+    bracketState.timeoutHandle = window.setTimeout(() => {
+      bracketState.timeoutHandle = null;
+      onTimeout();
+    }, timeoutMs);
+  }
+
+
+  function postBracketRenderPayload(frame, payload) {
+    if (frame instanceof HTMLIFrameElement && frame.contentWindow) {
+      frame.contentWindow.postMessage({ type: "ata:render-bracket", payload }, "*");
+    }
+  }
+
+
+  function readBracketFrameMessage(event, frame) {
+    if (!(frame instanceof HTMLIFrameElement) || event.source !== frame.contentWindow) {
+      return null;
+    }
+
+    const data = event.data;
+    if (!data || typeof data !== "object") {
+      return null;
+    }
+
+    return data;
+  }
+
+// App layer: runtime orchestration, persistence scheduling and user feedback.
+
+  function setNotice(type, message, timeoutMs = 4500) {
+    state.notice = { type, message: String(message || "") };
+    renderShell();
+
+    if (state.noticeTimer) {
+      clearTimeout(state.noticeTimer);
+      state.noticeTimer = null;
+    }
+
+    if (timeoutMs > 0 && state.notice.message) {
+      state.noticeTimer = window.setTimeout(() => {
+        state.notice = { type: "info", message: "" };
+        renderShell();
+      }, timeoutMs);
+    }
+  }
+
+// App layer: runtime orchestration, persistence scheduling and user feedback.
+
+  async function loadPersistedStore() {
+    const raw = await readStoreValue(STORAGE_KEY, createDefaultStore());
+    state.store = migrateStorage(raw);
+    state.activeTab = state.store.ui.activeTab;
+    const needsSchemaWriteback = Number(raw?.schemaVersion || 0) !== STORAGE_SCHEMA_VERSION;
+    if (state.store.tournament) {
+      const changed = refreshDerivedMatches(state.store.tournament);
+      if (changed || needsSchemaWriteback) {
+        state.store.tournament.updatedAt = nowIso();
+        schedulePersist();
+      }
+    } else if (needsSchemaWriteback) {
+      schedulePersist();
+    }
+    logDebug("storage", "Store loaded", state.store);
+  }
+
+
+  function schedulePersist() {
+    if (state.saveTimer) {
+      clearTimeout(state.saveTimer);
+      state.saveTimer = null;
+    }
+
+    state.saveTimer = window.setTimeout(() => {
+      state.saveTimer = null;
+      persistStore().catch((error) => {
+        logError("storage", "Persisting store failed.", error);
+      });
+    }, SAVE_DEBOUNCE_MS);
+  }
+
+
+  async function persistStore() {
+    state.store.schemaVersion = STORAGE_SCHEMA_VERSION;
+    state.store.ui.activeTab = state.activeTab;
+    await writeStoreValue(STORAGE_KEY, state.store);
+  }
+
+// App layer: runtime orchestration, persistence scheduling and user feedback.
+
+  function maybePersistKoMigrationBackup(tournament, defaultDrawMode = KO_DRAW_MODE_SEEDED) {
+    if (!tournament || tournament.mode !== "ko") {
+      return;
+    }
+
+    const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, defaultDrawMode);
+    const drawLocked = tournament?.ko?.drawLocked !== false;
+    const engineVersion = normalizeKoEngineVersion(tournament?.ko?.engineVersion, 0);
+    if (engineVersion >= KO_ENGINE_VERSION) {
+      return;
+    }
+
+    const normalizedKo = normalizeTournamentKoMeta(tournament?.ko, drawMode, drawLocked);
+    const nextKo = {
+      ...normalizedKo,
+      drawMode,
+      drawLocked,
+      engineVersion: KO_ENGINE_VERSION,
+    };
+    if (isSerializableEqual(tournament.ko, nextKo)) {
+      return;
+    }
+
+    const backupSnapshot = cloneSerializable(tournament);
+    if (!backupSnapshot) {
+      return;
+    }
+
+    persistKoMigrationBackup(backupSnapshot, "ko-engine-v3-migration").catch((error) => {
+      logWarn("storage", "KO migration backup write failed.", error);
+    });
+  }
+
+
+  function refreshDerivedMatches(tournament) {
+    if (!tournament) {
+      return false;
+    }
+
+    let changedAny = false;
+    for (let i = 0; i < 8; i += 1) {
+      let changed = false;
+      maybePersistKoMigrationBackup(tournament, KO_DRAW_MODE_SEEDED);
+      changed = migrateKoTournamentToV3(tournament, KO_DRAW_MODE_SEEDED) || changed;
+      changed = resolveGroupsToKoAssignments(tournament) || changed;
+      changed = synchronizeKoBracketState(tournament) || changed;
+      changed = normalizeCompletedMatchResults(tournament) || changed;
+      changed = synchronizeKoBracketState(tournament) || changed;
+      if (tournament.mode === "groups_ko") {
+        changed = advanceKoWinners(tournament) || changed;
+      }
+      changed = refreshTournamentResultsIndex(tournament) || changed;
+      changedAny = changedAny || changed;
+      if (!changed) {
+        break;
+      }
+    }
+
+    return changedAny;
+  }
+
+// App layer: runtime orchestration, persistence scheduling and user feedback.
+
+  function updateMatchResult(matchId, winnerId, legs, source, stats = null) {
+    const tournament = state.store.tournament;
+    if (!tournament) {
+      return { ok: false, message: "Kein aktives Turnier vorhanden." };
+    }
+
+    const result = applyMatchResultToTournament(tournament, matchId, winnerId, legs, source, stats);
+    if (!result.ok) {
+      return result;
+    }
+
+    refreshDerivedMatches(tournament);
+    tournament.updatedAt = nowIso();
+    schedulePersist();
+    renderShell();
+    return { ok: true };
+  }
+
+// App layer: runtime orchestration, persistence scheduling and user feedback.
+
+  function finalizeTournamentMutation(tournament, activeTab = state.activeTab) {
+    if (!tournament) {
+      return;
+    }
+    refreshDerivedMatches(tournament);
+    tournament.updatedAt = nowIso();
+    state.activeTab = activeTab;
+    state.store.ui.activeTab = activeTab;
+    schedulePersist();
+    renderShell();
+  }
+
+
+  function createTournamentSession(config) {
+    const errors = validateCreateConfig(config);
+    if (errors.length) {
+      return { ok: false, message: errors.join(" ") };
+    }
+
+    const tournament = createTournament(config);
+    refreshDerivedMatches(tournament);
+    tournament.updatedAt = nowIso();
+    state.store.tournament = tournament;
+    state.activeTab = "matches";
+    state.store.ui.activeTab = "matches";
+    schedulePersist();
+    renderShell();
+    return { ok: true, tournament };
+  }
+
+
+  function resetTournamentSession() {
+    state.store.tournament = null;
+    state.apiAutomation.startingMatchId = "";
+    state.apiAutomation.authBackoffUntil = 0;
+    state.activeTab = "tournament";
+    state.store.ui.activeTab = "tournament";
+    schedulePersist();
+    renderShell();
+    return { ok: true };
+  }
+
+
+  function importTournamentPayload(rawObject) {
+    if (!rawObject || typeof rawObject !== "object") {
+      return { ok: false, message: "JSON ist leer oder ungültig." };
+    }
+
+    let tournament = rawObject.tournament || null;
+    if (!tournament && rawObject.mode && rawObject.participants) {
+      tournament = rawObject;
+    }
+
+    const normalizedTournament = normalizeTournament(
+      tournament,
+      state.store.settings.featureFlags.koDrawLockDefault !== false,
+    );
+    if (!normalizedTournament) {
+      return { ok: false, message: "Turnierdaten konnten nicht validiert werden." };
+    }
+
+    const participantCountError = getParticipantCountError(normalizedTournament.mode, normalizedTournament.participants.length);
+    if (participantCountError) {
+      return { ok: false, message: participantCountError };
+    }
+
+    refreshDerivedMatches(normalizedTournament);
+    normalizedTournament.updatedAt = nowIso();
+    state.store.tournament = normalizedTournament;
+    state.activeTab = "matches";
+    state.store.ui.activeTab = "matches";
+    schedulePersist();
+    renderShell();
+    return { ok: true, tournament: normalizedTournament };
+  }
+
+
+  function setTournamentTieBreakProfile(profile) {
+    const tournament = state.store.tournament;
+    if (!tournament) {
+      return { ok: false, message: "Kein aktives Turnier vorhanden." };
+    }
+
+    const result = applyTournamentTieBreakProfile(tournament, profile);
+    if (!result.ok || !result.changed) {
+      return result;
+    }
+
+    finalizeTournamentMutation(tournament);
+    return result;
+  }
+
+
+  function setTournamentKoDrawLocked(drawLocked) {
+    const tournament = state.store.tournament;
+    if (!tournament) {
+      return { ok: false, message: "Kein aktives Turnier vorhanden." };
+    }
+
+    const result = applyTournamentKoDrawLocked(tournament, drawLocked);
+    if (!result.ok || !result.changed) {
+      return result;
+    }
+
+    finalizeTournamentMutation(tournament);
+    return result;
+  }
+
+// App layer: runtime orchestration, persistence scheduling and user feedback.
+
+  function compareMatchesByRound(left, right) {
+    const stageOrder = { group: 1, league: 2, ko: 3 };
+    const leftOrder = stageOrder[left.stage] || 99;
+    const rightOrder = stageOrder[right.stage] || 99;
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+    return left.round - right.round || left.number - right.number;
+  }
+
+
+  function getMatchPriorityReadyFirst(tournament, match) {
+    const auto = ensureMatchAutoMeta(match);
+    const playability = getMatchEditability(tournament, match);
+    if (match.status === STATUS_PENDING && auto.status === "started" && auto.lobbyId) {
+      return 0;
+    }
+    if (match.status === STATUS_PENDING && playability.editable) {
+      return 1;
+    }
+    if (match.status === STATUS_COMPLETED && !isByeMatchResult(match)) {
+      return 2;
+    }
+    if (match.status === STATUS_COMPLETED && isByeMatchResult(match)) {
+      return 3;
+    }
+    return 4;
+  }
+
+
+  function getMatchPriorityStatus(tournament, match) {
+    const playability = getMatchEditability(tournament, match);
+    if (match.status === STATUS_PENDING && playability.editable) {
+      return 0;
+    }
+    if (match.status === STATUS_PENDING) {
+      return 1;
+    }
+    if (isByeMatchResult(match)) {
+      return 3;
+    }
+    return 2;
+  }
+
+
+  function sortMatchesForDisplay(tournament, sortMode) {
+    const mode = sanitizeMatchesSortMode(sortMode, MATCH_SORT_MODE_READY_FIRST);
+    const source = Array.isArray(tournament?.matches) ? tournament.matches.slice() : [];
+    if (mode === MATCH_SORT_MODE_ROUND) {
+      return source.sort(compareMatchesByRound);
+    }
+    if (mode === MATCH_SORT_MODE_STATUS) {
+      return source.sort((left, right) => {
+        const leftPriority = getMatchPriorityStatus(tournament, left);
+        const rightPriority = getMatchPriorityStatus(tournament, right);
+        if (leftPriority !== rightPriority) {
+          return leftPriority - rightPriority;
+        }
+        return compareMatchesByRound(left, right);
+      });
+    }
+    return source.sort((left, right) => {
+      const leftPriority = getMatchPriorityReadyFirst(tournament, left);
+      const rightPriority = getMatchPriorityReadyFirst(tournament, right);
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority;
+      }
+      return compareMatchesByRound(left, right);
+    });
+  }
+
+
+  function findSuggestedNextMatch(tournament) {
+    const source = Array.isArray(tournament?.matches) ? tournament.matches.slice() : [];
+    const candidates = source
+      .filter((match) => {
+        if (!match || match.status !== STATUS_PENDING) {
+          return false;
+        }
+        const playability = getMatchEditability(tournament, match);
+        if (!playability.editable) {
+          return false;
+        }
+        const auto = ensureMatchAutoMeta(match);
+        return !(auto.status === "started" && auto.lobbyId);
+      })
+      .sort(compareMatchesByRound);
+    return candidates[0] || null;
+  }
+
+// App layer: runtime orchestration, persistence scheduling and user feedback.
+
+  function syncBracketFallbackVisibility() {
+    const shadow = state.shadowRoot;
+    if (!shadow || state.activeTab !== "view") {
+      return;
+    }
+    const fallback = shadow.getElementById("ata-bracket-fallback");
+    if (!(fallback instanceof HTMLElement)) {
+      return;
+    }
+    fallback.setAttribute("data-visible", state.bracket.failed ? "1" : "0");
+  }
+
+
+  function queueBracketRender(forceReload = false) {
+    const tournament = state.store.tournament;
+    if (!tournament || (tournament.mode !== "ko" && tournament.mode !== "groups_ko")) {
+      return;
+    }
+    const frame = resolveBracketFrameElement(state.shadowRoot);
+    if (!(frame instanceof HTMLIFrameElement)) {
+      return;
+    }
+
+    const payload = buildBracketPayload(tournament);
+    if (!payload) {
+      return;
+    }
+
+    if (forceReload || state.bracket.iframe !== frame) {
+      state.bracket.iframe = frame;
+      resetBracketFrameState(state.bracket, frame, buildBracketFrameSrcdoc());
+      syncBracketFallbackVisibility();
+    }
+
+    clearBracketFrameTimeout(state.bracket);
+    armBracketFrameTimeout(state.bracket, () => {
+      state.bracket.failed = true;
+      state.bracket.lastError = "Turnierbaum-Render-Timeout";
+      syncBracketFallbackVisibility();
+      setNotice("error", "CDN-Turnierbaum-Timeout, Fallback bleibt aktiv.", 3200);
+      logWarn("bracket", "Iframe bracket render timeout.");
+    }, 7000);
+
+    if (state.bracket.ready) {
+      postBracketRenderPayload(frame, payload);
+    }
+  }
+
+
+  function handleBracketMessage(event) {
+    const frame = state.bracket.iframe;
+    const data = readBracketFrameMessage(event, frame);
+    if (!data) {
+      return;
+    }
+
+    if (data.type === "ata:bracket-frame-ready") {
+      state.bracket.ready = true;
+      const payload = buildBracketPayload(state.store.tournament);
+      if (payload) {
+        postBracketRenderPayload(frame, payload);
+      }
+      return;
+    }
+
+    if (data.type === "ata:bracket-frame-height") {
+      applyBracketFrameHeight(frame, state.bracket, data.height);
+      return;
+    }
+
+    if (data.type === "ata:bracket-rendered") {
+      clearBracketFrameTimeout(state.bracket);
+      state.bracket.failed = false;
+      state.bracket.lastError = "";
+      syncBracketFallbackVisibility();
+      logDebug("bracket", "Bracket rendered successfully.");
+      return;
+    }
+
+    if (data.type === "ata:bracket-error") {
+      clearBracketFrameTimeout(state.bracket);
+      state.bracket.failed = true;
+      state.bracket.lastError = normalizeText(data.message || "Unbekannter Fehler");
+      syncBracketFallbackVisibility();
+      setNotice("error", `Turnierbaum-Fehler: ${state.bracket.lastError}. Fallback aktiv.`, 3600);
+      logWarn("bracket", "Bracket render error.", data);
+    }
+  }
+
+// App layer: runtime orchestration, persistence scheduling and user feedback.
+
+  function removeMatchReturnShortcut() {
+    if (state.matchReturnShortcut.root instanceof HTMLElement) {
+      state.matchReturnShortcut.root.remove();
+    }
+    state.matchReturnShortcut.root = null;
+    state.matchReturnShortcut.syncing = false;
+    state.matchReturnShortcut.inlineSyncingByLobby = {};
+    state.matchReturnShortcut.inlineOutcomeByLobby = {};
+  }
+
+
+  function renderMatchReturnShortcut() {
+    removeMatchReturnShortcut();
+  }
+
+
+  function cleanupRuntime() {
+    if (state.saveTimer) {
+      clearTimeout(state.saveTimer);
+      state.saveTimer = null;
+    }
+    if (state.noticeTimer) {
+      clearTimeout(state.noticeTimer);
+      state.noticeTimer = null;
+    }
+    clearBracketFrameTimeout(state.bracket);
+    removeMatchReturnShortcut();
+    removeHistoryImportButton();
+    while (state.cleanupStack.length) {
+      const cleanup = state.cleanupStack.pop();
+      try {
+        cleanup();
+      } catch (error) {
+        logWarn("lifecycle", "Cleanup function failed.", error);
+      }
+    }
+  }
+
+
+  function initEventBridge() {
+    addListener(window, TOGGLE_EVENT, () => {
+      toggleDrawer();
+    });
+    addListener(window, "message", handleBracketMessage);
+    addListener(window, "pagehide", cleanupRuntime, { once: true });
+    addListener(window, "beforeunload", cleanupRuntime, { once: true });
+  }
+
+  function runSelfTests() {
+    const results = [];
+    const record = (name, ok, details = "") => {
+      results.push({ name, ok: Boolean(ok), details: normalizeText(details || "") });
+    };
+    const participantList = (count, prefix = "P") => {
+      const list = [];
+      for (let i = 1; i <= count; i += 1) {
+        list.push({ id: `${prefix}${i}`, name: `${prefix}${i}` });
+      }
+      return list;
+    };
+
+    try {
+      const participants = participantList(9, "S");
+      const ids = participants.map((item) => item.id);
+      const seededMatches = buildKoMatchesV2(ids, KO_DRAW_MODE_SEEDED);
+      const seededRoundOne = seededMatches.filter((match) => match.round === 1);
+      const seededOpenRoundOne = seededRoundOne.filter((match) => match.player1Id && match.player2Id && !isByeMatchResult(match));
+      record(
+        "KO Seeded: 9 Teilnehmer -> genau 1 offenes R1-Match",
+        seededOpenRoundOne.length === 1,
+        `offene R1-Matches: ${seededOpenRoundOne.length}`,
+      );
+    } catch (error) {
+      record("KO Seeded: 9 Teilnehmer -> genau 1 offenes R1-Match", false, String(error?.message || error));
+    }
+
+    try {
+      const participants = participantList(9, "O");
+      const ids = participants.map((item) => item.id);
+      const openDrawMatches = buildKoMatchesV2(ids, KO_DRAW_MODE_OPEN_DRAW);
+      const repeatedOpenDrawMatches = buildKoMatchesV2(ids, KO_DRAW_MODE_OPEN_DRAW);
+      const toSignature = (matches) => matches
+        .map((match) => `${match.id}:${match.player1Id || "-"}:${match.player2Id || "-"}:${isByeMatchResult(match) ? "bye" : "match"}`)
+        .join("|");
+      const deterministic = toSignature(openDrawMatches) === toSignature(repeatedOpenDrawMatches);
+      const byeCount = openDrawMatches.filter((match) => isByeMatchResult(match)).length;
+      record(
+        "KO Open Draw: deterministisch mit expliziten Byes",
+        deterministic && byeCount > 0,
+        `matches=${openDrawMatches.length}, byes=${byeCount}, deterministic=${deterministic}`,
+      );
+    } catch (error) {
+      record("KO Open Draw: deterministisch mit expliziten Byes", false, String(error?.message || error));
+    }
+
+    try {
+      const participants = participantList(6, "K6");
+      const structure = buildBracketStructure(participants, generateSeeds(participants, KO_DRAW_MODE_SEEDED));
+      const matches = buildKoMatchesFromStructure(structure);
+      const expectedTotalMatches = structure.rounds.reduce((sum, roundDef) => sum + roundDef.virtualMatches.length, 0);
+      const byeCount = matches.filter((match) => isByeMatchResult(match)).length;
+      record(
+        "KO 6: vollständiger 8er-Baum mit 2 Byes",
+        matches.length === expectedTotalMatches && expectedTotalMatches === 7 && byeCount === 2,
+        `matches=${matches.length}, expected=${expectedTotalMatches}, byes=${byeCount}`,
+      );
+    } catch (error) {
+      record("KO 6: vollständiger 8er-Baum mit 2 Byes", false, String(error?.message || error));
+    }
+
+    try {
+      const participants = participantList(8, "K8");
+      const structure = buildBracketStructure(participants, generateSeeds(participants, KO_DRAW_MODE_SEEDED));
+      const matches = buildKoMatchesFromStructure(structure);
+      const byeCount = matches.filter((match) => isByeMatchResult(match)).length;
+      record(
+        "KO 8: 7 Match-Knoten von Start an vorhanden",
+        matches.length === 7 && byeCount === 0,
+        `matches=${matches.length}, byes=${byeCount}`,
+      );
+    } catch (error) {
+      record("KO 8: 7 Match-Knoten von Start an vorhanden", false, String(error?.message || error));
+    }
+
+    try {
+      const compliant = isPdcCompliantMatchSetup({
+        mode: "ko",
+        bestOfLegs: 5,
+        startScore: 501,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+      });
+      const notCompliantBestOfOne = isPdcCompliantMatchSetup({
+        mode: "ko",
+        bestOfLegs: 1,
+        startScore: 501,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+      });
+      record(
+        "PDC-Setup: KO + Best of >=3 + PDC-X01 erforderlich",
+        compliant && !notCompliantBestOfOne,
+        `compliant=${compliant}, bo1=${notCompliantBestOfOne}`,
+      );
+    } catch (error) {
+      record("PDC-Setup: KO + Best of >=3 + PDC-X01 erforderlich", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
+        name: "PayloadMapping",
+        mode: "league",
+        bestOfLegs: 7,
+        startScore: 701,
+        x01Preset: X01_PRESET_CUSTOM,
+        x01InMode: "Double",
+        x01OutMode: "Master",
+        x01BullMode: "50/50",
+        x01MaxRounds: 20,
+        x01BullOffMode: "Official",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        participants: participantList(2, "PM"),
+      });
+      const payload = buildLobbyCreatePayload(tournament);
+      record(
+        "Turnieranlage -> Matchstart-Payload übernimmt X01 + Best-of konsistent",
+        payload?.variant === X01_VARIANT
+          && payload?.isPrivate === true
+          && payload?.bullOffMode === "Official"
+          && payload?.legs === 4
+          && payload?.settings?.baseScore === 701
+          && payload?.settings?.inMode === "Double"
+          && payload?.settings?.outMode === "Master"
+          && payload?.settings?.maxRounds === 20
+          && payload?.settings?.bullMode === "50/50",
+        `legs=${payload?.legs}, settings=${JSON.stringify(payload?.settings || {})}`,
+      );
+    } catch (error) {
+      record("Turnieranlage -> Matchstart-Payload übernimmt X01 + Best-of konsistent", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
+        name: "BullOffOff",
+        mode: "league",
+        bestOfLegs: 5,
+        startScore: 501,
+        x01Preset: X01_PRESET_CUSTOM,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "50/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Off",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        participants: participantList(2, "BO"),
+      });
+      const payload = buildLobbyCreatePayload(tournament);
+      const hasBullMode = Object.prototype.hasOwnProperty.call(payload?.settings || {}, "bullMode");
+      record(
+        "Bull-off Off: Matchstart-Payload setzt top-level bullOffMode + bullMode",
+        payload?.bullOffMode === "Off"
+          && hasBullMode,
+        `bullOffMode=${payload?.bullOffMode || "-"}, hasBullMode=${hasBullMode}`,
+      );
+    } catch (error) {
+      record("Bull-off Off: Matchstart-Payload setzt top-level bullOffMode + bullMode", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
+        name: "DrawLockOn",
+        mode: "ko",
+        bestOfLegs: 3,
+        startScore: 501,
+        x01Preset: X01_PRESET_PDC_STANDARD,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        koDrawLocked: true,
+        participants: participantList(8, "DL"),
+      });
+      const before = JSON.stringify(tournament.ko?.rounds || []);
+      tournament.participants = tournament.participants.slice().reverse();
+      refreshDerivedMatches(tournament);
+      const after = JSON.stringify(tournament.ko?.rounds || []);
+      record(
+        "Draw-Lock aktiv: KO-Struktur bleibt stabil",
+        before === after,
+        `stable=${before === after}`,
+      );
+    } catch (error) {
+      record("Draw-Lock aktiv: KO-Struktur bleibt stabil", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
+        name: "DrawLockOff",
+        mode: "ko",
+        bestOfLegs: 3,
+        startScore: 501,
+        x01Preset: X01_PRESET_PDC_STANDARD,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        koDrawLocked: false,
+        participants: participantList(8, "DU"),
+      });
+      const before = JSON.stringify(tournament.ko?.rounds || []);
+      tournament.participants = tournament.participants.slice().reverse();
+      refreshDerivedMatches(tournament);
+      const after = JSON.stringify(tournament.ko?.rounds || []);
+      record(
+        "Draw-Lock aus: KO-Struktur kann neu aufgebaut werden",
+        before !== after,
+        `changed=${before !== after}`,
+      );
+    } catch (error) {
+      record("Draw-Lock aus: KO-Struktur kann neu aufgebaut werden", false, String(error?.message || error));
+    }
+
+    try {
+      const matches = [
+        createMatch({ id: "m-ab", stage: MATCH_STAGE_LEAGUE, round: 1, number: 1, player1Id: "A", player2Id: "B", status: STATUS_COMPLETED, winnerId: "A", legs: { p1: 2, p2: 1 } }),
+        createMatch({ id: "m-ac", stage: MATCH_STAGE_LEAGUE, round: 1, number: 2, player1Id: "A", player2Id: "C", status: STATUS_COMPLETED, winnerId: "A", legs: { p1: 2, p2: 1 } }),
+        createMatch({ id: "m-ad", stage: MATCH_STAGE_LEAGUE, round: 1, number: 3, player1Id: "A", player2Id: "D", status: STATUS_COMPLETED, winnerId: "D", legs: { p1: 0, p2: 2 } }),
+        createMatch({ id: "m-bc", stage: MATCH_STAGE_LEAGUE, round: 2, number: 1, player1Id: "B", player2Id: "C", status: STATUS_COMPLETED, winnerId: "B", legs: { p1: 2, p2: 0 } }),
+        createMatch({ id: "m-bd", stage: MATCH_STAGE_LEAGUE, round: 2, number: 2, player1Id: "B", player2Id: "D", status: STATUS_COMPLETED, winnerId: "B", legs: { p1: 2, p2: 0 } }),
+        createMatch({ id: "m-cd", stage: MATCH_STAGE_LEAGUE, round: 2, number: 3, player1Id: "C", player2Id: "D", status: STATUS_COMPLETED, winnerId: "C", legs: { p1: 2, p2: 1 } }),
+      ];
+
+      const h2hTournament = {
+        id: "tb1",
+        name: "TB1",
+        mode: "league",
+        ko: null,
+        bestOfLegs: 3,
+        startScore: 501,
+        x01: buildPdcX01Settings(),
+        rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
+        participants: [
+          { id: "A", name: "A" },
+          { id: "B", name: "B" },
+          { id: "C", name: "C" },
+          { id: "D", name: "D" },
+        ],
+        groups: [],
+        matches: cloneSerializable(matches),
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      };
+      const pointsLegDiffTournament = {
+        ...h2hTournament,
+        id: "tb2",
+        rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF }),
+        matches: cloneSerializable(matches),
+      };
+      const h2hRows = standingsForMatches(h2hTournament, h2hTournament.matches);
+      const legacyRows = standingsForMatches(pointsLegDiffTournament, pointsLegDiffTournament.matches);
+      record(
+        "Tie-Break-Profile: H2H und Punkte+LegDiff liefern unterschiedliche Reihenfolge",
+        h2hRows[0]?.id === "A" && legacyRows[0]?.id === "B",
+        `h2h=${h2hRows[0]?.id || "-"}, legacy=${legacyRows[0]?.id || "-"}`,
+      );
+    } catch (error) {
+      record("Tie-Break-Profile: H2H und Punkte+LegDiff liefern unterschiedliche Reihenfolge", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
+        name: "GroupsKo",
+        mode: "groups_ko",
+        bestOfLegs: 3,
+        startScore: 501,
+        x01Preset: X01_PRESET_PDC_STANDARD,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        participants: participantList(4, "G"),
+      });
+      const groupA = findMatch(tournament, "group-A-r1-m1");
+      const groupB = findMatch(tournament, "group-B-r1-m1");
+      groupA.status = STATUS_COMPLETED;
+      groupA.winnerId = groupA.player1Id;
+      groupA.legs = { p1: 2, p2: 0 };
+      groupB.status = STATUS_COMPLETED;
+      groupB.winnerId = groupB.player1Id;
+      groupB.legs = { p1: 2, p2: 1 };
+      refreshDerivedMatches(tournament);
+
+      const semi1 = findMatch(tournament, "ko-r1-m1");
+      const semi2 = findMatch(tournament, "ko-r1-m2");
+      semi1.status = STATUS_COMPLETED;
+      semi1.winnerId = semi1.player1Id;
+      semi1.legs = { p1: 2, p2: 0 };
+      semi2.status = STATUS_COMPLETED;
+      semi2.winnerId = semi2.player1Id;
+      semi2.legs = { p1: 2, p2: 1 };
+      refreshDerivedMatches(tournament);
+
+      const final = findMatch(tournament, "ko-r2-m1");
+      record(
+        "Groups+KO Regression: Finale wird korrekt aus Semis belegt",
+        Boolean(final?.player1Id && final?.player2Id),
+        `final=${final?.player1Id || "-"}:${final?.player2Id || "-"}`,
+      );
+    } catch (error) {
+      record("Groups+KO Regression: Finale wird korrekt aus Semis belegt", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = {
+        id: "t2",
+        name: "T2",
+        mode: "groups_ko",
+        ko: null,
+        bestOfLegs: 3,
+        startScore: 501,
+        x01: buildPdcX01Settings(),
+        rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
+        participants: [
+          { id: "A", name: "A" },
+          { id: "B", name: "B" },
+          { id: "C", name: "C" },
+        ],
+        groups: [],
+        matches: [
+          createMatch({ id: "m1", stage: MATCH_STAGE_GROUP, groupId: "A", round: 1, number: 1, player1Id: "A", player2Id: "B", status: STATUS_COMPLETED, winnerId: "A", legs: { p1: 2, p2: 1 } }),
+          createMatch({ id: "m2", stage: MATCH_STAGE_GROUP, groupId: "A", round: 2, number: 1, player1Id: "B", player2Id: "C", status: STATUS_COMPLETED, winnerId: "B", legs: { p1: 2, p2: 1 } }),
+          createMatch({ id: "m3", stage: MATCH_STAGE_GROUP, groupId: "A", round: 3, number: 1, player1Id: "C", player2Id: "A", status: STATUS_COMPLETED, winnerId: "C", legs: { p1: 2, p2: 1 } }),
+        ],
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      };
+      const rows = standingsForMatches(tournament, tournament.matches, ["A", "B", "C"]);
+      const blocked = rows.filter((row) => row.tiebreakState === "playoff_required").length;
+      record(
+        "Promoter H2H: Deadlock -> Playoff erforderlich",
+        blocked === 3,
+        rows.map((row) => `${row.id}:${row.tiebreakState}`).join(", "),
+      );
+    } catch (error) {
+      record("Promoter H2H: Deadlock -> Playoff erforderlich", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = {
+        participants: [
+          { id: "P1", name: "Sabine" },
+          { id: "P2", name: "Tanja" },
+        ],
+      };
+      const match = {
+        player1Id: "P1",
+        player2Id: "P2",
+      };
+      const apiStats = {
+        winner: 1,
+        players: [
+          { name: "Sabine" },
+          { name: "Tanja" },
+        ],
+        matchStats: [
+          { legsWon: 1 },
+          { legsWon: 0 },
+        ],
+      };
+      const candidates = getApiMatchLegCandidatesFromStats(tournament, match, apiStats, "P2");
+      const best = candidates[0] || { p1: -1, p2: -1 };
+      record(
+        "API Sync: vertauschte Legs-Reihenfolge wird korrigiert",
+        best.p1 === 0 && best.p2 === 1,
+        `best=${best.p1}:${best.p2}`,
+      );
+    } catch (error) {
+      record("API Sync: vertauschte Legs-Reihenfolge wird korrigiert", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = {
+        participants: [
+          { id: "P1", name: "Sabine" },
+          { id: "P2", name: "Tanja" },
+        ],
+      };
+      const match = {
+        player1Id: "P1",
+        player2Id: "P2",
+      };
+      const apiStats = {
+        winner: 0,
+        players: [
+          { name: "Sabine" },
+          { name: "Tanja" },
+        ],
+        matchStats: [
+          { legsWon: 1, player: { name: "Tanja" } },
+          { legsWon: 0, player: { name: "Sabine" } },
+        ],
+      };
+      const winners = resolveWinnerIdCandidatesFromApiStats(tournament, match, apiStats, 0);
+      record(
+        "API Sync: Winner-Index aus matchStats wird bevorzugt",
+        winners[0] === "P2",
+        `first=${winners[0] || "-"}`,
+      );
+    } catch (error) {
+      record("API Sync: Winner-Index aus matchStats wird bevorzugt", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = {
+        participants: [
+          { id: "P1", name: "Tommy" },
+          { id: "P2", name: "Hans" },
+        ],
+        matches: [
+          createMatch({ id: "m1", stage: MATCH_STAGE_GROUP, round: 1, number: 1, player1Id: "P1", player2Id: "P2", status: STATUS_PENDING }),
+          createMatch({ id: "m2", stage: MATCH_STAGE_KO, round: 2, number: 1, player1Id: "P1", player2Id: "P2", status: STATUS_PENDING }),
+        ],
+      };
+      const apiStats = {
+        players: [
+          { name: "Tommy" },
+          { name: "Hans" },
+        ],
+        matchStats: [
+          { player: { name: "Tommy" }, legsWon: 1 },
+          { player: { name: "Hans" }, legsWon: 0 },
+        ],
+      };
+      const recovered = findOpenMatchCandidatesByApiStats(tournament, apiStats);
+      record(
+        "API Sync: Recovery erkennt mehrdeutige Match-Zuordnung",
+        recovered.length === 2,
+        `candidates=${recovered.length}`,
+      );
+    } catch (error) {
+      record("API Sync: Recovery erkennt mehrdeutige Match-Zuordnung", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = {
+        participants: [
+          { id: "P1", name: "Tanja Mueller" },
+          { id: "P2", name: "Simon Stark" },
+        ],
+      };
+      const ids = participantIdsByName(tournament, "TANJA");
+      record(
+        "History Import: Namens-Matching erkennt Teilnamen",
+        ids.includes("P1"),
+        `ids=${ids.join(",")}`,
+      );
+    } catch (error) {
+      record("History Import: Namens-Matching erkennt Teilnamen", false, String(error?.message || error));
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      try {
+        const tournament = {
+          id: "history-test-lobby",
+          name: "History",
+          mode: "league",
+          ko: null,
+          bestOfLegs: 3,
+          startScore: 501,
+          x01: buildPdcX01Settings(),
+          rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
+          participants: [
+            { id: "P1", name: "Tanja Mueller" },
+            { id: "P2", name: "Simon Stark" },
+          ],
+          groups: [],
+          matches: [
+            createMatch({
+              id: "m-history-lobby",
+              stage: MATCH_STAGE_LEAGUE,
+              round: 1,
+              number: 1,
+              player1Id: "P1",
+              player2Id: "P2",
+              meta: {
+                auto: {
+                  lobbyId: "lobby-history-1",
+                  status: "started",
+                },
+              },
+            }),
+          ],
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        };
+        state.store.tournament = tournament;
+        const table = document.createElement("table");
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th>Stats</th>
+              <td><span class="ad-ext-player-name"><p>TANJA</p></span></td>
+              <td><span class="ad-ext-player-name"><p>SIMON</p></span><svg data-icon="trophy"></svg></td>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Gewonnene Legs</td><td>1</td><td>0</td></tr>
+          </tbody>
+        `;
+        const outcome = importHistoryStatsTableResult("lobby-history-1", { table });
+        const updated = findMatch(tournament, "m-history-lobby");
+        record(
+          "History Import: Lobby-Mapping priorisiert + Legs normalisiert",
+          Boolean(outcome?.ok)
+            && outcome.reasonCode === "completed"
+            && updated?.status === STATUS_COMPLETED
+            && updated?.winnerId === "P1"
+            && updated?.legs?.p1 === 2
+            && updated?.legs?.p2 === 0,
+          `reason=${outcome?.reasonCode || "-"}, winner=${updated?.winnerId || "-"}, legs=${updated?.legs?.p1}:${updated?.legs?.p2}`,
+        );
+      } catch (error) {
+        record("History Import: Lobby-Mapping priorisiert + Legs normalisiert", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+      }
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      try {
+        const tournament = {
+          id: "history-test-ambiguous",
+          name: "History",
+          mode: "league",
+          ko: null,
+          bestOfLegs: 1,
+          startScore: 501,
+          x01: buildPdcX01Settings(),
+          rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
+          participants: [
+            { id: "P1", name: "Tommy" },
+            { id: "P2", name: "Hans" },
+          ],
+          groups: [],
+          matches: [
+            createMatch({
+              id: "m-history-a",
+              stage: MATCH_STAGE_LEAGUE,
+              round: 1,
+              number: 1,
+              player1Id: "P1",
+              player2Id: "P2",
+            }),
+            createMatch({
+              id: "m-history-b",
+              stage: MATCH_STAGE_KO,
+              round: 2,
+              number: 1,
+              player1Id: "P1",
+              player2Id: "P2",
+              meta: {
+                auto: {
+                  lobbyId: "lobby-history-2",
+                  status: "started",
+                },
+              },
+            }),
+          ],
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        };
+        state.store.tournament = tournament;
+        const table = document.createElement("table");
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th>Stats</th>
+              <td><span class="ad-ext-player-name"><p>TOMMY</p></span></td>
+              <td><span class="ad-ext-player-name"><p>HANS</p></span></td>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Gewonnene Legs</td><td>1</td><td>0</td></tr>
+          </tbody>
+        `;
+        const outcome = importHistoryStatsTableResult("lobby-history-2", { table });
+        const matchA = findMatch(tournament, "m-history-a");
+        const matchB = findMatch(tournament, "m-history-b");
+        record(
+          "History Import: bei Mehrdeutigkeit gewinnt verknüpfte Lobby",
+          Boolean(outcome?.ok)
+            && matchA?.status === STATUS_PENDING
+            && matchB?.status === STATUS_COMPLETED
+            && matchB?.winnerId === "P1",
+          `reason=${outcome?.reasonCode || "-"}, A=${matchA?.status || "-"}, B=${matchB?.status || "-"}:${matchB?.winnerId || "-"}`,
+        );
+      } catch (error) {
+        record("History Import: bei Mehrdeutigkeit gewinnt verknüpfte Lobby", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+      }
+    }
+
+    try {
+      const rawStoreV2 = {
+        schemaVersion: 2,
+        settings: { debug: false, featureFlags: { autoLobbyStart: false, randomizeKoRound1: true } },
+        ui: { activeTab: "tournament", matchesSortMode: MATCH_SORT_MODE_READY_FIRST },
+        tournament: {
+          id: "legacy",
+          name: "Legacy",
+          mode: "league",
+          bestOfLegs: 3,
+          startScore: 501,
+          x01: buildPdcX01Settings(),
+          participants: [{ id: "A", name: "A" }, { id: "B", name: "B" }],
+          groups: [],
+          matches: [],
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        },
+      };
+      const migrated = migrateStorage(rawStoreV2);
+      record(
+        "Migration: v2 -> v4 setzt Tie-Break-Profil",
+        migrated.schemaVersion === 4
+          && migrated.tournament?.rules?.tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE
+          && migrated.settings?.featureFlags?.koDrawLockDefault === true,
+        `schema=${migrated.schemaVersion}, profile=${migrated.tournament?.rules?.tieBreakProfile}`,
+      );
+    } catch (error) {
+      record("Migration: v2 -> v3 setzt Tie-Break-Regeln", false, String(error?.message || error));
+    }
+
+    const passed = results.filter((entry) => entry.ok).length;
+    const failed = results.length - passed;
+    return {
+      ok: failed === 0,
+      passed,
+      failed,
+      results,
+      generatedAt: nowIso(),
+      version: APP_VERSION,
+    };
+  }
+
+// App layer: runtime orchestration, persistence scheduling and user feedback.
+
+  function setupRuntimeApi() {
+    window[RUNTIME_GLOBAL_KEY] = {
+      version: APP_VERSION,
+      isReady: () => state.ready,
+      openDrawer,
+      closeDrawer,
+      toggleDrawer,
+      runSelfTests,
+    };
+
+    addCleanup(() => {
+      if (window[RUNTIME_GLOBAL_KEY]) {
+        delete window[RUNTIME_GLOBAL_KEY];
+      }
+    });
   }
 
   function shouldShowAuthNotice() {
@@ -5688,2456 +7365,7 @@
 
   // Presentation layer: UI rendering and interaction wiring.
 
-  function onRouteChange() {
-    const current = routeKey();
-    if (current === state.routeKey) {
-      return;
-    }
-    state.routeKey = current;
-    logDebug("route", `Route changed to ${current}`);
-    ensureHost();
-    renderShell();
-    renderHistoryImportButton();
-  }
-
-
-  function installRouteHooks() {
-    if (state.patchedHistory) {
-      return;
-    }
-
-    const originalPushState = window.history.pushState;
-    const originalReplaceState = window.history.replaceState;
-
-    window.history.pushState = function patchedPushState(...args) {
-      const result = originalPushState.apply(this, args);
-      onRouteChange();
-      return result;
-    };
-    window.history.replaceState = function patchedReplaceState(...args) {
-      const result = originalReplaceState.apply(this, args);
-      onRouteChange();
-      return result;
-    };
-
-    state.patchedHistory = {
-      pushState: originalPushState,
-      replaceState: originalReplaceState,
-    };
-
-    addCleanup(() => {
-      if (state.patchedHistory) {
-        window.history.pushState = state.patchedHistory.pushState;
-        window.history.replaceState = state.patchedHistory.replaceState;
-        state.patchedHistory = null;
-      }
-    });
-
-    addListener(window, "popstate", onRouteChange, { passive: true });
-    addListener(window, "hashchange", onRouteChange, { passive: true });
-    addInterval(() => {
-      if (!document.getElementById(UI_HOST_ID)) {
-        ensureHost();
-      }
-      onRouteChange();
-      renderHistoryImportButton();
-    }, 1000);
-  }
-
-  function buildStyles() {
-    return ATA_UI_MAIN_CSS;
-  }
-
-  function buildShellHtml() {
-    const tabs = TAB_META.map((tab) => `
-      <button type="button" class="ata-tab" data-tab="${tab.id}" data-active="${state.activeTab === tab.id ? "1" : "0"}">
-        ${escapeHtml(tab.label)}
-      </button>
-    `).join("");
-
-    const noticeHtml = state.notice.message
-      ? `<div class="ata-notice ata-notice-${escapeHtml(state.notice.type)}">${escapeHtml(state.notice.message)}</div>`
-      : "";
-    const runtimeStatusHtml = renderRuntimeStatusBar();
-
-    return `
-      <style>${buildStyles()}</style>
-      <div class="ata-root" data-open="${state.drawerOpen ? "1" : "0"}">
-        <div class="ata-overlay" data-action="close-drawer"></div>
-        <aside class="ata-drawer" role="dialog" aria-modal="true" aria-label="Autodarts Tournament Assistant" tabindex="-1">
-          <header class="ata-header">
-            <div class="ata-title-wrap">
-              <h2>Turnier Assistent</h2>
-              <p>Lokales Management f\u00fcr KO, Liga und Gruppenphase <span class="ata-version">v${escapeHtml(APP_VERSION)}</span></p>
-            </div>
-            <button type="button" class="ata-close-btn" data-action="close-drawer" aria-label="Schlie\u00dfen">Schlie\u00dfen</button>
-          </header>
-          <nav class="ata-tabs">${tabs}</nav>
-          ${runtimeStatusHtml}
-          <main class="ata-content" data-role="content">${noticeHtml}${renderActiveTab()}</main>
-        </aside>
-      </div>
-    `;
-  }
-
-  function renderActiveTab() {
-    switch (state.activeTab) {
-      case "matches":
-        return renderMatchesTab();
-      case "view":
-        return renderViewTab();
-      case "io":
-        return renderIOTab();
-      case "settings":
-        return renderSettingsTab();
-      case "tournament":
-      default:
-        return renderTournamentTab();
-    }
-  }
-
-  function renderTournamentTab() {
-    const tournament = state.store.tournament;
-    if (!tournament) {
-      const draft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store?.settings);
-      const randomizeChecked = draft.randomizeKoRound1 ? "checked" : "";
-      const modeLimitSummary = buildModeParticipantLimitSummary();
-      const startScoreOptions = X01_START_SCORE_OPTIONS.map((score) => (
-        `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${score}</option>`
-      )).join("");
-      const pdcCompliantSetup = isPdcCompliantMatchSetup(draft);
-      const pdcPresetActive = draft.x01Preset === X01_PRESET_PDC_STANDARD && pdcCompliantSetup;
-      const presetStatusLabel = pdcPresetActive ? "Preset aktiv: PDC-Standard" : "Preset aktiv: Individuell";
-      const pdcPresetHint = "PDC-Preset setzt KO, Best of 5, 501, Straight In, Double Out, Bull-off Normal, Bull 25/50 und Max. Runden 50.";
-      const bullModeDisabled = draft.x01BullOffMode === "Off";
-      const bullModeDisabledAttr = bullModeDisabled ? "disabled" : "";
-      const bullModeHiddenInput = bullModeDisabled
-        ? `<input type="hidden" id="ata-x01-bullmode-hidden" name="x01BullMode" value="${escapeHtml(draft.x01BullMode)}">`
-        : "";
-      const createHeadingLinks = [
-        { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erklärung zur Turniererstellung öffnen", title: "README: Turnier anlegen" },
-        { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole öffnen", title: "README: Info-Symbole" },
-      ];
-      const modeHelpLinks = renderInfoLinks([
-        { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Erklärung der Modi öffnen", title: "README: Turniermodi" },
-        { href: DRA_GUI_RULE_MODE_FORMATS_URL, kind: "rule", label: "DRA-Regelerklärung zu Modus und Format öffnen", title: "DRA-Regeln in der GUI: Modus und Format" },
-      ]);
-      const drawHelpLinks = renderInfoLinks([
-        { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Open Draw und gesetzter Draw erklärt", title: "README: KO-Modus" },
-        { href: DRA_GUI_RULE_OPEN_DRAW_URL, kind: "rule", label: "DRA-Regelerklärung zu Open Draw öffnen", title: "DRA-Regeln in der GUI: Open Draw" },
-      ]);
-      const modeLimitHelpLinks = renderInfoLinks([
-        { href: DRA_GUI_RULE_PARTICIPANT_LIMITS_URL, kind: "rule", label: "DRA-Regelerklärung zu Limits öffnen", title: "DRA-Regeln in der GUI: Teilnehmerlimits" },
-      ]);
-      return `
-        <section class="ata-card tournamentCard">
-          ${renderSectionHeading("Neues Turnier erstellen", createHeadingLinks)}
-          <form id="ata-create-form" class="ata-create-form">
-            <input type="hidden" id="ata-x01-preset" name="x01Preset" value="${escapeHtml(draft.x01Preset)}">
-            <div class="ata-create-layout">
-              <div class="ata-create-main">
-                <div class="ata-grid-3 ata-grid-3-tight">
-                  <div class="ata-field">
-                    <label for="ata-name">Turniername</label>
-                    <input id="ata-name" name="name" type="text" placeholder="z. B. Freitagsturnier" value="${escapeHtml(draft.name)}" required>
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-mode">Modus ${modeHelpLinks}</label>
-                    <select id="ata-mode" name="mode">
-                      <option value="ko" ${draft.mode === "ko" ? "selected" : ""}>KO</option>
-                      <option value="league" ${draft.mode === "league" ? "selected" : ""}>Liga</option>
-                      <option value="groups_ko" ${draft.mode === "groups_ko" ? "selected" : ""}>Gruppenphase + KO</option>
-                    </select>
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-bestof">Best of Legs</label>
-                    <input id="ata-bestof" name="bestOfLegs" type="number" min="1" max="21" step="2" value="${draft.bestOfLegs}">
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-startscore">Startpunkte</label>
-                    <select id="ata-startscore" name="startScore">
-                      ${startScoreOptions}
-                    </select>
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-x01-inmode">In-Modus</label>
-                    <select id="ata-x01-inmode" name="x01InMode">
-                      <option value="Straight" ${draft.x01InMode === "Straight" ? "selected" : ""}>Straight</option>
-                      <option value="Double" ${draft.x01InMode === "Double" ? "selected" : ""}>Double</option>
-                      <option value="Master" ${draft.x01InMode === "Master" ? "selected" : ""}>Master</option>
-                    </select>
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-x01-outmode">Out-Modus</label>
-                    <select id="ata-x01-outmode" name="x01OutMode">
-                      <option value="Straight" ${draft.x01OutMode === "Straight" ? "selected" : ""}>Straight</option>
-                      <option value="Double" ${draft.x01OutMode === "Double" ? "selected" : ""}>Double</option>
-                      <option value="Master" ${draft.x01OutMode === "Master" ? "selected" : ""}>Master</option>
-                    </select>
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-x01-bulloff">Bull-off</label>
-                    <select id="ata-x01-bulloff" name="x01BullOffMode">
-                      <option value="Off" ${draft.x01BullOffMode === "Off" ? "selected" : ""}>Off</option>
-                      <option value="Normal" ${draft.x01BullOffMode === "Normal" ? "selected" : ""}>Normal</option>
-                      <option value="Official" ${draft.x01BullOffMode === "Official" ? "selected" : ""}>Official</option>
-                    </select>
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-x01-bullmode">Bull-Modus</label>
-                    <select id="ata-x01-bullmode" name="x01BullMode" ${bullModeDisabledAttr}>
-                      <option value="25/50" ${draft.x01BullMode === "25/50" ? "selected" : ""}>25/50</option>
-                      <option value="50/50" ${draft.x01BullMode === "50/50" ? "selected" : ""}>50/50</option>
-                    </select>
-                    ${bullModeHiddenInput}
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-x01-maxrounds">Max Runden</label>
-                    <select id="ata-x01-maxrounds" name="x01MaxRounds">
-                      <option value="15" ${draft.x01MaxRounds === 15 ? "selected" : ""}>15</option>
-                      <option value="20" ${draft.x01MaxRounds === 20 ? "selected" : ""}>20</option>
-                      <option value="50" ${draft.x01MaxRounds === 50 ? "selected" : ""}>50</option>
-                      <option value="80" ${draft.x01MaxRounds === 80 ? "selected" : ""}>80</option>
-                    </select>
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-match-mode">Spielmodus</label>
-                    <span id="ata-match-mode" class="ata-field-readonly">Legs (First to N aus Best of)</span>
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-lobby-fixed">Lobby</label>
-                    <span id="ata-lobby-fixed" class="ata-field-readonly">Privat</span>
-                  </div>
-                  <div class="ata-field ata-field-span-3">
-                    <label for="ata-apply-pdc-preset">Preset</label>
-                    <div class="ata-form-inline-actions">
-                      <button id="ata-apply-pdc-preset" type="button" class="ata-btn ata-btn-sm" data-action="apply-pdc-preset">PDC-Preset anwenden</button>
-                      <span class="ata-preset-pill">${escapeHtml(presetStatusLabel)}</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="ata-toggle ata-toggle-compact">
-                  <div>
-                    <strong>KO-Erstrunde zuf\u00e4llig mischen ${drawHelpLinks}</strong>
-                    <div class="ata-small">Open Draw bei aktivem Schalter, sonst gesetzter Draw.</div>
-                  </div>
-                  <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
-                </div>
-                <p class="ata-small ata-create-help">${escapeHtml(pdcPresetHint)}</p>
-                <p class="ata-small ata-create-help">Best of 1 ist kein PDC-Standardprofil; für das Badge gilt Best of mindestens 3 Legs.</p>
-                <p class="ata-small ata-create-help">Bull-off = Off deaktiviert Bull-Modus automatisch (schreibgesch\u00fctzt).</p>
-              </div>
-              <aside class="ata-create-side">
-                <div class="ata-field">
-                  <label for="ata-participants">Teilnehmer (eine Zeile pro Person)</label>
-                  <textarea id="ata-participants" name="participants" placeholder="Max Mustermann&#10;Erika Musterfrau">${escapeHtml(draft.participantsText)}</textarea>
-                </div>
-                <div class="ata-actions">
-                  <button type="button" class="ata-btn ata-btn-sm" data-action="shuffle-participants">Teilnehmer mischen</button>
-                  <button type="submit" class="ata-btn ata-btn-primary">Turnier anlegen</button>
-                </div>
-                <p class="ata-small">Modus-Limits ${modeLimitHelpLinks}: ${escapeHtml(modeLimitSummary)}.</p>
-              </aside>
-            </div>
-            <p class="ata-small">Bei Moduswechsel gelten die jeweiligen Grenzen sofort.</p>
-          </form>
-        </section>
-      `;
-    }
-
-    const modeLabel = tournament.mode === "ko"
-      ? "KO (Straight Knockout)"
-      : tournament.mode === "league"
-        ? "Liga (Round Robin)"
-        : "Gruppenphase + KO (Round Robin + Straight Knockout)";
-
-    const participantsHtml = tournament.participants.map((participant) => (
-      `<span class="ata-player-chip">${escapeHtml(participant.name)}</span>`
-    )).join("");
-    const participantsCount = tournament.participants.length;
-    const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
-    const x01PresetLabel = x01Settings.presetId === X01_PRESET_PDC_STANDARD ? "PDC-Standard" : "Individuell";
-    const x01BullModeLabel = x01Settings.bullOffMode === "Off"
-      ? "Bull-Modus deaktiviert"
-      : `Bull-Modus ${x01Settings.bullMode}`;
-    const legsToWin = getLegsToWin(tournament.bestOfLegs);
-    const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED);
-    const drawModeLabel = drawMode === KO_DRAW_MODE_OPEN_DRAW ? "Open Draw" : "Gesetzter Draw";
-    const drawLockLabel = tournament?.ko?.drawLocked !== false ? "Draw-Lock aktiv" : "Draw-Lock aus";
-    const primaryTags = [
-      { text: `Best of ${tournament.bestOfLegs} Legs`, cls: "ata-info-tag ata-info-tag-key" },
-      { text: `First to ${legsToWin} Legs`, cls: "ata-info-tag" },
-      { text: `Startpunkte ${tournament.startScore}`, cls: "ata-info-tag" },
-      ...(tournament.mode === "ko"
-        ? [
-          { text: drawModeLabel, cls: "ata-info-tag ata-info-tag-accent" },
-          { text: drawLockLabel, cls: "ata-info-tag" },
-        ]
-        : []),
-    ];
-    const x01Tags = [
-      { text: `X01 ${x01PresetLabel}`, cls: "ata-info-tag ata-info-tag-key" },
-      { text: `${x01Settings.inMode} In`, cls: "ata-info-tag" },
-      { text: `${x01Settings.outMode} Out`, cls: "ata-info-tag" },
-      { text: `Bull-off ${x01Settings.bullOffMode}`, cls: "ata-info-tag" },
-      { text: x01BullModeLabel, cls: "ata-info-tag" },
-      { text: `Max. Runden ${x01Settings.maxRounds}`, cls: "ata-info-tag" },
-    ];
-    const primaryTagsHtml = primaryTags.map((tag) => `<span class="${tag.cls}">${escapeHtml(tag.text)}</span>`).join("");
-    const x01TagsHtml = x01Tags.map((tag) => `<span class="${tag.cls}">${escapeHtml(tag.text)}</span>`).join("");
-    const activeTournamentHeadingLinks = [
-      { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Turniermodus-Erklärung öffnen", title: "README: Turniermodi" },
-    ];
-    const activeFormatHelpLinks = renderInfoLinks([
-      { href: DRA_GUI_RULE_MODE_FORMATS_URL, kind: "rule", label: "DRA-Regelerklärung zu Modus und Format öffnen", title: "DRA-Regeln in der GUI: Modus und Format" },
-    ]);
-
-    return `
-      <section class="ata-card tournamentCard">
-        ${renderSectionHeading("Aktives Turnier", activeTournamentHeadingLinks)}
-        <p class="ata-tournament-title">
-          <b>${escapeHtml(tournament.name)}</b>
-          <span class="ata-tournament-mode-pill">${escapeHtml(modeLabel)}</span>
-        </p>
-        <div class="ata-tournament-meta">
-          <div class="ata-meta-block">
-            <div class="ata-meta-heading">Format ${activeFormatHelpLinks}</div>
-            <div class="ata-info-tag-cloud">${primaryTagsHtml}</div>
-          </div>
-          <div class="ata-meta-block">
-            <div class="ata-meta-heading">Spiel-Setup (X01)</div>
-            <div class="ata-info-tag-cloud">${x01TagsHtml}</div>
-          </div>
-          <div class="ata-meta-block">
-            <div class="ata-meta-heading">Teilnehmerfeld <span class="ata-player-chip-count">(${participantsCount})</span></div>
-            <div class="ata-player-chip-cloud">${participantsHtml}</div>
-          </div>
-        </div>
-      </section>
-      <section class="ata-card tournamentCard">
-        <h3>Turnier zur\u00fccksetzen</h3>
-        <p class="ata-small">Dieser Schritt l\u00f6scht alle Spielst\u00e4nde. Bitte vorher exportieren.</p>
-        <div class="ata-actions">
-          <button type="button" class="ata-btn ata-btn-danger" data-action="reset-tournament">Turnier l\u00f6schen</button>
-        </div>
-      </section>
-    `;
-  }
-
-  function compareMatchesByRound(left, right) {
-    const stageOrder = { group: 1, league: 2, ko: 3 };
-    const leftOrder = stageOrder[left.stage] || 99;
-    const rightOrder = stageOrder[right.stage] || 99;
-    if (leftOrder !== rightOrder) {
-      return leftOrder - rightOrder;
-    }
-    return left.round - right.round || left.number - right.number;
-  }
-
-
-  function getMatchPriorityReadyFirst(tournament, match) {
-    const auto = ensureMatchAutoMeta(match);
-    const playability = getMatchEditability(tournament, match);
-    if (match.status === STATUS_PENDING && auto.status === "started" && auto.lobbyId) {
-      return 0;
-    }
-    if (match.status === STATUS_PENDING && playability.editable) {
-      return 1;
-    }
-    if (match.status === STATUS_COMPLETED && !isByeMatchResult(match)) {
-      return 2;
-    }
-    if (match.status === STATUS_COMPLETED && isByeMatchResult(match)) {
-      return 3;
-    }
-    return 4;
-  }
-
-
-  function getMatchPriorityStatus(tournament, match) {
-    const playability = getMatchEditability(tournament, match);
-    if (match.status === STATUS_PENDING && playability.editable) {
-      return 0;
-    }
-    if (match.status === STATUS_PENDING) {
-      return 1;
-    }
-    if (isByeMatchResult(match)) {
-      return 3;
-    }
-    return 2;
-  }
-
-
-  function sortMatchesForDisplay(tournament, sortMode) {
-    const mode = sanitizeMatchesSortMode(sortMode, MATCH_SORT_MODE_READY_FIRST);
-    const source = Array.isArray(tournament?.matches) ? tournament.matches.slice() : [];
-    if (mode === MATCH_SORT_MODE_ROUND) {
-      return source.sort(compareMatchesByRound);
-    }
-    if (mode === MATCH_SORT_MODE_STATUS) {
-      return source.sort((left, right) => {
-        const leftPriority = getMatchPriorityStatus(tournament, left);
-        const rightPriority = getMatchPriorityStatus(tournament, right);
-        if (leftPriority !== rightPriority) {
-          return leftPriority - rightPriority;
-        }
-        return compareMatchesByRound(left, right);
-      });
-    }
-    return source.sort((left, right) => {
-      const leftPriority = getMatchPriorityReadyFirst(tournament, left);
-      const rightPriority = getMatchPriorityReadyFirst(tournament, right);
-      if (leftPriority !== rightPriority) {
-        return leftPriority - rightPriority;
-      }
-      return compareMatchesByRound(left, right);
-    });
-  }
-
-
-  function findSuggestedNextMatch(tournament) {
-    const source = Array.isArray(tournament?.matches) ? tournament.matches.slice() : [];
-    const candidates = source
-      .filter((match) => {
-        if (!match || match.status !== STATUS_PENDING) {
-          return false;
-        }
-        const playability = getMatchEditability(tournament, match);
-        if (!playability.editable) {
-          return false;
-        }
-        const auto = ensureMatchAutoMeta(match);
-        return !(auto.status === "started" && auto.lobbyId);
-      })
-      .sort(compareMatchesByRound);
-    return candidates[0] || null;
-  }
-
-
-  function renderMatchesTab() {
-    const tournament = state.store.tournament;
-    if (!tournament) {
-      return `<section class="ata-card tournamentCard"><h3>Keine Turnierdaten</h3><p>Bitte zuerst ein Turnier erstellen.</p></section>`;
-    }
-
-    const activeStartedMatch = findActiveStartedMatch(tournament);
-    const sortMode = sanitizeMatchesSortMode(state.store?.ui?.matchesSortMode, MATCH_SORT_MODE_READY_FIRST);
-    const sortOptions = [
-      { id: MATCH_SORT_MODE_READY_FIRST, label: "Spielbar zuerst" },
-      { id: MATCH_SORT_MODE_ROUND, label: "Runde/Spiel" },
-      { id: MATCH_SORT_MODE_STATUS, label: "Status" },
-    ];
-
-    const matches = sortMatchesForDisplay(tournament, sortMode);
-    const legsToWin = getLegsToWin(tournament.bestOfLegs);
-    const suggestedNextMatch = findSuggestedNextMatch(tournament);
-    const suggestedNextMatchId = suggestedNextMatch?.id || "";
-    const koFinalRound = getMatchesByStage(tournament, MATCH_STAGE_KO).reduce((maxRound, koMatch) => {
-      const roundNumber = Number.parseInt(String(koMatch?.round || "0"), 10);
-      return Number.isFinite(roundNumber) && roundNumber > maxRound ? roundNumber : maxRound;
-    }, 0);
-
-    const cards = matches.map((match) => {
-      const player1 = participantNameById(tournament, match.player1Id);
-      const player2 = participantNameById(tournament, match.player2Id);
-      const winner = participantNameById(tournament, match.winnerId);
-      const isOpenSlot = (name) => name === "\u2205 offen";
-      const playability = getMatchEditability(tournament, match);
-      const editable = playability.editable;
-      const auto = ensureMatchAutoMeta(match);
-      const isCompleted = match.status === STATUS_COMPLETED;
-      const isByeCompletion = isCompleted && isByeMatchResult(match);
-      const isAutoStarted = match.status === STATUS_PENDING && auto.status === "started" && Boolean(auto.lobbyId);
-      const isBlockedPending = match.status === STATUS_PENDING && !editable;
-      const isReadyPending = match.status === STATUS_PENDING && editable;
-      const isSuggestedNext = Boolean(suggestedNextMatchId) && match.id === suggestedNextMatchId;
-      const isKoFinal = match.stage === MATCH_STAGE_KO && koFinalRound > 0 && Number(match.round) === koFinalRound;
-      const stageLabel = match.stage === MATCH_STAGE_GROUP
-        ? `Gruppe ${match.groupId || "?"}`
-        : match.stage === MATCH_STAGE_LEAGUE
-          ? "Liga (Round Robin)"
-          : "KO (Straight Knockout)";
-      const startUi = getApiMatchStartUi(tournament, match, activeStartedMatch);
-      const startDisabledAttr = startUi.disabled ? "disabled" : "";
-      const startTitleAttr = startUi.title ? `title="${escapeHtml(startUi.title)}"` : "";
-      const autoStatus = getApiMatchStatusText(match);
-      let statusLine = "";
-      if (match.status === STATUS_PENDING) {
-        if (!editable && playability.reason) {
-          statusLine = auto.status === "idle"
-            ? playability.reason
-            : `${playability.reason} - ${autoStatus}`;
-        } else if (auto.status !== "idle") {
-          statusLine = autoStatus;
-        }
-      } else if (!isByeCompletion && auto.status !== "completed") {
-        statusLine = autoStatus;
-      }
-      const matchCellText = `Runde ${match.round} / Spiel ${match.number}`;
-      const matchCellHelpText = "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
-      const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
-      const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
-      const saveHelpText = `Speichert Legs f\u00fcr ${player1} vs ${player2}. Sieger wird automatisch aus den Legs bestimmt. Sieger muss ${legsToWin} Legs erreichen.`;
-      const rowClasses = [
-        "ata-match-card",
-        isCompleted ? "ata-row-completed" : "",
-        isByeCompletion ? "ata-row-bye" : "",
-        isAutoStarted ? "ata-row-live" : "",
-        isReadyPending ? "ata-row-ready" : "",
-        isSuggestedNext ? "ata-row-next" : "",
-        isKoFinal ? "ata-row-final" : "",
-        isBlockedPending ? "ata-row-blocked" : "",
-        !editable ? "ata-row-inactive" : "",
-      ].filter(Boolean).join(" ");
-      const statusBadgeText = isByeCompletion ? "Freilos (Bye)" : (isCompleted ? "Abgeschlossen" : "Offen");
-      const contextPillClass = isByeCompletion
-        ? "ata-match-context-pill ata-match-context-bye"
-        : (isCompleted ? "ata-match-context-pill ata-match-context-completed" : "ata-match-context-pill ata-match-context-open");
-      const contextText = `${stageLabel}, ${matchCellText}, ${statusBadgeText}`;
-      const summaryText = isCompleted
-        ? (isByeCompletion
-          ? `Weiter (Bye): ${winner}`
-          : (isKoFinal ? `Champion: ${winner} (${match.legs.p1}:${match.legs.p2})` : `Sieger: ${winner} (${match.legs.p1}:${match.legs.p2})`))
-        : "";
-      const advanceClasses = [
-        "ata-match-advance-pill",
-        isByeCompletion ? "ata-match-advance-bye" : "",
-        isKoFinal ? "ata-match-advance-final" : "",
-      ].filter(Boolean).join(" ");
-
-      const buildPairingPlayerHtml = (name, participantId) => {
-        const classes = ["ata-pairing-player"];
-        if (isOpenSlot(name)) {
-          classes.push("ata-open-slot");
-          return `<span class="${classes.join(" ")}">${escapeHtml(name)}</span>`;
-        }
-        if (isCompleted && match.winnerId) {
-          if (participantId === match.winnerId) {
-            classes.push("is-winner");
-            if (isKoFinal) {
-              classes.push("is-champion");
-            }
-          } else if (participantId === match.player1Id || participantId === match.player2Id) {
-            classes.push("is-loser");
-          }
-        }
-        return `<span class="${classes.join(" ")}">${escapeHtml(name)}</span>`;
-      };
-
-      const player1PairingHtml = buildPairingPlayerHtml(player1, match.player1Id);
-      const player2PairingHtml = buildPairingPlayerHtml(player2, match.player2Id);
-
-      const editorHtml = editable
-        ? `
-          <div class="ata-match-editor">
-            <div class="ata-score-grid">
-              <input
-                type="number"
-                min="0"
-                max="${legsToWin}"
-                data-field="legs-p1"
-                data-match-id="${escapeHtml(match.id)}"
-                value="${match.legs.p1}"
-                aria-label="${escapeHtml(legsP1HelpText)}"
-                title="${escapeHtml(legsP1HelpText)}"
-              >
-              <input
-                type="number"
-                min="0"
-                max="${legsToWin}"
-                data-field="legs-p2"
-                data-match-id="${escapeHtml(match.id)}"
-                value="${match.legs.p2}"
-                aria-label="${escapeHtml(legsP2HelpText)}"
-                title="${escapeHtml(legsP2HelpText)}"
-              >
-            </div>
-            <div class="ata-editor-actions">
-              <button type="button" class="ata-btn" data-action="save-match" data-match-id="${escapeHtml(match.id)}" title="${escapeHtml(saveHelpText)}">Speichern</button>
-              <button type="button" class="ata-btn ata-btn-primary" data-action="start-match" data-match-id="${escapeHtml(match.id)}" ${startDisabledAttr} ${startTitleAttr}>${escapeHtml(startUi.label)}</button>
-            </div>
-          </div>
-        `
-        : "";
-
-      const summaryHtml = summaryText
-        ? `<span class="${escapeHtml(advanceClasses)}">${escapeHtml(summaryText)}</span>`
-        : "";
-      const nextPillHtml = isSuggestedNext
-        ? `<span class="ata-match-next-pill" title="Empfohlene n\u00e4chste Paarung (PDC: Next Match)">N\u00e4chstes Match</span>`
-        : "";
-      const finalPillHtml = isKoFinal
-        ? `<span class="ata-match-final-pill" title="Finale">🏆 Finale</span>`
-        : "";
-      const statusLineHtml = statusLine
-        ? `<div class="ata-match-note">${escapeHtml(statusLine)}</div>`
-        : "";
-
-      return `
-        <article class="${escapeHtml(rowClasses)}" data-match-id="${escapeHtml(match.id)}">
-          <div class="ata-match-card-head">
-            <div class="ata-match-title-row">
-              <div class="ata-match-pairing">${player1PairingHtml} <span class="ata-vs">vs</span> ${player2PairingHtml}</div>
-              <div class="ata-match-meta-inline">
-                ${finalPillHtml}
-                ${nextPillHtml}
-                <span class="${contextPillClass}" title="${escapeHtml(matchCellHelpText)}">${escapeHtml(contextText)}</span>
-              </div>
-            </div>
-            ${summaryHtml}
-          </div>
-          ${editorHtml}
-          ${statusLineHtml}
-        </article>
-      `;
-    }).join("");
-
-    const cardsHtml = cards || `<p class="ata-small">Keine Matches vorhanden.</p>`;
-    const resultHeadingLinks = [
-      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Erklärung zur API-Halbautomatik öffnen", title: "README: API-Halbautomatik" },
-      { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
-    ];
-    const nextMatchHelpLinks = renderInfoLinks([
-      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Ablauf der Ergebnisführung öffnen", title: "README: API-Halbautomatik und Ergebnisführung" },
-      { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Turniermodus-Kontext öffnen", title: "README: Turniermodi" },
-    ]);
-    const nextHintHtml = suggestedNextMatchId
-      ? `<p class="ata-small ata-next-hint">Hinweis: Die Markierung "Nächstes Match" zeigt die empfohlene nächste Paarung (PDC: Next Match) ${nextMatchHelpLinks}.</p>`
-      : "";
-    const sortButtonsHtml = sortOptions.map((option) => `
-      <button type="button" class="ata-segmented-btn" data-action="set-matches-sort" data-sort-mode="${option.id}" data-active="${sortMode === option.id ? "1" : "0"}">${escapeHtml(option.label)}</button>
-    `).join("");
-
-    return `
-      <section class="ata-card tournamentCard ata-matches-card">
-        ${renderSectionHeading("Ergebnisführung", resultHeadingLinks)}
-        <p class="ata-small">API-Halbautomatik: Match per Klick starten, Ergebnis wird automatisch synchronisiert. Manuelle Eingabe bleibt als Fallback aktiv. ${renderInfoLinks([
-          { href: README_API_AUTOMATION_URL, kind: "tech", label: "Voraussetzungen und Ablauf öffnen", title: "README: API-Halbautomatik" },
-        ])}</p>
-        <div class="ata-matches-toolbar">
-          <div class="ata-segmented" role="group" aria-label="Match-Sortierung">${sortButtonsHtml}</div>
-        </div>
-        ${nextHintHtml}
-        <div class="ata-match-list">${cardsHtml}</div>
-      </section>
-    `;
-  }
-
-  function renderStandingsTable(rows, headline, headingLinks = []) {
-    const bodyRows = rows.map((row) => `
-      <tr>
-        <td>${row.rank}</td>
-        <td>${escapeHtml(row.name)}</td>
-        <td>${row.played}</td>
-        <td>${row.wins}</td>
-        <td>${row.draws || 0}</td>
-        <td>${row.losses}</td>
-        <td>${row.points}</td>
-        <td>${row.legDiff}</td>
-        <td>${row.legsFor}</td>
-        <td>${row.tiebreakState === "playoff_required" ? "Playoff" : "-"}</td>
-      </tr>
-    `).join("");
-
-    return `
-      <div class="ata-card">
-        ${renderSectionHeading(headline, headingLinks)}
-        <div class="ata-table-wrap">
-          <table class="ata-table tournamentRanking">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Name</th>
-                <th>Sp</th>
-                <th>S</th>
-                <th>U</th>
-                <th>N</th>
-                <th>Pkt</th>
-                <th>LegDiff</th>
-                <th>Legs+</th>
-                <th>TB</th>
-              </tr>
-            </thead>
-            <tbody>${bodyRows}</tbody>
-          </table>
-        </div>
-      </div>
-    `;
-  }
-
-
-  function renderLeagueSchedule(tournament) {
-    const matches = getMatchesByStage(tournament, MATCH_STAGE_LEAGUE);
-    if (!matches.length) {
-      return "";
-    }
-    const rows = matches.map((match) => `
-      <tr>
-        <td>R${match.round}</td>
-        <td>${escapeHtml(participantNameById(tournament, match.player1Id))}</td>
-        <td>${escapeHtml(participantNameById(tournament, match.player2Id))}</td>
-        <td>${match.status === STATUS_COMPLETED ? escapeHtml(participantNameById(tournament, match.winnerId)) : "-"}</td>
-        <td>${match.status === STATUS_COMPLETED ? `${match.legs.p1}:${match.legs.p2}` : "-"}</td>
-      </tr>
-    `).join("");
-
-    return `
-      <div class="ata-card">
-        <h3>Liga-Spielplan</h3>
-        <div class="ata-table-wrap">
-          <table class="ata-table tournamentRanking">
-            <thead>
-              <tr>
-                <th>Runde</th>
-                <th>Spieler 1</th>
-                <th>Spieler 2</th>
-                <th>Winner</th>
-                <th>Legs</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-      </div>
-    `;
-  }
-
-
-  function renderStaticBracketFallback(tournament) {
-    const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
-    if (!koMatches.length) {
-      return `<p class="ata-small">Kein KO-Turnierbaum vorhanden.</p>`;
-    }
-
-    const rounds = new Map();
-    koMatches.forEach((match) => {
-      if (!rounds.has(match.round)) {
-        rounds.set(match.round, []);
-      }
-      rounds.get(match.round).push(match);
-    });
-
-    const roundHtml = [...rounds.entries()]
-      .sort((left, right) => left[0] - right[0])
-      .map(([roundNumber, matches]) => {
-        const matchesHtml = matches
-          .sort((a, b) => a.number - b.number)
-          .map((match) => {
-            const isCompleted = isCompletedMatchResultValid(tournament, match);
-            const isBye = isCompleted && isByeMatchResult(match);
-            const player1Name = participantNameById(tournament, match.player1Id);
-            const player2Name = participantNameById(tournament, match.player2Id);
-            const hasLegScores = isCompleted && Number.isFinite(match?.legs?.p1) && Number.isFinite(match?.legs?.p2);
-            const winnerId = isCompleted ? normalizeText(match.winnerId) : "";
-            const player1IsWinner = Boolean(winnerId) && normalizeText(match.player1Id) === winnerId;
-            const player2IsWinner = Boolean(winnerId) && normalizeText(match.player2Id) === winnerId;
-            const player1Classes = [
-              "ata-bracket-player",
-              player1Name === "\u2205 offen" ? "ata-open-slot" : "",
-              player1IsWinner ? "is-winner" : "",
-              (isCompleted && !isBye && !player1IsWinner && normalizeText(match.player1Id)) ? "is-loser" : "",
-            ].filter(Boolean).join(" ");
-            const player2Classes = [
-              "ata-bracket-player",
-              player2Name === "\u2205 offen" ? "ata-open-slot" : "",
-              player2IsWinner ? "is-winner" : "",
-              (isCompleted && !isBye && !player2IsWinner && normalizeText(match.player2Id)) ? "is-loser" : "",
-            ].filter(Boolean).join(" ");
-            const statusBadgeClass = isBye
-              ? "ata-match-status ata-match-status-bye"
-              : (isCompleted ? "ata-match-status ata-match-status-completed" : "ata-match-status ata-match-status-open");
-            const statusBadgeText = isBye ? "Freilos (Bye)" : (isCompleted ? "Abgeschlossen" : "Offen");
-            const statusText = !isCompleted
-              ? "Noch nicht abgeschlossen."
-                : isBye
-                ? `Freilos (Bye): ${escapeHtml(participantNameById(tournament, match.winnerId))}`
-                : `Gewinner: ${escapeHtml(participantNameById(tournament, match.winnerId))} (${match.legs.p1}:${match.legs.p2})`;
-            return `
-              <div class="ata-bracket-match">
-                <div class="${player1Classes}">
-                  <span>${escapeHtml(player1Name)}</span>
-                  ${hasLegScores ? `<span class="ata-bracket-score ${player1IsWinner ? "is-win" : (isBye ? "" : "is-loss")}">${match.legs.p1}</span>` : ""}
-                </div>
-                <div class="${player2Classes}">
-                  <span>${escapeHtml(player2Name)}</span>
-                  ${hasLegScores ? `<span class="ata-bracket-score ${player2IsWinner ? "is-win" : (isBye ? "" : "is-loss")}">${match.legs.p2}</span>` : ""}
-                </div>
-                <div><span class="${statusBadgeClass}">${statusBadgeText}</span></div>
-                <div class="ata-small">${statusText}</div>
-              </div>
-            `;
-          }).join("");
-
-        return `
-          <div class="ata-bracket-round">
-            <strong>Runde ${roundNumber}</strong>
-            ${matchesHtml}
-          </div>
-        `;
-      }).join("");
-
-    return `<div class="ata-bracket-grid">${roundHtml}</div>`;
-  }
-
-
-  function renderViewTab() {
-    const tournament = state.store.tournament;
-    if (!tournament) {
-      return `<section class="ata-card tournamentCard"><h3>Keine Turnierdaten</h3><p>Bitte zuerst ein Turnier erstellen.</p></section>`;
-    }
-
-    let html = "";
-    const fallbackVisible = state.bracket.failed ? "1" : "0";
-
-    if (tournament.mode === "league") {
-      const standings = standingsForMatches(tournament, getMatchesByStage(tournament, MATCH_STAGE_LEAGUE));
-      html += renderStandingsTable(standings, "Liga-Tabelle", [
-        { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
-      ]);
-      html += renderLeagueSchedule(tournament);
-    } else if (tournament.mode === "groups_ko") {
-      const standingsMap = groupStandingsMap(tournament);
-      const groupCards = [];
-      const blockedGroups = [];
-      standingsMap.forEach((entry) => {
-        groupCards.push(renderStandingsTable(entry.rows, `Tabelle ${entry.group.name}`, [
-          { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
-        ]));
-        if (entry.groupResolution?.status === "playoff_required") {
-          blockedGroups.push(`${entry.group.name}: ${entry.groupResolution.reason}`);
-        }
-      });
-      html += `<div class="ata-group-grid">${groupCards.join("")}</div>`;
-      if (blockedGroups.length) {
-        html += `
-          <section class="ata-card tournamentCard">
-            ${renderSectionHeading("Gruppenentscheidung offen", [
-              { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
-            ])}
-            <p class="ata-small">KO-Qualifikation ist blockiert, bis folgende DRA-Entscheidungen geklärt sind:</p>
-            <ul class="ata-small">
-              ${blockedGroups.map((text) => `<li>${escapeHtml(text)}</li>`).join("")}
-            </ul>
-          </section>
-        `;
-      }
-    }
-
-    if (tournament.mode === "ko" || tournament.mode === "groups_ko") {
-      html += `
-        <section class="ata-card tournamentCard">
-          ${renderSectionHeading("KO-Turnierbaum", [
-            { href: DRA_GUI_RULE_BYE_URL, kind: "rule", label: "DRA-Regelerklärung zu Freilosen öffnen", title: "DRA-Regeln in der GUI: Freilos (Bye)" },
-          ])}
-          <div class="ata-bracket-dock" id="ata-bracket-dock">
-            <div class="ata-bracket-shell">
-              <iframe id="ata-bracket-frame" class="ata-bracket-frame" title="Turnierbaum" sandbox="allow-scripts allow-same-origin"></iframe>
-              <div class="ata-bracket-fallback" id="ata-bracket-fallback" data-visible="${fallbackVisible}">
-                ${renderStaticBracketFallback(tournament)}
-              </div>
-            </div>
-          </div>
-          <div class="ata-actions" style="margin-top: 10px;">
-            <button type="button" class="ata-btn" data-action="retry-bracket">Turnierbaum neu laden</button>
-          </div>
-          <p class="ata-small">CDN-Render aktiv. Der HTML-Fallback wird nur bei Fehlern oder Timeout angezeigt.</p>
-        </section>
-      `;
-    }
-
-    return html || `<section class="ata-card tournamentCard"><h3>Turnierbaum</h3><p>Keine Daten.</p></section>`;
-  }
-
-
-  function syncBracketFallbackVisibility() {
-    const shadow = state.shadowRoot;
-    if (!shadow || state.activeTab !== "view") {
-      return;
-    }
-    const fallback = shadow.getElementById("ata-bracket-fallback");
-    if (!(fallback instanceof HTMLElement)) {
-      return;
-    }
-    fallback.setAttribute("data-visible", state.bracket.failed ? "1" : "0");
-  }
-
-  function renderIOTab() {
-    return `
-      <section class="ata-card tournamentCard">
-        <h3>Export</h3>
-        <div class="ata-actions">
-          <button type="button" class="ata-btn ata-btn-primary" data-action="export-file">JSON herunterladen</button>
-          <button type="button" class="ata-btn" data-action="export-clipboard">JSON in Zwischenablage</button>
-        </div>
-      </section>
-      <section class="ata-card tournamentCard">
-        <h3>Import</h3>
-        <div class="ata-field">
-          <label for="ata-import-file">Datei importieren</label>
-          <input id="ata-import-file" type="file" accept=".json,application/json">
-        </div>
-        <div class="ata-field" style="margin-top: 10px;">
-          <label for="ata-import-text">JSON einf\u00fcgen</label>
-          <textarea id="ata-import-text" placeholder="{ ... }"></textarea>
-        </div>
-        <div class="ata-actions" style="margin-top: 10px;">
-          <button type="button" class="ata-btn" data-action="import-text">Eingef\u00fcgtes JSON importieren</button>
-        </div>
-      </section>
-    `;
-  }
-
-  function renderSettingsTab() {
-    const debugEnabled = state.store.settings.debug ? "checked" : "";
-    const autoLobbyEnabled = state.store.settings.featureFlags.autoLobbyStart ? "checked" : "";
-    const randomizeKoEnabled = state.store.settings.featureFlags.randomizeKoRound1 ? "checked" : "";
-    const koDrawLockDefaultEnabled = state.store.settings.featureFlags.koDrawLockDefault !== false ? "checked" : "";
-    const activeKoDrawLocked = state.store?.tournament?.mode === "ko"
-      ? (state.store?.tournament?.ko?.drawLocked !== false ? "checked" : "")
-      : "";
-    const activeKoDrawLockDisabledAttr = state.store?.tournament?.mode === "ko" ? "" : "disabled";
-    const modeLimitSummary = buildModeParticipantLimitSummary();
-    const tieBreakProfile = normalizeTieBreakProfile(
-      state.store?.tournament?.rules?.tieBreakProfile,
-      TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE,
-    );
-    const tieBreakDisabledAttr = state.store?.tournament ? "" : "disabled";
-    const apiSyncHelpLinks = renderInfoLinks([
-      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Erkl\u00e4rung zur API-Halbautomatik \u00f6ffnen", title: "README: API-Halbautomatik" },
-      { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole \u00f6ffnen", title: "README: Info-Symbole" },
-    ]);
-    const koDrawHelpLinks = renderInfoLinks([
-      { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Erkl\u00e4rung zu Turniermodi \u00f6ffnen", title: "README: Turniermodi und Open Draw" },
-      { href: DRA_GUI_RULE_OPEN_DRAW_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zu Open Draw \u00f6ffnen", title: "DRA-Regeln in der GUI: Open Draw" },
-    ]);
-    const koDrawLockHelpLinks = renderInfoLinks([
-      { href: DRA_GUI_RULE_DRAW_LOCK_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zu Draw-Lock \u00f6ffnen", title: "DRA-Regeln in der GUI: Draw-Lock" },
-    ]);
-
-    return `
-      <section class="ata-card tournamentCard">
-        ${renderSectionHeading("Debug und Feature-Flags", [
-          { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen-Dokumentation \u00f6ffnen", title: "README: Einstellungen" },
-          { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole \u00f6ffnen", title: "README: Info-Symbole" },
-        ])}
-        <div class="ata-toggle">
-          <div>
-            <strong>Debug-Mode</strong>
-            <div class="ata-small">Aktiviert detaillierte Logs in der Browser-Konsole.</div>
-          </div>
-          <input type="checkbox" id="ata-setting-debug" data-action="toggle-debug" ${debugEnabled}>
-        </div>
-        <div class="ata-toggle">
-          <div>
-            <strong>Automatischer Lobby-Start + API-Sync ${apiSyncHelpLinks}</strong>
-            <div class="ata-small">Standard: AUS. Aktiviert Matchstart per Klick und automatische Ergebnis\u00fcbernahme aus der Autodarts-API.</div>
-          </div>
-          <input type="checkbox" id="ata-setting-autolobby" data-action="toggle-autolobby" ${autoLobbyEnabled}>
-        </div>
-        <div class="ata-toggle">
-          <div>
-            <strong>KO-Erstrunde zuf\u00e4llig mischen (Standard) ${koDrawHelpLinks}</strong>
-            <div class="ata-small">Standard: EIN. Neue KO-Turniere nutzen damit Open Draw (zuf\u00e4llige Reihenfolge, PDC-konforme Freilose).</div>
-          </div>
-          <input type="checkbox" id="ata-setting-randomize-ko" data-action="toggle-randomize-ko" ${randomizeKoEnabled}>
-        </div>
-        <div class="ata-toggle">
-          <div>
-            <strong>KO-Draw sperren (Standard) ${koDrawLockHelpLinks}</strong>
-            <div class="ata-small">Standard: EIN. Neue KO-Turniere behalten den initialen Draw unver\u00e4ndert.</div>
-          </div>
-          <input type="checkbox" id="ata-setting-ko-draw-lock-default" data-action="toggle-ko-draw-lock-default" ${koDrawLockDefaultEnabled}>
-        </div>
-      </section>
-      <section class="ata-card tournamentCard">
-        ${renderSectionHeading("KO Draw-Lock (aktives Turnier)", [
-          { href: DRA_GUI_RULE_DRAW_LOCK_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zu Draw-Lock \u00f6ffnen", title: "DRA-Regeln in der GUI: Draw-Lock" },
-        ])}
-        <div class="ata-toggle">
-          <div>
-            <strong>Draw unver\u00e4nderlich halten</strong>
-            <div class="ata-small">Wenn aktiv, bleibt die KO-Struktur dieses Turniers bestehen und wird nicht automatisch neu ausgelost.</div>
-          </div>
-          <input type="checkbox" id="ata-setting-ko-draw-locked" data-action="set-ko-draw-locked" ${activeKoDrawLocked} ${activeKoDrawLockDisabledAttr}>
-        </div>
-        <p class="ata-small">Nur f\u00fcr den Modus KO (Straight Knockout) verf\u00fcgbar.</p>
-      </section>
-      <section class="ata-card tournamentCard">
-        ${renderSectionHeading("Promoter Tie-Break-Profil", [
-          { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zum Tie-Break \u00f6ffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
-        ])}
-        <div class="ata-field">
-          <label for="ata-setting-tiebreak">Profil pro Turnier</label>
-          <select id="ata-setting-tiebreak" data-action="set-tiebreak-mode" ${tieBreakDisabledAttr}>
-            <option value="${TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE ? "selected" : ""}>Promoter H2H + Mini-Tabelle (empfohlen)</option>
-            <option value="${TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF ? "selected" : ""}>Promoter Punkte + LegDiff</option>
-          </select>
-        </div>
-        <p class="ata-small"><strong>Promoter H2H + Mini-Tabelle:</strong> Punkte (2/1/0), danach Direktvergleich (2er-Gleichstand), Teilgruppen-Leg-Differenz (3+), Gesamt-Leg-Differenz, Legs gewonnen; verbleibender Gleichstand = &bdquo;Playoff erforderlich&ldquo;.</p>
-        <p class="ata-small"><strong>Promoter Punkte + LegDiff:</strong> vereinfachte Sortierung \u00fcber Punkte, Gesamt-Leg-Differenz und Legs gewonnen (legacy-kompatibel).</p>
-      </section>
-      <section class="ata-card tournamentCard">
-        ${renderSectionHeading("DRA Checkliste (nicht automatisierbar)", [
-          { href: DRA_GUI_RULE_CHECKLIST_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zur Checkliste \u00f6ffnen", title: "DRA-Regeln in der GUI: Checkliste" },
-        ])}
-        <ul class="ata-small">
-          <li>Start-/Wurfreihenfolge und Bull-Off-Entscheidungen werden durch den Spielleiter vor Ort best\u00e4tigt.</li>
-          <li>Practice/Anspielzeit und Board-Etikette werden organisatorisch durchgesetzt.</li>
-          <li>Tie-Break-Entscheidungen bei verbleibendem Gleichstand erfolgen als Promoter-Entscheidung.</li>
-          <li>Unklare Sonderf\u00e4lle werden dokumentiert und manuell entschieden, bevor der Turnierfortschritt fortgesetzt wird.</li>
-        </ul>
-      </section>
-      <section class="ata-card tournamentCard">
-        ${renderSectionHeading("Regelbasis und Limits", [
-          { href: DRA_GUI_RULE_PARTICIPANT_LIMITS_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zu Limits \u00f6ffnen", title: "DRA-Regeln in der GUI: Teilnehmerlimits" },
-        ])}
-        <p class="ata-small">Aktive Modus-Limits: ${escapeHtml(modeLimitSummary)}.</p>
-        <p class="ata-small">Die DRA-Regeln setzen kein fixes globales Teilnehmermaximum. Die Grenzen oben sind bewusst f\u00fcr faire Turnierdauer und stabile Darstellung gesetzt.</p>
-      </section>
-      <section class="ata-card tournamentCard">
-        ${renderSectionHeading("Storage", [
-          { href: README_BASE_URL, kind: "tech", label: "Hinweise zu Storage und Import \u00f6ffnen", title: "README: Import, Migration und Persistenz" },
-        ])}
-        <p class="ata-small"><code>${escapeHtml(STORAGE_KEY)}</code>, schemaVersion ${STORAGE_SCHEMA_VERSION}</p>
-      </section>
-    `;
-  }
-
-  function ensureHost() {
-    let host = document.getElementById(UI_HOST_ID);
-    if (!host) {
-      host = document.createElement("div");
-      host.id = UI_HOST_ID;
-      document.documentElement.appendChild(host);
-    }
-    if (!(host instanceof HTMLElement)) {
-      throw new Error("ATA host element not available.");
-    }
-    state.host = host;
-
-    if (!host.shadowRoot) {
-      host.attachShadow({ mode: "open" });
-    }
-    state.shadowRoot = host.shadowRoot;
-  }
-
-
-  function renderShell() {
-    if (!state.shadowRoot) {
-      return;
-    }
-
-    state.shadowRoot.innerHTML = buildShellHtml();
-    bindUiHandlers();
-    if (state.activeTab === "view") {
-      queueBracketRender();
-      syncBracketFallbackVisibility();
-    }
-  }
-
-
-  function bindUiHandlers() {
-    const shadow = state.shadowRoot;
-    if (!shadow) {
-      return;
-    }
-
-    shadow.querySelectorAll("[data-tab]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const tabId = button.getAttribute("data-tab");
-        if (!TAB_IDS.includes(tabId)) {
-          return;
-        }
-        state.activeTab = tabId;
-        state.store.ui.activeTab = tabId;
-        schedulePersist();
-        renderShell();
-      });
-    });
-
-    shadow.querySelectorAll("[data-action='set-matches-sort']").forEach((button) => {
-      button.addEventListener("click", () => {
-        const sortMode = sanitizeMatchesSortMode(button.getAttribute("data-sort-mode"), MATCH_SORT_MODE_READY_FIRST);
-        if (state.store.ui.matchesSortMode === sortMode) {
-          return;
-        }
-        state.store.ui.matchesSortMode = sortMode;
-        schedulePersist();
-        renderShell();
-      });
-    });
-
-    const createForm = shadow.getElementById("ata-create-form");
-    if (createForm instanceof HTMLFormElement) {
-      syncCreateFormDependencies(createForm);
-      const handleDraftInputChange = (event) => {
-        const target = event?.target;
-        const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
-          ? normalizeText(target.name || "")
-          : "";
-        if (isCreateDraftPresetField(fieldName)) {
-          setCreateFormPresetValue(createForm, X01_PRESET_CUSTOM);
-        }
-        syncCreateFormDependencies(createForm);
-        updateCreateDraftFromForm(createForm, true);
-      };
-      createForm.addEventListener("input", handleDraftInputChange);
-      createForm.addEventListener("change", handleDraftInputChange);
-      createForm.addEventListener("submit", (event) => {
-        event.preventDefault();
-        handleCreateTournament(createForm);
-      });
-
-      const applyPresetButton = createForm.querySelector("[data-action='apply-pdc-preset']");
-      if (applyPresetButton instanceof HTMLButtonElement) {
-        applyPresetButton.addEventListener("click", () => {
-          applyPdcPresetToCreateForm(createForm);
-        });
-      }
-    }
-
-    const shuffleParticipantsButton = shadow.querySelector("[data-action='shuffle-participants']");
-    if (shuffleParticipantsButton && createForm instanceof HTMLFormElement) {
-      shuffleParticipantsButton.addEventListener("click", () => handleShuffleParticipants(createForm));
-    }
-
-    shadow.querySelectorAll("[data-action='close-drawer']").forEach((button) => {
-      button.addEventListener("click", () => closeDrawer());
-    });
-
-    shadow.querySelectorAll("[data-action='save-match']").forEach((button) => {
-      button.addEventListener("click", () => {
-        const matchId = button.getAttribute("data-match-id");
-        if (matchId) {
-          handleSaveMatchResult(matchId);
-        }
-      });
-    });
-
-    shadow.querySelectorAll("[data-action='start-match']").forEach((button) => {
-      button.addEventListener("click", () => {
-        const matchId = button.getAttribute("data-match-id");
-        if (!matchId) {
-          return;
-        }
-        handleStartMatch(matchId).catch((error) => {
-          logError("api", "Start-match handler failed unexpectedly.", error);
-          setNotice("error", "Matchstart ist unerwartet fehlgeschlagen.");
-        });
-      });
-    });
-
-    const resetButton = shadow.querySelector("[data-action='reset-tournament']");
-    if (resetButton) {
-      resetButton.addEventListener("click", () => {
-        handleResetTournament();
-      });
-    }
-
-    const exportFileButton = shadow.querySelector("[data-action='export-file']");
-    if (exportFileButton) {
-      exportFileButton.addEventListener("click", () => handleExportFile());
-    }
-
-    const exportClipboardButton = shadow.querySelector("[data-action='export-clipboard']");
-    if (exportClipboardButton) {
-      exportClipboardButton.addEventListener("click", () => handleExportClipboard());
-    }
-
-    const importTextButton = shadow.querySelector("[data-action='import-text']");
-    if (importTextButton) {
-      importTextButton.addEventListener("click", () => handleImportFromTextarea());
-    }
-
-    const fileInput = shadow.getElementById("ata-import-file");
-    if (fileInput instanceof HTMLInputElement) {
-      fileInput.addEventListener("change", () => handleImportFromFile(fileInput));
-    }
-
-    const debugToggle = shadow.getElementById("ata-setting-debug");
-    if (debugToggle instanceof HTMLInputElement) {
-      debugToggle.addEventListener("change", () => {
-        state.store.settings.debug = debugToggle.checked;
-        schedulePersist();
-        setNotice("success", `Debug-Mode ${debugToggle.checked ? "aktiviert" : "deaktiviert"}.`, 1800);
-      });
-    }
-
-    const autoLobbyToggle = shadow.getElementById("ata-setting-autolobby");
-    if (autoLobbyToggle instanceof HTMLInputElement) {
-      autoLobbyToggle.addEventListener("change", () => {
-        state.store.settings.featureFlags.autoLobbyStart = autoLobbyToggle.checked;
-        if (!autoLobbyToggle.checked) {
-          state.apiAutomation.authBackoffUntil = 0;
-        }
-        schedulePersist();
-        setNotice("info", `Auto-Lobby + API-Sync: ${autoLobbyToggle.checked ? "ON" : "OFF"}.`, 2200);
-        if (autoLobbyToggle.checked) {
-          syncPendingApiMatches().catch((error) => {
-            logWarn("api", "Immediate sync after toggle failed.", error);
-          });
-        }
-      });
-    }
-
-    const randomizeKoToggle = shadow.getElementById("ata-setting-randomize-ko");
-    if (randomizeKoToggle instanceof HTMLInputElement) {
-      randomizeKoToggle.addEventListener("change", () => {
-        state.store.settings.featureFlags.randomizeKoRound1 = randomizeKoToggle.checked;
-        state.store.ui.createDraft = normalizeCreateDraft({
-          ...state.store.ui.createDraft,
-          randomizeKoRound1: randomizeKoToggle.checked,
-        }, state.store.settings);
-        schedulePersist();
-        setNotice("info", `KO-Erstrunden-Mix: ${randomizeKoToggle.checked ? "ON" : "OFF"}.`, 2200);
-        if (state.activeTab === "tournament" && !state.store.tournament) {
-          renderShell();
-        }
-      });
-    }
-
-    const koDrawLockDefaultToggle = shadow.getElementById("ata-setting-ko-draw-lock-default");
-    if (koDrawLockDefaultToggle instanceof HTMLInputElement) {
-      koDrawLockDefaultToggle.addEventListener("change", () => {
-        state.store.settings.featureFlags.koDrawLockDefault = koDrawLockDefaultToggle.checked;
-        schedulePersist();
-        setNotice("info", `KO Draw-Lock (Standard): ${koDrawLockDefaultToggle.checked ? "ON" : "OFF"}.`, 2200);
-      });
-    }
-
-    const koDrawLockedToggle = shadow.getElementById("ata-setting-ko-draw-locked");
-    if (koDrawLockedToggle instanceof HTMLInputElement) {
-      koDrawLockedToggle.addEventListener("change", () => {
-        const result = setTournamentKoDrawLocked(koDrawLockedToggle.checked);
-        if (!result.ok) {
-          setNotice("error", result.message || "KO Draw-Lock konnte nicht gesetzt werden.");
-          return;
-        }
-        if (result.changed) {
-          setNotice("success", `KO Draw-Lock ${koDrawLockedToggle.checked ? "aktiviert" : "deaktiviert"}.`, 1800);
-        }
-      });
-    }
-
-    const tieBreakSelect = shadow.getElementById("ata-setting-tiebreak");
-    if (tieBreakSelect instanceof HTMLSelectElement) {
-      tieBreakSelect.addEventListener("change", () => {
-        const result = setTournamentTieBreakProfile(tieBreakSelect.value);
-        if (!result.ok) {
-          setNotice("error", result.message || "Tie-Break-Profil konnte nicht gesetzt werden.");
-          return;
-        }
-        if (result.changed) {
-          setNotice("success", "Tie-Break-Profil aktualisiert.", 1800);
-        }
-      });
-    }
-
-    const retryBracketButton = shadow.querySelector("[data-action='retry-bracket']");
-    if (retryBracketButton) {
-      retryBracketButton.addEventListener("click", () => queueBracketRender(true));
-    }
-
-    const drawer = shadow.querySelector(".ata-drawer");
-    if (drawer) {
-      drawer.addEventListener("keydown", handleDrawerKeydown);
-    }
-  }
-
-
-  function handleDrawerKeydown(event) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeDrawer();
-      return;
-    }
-
-    if (event.key !== "Tab" || !state.drawerOpen) {
-      return;
-    }
-
-    const drawer = state.shadowRoot?.querySelector(".ata-drawer");
-    if (!drawer) {
-      return;
-    }
-
-    const focusables = Array.from(drawer.querySelectorAll(
-      "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
-    )).filter((element) => !element.hasAttribute("disabled"));
-
-    if (!focusables.length) {
-      return;
-    }
-
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    const current = drawer.getRootNode().activeElement;
-
-    if (event.shiftKey && current === first) {
-      event.preventDefault();
-      last.focus();
-      return;
-    }
-
-    if (!event.shiftKey && current === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
-
-
-  function openDrawer() {
-    state.lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    state.drawerOpen = true;
-    renderShell();
-    const firstInteractive = state.shadowRoot?.querySelector(".ata-drawer button, .ata-drawer input, .ata-drawer select, .ata-drawer textarea");
-    if (firstInteractive instanceof HTMLElement) {
-      firstInteractive.focus();
-    }
-  }
-
-
-  function closeDrawer() {
-    state.drawerOpen = false;
-    renderShell();
-    if (state.lastFocused instanceof HTMLElement) {
-      state.lastFocused.focus();
-    }
-  }
-
-
-  function toggleDrawer() {
-    if (state.drawerOpen) {
-      closeDrawer();
-    } else {
-      openDrawer();
-    }
-  }
-
-
-  function isCreateDraftPresetField(fieldName) {
-    return [
-      "mode",
-      "bestOfLegs",
-      "startScore",
-      "x01InMode",
-      "x01OutMode",
-      "x01BullMode",
-      "x01BullOffMode",
-      "x01MaxRounds",
-    ].includes(normalizeText(fieldName || ""));
-  }
-
-
-  function setCreateFormPresetValue(form, presetId) {
-    if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
-    const presetInput = form.querySelector("#ata-x01-preset");
-    if (!(presetInput instanceof HTMLInputElement)) {
-      return;
-    }
-    const normalizedPreset = sanitizeX01Preset(presetId, X01_PRESET_CUSTOM);
-    presetInput.value = normalizedPreset;
-  }
-
-
-  function refreshCreateFormPresetBadge(form) {
-    if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
-    const presetInput = form.querySelector("#ata-x01-preset");
-    const presetBadge = form.querySelector(".ata-preset-pill");
-    if (!(presetInput instanceof HTMLInputElement) || !(presetBadge instanceof HTMLElement)) {
-      return;
-    }
-    let presetId = sanitizeX01Preset(presetInput.value, X01_PRESET_CUSTOM);
-    if (presetId === X01_PRESET_PDC_STANDARD) {
-      const formData = new FormData(form);
-      const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
-      if (!isPdcCompliantMatchSetup(draft)) {
-        presetId = X01_PRESET_CUSTOM;
-        presetInput.value = presetId;
-      }
-    }
-    presetBadge.textContent = presetId === X01_PRESET_PDC_STANDARD
-      ? "Preset aktiv: PDC-Standard"
-      : "Preset aktiv: Individuell";
-  }
-
-
-  function syncCreateFormDependencies(form) {
-    if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
-    const bullOffSelect = form.querySelector("#ata-x01-bulloff");
-    const bullModeSelect = form.querySelector("#ata-x01-bullmode");
-    if (!(bullOffSelect instanceof HTMLSelectElement) || !(bullModeSelect instanceof HTMLSelectElement)) {
-      refreshCreateFormPresetBadge(form);
-      return;
-    }
-
-    const disableBullMode = normalizeText(bullOffSelect.value) === "Off";
-    bullModeSelect.disabled = disableBullMode;
-    bullModeSelect.title = disableBullMode
-      ? "Bull-Modus ist bei Bull-off = Off ohne Wirkung und daher schreibgesch\u00fctzt."
-      : "";
-
-    let hiddenBullMode = form.querySelector("#ata-x01-bullmode-hidden");
-    if (disableBullMode) {
-      if (!(hiddenBullMode instanceof HTMLInputElement)) {
-        hiddenBullMode = document.createElement("input");
-        hiddenBullMode.type = "hidden";
-        hiddenBullMode.id = "ata-x01-bullmode-hidden";
-        hiddenBullMode.name = "x01BullMode";
-        bullModeSelect.insertAdjacentElement("afterend", hiddenBullMode);
-      }
-      hiddenBullMode.value = sanitizeX01BullMode(bullModeSelect.value);
-    } else if (hiddenBullMode instanceof HTMLElement) {
-      hiddenBullMode.remove();
-    }
-
-    refreshCreateFormPresetBadge(form);
-  }
-
-
-  function applyPdcPresetToCreateForm(form) {
-    if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
-    const pdcSettings = buildPdcX01Settings();
-    const pdcMode = "ko";
-    const pdcBestOfLegs = 5;
-    const assignments = [
-      ["#ata-mode", pdcMode],
-      ["#ata-bestof", String(pdcBestOfLegs)],
-      ["#ata-startscore", String(pdcSettings.baseScore)],
-      ["#ata-x01-inmode", pdcSettings.inMode],
-      ["#ata-x01-outmode", pdcSettings.outMode],
-      ["#ata-x01-bullmode", pdcSettings.bullMode],
-      ["#ata-x01-bulloff", pdcSettings.bullOffMode],
-      ["#ata-x01-maxrounds", String(pdcSettings.maxRounds)],
-    ];
-
-    assignments.forEach(([selector, value]) => {
-      const field = form.querySelector(selector);
-      if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement) {
-        field.value = value;
-      }
-    });
-
-    setCreateFormPresetValue(form, X01_PRESET_PDC_STANDARD);
-    syncCreateFormDependencies(form);
-    updateCreateDraftFromForm(form, true);
-    setNotice("info", "PDC-Preset wurde auf KO, Best of 5 und die X01-Felder angewendet.", 2400);
-  }
-
-
-  function readCreateDraftInput(formData) {
-    return {
-      name: formData.get("name"),
-      mode: formData.get("mode"),
-      bestOfLegs: formData.get("bestOfLegs"),
-      startScore: formData.get("startScore"),
-      x01Preset: formData.get("x01Preset"),
-      x01InMode: formData.get("x01InMode"),
-      x01OutMode: formData.get("x01OutMode"),
-      x01BullMode: formData.get("x01BullMode"),
-      x01MaxRounds: formData.get("x01MaxRounds"),
-      x01BullOffMode: formData.get("x01BullOffMode"),
-      participantsText: String(formData.get("participants") || ""),
-      randomizeKoRound1: formData.get("randomizeKoRound1") !== null,
-    };
-  }
-
-
-  function updateCreateDraftFromForm(form, persist = true) {
-    if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
-    const formData = new FormData(form);
-    const nextDraft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
-    const currentDraft = state.store.ui.createDraft || {};
-    const changed = JSON.stringify(nextDraft) !== JSON.stringify(currentDraft);
-    if (!changed) {
-      return;
-    }
-    state.store.ui.createDraft = nextDraft;
-    if (persist) {
-      schedulePersist();
-    }
-  }
-
-
-  function handleShuffleParticipants(form) {
-    if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
-    const participantField = form.querySelector("#ata-participants");
-    if (!(participantField instanceof HTMLTextAreaElement)) {
-      return;
-    }
-    const participants = parseParticipantLines(participantField.value);
-    if (participants.length < 2) {
-      setNotice("info", "Mindestens zwei Teilnehmer zum Mischen eingeben.", 2200);
-      return;
-    }
-    const shuffledNames = shuffleArray(participants.map((participant) => participant.name));
-    participantField.value = shuffledNames.join("\n");
-    updateCreateDraftFromForm(form, true);
-    setNotice("success", "Teilnehmer wurden zuf\u00e4llig gemischt.", 1800);
-  }
-
-
-  function handleCreateTournament(form) {
-    syncCreateFormDependencies(form);
-    const formData = new FormData(form);
-    const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
-    state.store.ui.createDraft = draft;
-    const participants = parseParticipantLines(formData.get("participants"));
-    const config = {
-      name: draft.name,
-      mode: draft.mode,
-      bestOfLegs: draft.bestOfLegs,
-      startScore: draft.startScore,
-      x01Preset: draft.x01Preset,
-      x01InMode: draft.x01InMode,
-      x01OutMode: draft.x01OutMode,
-      x01BullMode: draft.x01BullMode,
-      x01MaxRounds: draft.x01MaxRounds,
-      x01BullOffMode: draft.x01BullOffMode,
-      lobbyVisibility: "private",
-      randomizeKoRound1: draft.randomizeKoRound1,
-      koDrawLocked: state.store.settings.featureFlags.koDrawLockDefault !== false,
-      participants,
-    };
-
-    const errors = validateCreateConfig(config);
-    if (errors.length) {
-      setNotice("error", errors.join(" "));
-      return;
-    }
-
-    state.store.tournament = createTournament(config);
-    schedulePersist();
-    setNotice("success", "Turnier wurde erstellt.");
-    state.activeTab = "matches";
-    renderShell();
-  }
-
-
-  function getMatchFieldElement(shadow, fieldName, matchId) {
-    const candidates = Array.from(shadow.querySelectorAll(`[data-field="${fieldName}"]`));
-    return candidates.find((candidate) => candidate.getAttribute("data-match-id") === matchId) || null;
-  }
-
-
-  function handleSaveMatchResult(matchId) {
-    const shadow = state.shadowRoot;
-    if (!shadow) {
-      return;
-    }
-    const tournament = state.store.tournament;
-    if (!tournament) {
-      return;
-    }
-    const match = findMatch(tournament, matchId);
-    if (!match) {
-      setNotice("error", "Match nicht gefunden.");
-      return;
-    }
-    const editability = getMatchEditability(tournament, match);
-    if (!editability.editable) {
-      setNotice("error", editability.reason || "Match ist nicht freigeschaltet.");
-      return;
-    }
-    const legsP1Input = getMatchFieldElement(shadow, "legs-p1", matchId);
-    const legsP2Input = getMatchFieldElement(shadow, "legs-p2", matchId);
-
-    if (!(legsP1Input instanceof HTMLInputElement) || !(legsP2Input instanceof HTMLInputElement)) {
-      return;
-    }
-
-    const p1Legs = clampInt(legsP1Input.value, 0, 0, 99);
-    const p2Legs = clampInt(legsP2Input.value, 0, 0, 99);
-    if (p1Legs === p2Legs) {
-      setNotice("error", "Ung\u00fcltiges Ergebnis: Bei Best-of ist kein Gleichstand m\u00f6glich.");
-      return;
-    }
-
-    const winnerId = p1Legs > p2Legs ? match.player1Id : match.player2Id;
-
-    const result = updateMatchResult(matchId, winnerId, {
-      p1: p1Legs,
-      p2: p2Legs,
-    }, "manual");
-
-    if (result.ok) {
-      setNotice("success", "Match gespeichert.", 1800);
-    } else {
-      setNotice("error", result.message || "Match konnte nicht gespeichert werden.");
-    }
-  }
-
-
-  function handleResetTournament() {
-    const confirmed = window.confirm("Soll das Turnier wirklich gel\u00f6scht werden? Dieser Schritt kann nicht r\u00fcckg\u00e4ngig gemacht werden.");
-    if (!confirmed) {
-      return;
-    }
-    state.store.tournament = null;
-    state.apiAutomation.startingMatchId = "";
-    state.apiAutomation.authBackoffUntil = 0;
-    schedulePersist();
-    setNotice("success", "Turnier wurde gel\u00f6scht.");
-    state.activeTab = "tournament";
-    renderShell();
-  }
-
-
-  function exportDataPayload() {
-    return {
-      schemaVersion: STORAGE_SCHEMA_VERSION,
-      exportedAt: nowIso(),
-      tournament: state.store.tournament,
-    };
-  }
-
-
-  function handleExportFile() {
-    const payload = exportDataPayload();
-    const text = JSON.stringify(payload, null, 2);
-    const blob = new Blob([text], { type: "application/json;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `ata-export-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-    setNotice("success", "JSON-Datei exportiert.", 2000);
-  }
-
-
-  async function handleExportClipboard() {
-    try {
-      const payload = exportDataPayload();
-      const text = JSON.stringify(payload, null, 2);
-      await navigator.clipboard.writeText(text);
-      setNotice("success", "JSON in Zwischenablage kopiert.", 2000);
-    } catch (error) {
-      setNotice("error", "Kopieren in Zwischenablage fehlgeschlagen.");
-      logWarn("io", "Clipboard write failed.", error);
-    }
-  }
-
-
-  function importPayload(rawObject) {
-    if (!rawObject || typeof rawObject !== "object") {
-      return { ok: false, message: "JSON ist leer oder ung\u00fcltig." };
-    }
-
-    let tournament = rawObject.tournament || null;
-    if (!tournament && rawObject.mode && rawObject.participants) {
-      tournament = rawObject;
-    }
-
-    const normalizedTournament = normalizeTournament(
-      tournament,
-      state.store.settings.featureFlags.koDrawLockDefault !== false,
-    );
-    if (!normalizedTournament) {
-      return { ok: false, message: "Turnierdaten konnten nicht validiert werden." };
-    }
-
-    const participantCountError = getParticipantCountError(normalizedTournament.mode, normalizedTournament.participants.length);
-    if (participantCountError) {
-      return { ok: false, message: participantCountError };
-    }
-
-    refreshDerivedMatches(normalizedTournament);
-    state.store.tournament = normalizedTournament;
-    schedulePersist();
-    renderShell();
-    return { ok: true };
-  }
-
-
-  function handleImportFromTextarea() {
-    const textarea = state.shadowRoot?.getElementById("ata-import-text");
-    if (!(textarea instanceof HTMLTextAreaElement)) {
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(textarea.value);
-      const result = importPayload(parsed);
-      if (result.ok) {
-        setNotice("success", "JSON erfolgreich importiert.");
-        state.activeTab = "matches";
-        renderShell();
-      } else {
-        setNotice("error", result.message || "Import fehlgeschlagen.");
-      }
-    } catch (error) {
-      setNotice("error", "JSON konnte nicht geparst werden.");
-      logWarn("io", "Import parse failed.", error);
-    }
-  }
-
-
-  function handleImportFromFile(fileInput) {
-    const file = fileInput.files && fileInput.files[0];
-    if (!file) {
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(String(reader.result || "{}"));
-        const result = importPayload(parsed);
-        if (result.ok) {
-          setNotice("success", "Datei erfolgreich importiert.");
-          state.activeTab = "matches";
-          renderShell();
-        } else {
-          setNotice("error", result.message || "Datei konnte nicht importiert werden.");
-        }
-      } catch (error) {
-        setNotice("error", "Datei enth\u00e4lt kein g\u00fcltiges JSON.");
-        logWarn("io", "File import parse failed.", error);
-      }
-    };
-    reader.onerror = () => {
-      setNotice("error", "Datei konnte nicht gelesen werden.");
-    };
-    reader.readAsText(file);
-  }
-
-  function buildBracketPayload(tournament) {
-    const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
-    if (!koMatches.length) {
-      return null;
-    }
-
-    const bracketSize = tournament.mode === "groups_ko"
-      ? 4
-      : nextPowerOfTwo(clampInt(tournament?.ko?.bracketSize, tournament.participants.length, 2, TECHNICAL_PARTICIPANT_HARD_MAX));
-    const participants = tournament.participants
-      .map((participant) => {
-        const participantId = normalizeText(participant?.id);
-        if (!participantId) {
-          return null;
-        }
-        return {
-          id: participantId,
-          tournament_id: 1,
-          name: normalizeText(participant?.name) || participantId,
-        };
-      })
-      .filter(Boolean);
-    const participantIdSet = new Set(participants.map((participant) => participant.id));
-    const participantIndexes = buildParticipantIndexes(tournament);
-    const resolveBracketParticipantId = (slotId) => {
-      const resolved = resolveParticipantSlotId(tournament, slotId, participantIndexes);
-      if (!resolved) {
-        return null;
-      }
-      const participantId = normalizeText(resolved);
-      return participantIdSet.has(participantId) ? participantId : null;
-    };
-
-    const matches = koMatches.map((match) => {
-      const player1Id = resolveBracketParticipantId(match.player1Id);
-      const player2Id = resolveBracketParticipantId(match.player2Id);
-      const winnerId = resolveBracketParticipantId(match.winnerId);
-      const isBye = isByeMatchResult(match);
-      const completed = isCompletedMatchResultValid(tournament, match)
-        && Boolean(winnerId && (winnerId === player1Id || winnerId === player2Id));
-      const occupied = Boolean(player1Id || player2Id);
-      const status = completed
-        ? 4
-        : (occupied ? 2 : 1);
-      const opponent1 = player1Id
-        ? {
-            id: player1Id,
-            score: completed ? clampInt(match.legs?.p1, 0, 0, 99) : undefined,
-            result: completed && winnerId
-              ? (winnerId === player1Id ? "win" : (isBye ? undefined : "loss"))
-              : undefined,
-          }
-        : null;
-      const opponent2 = player2Id
-        ? {
-            id: player2Id,
-            score: completed ? clampInt(match.legs?.p2, 0, 0, 99) : undefined,
-            result: completed && winnerId
-              ? (winnerId === player2Id ? "win" : (isBye ? undefined : "loss"))
-              : undefined,
-          }
-        : null;
-      return {
-        id: match.id,
-        stage_id: 1,
-        group_id: 1,
-        round_id: match.round,
-        number: match.number,
-        child_count: 0,
-        status,
-        opponent1,
-        opponent2,
-      };
-    });
-
-    return {
-      stages: [{
-        id: 1,
-        tournament_id: 1,
-        name: tournament.mode === "groups_ko" ? "KO-Phase" : "KO",
-        type: "single_elimination",
-        settings: { size: bracketSize },
-        number: 1,
-      }],
-      matches,
-      matchGames: [],
-      participants,
-    };
-  }
-
-  function buildBracketFrameSrcdoc() {
-    return `
-<!doctype html>
-<html lang="de">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="${BRACKETS_VIEWER_CSS}">
-  <style>
-    :root {
-      --tb-bg-1: #2b356f;
-      --tb-bg-2: #1f3f72;
-      --tb-panel-border: rgba(255, 255, 255, 0.2);
-      --tb-text: #f4f7ff;
-      --tb-muted: rgba(232, 237, 255, 0.78);
-    }
-
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden !important;
-      color: var(--tb-text);
-      font-family: "Open Sans", "Segoe UI", Tahoma, sans-serif !important;
-      background: linear-gradient(180deg, var(--tb-bg-1), var(--tb-bg-2));
-    }
-
-    #msg {
-      padding: 12px 16px;
-      font-size: 16px;
-      color: var(--tb-muted);
-      border-bottom: 1px solid var(--tb-panel-border);
-      background: rgba(255, 255, 255, 0.05);
-    }
-
-    #brackets-root {
-      width: 100%;
-      flex: 1 1 auto;
-      overflow-x: auto;
-      overflow-y: hidden;
-      min-height: 420px;
-      box-sizing: border-box;
-      padding: 10px;
-      background:
-        radial-gradient(circle at 14% 8%, rgba(90, 210, 153, 0.07), transparent 45%),
-        radial-gradient(circle at 82% 10%, rgba(114, 121, 224, 0.18), transparent 52%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
-    }
-
-    #ata-brackets-viewer {
-      --primary-background: transparent;
-      --secondary-background: rgba(255, 255, 255, 0.11);
-      --match-background: rgba(59, 84, 136, 0.93);
-      --font-color: #f4f7ff;
-      --win-color: #5ad299;
-      --loss-color: #ff8787;
-      --label-color: rgba(226, 234, 255, 0.82);
-      --hint-color: rgba(205, 217, 248, 0.75);
-      --connector-color: rgba(183, 198, 236, 0.8);
-      --border-color: rgba(255, 255, 255, 0.28);
-      --border-hover-color: rgba(255, 255, 255, 0.46);
-      --border-selected-color: rgba(255, 255, 255, 0.66);
-      --text-size: 16px;
-      --round-margin: 78px;
-      --match-width: 256px;
-      --match-horizontal-padding: 14px;
-      --match-vertical-padding: 10px;
-      --connector-border-width: 2px;
-      --match-border-width: 1px;
-      --match-border-radius: 10px;
-      --participant-image-size: 1.1em;
-      width: max-content;
-      min-width: 100%;
-      min-height: 0;
-      margin: 0;
-      padding: 12px 20px 22px;
-    }
-
-    #ata-brackets-viewer.brackets-viewer {
-      align-items: flex-start;
-      margin: 0;
-    }
-
-    #ata-brackets-viewer h1,
-    #ata-brackets-viewer .bracket h2 {
-      display: none;
-    }
-
-    #ata-brackets-viewer h3 {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.26);
-      border-radius: 10px;
-      font-size: 1em;
-      font-weight: 700;
-      color: #f2f6ff;
-      padding: 9px 10px;
-    }
-
-    #ata-brackets-viewer .round.ata-final-round {
-      position: relative;
-    }
-
-    #ata-brackets-viewer .round.ata-final-round h3 {
-      background: linear-gradient(180deg, rgba(255, 211, 79, 0.28), rgba(255, 211, 79, 0.08));
-      border-color: rgba(255, 224, 140, 0.84);
-      color: #fff4cb;
-      text-shadow: 0 1px 0 rgba(58, 36, 8, 0.45);
-      box-shadow: 0 0 0 1px rgba(255, 211, 79, 0.36), 0 8px 18px rgba(47, 31, 8, 0.28);
-      position: relative;
-      padding-right: 104px;
-    }
-
-    #ata-brackets-viewer .round.ata-final-round h3::after {
-      content: "🏆 Finale";
-      position: absolute;
-      right: 8px;
-      top: 6px;
-      border-radius: 999px;
-      font-size: 0.65em;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-      color: #fff1c5;
-      background: rgba(98, 74, 18, 0.95);
-      border: 1px solid rgba(255, 224, 140, 0.82);
-      padding: 2px 7px;
-      line-height: 1.2;
-      text-transform: uppercase;
-    }
-
-    #ata-brackets-viewer .match {
-      margin: 12px 0;
-    }
-
-    #ata-brackets-viewer .round.ata-final-round .match {
-      margin: 16px 0;
-    }
-
-    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .opponents {
-      position: relative;
-      overflow: visible;
-      border-color: rgba(255, 224, 140, 0.86);
-      background:
-        radial-gradient(circle at 88% -22%, rgba(255, 228, 146, 0.27), transparent 54%),
-        linear-gradient(180deg, rgba(255, 211, 79, 0.15), rgba(59, 84, 136, 0.95));
-      box-shadow: 0 0 0 1px rgba(255, 224, 140, 0.38), 0 8px 20px rgba(35, 22, 8, 0.3);
-    }
-
-    #ata-brackets-viewer .match[data-match-status="4"] .opponents {
-      border-color: rgba(90, 210, 153, 0.9);
-      box-shadow: 0 0 0 1px rgba(90, 210, 153, 0.35), 0 6px 16px rgba(8, 30, 24, 0.35);
-      background: linear-gradient(180deg, rgba(90, 210, 153, 0.16), rgba(59, 84, 136, 0.94));
-    }
-
-    #ata-brackets-viewer .match[data-match-status="4"] .opponents::after {
-      content: "Abgeschlossen";
-      position: absolute;
-      top: -11px;
-      right: 8px;
-      font-size: 0.69em;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-      color: #aef4ce;
-      background: rgba(32, 88, 68, 0.94);
-      border: 1px solid rgba(110, 231, 183, 0.66);
-      border-radius: 999px;
-      padding: 2px 7px;
-      line-height: 1.2;
-      pointer-events: none;
-      text-transform: uppercase;
-    }
-
-    #ata-brackets-viewer .match[data-match-status="4"].ata-bye .opponents {
-      border-color: rgba(255, 211, 79, 0.9);
-      box-shadow: 0 0 0 1px rgba(255, 211, 79, 0.38), 0 6px 16px rgba(56, 36, 8, 0.35);
-      background: linear-gradient(180deg, rgba(255, 211, 79, 0.16), rgba(59, 84, 136, 0.94));
-    }
-
-    #ata-brackets-viewer .match[data-match-status="4"].ata-bye .opponents::after {
-      content: "Freilos";
-      color: #ffe39a;
-      background: rgba(89, 68, 16, 0.95);
-      border-color: rgba(255, 224, 140, 0.72);
-    }
-
-    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match[data-match-status="4"] .opponents {
-      border-color: rgba(255, 224, 140, 0.92);
-      box-shadow: 0 0 0 1px rgba(255, 224, 140, 0.52), 0 10px 22px rgba(50, 31, 8, 0.44);
-      background:
-        radial-gradient(circle at 84% -14%, rgba(255, 241, 198, 0.22), transparent 56%),
-        linear-gradient(180deg, rgba(255, 211, 79, 0.25), rgba(90, 210, 153, 0.2), rgba(59, 84, 136, 0.96));
-    }
-
-    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match[data-match-status="4"] .opponents::after {
-      content: "Champion";
-      color: #fff3c7;
-      background: rgba(98, 74, 18, 0.96);
-      border-color: rgba(255, 224, 140, 0.8);
-    }
-
-    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match[data-match-status="4"].ata-bye .opponents::after {
-      content: "Freilos";
-      color: #ffe39a;
-      background: rgba(89, 68, 16, 0.95);
-      border-color: rgba(255, 224, 140, 0.72);
-    }
-
-    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-winner {
-      background: rgba(98, 74, 18, 0.45);
-      border-radius: 8px;
-      box-shadow: inset 0 0 0 1px rgba(255, 224, 140, 0.48);
-    }
-
-    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-winner .name {
-      color: #72e5b0;
-      text-shadow: 0 1px 0 rgba(8, 33, 25, 0.58);
-      font-weight: 800;
-    }
-
-    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-winner .name::after {
-      content: "  🏆";
-      font-size: 0.88em;
-      color: #fff1c5;
-    }
-
-    #ata-brackets-viewer .round.ata-final-round .match.ata-final-match .participant.ata-final-loser .name {
-      color: rgba(229, 237, 255, 0.72);
-    }
-
-    #ata-brackets-viewer .match[data-match-status="4"] .participant .name:not(.ata-open-slot) {
-      font-weight: 700;
-    }
-
-    #ata-brackets-viewer .match[data-match-status="4"] .participant.win .name:not(.ata-open-slot) {
-      color: #72e5b0;
-      text-shadow: 0 1px 0 rgba(8, 33, 25, 0.5);
-    }
-
-    #ata-brackets-viewer .match[data-match-status="4"] .participant.loss .name:not(.ata-open-slot) {
-      color: rgba(229, 237, 255, 0.72);
-    }
-
-    #ata-brackets-viewer .participant {
-      align-items: center;
-      min-height: 42px;
-      font-size: 1em;
-    }
-
-    #ata-brackets-viewer .participant .name {
-      width: 78%;
-      font-weight: 600;
-    }
-
-    #ata-brackets-viewer .participant .name.ata-open-slot {
-      color: #ffd34f;
-      font-weight: 700;
-    }
-
-    #ata-brackets-viewer .participant .result {
-      width: 22%;
-      font-weight: 700;
-      text-align: center;
-    }
-
-    #brackets-root::-webkit-scrollbar {
-      width: 11px;
-      height: 11px;
-    }
-
-    #brackets-root::-webkit-scrollbar-track {
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 999px;
-    }
-
-    #brackets-root::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.28);
-      border-radius: 999px;
-    }
-
-  </style>
-</head>
-<body>
-  <div id="msg">Turnierbaum wird geladen ...</div>
-  <div id="brackets-root">
-    <div id="ata-brackets-viewer" class="brackets-viewer"></div>
-  </div>
-  <script src="${I18NEXT_JS}"></script>
-  <script src="${BRACKETS_VIEWER_JS}"></script>
-  <script>
-    (function () {
-      var msgEl = document.getElementById("msg");
-      var rootEl = document.getElementById("brackets-root");
-      var viewerEl = document.getElementById("ata-brackets-viewer");
-
-      function post(data) { window.parent.postMessage(data, "*"); }
-
-      function ensurePayload(payload) {
-        var safePayload = payload && typeof payload === "object" ? payload : {};
-        if (!Array.isArray(safePayload.stages) || !Array.isArray(safePayload.matches) || !Array.isArray(safePayload.participants)) {
-          throw new Error("invalid bracket payload");
-        }
-        return safePayload;
-      }
-
-      function normalizeOpenSlotLabels() {
-        if (!viewerEl) {
-          return;
-        }
-        var nodes = viewerEl.querySelectorAll(".participant .name");
-        nodes.forEach(function (node) {
-          var value = String(node.textContent || "").trim();
-          if (/^(bye|tbd)$/i.test(value)) {
-            node.textContent = "\\u2205 offen";
-            node.classList.add("ata-open-slot");
-          }
-        });
-      }
-
-      function decorateCompletedMatchBadges(payload) {
-        if (!viewerEl || !payload || !Array.isArray(payload.matches)) {
-          return;
-        }
-
-        var byeMatchById = {};
-        payload.matches.forEach(function (match) {
-          if (!match || Number(match.status) !== 4) {
-            return;
-          }
-          var matchId = String(match.id || "");
-          if (!matchId) {
-            return;
-          }
-          byeMatchById[matchId] = !match.opponent1 || !match.opponent2;
-        });
-
-        var matchNodes = viewerEl.querySelectorAll(".match[data-match-status='4']");
-        matchNodes.forEach(function (node) {
-          var matchId = String(node.getAttribute("data-match-id") || "");
-          var isByeByPayload = matchId && Object.prototype.hasOwnProperty.call(byeMatchById, matchId)
-            ? byeMatchById[matchId]
-            : false;
-          var isByeByDom = Boolean(node.querySelector(".participant .name.ata-open-slot"));
-          var isBye = isByeByPayload || isByeByDom;
-          node.classList.toggle("ata-bye", isBye);
-        });
-      }
-
-      function decorateFinalRound(payload) {
-        if (!viewerEl) {
-          return;
-        }
-
-        var roundNodes = viewerEl.querySelectorAll(".round");
-        var matchNodes = viewerEl.querySelectorAll(".match");
-        var participantNodes = viewerEl.querySelectorAll(".participant");
-        matchNodes.forEach(function (node) {
-          node.classList.remove("ata-final-match");
-        });
-        participantNodes.forEach(function (node) {
-          node.classList.remove("ata-final-winner");
-          node.classList.remove("ata-final-loser");
-        });
-        if (!roundNodes || !roundNodes.length) {
-          return;
-        }
-
-        roundNodes.forEach(function (node) {
-          node.classList.remove("ata-final-round");
-        });
-
-        var finalRoundNode = null;
-        roundNodes.forEach(function (node) {
-          if (finalRoundNode) {
-            return;
-          }
-          var titleEl = node.querySelector("h3");
-          var title = titleEl ? String(titleEl.textContent || "").trim() : "";
-          if (/(^|\\s)(final|finale|endspiel|grand\\s*final|championship)(\\s|$)/i.test(title)) {
-            finalRoundNode = node;
-          }
-        });
-
-        if (!finalRoundNode) {
-          finalRoundNode = roundNodes[roundNodes.length - 1];
-        }
-
-        if (finalRoundNode) {
-          finalRoundNode.classList.add("ata-final-round");
-        }
-
-        if (!finalRoundNode) {
-          return;
-        }
-
-        var winnerSideByMatchId = {};
-        if (payload && Array.isArray(payload.matches)) {
-          payload.matches.forEach(function (match) {
-            if (!match) {
-              return;
-            }
-            var matchId = String(match.id || "");
-            if (!matchId) {
-              return;
-            }
-            var winnerSide = 0;
-            if (match.opponent1 && String(match.opponent1.result || "").toLowerCase() === "win") {
-              winnerSide = 1;
-            } else if (match.opponent2 && String(match.opponent2.result || "").toLowerCase() === "win") {
-              winnerSide = 2;
-            }
-            winnerSideByMatchId[matchId] = winnerSide;
-          });
-        }
-
-        var finalMatchNodes = finalRoundNode.querySelectorAll(".match");
-        finalMatchNodes.forEach(function (node) {
-          node.classList.add("ata-final-match");
-          var matchId = String(node.getAttribute("data-match-id") || "");
-          var winnerSide = matchId && Object.prototype.hasOwnProperty.call(winnerSideByMatchId, matchId)
-            ? winnerSideByMatchId[matchId]
-            : 0;
-          if (!winnerSide) {
-            return;
-          }
-          var participants = node.querySelectorAll(".participant");
-          participants.forEach(function (participantNode, index) {
-            if (index === winnerSide - 1) {
-              participantNode.classList.add("ata-final-winner");
-            } else if (index === 0 || index === 1) {
-              participantNode.classList.add("ata-final-loser");
-            }
-          });
-        });
-      }
-
-      function pxToNumber(value) {
-        var num = Number.parseFloat(String(value || "0"));
-        return Number.isFinite(num) ? num : 0;
-      }
-
-      function computeFrameHeight() {
-        var msgHeight = msgEl && msgEl.style.display !== "none" ? msgEl.offsetHeight : 0;
-        var rootStyles = rootEl ? window.getComputedStyle(rootEl) : null;
-        var rootPadding = rootStyles
-          ? pxToNumber(rootStyles.paddingTop) + pxToNumber(rootStyles.paddingBottom)
-          : 0;
-        var viewerHeight = viewerEl ? Math.ceil(viewerEl.getBoundingClientRect().height) : 0;
-        return Math.max(420, msgHeight + rootPadding + viewerHeight);
-      }
-
-      function scheduleHeightReport() {
-        window.requestAnimationFrame(function () {
-          post({ type: "ata:bracket-frame-height", height: computeFrameHeight() });
-          window.setTimeout(function () {
-            post({ type: "ata:bracket-frame-height", height: computeFrameHeight() });
-          }, 100);
-          window.setTimeout(function () {
-            post({ type: "ata:bracket-frame-height", height: computeFrameHeight() });
-          }, 320);
-        });
-      }
-
-      function render(payload) {
-        if (!window.bracketsViewer || typeof window.bracketsViewer.render !== "function") {
-          throw new Error("brackets-viewer not found");
-        }
-        if (!viewerEl) {
-          throw new Error("bracket root not found");
-        }
-        var safePayload = ensurePayload(payload);
-        window.bracketsViewer.render(safePayload, {
-          selector: "#ata-brackets-viewer",
-          clear: true,
-        });
-        normalizeOpenSlotLabels();
-        decorateCompletedMatchBadges(safePayload);
-        decorateFinalRound(safePayload);
-        if (msgEl) {
-          msgEl.style.display = "none";
-        }
-        scheduleHeightReport();
-      }
-
-      window.addEventListener("message", function (event) {
-        var data = event.data;
-        if (!data || data.type !== "ata:render-bracket") {
-          return;
-        }
-        try {
-          render(data.payload || {});
-          post({ type: "ata:bracket-rendered" });
-        } catch (error) {
-          post({
-            type: "ata:bracket-error",
-            message: error && error.message ? error.message : String(error),
-          });
-        }
-      });
-
-      window.addEventListener("resize", scheduleHeightReport);
-
-      if (window.ResizeObserver && viewerEl) {
-        var resizeObserver = new window.ResizeObserver(scheduleHeightReport);
-        resizeObserver.observe(viewerEl);
-        if (rootEl) {
-          resizeObserver.observe(rootEl);
-        }
-      }
-
-      post({ type: "ata:bracket-frame-ready" });
-      scheduleHeightReport();
-    })();
-  </script>
-</body>
-</html>
-    `;
-  }
-
-  function applyBracketFrameHeight(height) {
-    const frame = state.bracket.iframe;
-    if (!(frame instanceof HTMLIFrameElement)) {
-      return;
-    }
-    const nextHeight = clampInt(height, 0, 420, 12000);
-    if (!nextHeight || Math.abs(nextHeight - state.bracket.frameHeight) < 2) {
-      return;
-    }
-    state.bracket.frameHeight = nextHeight;
-    frame.style.height = `${nextHeight}px`;
-  }
-
-
-  function queueBracketRender(forceReload = false) {
-    const tournament = state.store.tournament;
-    if (!tournament || (tournament.mode !== "ko" && tournament.mode !== "groups_ko")) {
-      return;
-    }
-    const shadow = state.shadowRoot;
-    if (!shadow) {
-      return;
-    }
-    const frame = shadow.getElementById("ata-bracket-frame");
-    if (!(frame instanceof HTMLIFrameElement)) {
-      return;
-    }
-
-    const payload = buildBracketPayload(tournament);
-    if (!payload) {
-      return;
-    }
-
-    if (forceReload || state.bracket.iframe !== frame) {
-      state.bracket.iframe = frame;
-      state.bracket.ready = false;
-      state.bracket.failed = false;
-      state.bracket.frameHeight = 0;
-      state.bracket.lastError = "";
-      frame.style.removeProperty("height");
-      syncBracketFallbackVisibility();
-      frame.srcdoc = buildBracketFrameSrcdoc();
-    }
-
-    if (state.bracket.timeoutHandle) {
-      clearTimeout(state.bracket.timeoutHandle);
-      state.bracket.timeoutHandle = null;
-    }
-
-    state.bracket.timeoutHandle = window.setTimeout(() => {
-      state.bracket.failed = true;
-      state.bracket.lastError = "Turnierbaum-Render-Timeout";
-      syncBracketFallbackVisibility();
-      setNotice("error", "CDN-Turnierbaum-Timeout, Fallback bleibt aktiv.", 3200);
-      logWarn("bracket", "Iframe bracket render timeout.");
-    }, 7000);
-
-    if (state.bracket.ready && frame.contentWindow) {
-      frame.contentWindow.postMessage({ type: "ata:render-bracket", payload }, "*");
-    }
-  }
-
-
-  function handleBracketMessage(event) {
-    const frame = state.bracket.iframe;
-    if (!frame || event.source !== frame.contentWindow) {
-      return;
-    }
-
-    const data = event.data;
-    if (!data || typeof data !== "object") {
-      return;
-    }
-
-    if (data.type === "ata:bracket-frame-ready") {
-      state.bracket.ready = true;
-      const payload = buildBracketPayload(state.store.tournament);
-      if (payload && frame.contentWindow) {
-        frame.contentWindow.postMessage({ type: "ata:render-bracket", payload }, "*");
-      }
-      return;
-    }
-
-    if (data.type === "ata:bracket-frame-height") {
-      applyBracketFrameHeight(data.height);
-      return;
-    }
-
-    if (data.type === "ata:bracket-rendered") {
-      if (state.bracket.timeoutHandle) {
-        clearTimeout(state.bracket.timeoutHandle);
-        state.bracket.timeoutHandle = null;
-      }
-      state.bracket.failed = false;
-      state.bracket.lastError = "";
-      syncBracketFallbackVisibility();
-      logDebug("bracket", "Bracket rendered successfully.");
-      return;
-    }
-
-    if (data.type === "ata:bracket-error") {
-      if (state.bracket.timeoutHandle) {
-        clearTimeout(state.bracket.timeoutHandle);
-        state.bracket.timeoutHandle = null;
-      }
-      state.bracket.failed = true;
-      state.bracket.lastError = normalizeText(data.message || "Unbekannter Fehler");
-      syncBracketFallbackVisibility();
-      setNotice("error", `Turnierbaum-Fehler: ${state.bracket.lastError}. Fallback aktiv.`, 3600);
-      logWarn("bracket", "Bracket render error.", data);
-    }
-  }
+// Infrastructure layer: browser integration and Autodarts page coupling.
 
   function playerLookupMap(tournament) {
     const map = new Map();
@@ -8354,16 +7582,7 @@
     addObserver(observer);
   }
 
-
-  function removeMatchReturnShortcut() {
-    if (state.matchReturnShortcut.root instanceof HTMLElement) {
-      state.matchReturnShortcut.root.remove();
-    }
-    state.matchReturnShortcut.root = null;
-    state.matchReturnShortcut.syncing = false;
-    state.matchReturnShortcut.inlineSyncingByLobby = {};
-    state.matchReturnShortcut.inlineOutcomeByLobby = {};
-  }
+  // History import and lobby-route helpers.
 
 
   function removeHistoryImportButton() {
@@ -9103,723 +8322,1642 @@
     return handleLobbySyncAndOpen(lobbyId, "inline-history");
   }
 
-
-  function renderMatchReturnShortcut() {
-    removeMatchReturnShortcut();
+  function onRouteChange() {
+    const current = routeKey();
+    if (current === state.routeKey) {
+      return;
+    }
+    state.routeKey = current;
+    logDebug("route", `Route changed to ${current}`);
+    ensureHost();
+    renderShell();
+    renderHistoryImportButton();
   }
 
 
-  function cleanupRuntime() {
-    if (state.saveTimer) {
-      clearTimeout(state.saveTimer);
-      state.saveTimer = null;
+  function installRouteHooks() {
+    if (state.patchedHistory) {
+      return;
     }
-    if (state.noticeTimer) {
-      clearTimeout(state.noticeTimer);
-      state.noticeTimer = null;
-    }
-    if (state.bracket.timeoutHandle) {
-      clearTimeout(state.bracket.timeoutHandle);
-      state.bracket.timeoutHandle = null;
-    }
-    removeMatchReturnShortcut();
-    removeHistoryImportButton();
-    while (state.cleanupStack.length) {
-      const cleanup = state.cleanupStack.pop();
-      try {
-        cleanup();
-      } catch (error) {
-        logWarn("lifecycle", "Cleanup function failed.", error);
-      }
-    }
-  }
 
+    const originalPushState = window.history.pushState;
+    const originalReplaceState = window.history.replaceState;
 
-  function initEventBridge() {
-    addListener(window, TOGGLE_EVENT, () => {
-      toggleDrawer();
-    });
-    addListener(window, "message", handleBracketMessage);
-    addListener(window, "pagehide", cleanupRuntime, { once: true });
-    addListener(window, "beforeunload", cleanupRuntime, { once: true });
-  }
-
-  function runSelfTests() {
-    const results = [];
-    const record = (name, ok, details = "") => {
-      results.push({ name, ok: Boolean(ok), details: normalizeText(details || "") });
+    window.history.pushState = function patchedPushState(...args) {
+      const result = originalPushState.apply(this, args);
+      onRouteChange();
+      return result;
     };
-    const participantList = (count, prefix = "P") => {
-      const list = [];
-      for (let i = 1; i <= count; i += 1) {
-        list.push({ id: `${prefix}${i}`, name: `${prefix}${i}` });
-      }
-      return list;
+    window.history.replaceState = function patchedReplaceState(...args) {
+      const result = originalReplaceState.apply(this, args);
+      onRouteChange();
+      return result;
     };
 
-    try {
-      const participants = participantList(9, "S");
-      const ids = participants.map((item) => item.id);
-      const seededMatches = buildKoMatchesV2(ids, KO_DRAW_MODE_SEEDED);
-      const seededRoundOne = seededMatches.filter((match) => match.round === 1);
-      const seededOpenRoundOne = seededRoundOne.filter((match) => match.player1Id && match.player2Id && !isByeMatchResult(match));
-      record(
-        "KO Seeded: 9 Teilnehmer -> genau 1 offenes R1-Match",
-        seededOpenRoundOne.length === 1,
-        `offene R1-Matches: ${seededOpenRoundOne.length}`,
-      );
-    } catch (error) {
-      record("KO Seeded: 9 Teilnehmer -> genau 1 offenes R1-Match", false, String(error?.message || error));
-    }
-
-    try {
-      const participants = participantList(9, "O");
-      const ids = participants.map((item) => item.id);
-      const openDrawMatches = buildKoMatchesV2(ids, KO_DRAW_MODE_OPEN_DRAW);
-      const repeatedOpenDrawMatches = buildKoMatchesV2(ids, KO_DRAW_MODE_OPEN_DRAW);
-      const toSignature = (matches) => matches
-        .map((match) => `${match.id}:${match.player1Id || "-"}:${match.player2Id || "-"}:${isByeMatchResult(match) ? "bye" : "match"}`)
-        .join("|");
-      const deterministic = toSignature(openDrawMatches) === toSignature(repeatedOpenDrawMatches);
-      const byeCount = openDrawMatches.filter((match) => isByeMatchResult(match)).length;
-      record(
-        "KO Open Draw: deterministisch mit expliziten Byes",
-        deterministic && byeCount > 0,
-        `matches=${openDrawMatches.length}, byes=${byeCount}, deterministic=${deterministic}`,
-      );
-    } catch (error) {
-      record("KO Open Draw: deterministisch mit expliziten Byes", false, String(error?.message || error));
-    }
-
-    try {
-      const participants = participantList(6, "K6");
-      const structure = buildBracketStructure(participants, generateSeeds(participants, KO_DRAW_MODE_SEEDED));
-      const matches = buildKoMatchesFromStructure(structure);
-      const expectedTotalMatches = structure.rounds.reduce((sum, roundDef) => sum + roundDef.virtualMatches.length, 0);
-      const byeCount = matches.filter((match) => isByeMatchResult(match)).length;
-      record(
-        "KO 6: vollständiger 8er-Baum mit 2 Byes",
-        matches.length === expectedTotalMatches && expectedTotalMatches === 7 && byeCount === 2,
-        `matches=${matches.length}, expected=${expectedTotalMatches}, byes=${byeCount}`,
-      );
-    } catch (error) {
-      record("KO 6: vollständiger 8er-Baum mit 2 Byes", false, String(error?.message || error));
-    }
-
-    try {
-      const participants = participantList(8, "K8");
-      const structure = buildBracketStructure(participants, generateSeeds(participants, KO_DRAW_MODE_SEEDED));
-      const matches = buildKoMatchesFromStructure(structure);
-      const byeCount = matches.filter((match) => isByeMatchResult(match)).length;
-      record(
-        "KO 8: 7 Match-Knoten von Start an vorhanden",
-        matches.length === 7 && byeCount === 0,
-        `matches=${matches.length}, byes=${byeCount}`,
-      );
-    } catch (error) {
-      record("KO 8: 7 Match-Knoten von Start an vorhanden", false, String(error?.message || error));
-    }
-
-    try {
-      const compliant = isPdcCompliantMatchSetup({
-        mode: "ko",
-        bestOfLegs: 5,
-        startScore: 501,
-        x01InMode: "Straight",
-        x01OutMode: "Double",
-        x01BullMode: "25/50",
-        x01MaxRounds: 50,
-        x01BullOffMode: "Normal",
-        lobbyVisibility: "private",
-      });
-      const notCompliantBestOfOne = isPdcCompliantMatchSetup({
-        mode: "ko",
-        bestOfLegs: 1,
-        startScore: 501,
-        x01InMode: "Straight",
-        x01OutMode: "Double",
-        x01BullMode: "25/50",
-        x01MaxRounds: 50,
-        x01BullOffMode: "Normal",
-        lobbyVisibility: "private",
-      });
-      record(
-        "PDC-Setup: KO + Best of >=3 + PDC-X01 erforderlich",
-        compliant && !notCompliantBestOfOne,
-        `compliant=${compliant}, bo1=${notCompliantBestOfOne}`,
-      );
-    } catch (error) {
-      record("PDC-Setup: KO + Best of >=3 + PDC-X01 erforderlich", false, String(error?.message || error));
-    }
-
-    try {
-      const tournament = createTournament({
-        name: "PayloadMapping",
-        mode: "league",
-        bestOfLegs: 7,
-        startScore: 701,
-        x01Preset: X01_PRESET_CUSTOM,
-        x01InMode: "Double",
-        x01OutMode: "Master",
-        x01BullMode: "50/50",
-        x01MaxRounds: 20,
-        x01BullOffMode: "Official",
-        lobbyVisibility: "private",
-        randomizeKoRound1: false,
-        participants: participantList(2, "PM"),
-      });
-      const payload = buildLobbyCreatePayload(tournament);
-      record(
-        "Turnieranlage -> Matchstart-Payload übernimmt X01 + Best-of konsistent",
-        payload?.variant === X01_VARIANT
-          && payload?.isPrivate === true
-          && payload?.bullOffMode === "Official"
-          && payload?.legs === 4
-          && payload?.settings?.baseScore === 701
-          && payload?.settings?.inMode === "Double"
-          && payload?.settings?.outMode === "Master"
-          && payload?.settings?.maxRounds === 20
-          && payload?.settings?.bullMode === "50/50",
-        `legs=${payload?.legs}, settings=${JSON.stringify(payload?.settings || {})}`,
-      );
-    } catch (error) {
-      record("Turnieranlage -> Matchstart-Payload übernimmt X01 + Best-of konsistent", false, String(error?.message || error));
-    }
-
-    try {
-      const tournament = createTournament({
-        name: "BullOffOff",
-        mode: "league",
-        bestOfLegs: 5,
-        startScore: 501,
-        x01Preset: X01_PRESET_CUSTOM,
-        x01InMode: "Straight",
-        x01OutMode: "Double",
-        x01BullMode: "50/50",
-        x01MaxRounds: 50,
-        x01BullOffMode: "Off",
-        lobbyVisibility: "private",
-        randomizeKoRound1: false,
-        participants: participantList(2, "BO"),
-      });
-      const payload = buildLobbyCreatePayload(tournament);
-      const hasBullMode = Object.prototype.hasOwnProperty.call(payload?.settings || {}, "bullMode");
-      record(
-        "Bull-off Off: Matchstart-Payload setzt top-level bullOffMode + bullMode",
-        payload?.bullOffMode === "Off"
-          && hasBullMode,
-        `bullOffMode=${payload?.bullOffMode || "-"}, hasBullMode=${hasBullMode}`,
-      );
-    } catch (error) {
-      record("Bull-off Off: Matchstart-Payload setzt top-level bullOffMode + bullMode", false, String(error?.message || error));
-    }
-
-    try {
-      const tournament = createTournament({
-        name: "DrawLockOn",
-        mode: "ko",
-        bestOfLegs: 3,
-        startScore: 501,
-        x01Preset: X01_PRESET_PDC_STANDARD,
-        x01InMode: "Straight",
-        x01OutMode: "Double",
-        x01BullMode: "25/50",
-        x01MaxRounds: 50,
-        x01BullOffMode: "Normal",
-        lobbyVisibility: "private",
-        randomizeKoRound1: false,
-        koDrawLocked: true,
-        participants: participantList(8, "DL"),
-      });
-      const before = JSON.stringify(tournament.ko?.rounds || []);
-      tournament.participants = tournament.participants.slice().reverse();
-      refreshDerivedMatches(tournament);
-      const after = JSON.stringify(tournament.ko?.rounds || []);
-      record(
-        "Draw-Lock aktiv: KO-Struktur bleibt stabil",
-        before === after,
-        `stable=${before === after}`,
-      );
-    } catch (error) {
-      record("Draw-Lock aktiv: KO-Struktur bleibt stabil", false, String(error?.message || error));
-    }
-
-    try {
-      const tournament = createTournament({
-        name: "DrawLockOff",
-        mode: "ko",
-        bestOfLegs: 3,
-        startScore: 501,
-        x01Preset: X01_PRESET_PDC_STANDARD,
-        x01InMode: "Straight",
-        x01OutMode: "Double",
-        x01BullMode: "25/50",
-        x01MaxRounds: 50,
-        x01BullOffMode: "Normal",
-        lobbyVisibility: "private",
-        randomizeKoRound1: false,
-        koDrawLocked: false,
-        participants: participantList(8, "DU"),
-      });
-      const before = JSON.stringify(tournament.ko?.rounds || []);
-      tournament.participants = tournament.participants.slice().reverse();
-      refreshDerivedMatches(tournament);
-      const after = JSON.stringify(tournament.ko?.rounds || []);
-      record(
-        "Draw-Lock aus: KO-Struktur kann neu aufgebaut werden",
-        before !== after,
-        `changed=${before !== after}`,
-      );
-    } catch (error) {
-      record("Draw-Lock aus: KO-Struktur kann neu aufgebaut werden", false, String(error?.message || error));
-    }
-
-    try {
-      const matches = [
-        createMatch({ id: "m-ab", stage: MATCH_STAGE_LEAGUE, round: 1, number: 1, player1Id: "A", player2Id: "B", status: STATUS_COMPLETED, winnerId: "A", legs: { p1: 2, p2: 1 } }),
-        createMatch({ id: "m-ac", stage: MATCH_STAGE_LEAGUE, round: 1, number: 2, player1Id: "A", player2Id: "C", status: STATUS_COMPLETED, winnerId: "A", legs: { p1: 2, p2: 1 } }),
-        createMatch({ id: "m-ad", stage: MATCH_STAGE_LEAGUE, round: 1, number: 3, player1Id: "A", player2Id: "D", status: STATUS_COMPLETED, winnerId: "D", legs: { p1: 0, p2: 2 } }),
-        createMatch({ id: "m-bc", stage: MATCH_STAGE_LEAGUE, round: 2, number: 1, player1Id: "B", player2Id: "C", status: STATUS_COMPLETED, winnerId: "B", legs: { p1: 2, p2: 0 } }),
-        createMatch({ id: "m-bd", stage: MATCH_STAGE_LEAGUE, round: 2, number: 2, player1Id: "B", player2Id: "D", status: STATUS_COMPLETED, winnerId: "B", legs: { p1: 2, p2: 0 } }),
-        createMatch({ id: "m-cd", stage: MATCH_STAGE_LEAGUE, round: 2, number: 3, player1Id: "C", player2Id: "D", status: STATUS_COMPLETED, winnerId: "C", legs: { p1: 2, p2: 1 } }),
-      ];
-
-      const h2hTournament = {
-        id: "tb1",
-        name: "TB1",
-        mode: "league",
-        ko: null,
-        bestOfLegs: 3,
-        startScore: 501,
-        x01: buildPdcX01Settings(),
-        rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
-        participants: [
-          { id: "A", name: "A" },
-          { id: "B", name: "B" },
-          { id: "C", name: "C" },
-          { id: "D", name: "D" },
-        ],
-        groups: [],
-        matches: cloneSerializable(matches),
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-      };
-      const pointsLegDiffTournament = {
-        ...h2hTournament,
-        id: "tb2",
-        rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF }),
-        matches: cloneSerializable(matches),
-      };
-      const h2hRows = standingsForMatches(h2hTournament, h2hTournament.matches);
-      const legacyRows = standingsForMatches(pointsLegDiffTournament, pointsLegDiffTournament.matches);
-      record(
-        "Tie-Break-Profile: H2H und Punkte+LegDiff liefern unterschiedliche Reihenfolge",
-        h2hRows[0]?.id === "A" && legacyRows[0]?.id === "B",
-        `h2h=${h2hRows[0]?.id || "-"}, legacy=${legacyRows[0]?.id || "-"}`,
-      );
-    } catch (error) {
-      record("Tie-Break-Profile: H2H und Punkte+LegDiff liefern unterschiedliche Reihenfolge", false, String(error?.message || error));
-    }
-
-    try {
-      const tournament = createTournament({
-        name: "GroupsKo",
-        mode: "groups_ko",
-        bestOfLegs: 3,
-        startScore: 501,
-        x01Preset: X01_PRESET_PDC_STANDARD,
-        x01InMode: "Straight",
-        x01OutMode: "Double",
-        x01BullMode: "25/50",
-        x01MaxRounds: 50,
-        x01BullOffMode: "Normal",
-        lobbyVisibility: "private",
-        randomizeKoRound1: false,
-        participants: participantList(4, "G"),
-      });
-      const groupA = findMatch(tournament, "group-A-r1-m1");
-      const groupB = findMatch(tournament, "group-B-r1-m1");
-      groupA.status = STATUS_COMPLETED;
-      groupA.winnerId = groupA.player1Id;
-      groupA.legs = { p1: 2, p2: 0 };
-      groupB.status = STATUS_COMPLETED;
-      groupB.winnerId = groupB.player1Id;
-      groupB.legs = { p1: 2, p2: 1 };
-      refreshDerivedMatches(tournament);
-
-      const semi1 = findMatch(tournament, "ko-r1-m1");
-      const semi2 = findMatch(tournament, "ko-r1-m2");
-      semi1.status = STATUS_COMPLETED;
-      semi1.winnerId = semi1.player1Id;
-      semi1.legs = { p1: 2, p2: 0 };
-      semi2.status = STATUS_COMPLETED;
-      semi2.winnerId = semi2.player1Id;
-      semi2.legs = { p1: 2, p2: 1 };
-      refreshDerivedMatches(tournament);
-
-      const final = findMatch(tournament, "ko-r2-m1");
-      record(
-        "Groups+KO Regression: Finale wird korrekt aus Semis belegt",
-        Boolean(final?.player1Id && final?.player2Id),
-        `final=${final?.player1Id || "-"}:${final?.player2Id || "-"}`,
-      );
-    } catch (error) {
-      record("Groups+KO Regression: Finale wird korrekt aus Semis belegt", false, String(error?.message || error));
-    }
-
-    try {
-      const tournament = {
-        id: "t2",
-        name: "T2",
-        mode: "groups_ko",
-        ko: null,
-        bestOfLegs: 3,
-        startScore: 501,
-        x01: buildPdcX01Settings(),
-        rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
-        participants: [
-          { id: "A", name: "A" },
-          { id: "B", name: "B" },
-          { id: "C", name: "C" },
-        ],
-        groups: [],
-        matches: [
-          createMatch({ id: "m1", stage: MATCH_STAGE_GROUP, groupId: "A", round: 1, number: 1, player1Id: "A", player2Id: "B", status: STATUS_COMPLETED, winnerId: "A", legs: { p1: 2, p2: 1 } }),
-          createMatch({ id: "m2", stage: MATCH_STAGE_GROUP, groupId: "A", round: 2, number: 1, player1Id: "B", player2Id: "C", status: STATUS_COMPLETED, winnerId: "B", legs: { p1: 2, p2: 1 } }),
-          createMatch({ id: "m3", stage: MATCH_STAGE_GROUP, groupId: "A", round: 3, number: 1, player1Id: "C", player2Id: "A", status: STATUS_COMPLETED, winnerId: "C", legs: { p1: 2, p2: 1 } }),
-        ],
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-      };
-      const rows = standingsForMatches(tournament, tournament.matches, ["A", "B", "C"]);
-      const blocked = rows.filter((row) => row.tiebreakState === "playoff_required").length;
-      record(
-        "Promoter H2H: Deadlock -> Playoff erforderlich",
-        blocked === 3,
-        rows.map((row) => `${row.id}:${row.tiebreakState}`).join(", "),
-      );
-    } catch (error) {
-      record("Promoter H2H: Deadlock -> Playoff erforderlich", false, String(error?.message || error));
-    }
-
-    try {
-      const tournament = {
-        participants: [
-          { id: "P1", name: "Sabine" },
-          { id: "P2", name: "Tanja" },
-        ],
-      };
-      const match = {
-        player1Id: "P1",
-        player2Id: "P2",
-      };
-      const apiStats = {
-        winner: 1,
-        players: [
-          { name: "Sabine" },
-          { name: "Tanja" },
-        ],
-        matchStats: [
-          { legsWon: 1 },
-          { legsWon: 0 },
-        ],
-      };
-      const candidates = getApiMatchLegCandidatesFromStats(tournament, match, apiStats, "P2");
-      const best = candidates[0] || { p1: -1, p2: -1 };
-      record(
-        "API Sync: vertauschte Legs-Reihenfolge wird korrigiert",
-        best.p1 === 0 && best.p2 === 1,
-        `best=${best.p1}:${best.p2}`,
-      );
-    } catch (error) {
-      record("API Sync: vertauschte Legs-Reihenfolge wird korrigiert", false, String(error?.message || error));
-    }
-
-    try {
-      const tournament = {
-        participants: [
-          { id: "P1", name: "Sabine" },
-          { id: "P2", name: "Tanja" },
-        ],
-      };
-      const match = {
-        player1Id: "P1",
-        player2Id: "P2",
-      };
-      const apiStats = {
-        winner: 0,
-        players: [
-          { name: "Sabine" },
-          { name: "Tanja" },
-        ],
-        matchStats: [
-          { legsWon: 1, player: { name: "Tanja" } },
-          { legsWon: 0, player: { name: "Sabine" } },
-        ],
-      };
-      const winners = resolveWinnerIdCandidatesFromApiStats(tournament, match, apiStats, 0);
-      record(
-        "API Sync: Winner-Index aus matchStats wird bevorzugt",
-        winners[0] === "P2",
-        `first=${winners[0] || "-"}`,
-      );
-    } catch (error) {
-      record("API Sync: Winner-Index aus matchStats wird bevorzugt", false, String(error?.message || error));
-    }
-
-    try {
-      const tournament = {
-        participants: [
-          { id: "P1", name: "Tommy" },
-          { id: "P2", name: "Hans" },
-        ],
-        matches: [
-          createMatch({ id: "m1", stage: MATCH_STAGE_GROUP, round: 1, number: 1, player1Id: "P1", player2Id: "P2", status: STATUS_PENDING }),
-          createMatch({ id: "m2", stage: MATCH_STAGE_KO, round: 2, number: 1, player1Id: "P1", player2Id: "P2", status: STATUS_PENDING }),
-        ],
-      };
-      const apiStats = {
-        players: [
-          { name: "Tommy" },
-          { name: "Hans" },
-        ],
-        matchStats: [
-          { player: { name: "Tommy" }, legsWon: 1 },
-          { player: { name: "Hans" }, legsWon: 0 },
-        ],
-      };
-      const recovered = findOpenMatchCandidatesByApiStats(tournament, apiStats);
-      record(
-        "API Sync: Recovery erkennt mehrdeutige Match-Zuordnung",
-        recovered.length === 2,
-        `candidates=${recovered.length}`,
-      );
-    } catch (error) {
-      record("API Sync: Recovery erkennt mehrdeutige Match-Zuordnung", false, String(error?.message || error));
-    }
-
-    try {
-      const tournament = {
-        participants: [
-          { id: "P1", name: "Tanja Mueller" },
-          { id: "P2", name: "Simon Stark" },
-        ],
-      };
-      const ids = participantIdsByName(tournament, "TANJA");
-      record(
-        "History Import: Namens-Matching erkennt Teilnamen",
-        ids.includes("P1"),
-        `ids=${ids.join(",")}`,
-      );
-    } catch (error) {
-      record("History Import: Namens-Matching erkennt Teilnamen", false, String(error?.message || error));
-    }
-
-    {
-      const previousTournament = state.store.tournament;
-      try {
-        const tournament = {
-          id: "history-test-lobby",
-          name: "History",
-          mode: "league",
-          ko: null,
-          bestOfLegs: 3,
-          startScore: 501,
-          x01: buildPdcX01Settings(),
-          rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
-          participants: [
-            { id: "P1", name: "Tanja Mueller" },
-            { id: "P2", name: "Simon Stark" },
-          ],
-          groups: [],
-          matches: [
-            createMatch({
-              id: "m-history-lobby",
-              stage: MATCH_STAGE_LEAGUE,
-              round: 1,
-              number: 1,
-              player1Id: "P1",
-              player2Id: "P2",
-              meta: {
-                auto: {
-                  lobbyId: "lobby-history-1",
-                  status: "started",
-                },
-              },
-            }),
-          ],
-          createdAt: nowIso(),
-          updatedAt: nowIso(),
-        };
-        state.store.tournament = tournament;
-        const table = document.createElement("table");
-        table.innerHTML = `
-          <thead>
-            <tr>
-              <th>Stats</th>
-              <td><span class="ad-ext-player-name"><p>TANJA</p></span></td>
-              <td><span class="ad-ext-player-name"><p>SIMON</p></span><svg data-icon="trophy"></svg></td>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td>Gewonnene Legs</td><td>1</td><td>0</td></tr>
-          </tbody>
-        `;
-        const outcome = importHistoryStatsTableResult("lobby-history-1", { table });
-        const updated = findMatch(tournament, "m-history-lobby");
-        record(
-          "History Import: Lobby-Mapping priorisiert + Legs normalisiert",
-          Boolean(outcome?.ok)
-            && outcome.reasonCode === "completed"
-            && updated?.status === STATUS_COMPLETED
-            && updated?.winnerId === "P1"
-            && updated?.legs?.p1 === 2
-            && updated?.legs?.p2 === 0,
-          `reason=${outcome?.reasonCode || "-"}, winner=${updated?.winnerId || "-"}, legs=${updated?.legs?.p1}:${updated?.legs?.p2}`,
-        );
-      } catch (error) {
-        record("History Import: Lobby-Mapping priorisiert + Legs normalisiert", false, String(error?.message || error));
-      } finally {
-        state.store.tournament = previousTournament;
-      }
-    }
-
-    {
-      const previousTournament = state.store.tournament;
-      try {
-        const tournament = {
-          id: "history-test-ambiguous",
-          name: "History",
-          mode: "league",
-          ko: null,
-          bestOfLegs: 1,
-          startScore: 501,
-          x01: buildPdcX01Settings(),
-          rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
-          participants: [
-            { id: "P1", name: "Tommy" },
-            { id: "P2", name: "Hans" },
-          ],
-          groups: [],
-          matches: [
-            createMatch({
-              id: "m-history-a",
-              stage: MATCH_STAGE_LEAGUE,
-              round: 1,
-              number: 1,
-              player1Id: "P1",
-              player2Id: "P2",
-            }),
-            createMatch({
-              id: "m-history-b",
-              stage: MATCH_STAGE_KO,
-              round: 2,
-              number: 1,
-              player1Id: "P1",
-              player2Id: "P2",
-              meta: {
-                auto: {
-                  lobbyId: "lobby-history-2",
-                  status: "started",
-                },
-              },
-            }),
-          ],
-          createdAt: nowIso(),
-          updatedAt: nowIso(),
-        };
-        state.store.tournament = tournament;
-        const table = document.createElement("table");
-        table.innerHTML = `
-          <thead>
-            <tr>
-              <th>Stats</th>
-              <td><span class="ad-ext-player-name"><p>TOMMY</p></span></td>
-              <td><span class="ad-ext-player-name"><p>HANS</p></span></td>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td>Gewonnene Legs</td><td>1</td><td>0</td></tr>
-          </tbody>
-        `;
-        const outcome = importHistoryStatsTableResult("lobby-history-2", { table });
-        const matchA = findMatch(tournament, "m-history-a");
-        const matchB = findMatch(tournament, "m-history-b");
-        record(
-          "History Import: bei Mehrdeutigkeit gewinnt verknüpfte Lobby",
-          Boolean(outcome?.ok)
-            && matchA?.status === STATUS_PENDING
-            && matchB?.status === STATUS_COMPLETED
-            && matchB?.winnerId === "P1",
-          `reason=${outcome?.reasonCode || "-"}, A=${matchA?.status || "-"}, B=${matchB?.status || "-"}:${matchB?.winnerId || "-"}`,
-        );
-      } catch (error) {
-        record("History Import: bei Mehrdeutigkeit gewinnt verknüpfte Lobby", false, String(error?.message || error));
-      } finally {
-        state.store.tournament = previousTournament;
-      }
-    }
-
-    try {
-      const rawStoreV2 = {
-        schemaVersion: 2,
-        settings: { debug: false, featureFlags: { autoLobbyStart: false, randomizeKoRound1: true } },
-        ui: { activeTab: "tournament", matchesSortMode: MATCH_SORT_MODE_READY_FIRST },
-        tournament: {
-          id: "legacy",
-          name: "Legacy",
-          mode: "league",
-          bestOfLegs: 3,
-          startScore: 501,
-          x01: buildPdcX01Settings(),
-          participants: [{ id: "A", name: "A" }, { id: "B", name: "B" }],
-          groups: [],
-          matches: [],
-          createdAt: nowIso(),
-          updatedAt: nowIso(),
-        },
-      };
-      const migrated = migrateStorage(rawStoreV2);
-      record(
-        "Migration: v2 -> v4 setzt Tie-Break-Profil",
-        migrated.schemaVersion === 4
-          && migrated.tournament?.rules?.tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE
-          && migrated.settings?.featureFlags?.koDrawLockDefault === true,
-        `schema=${migrated.schemaVersion}, profile=${migrated.tournament?.rules?.tieBreakProfile}`,
-      );
-    } catch (error) {
-      record("Migration: v2 -> v3 setzt Tie-Break-Regeln", false, String(error?.message || error));
-    }
-
-    const passed = results.filter((entry) => entry.ok).length;
-    const failed = results.length - passed;
-    return {
-      ok: failed === 0,
-      passed,
-      failed,
-      results,
-      generatedAt: nowIso(),
-      version: APP_VERSION,
-    };
-  }
-
-
-  function setupRuntimeApi() {
-    window[RUNTIME_GLOBAL_KEY] = {
-      version: APP_VERSION,
-      isReady: () => state.ready,
-      openDrawer,
-      closeDrawer,
-      toggleDrawer,
-      runSelfTests,
+    state.patchedHistory = {
+      pushState: originalPushState,
+      replaceState: originalReplaceState,
     };
 
     addCleanup(() => {
-      if (window[RUNTIME_GLOBAL_KEY]) {
-        delete window[RUNTIME_GLOBAL_KEY];
+      if (state.patchedHistory) {
+        window.history.pushState = state.patchedHistory.pushState;
+        window.history.replaceState = state.patchedHistory.replaceState;
+        state.patchedHistory = null;
       }
     });
+
+    addListener(window, "popstate", onRouteChange, { passive: true });
+    addListener(window, "hashchange", onRouteChange, { passive: true });
+    addInterval(() => {
+      if (!document.getElementById(UI_HOST_ID)) {
+        ensureHost();
+      }
+      onRouteChange();
+      renderHistoryImportButton();
+    }, 1000);
   }
+
+// Presentation layer: UI rendering and interaction wiring.
+
+  function renderInfoLinks(links) {
+    if (!Array.isArray(links) || !links.length) {
+      return "";
+    }
+
+    const linksHtml = links
+      .map((entry) => {
+        const href = String(entry?.href || "").trim();
+        if (!href) {
+          return "";
+        }
+        const kind = normalizeToken(entry?.kind || "tech");
+        const isRuleLink = kind === "rule" || kind === "rules" || kind === "regel";
+        const symbol = isRuleLink ? "§" : "ⓘ";
+        const className = isRuleLink
+          ? "ata-help-link ata-help-link-rule"
+          : "ata-help-link ata-help-link-tech";
+        const label = normalizeText(entry?.label) || "Mehr Informationen";
+        const title = normalizeText(entry?.title) || label;
+        return `
+          <a
+            class="${className}"
+            href="${escapeHtml(href)}"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="${escapeHtml(label)}"
+            title="${escapeHtml(title)}"
+          >${symbol}</a>
+        `;
+      })
+      .filter(Boolean)
+      .join("");
+
+    if (!linksHtml) {
+      return "";
+    }
+
+    return `<span class="ata-help-links">${linksHtml}</span>`;
+  }
+
+
+  function renderSectionHeading(title, links = []) {
+    return `
+      <div class="ata-heading-row">
+        <h3>${escapeHtml(title)}</h3>
+        ${renderInfoLinks(links)}
+      </div>
+    `;
+  }
+
+  function buildStyles() {
+    return ATA_UI_MAIN_CSS;
+  }
+
+  function buildShellHtml() {
+    const tabs = TAB_META.map((tab) => `
+      <button type="button" class="ata-tab" data-tab="${tab.id}" data-active="${state.activeTab === tab.id ? "1" : "0"}">
+        ${escapeHtml(tab.label)}
+      </button>
+    `).join("");
+
+    const noticeHtml = state.notice.message
+      ? `<div class="ata-notice ata-notice-${escapeHtml(state.notice.type)}">${escapeHtml(state.notice.message)}</div>`
+      : "";
+    const runtimeStatusHtml = renderRuntimeStatusBar();
+
+    return `
+      <style>${buildStyles()}</style>
+      <div class="ata-root" data-open="${state.drawerOpen ? "1" : "0"}">
+        <div class="ata-overlay" data-action="close-drawer"></div>
+        <aside class="ata-drawer" role="dialog" aria-modal="true" aria-label="Autodarts Tournament Assistant" tabindex="-1">
+          <header class="ata-header">
+            <div class="ata-title-wrap">
+              <h2>Turnier Assistent</h2>
+              <p>Lokales Management f\u00fcr KO, Liga und Gruppenphase <span class="ata-version">v${escapeHtml(APP_VERSION)}</span></p>
+            </div>
+            <button type="button" class="ata-close-btn" data-action="close-drawer" aria-label="Schlie\u00dfen">Schlie\u00dfen</button>
+          </header>
+          <nav class="ata-tabs">${tabs}</nav>
+          ${runtimeStatusHtml}
+          <main class="ata-content" data-role="content">${noticeHtml}${renderActiveTab()}</main>
+        </aside>
+      </div>
+    `;
+  }
+
+  function renderActiveTab() {
+    switch (state.activeTab) {
+      case "matches":
+        return renderMatchesTab();
+      case "view":
+        return renderViewTab();
+      case "io":
+        return renderIOTab();
+      case "settings":
+        return renderSettingsTab();
+      case "tournament":
+      default:
+        return renderTournamentTab();
+    }
+  }
+
+  function renderTournamentTab() {
+    const tournament = state.store.tournament;
+    if (!tournament) {
+      const draft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store?.settings);
+      const randomizeChecked = draft.randomizeKoRound1 ? "checked" : "";
+      const modeLimitSummary = buildModeParticipantLimitSummary();
+      const startScoreOptions = X01_START_SCORE_OPTIONS.map((score) => (
+        `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${score}</option>`
+      )).join("");
+      const pdcCompliantSetup = isPdcCompliantMatchSetup(draft);
+      const pdcPresetActive = draft.x01Preset === X01_PRESET_PDC_STANDARD && pdcCompliantSetup;
+      const presetStatusLabel = pdcPresetActive ? "Preset aktiv: PDC-Standard" : "Preset aktiv: Individuell";
+      const pdcPresetHint = "PDC-Preset setzt KO, Best of 5, 501, Straight In, Double Out, Bull-off Normal, Bull 25/50 und Max. Runden 50.";
+      const bullModeDisabled = draft.x01BullOffMode === "Off";
+      const bullModeDisabledAttr = bullModeDisabled ? "disabled" : "";
+      const bullModeHiddenInput = bullModeDisabled
+        ? `<input type="hidden" id="ata-x01-bullmode-hidden" name="x01BullMode" value="${escapeHtml(draft.x01BullMode)}">`
+        : "";
+      const createHeadingLinks = [
+        { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erklärung zur Turniererstellung öffnen", title: "README: Turnier anlegen" },
+        { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole öffnen", title: "README: Info-Symbole" },
+      ];
+      const modeHelpLinks = renderInfoLinks([
+        { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Erklärung der Modi öffnen", title: "README: Turniermodi" },
+        { href: DRA_GUI_RULE_MODE_FORMATS_URL, kind: "rule", label: "DRA-Regelerklärung zu Modus und Format öffnen", title: "DRA-Regeln in der GUI: Modus und Format" },
+      ]);
+      const drawHelpLinks = renderInfoLinks([
+        { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Open Draw und gesetzter Draw erklärt", title: "README: KO-Modus" },
+        { href: DRA_GUI_RULE_OPEN_DRAW_URL, kind: "rule", label: "DRA-Regelerklärung zu Open Draw öffnen", title: "DRA-Regeln in der GUI: Open Draw" },
+      ]);
+      const modeLimitHelpLinks = renderInfoLinks([
+        { href: DRA_GUI_RULE_PARTICIPANT_LIMITS_URL, kind: "rule", label: "DRA-Regelerklärung zu Limits öffnen", title: "DRA-Regeln in der GUI: Teilnehmerlimits" },
+      ]);
+      return `
+        <section class="ata-card tournamentCard">
+          ${renderSectionHeading("Neues Turnier erstellen", createHeadingLinks)}
+          <form id="ata-create-form" class="ata-create-form">
+            <input type="hidden" id="ata-x01-preset" name="x01Preset" value="${escapeHtml(draft.x01Preset)}">
+            <div class="ata-create-layout">
+              <div class="ata-create-main">
+                <div class="ata-grid-3 ata-grid-3-tight">
+                  <div class="ata-field">
+                    <label for="ata-name">Turniername</label>
+                    <input id="ata-name" name="name" type="text" placeholder="z. B. Freitagsturnier" value="${escapeHtml(draft.name)}" required>
+                  </div>
+                  <div class="ata-field">
+                    <label for="ata-mode">Modus ${modeHelpLinks}</label>
+                    <select id="ata-mode" name="mode">
+                      <option value="ko" ${draft.mode === "ko" ? "selected" : ""}>KO</option>
+                      <option value="league" ${draft.mode === "league" ? "selected" : ""}>Liga</option>
+                      <option value="groups_ko" ${draft.mode === "groups_ko" ? "selected" : ""}>Gruppenphase + KO</option>
+                    </select>
+                  </div>
+                  <div class="ata-field">
+                    <label for="ata-bestof">Best of Legs</label>
+                    <input id="ata-bestof" name="bestOfLegs" type="number" min="1" max="21" step="2" value="${draft.bestOfLegs}">
+                  </div>
+                  <div class="ata-field">
+                    <label for="ata-startscore">Startpunkte</label>
+                    <select id="ata-startscore" name="startScore">
+                      ${startScoreOptions}
+                    </select>
+                  </div>
+                  <div class="ata-field">
+                    <label for="ata-x01-inmode">In-Modus</label>
+                    <select id="ata-x01-inmode" name="x01InMode">
+                      <option value="Straight" ${draft.x01InMode === "Straight" ? "selected" : ""}>Straight</option>
+                      <option value="Double" ${draft.x01InMode === "Double" ? "selected" : ""}>Double</option>
+                      <option value="Master" ${draft.x01InMode === "Master" ? "selected" : ""}>Master</option>
+                    </select>
+                  </div>
+                  <div class="ata-field">
+                    <label for="ata-x01-outmode">Out-Modus</label>
+                    <select id="ata-x01-outmode" name="x01OutMode">
+                      <option value="Straight" ${draft.x01OutMode === "Straight" ? "selected" : ""}>Straight</option>
+                      <option value="Double" ${draft.x01OutMode === "Double" ? "selected" : ""}>Double</option>
+                      <option value="Master" ${draft.x01OutMode === "Master" ? "selected" : ""}>Master</option>
+                    </select>
+                  </div>
+                  <div class="ata-field">
+                    <label for="ata-x01-bulloff">Bull-off</label>
+                    <select id="ata-x01-bulloff" name="x01BullOffMode">
+                      <option value="Off" ${draft.x01BullOffMode === "Off" ? "selected" : ""}>Off</option>
+                      <option value="Normal" ${draft.x01BullOffMode === "Normal" ? "selected" : ""}>Normal</option>
+                      <option value="Official" ${draft.x01BullOffMode === "Official" ? "selected" : ""}>Official</option>
+                    </select>
+                  </div>
+                  <div class="ata-field">
+                    <label for="ata-x01-bullmode">Bull-Modus</label>
+                    <select id="ata-x01-bullmode" name="x01BullMode" ${bullModeDisabledAttr}>
+                      <option value="25/50" ${draft.x01BullMode === "25/50" ? "selected" : ""}>25/50</option>
+                      <option value="50/50" ${draft.x01BullMode === "50/50" ? "selected" : ""}>50/50</option>
+                    </select>
+                    ${bullModeHiddenInput}
+                  </div>
+                  <div class="ata-field">
+                    <label for="ata-x01-maxrounds">Max Runden</label>
+                    <select id="ata-x01-maxrounds" name="x01MaxRounds">
+                      <option value="15" ${draft.x01MaxRounds === 15 ? "selected" : ""}>15</option>
+                      <option value="20" ${draft.x01MaxRounds === 20 ? "selected" : ""}>20</option>
+                      <option value="50" ${draft.x01MaxRounds === 50 ? "selected" : ""}>50</option>
+                      <option value="80" ${draft.x01MaxRounds === 80 ? "selected" : ""}>80</option>
+                    </select>
+                  </div>
+                  <div class="ata-field">
+                    <label for="ata-match-mode">Spielmodus</label>
+                    <span id="ata-match-mode" class="ata-field-readonly">Legs (First to N aus Best of)</span>
+                  </div>
+                  <div class="ata-field">
+                    <label for="ata-lobby-fixed">Lobby</label>
+                    <span id="ata-lobby-fixed" class="ata-field-readonly">Privat</span>
+                  </div>
+                  <div class="ata-field ata-field-span-3">
+                    <label for="ata-apply-pdc-preset">Preset</label>
+                    <div class="ata-form-inline-actions">
+                      <button id="ata-apply-pdc-preset" type="button" class="ata-btn ata-btn-sm" data-action="apply-pdc-preset">PDC-Preset anwenden</button>
+                      <span class="ata-preset-pill">${escapeHtml(presetStatusLabel)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="ata-toggle ata-toggle-compact">
+                  <div>
+                    <strong>KO-Erstrunde zuf\u00e4llig mischen ${drawHelpLinks}</strong>
+                    <div class="ata-small">Open Draw bei aktivem Schalter, sonst gesetzter Draw.</div>
+                  </div>
+                  <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
+                </div>
+                <p class="ata-small ata-create-help">${escapeHtml(pdcPresetHint)}</p>
+                <p class="ata-small ata-create-help">Best of 1 ist kein PDC-Standardprofil; für das Badge gilt Best of mindestens 3 Legs.</p>
+                <p class="ata-small ata-create-help">Bull-off = Off deaktiviert Bull-Modus automatisch (schreibgesch\u00fctzt).</p>
+              </div>
+              <aside class="ata-create-side">
+                <div class="ata-field">
+                  <label for="ata-participants">Teilnehmer (eine Zeile pro Person)</label>
+                  <textarea id="ata-participants" name="participants" placeholder="Max Mustermann&#10;Erika Musterfrau">${escapeHtml(draft.participantsText)}</textarea>
+                </div>
+                <div class="ata-actions">
+                  <button type="button" class="ata-btn ata-btn-sm" data-action="shuffle-participants">Teilnehmer mischen</button>
+                  <button type="submit" class="ata-btn ata-btn-primary">Turnier anlegen</button>
+                </div>
+                <p class="ata-small">Modus-Limits ${modeLimitHelpLinks}: ${escapeHtml(modeLimitSummary)}.</p>
+              </aside>
+            </div>
+            <p class="ata-small">Bei Moduswechsel gelten die jeweiligen Grenzen sofort.</p>
+          </form>
+        </section>
+      `;
+    }
+
+    const modeLabel = tournament.mode === "ko"
+      ? "KO (Straight Knockout)"
+      : tournament.mode === "league"
+        ? "Liga (Round Robin)"
+        : "Gruppenphase + KO (Round Robin + Straight Knockout)";
+
+    const participantsHtml = tournament.participants.map((participant) => (
+      `<span class="ata-player-chip">${escapeHtml(participant.name)}</span>`
+    )).join("");
+    const participantsCount = tournament.participants.length;
+    const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
+    const x01PresetLabel = x01Settings.presetId === X01_PRESET_PDC_STANDARD ? "PDC-Standard" : "Individuell";
+    const x01BullModeLabel = x01Settings.bullOffMode === "Off"
+      ? "Bull-Modus deaktiviert"
+      : `Bull-Modus ${x01Settings.bullMode}`;
+    const legsToWin = getLegsToWin(tournament.bestOfLegs);
+    const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED);
+    const drawModeLabel = drawMode === KO_DRAW_MODE_OPEN_DRAW ? "Open Draw" : "Gesetzter Draw";
+    const drawLockLabel = tournament?.ko?.drawLocked !== false ? "Draw-Lock aktiv" : "Draw-Lock aus";
+    const primaryTags = [
+      { text: `Best of ${tournament.bestOfLegs} Legs`, cls: "ata-info-tag ata-info-tag-key" },
+      { text: `First to ${legsToWin} Legs`, cls: "ata-info-tag" },
+      { text: `Startpunkte ${tournament.startScore}`, cls: "ata-info-tag" },
+      ...(tournament.mode === "ko"
+        ? [
+          { text: drawModeLabel, cls: "ata-info-tag ata-info-tag-accent" },
+          { text: drawLockLabel, cls: "ata-info-tag" },
+        ]
+        : []),
+    ];
+    const x01Tags = [
+      { text: `X01 ${x01PresetLabel}`, cls: "ata-info-tag ata-info-tag-key" },
+      { text: `${x01Settings.inMode} In`, cls: "ata-info-tag" },
+      { text: `${x01Settings.outMode} Out`, cls: "ata-info-tag" },
+      { text: `Bull-off ${x01Settings.bullOffMode}`, cls: "ata-info-tag" },
+      { text: x01BullModeLabel, cls: "ata-info-tag" },
+      { text: `Max. Runden ${x01Settings.maxRounds}`, cls: "ata-info-tag" },
+    ];
+    const primaryTagsHtml = primaryTags.map((tag) => `<span class="${tag.cls}">${escapeHtml(tag.text)}</span>`).join("");
+    const x01TagsHtml = x01Tags.map((tag) => `<span class="${tag.cls}">${escapeHtml(tag.text)}</span>`).join("");
+    const activeTournamentHeadingLinks = [
+      { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Turniermodus-Erklärung öffnen", title: "README: Turniermodi" },
+    ];
+    const activeFormatHelpLinks = renderInfoLinks([
+      { href: DRA_GUI_RULE_MODE_FORMATS_URL, kind: "rule", label: "DRA-Regelerklärung zu Modus und Format öffnen", title: "DRA-Regeln in der GUI: Modus und Format" },
+    ]);
+
+    return `
+      <section class="ata-card tournamentCard">
+        ${renderSectionHeading("Aktives Turnier", activeTournamentHeadingLinks)}
+        <p class="ata-tournament-title">
+          <b>${escapeHtml(tournament.name)}</b>
+          <span class="ata-tournament-mode-pill">${escapeHtml(modeLabel)}</span>
+        </p>
+        <div class="ata-tournament-meta">
+          <div class="ata-meta-block">
+            <div class="ata-meta-heading">Format ${activeFormatHelpLinks}</div>
+            <div class="ata-info-tag-cloud">${primaryTagsHtml}</div>
+          </div>
+          <div class="ata-meta-block">
+            <div class="ata-meta-heading">Spiel-Setup (X01)</div>
+            <div class="ata-info-tag-cloud">${x01TagsHtml}</div>
+          </div>
+          <div class="ata-meta-block">
+            <div class="ata-meta-heading">Teilnehmerfeld <span class="ata-player-chip-count">(${participantsCount})</span></div>
+            <div class="ata-player-chip-cloud">${participantsHtml}</div>
+          </div>
+        </div>
+      </section>
+      <section class="ata-card tournamentCard">
+        <h3>Turnier zur\u00fccksetzen</h3>
+        <p class="ata-small">Dieser Schritt l\u00f6scht alle Spielst\u00e4nde. Bitte vorher exportieren.</p>
+        <div class="ata-actions">
+          <button type="button" class="ata-btn ata-btn-danger" data-action="reset-tournament">Turnier l\u00f6schen</button>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderMatchesTab() {
+    const tournament = state.store.tournament;
+    if (!tournament) {
+      return `<section class="ata-card tournamentCard"><h3>Keine Turnierdaten</h3><p>Bitte zuerst ein Turnier erstellen.</p></section>`;
+    }
+
+    const activeStartedMatch = findActiveStartedMatch(tournament);
+    const sortMode = sanitizeMatchesSortMode(state.store?.ui?.matchesSortMode, MATCH_SORT_MODE_READY_FIRST);
+    const sortOptions = [
+      { id: MATCH_SORT_MODE_READY_FIRST, label: "Spielbar zuerst" },
+      { id: MATCH_SORT_MODE_ROUND, label: "Runde/Spiel" },
+      { id: MATCH_SORT_MODE_STATUS, label: "Status" },
+    ];
+
+    const matches = sortMatchesForDisplay(tournament, sortMode);
+    const legsToWin = getLegsToWin(tournament.bestOfLegs);
+    const suggestedNextMatch = findSuggestedNextMatch(tournament);
+    const suggestedNextMatchId = suggestedNextMatch?.id || "";
+    const koFinalRound = getMatchesByStage(tournament, MATCH_STAGE_KO).reduce((maxRound, koMatch) => {
+      const roundNumber = Number.parseInt(String(koMatch?.round || "0"), 10);
+      return Number.isFinite(roundNumber) && roundNumber > maxRound ? roundNumber : maxRound;
+    }, 0);
+
+    const cards = matches.map((match) => {
+      const player1 = participantNameById(tournament, match.player1Id);
+      const player2 = participantNameById(tournament, match.player2Id);
+      const winner = participantNameById(tournament, match.winnerId);
+      const isOpenSlot = (name) => name === "\u2205 offen";
+      const playability = getMatchEditability(tournament, match);
+      const editable = playability.editable;
+      const auto = ensureMatchAutoMeta(match);
+      const isCompleted = match.status === STATUS_COMPLETED;
+      const isByeCompletion = isCompleted && isByeMatchResult(match);
+      const isAutoStarted = match.status === STATUS_PENDING && auto.status === "started" && Boolean(auto.lobbyId);
+      const isBlockedPending = match.status === STATUS_PENDING && !editable;
+      const isReadyPending = match.status === STATUS_PENDING && editable;
+      const isSuggestedNext = Boolean(suggestedNextMatchId) && match.id === suggestedNextMatchId;
+      const isKoFinal = match.stage === MATCH_STAGE_KO && koFinalRound > 0 && Number(match.round) === koFinalRound;
+      const stageLabel = match.stage === MATCH_STAGE_GROUP
+        ? `Gruppe ${match.groupId || "?"}`
+        : match.stage === MATCH_STAGE_LEAGUE
+          ? "Liga (Round Robin)"
+          : "KO (Straight Knockout)";
+      const startUi = getApiMatchStartUi(tournament, match, activeStartedMatch);
+      const startDisabledAttr = startUi.disabled ? "disabled" : "";
+      const startTitleAttr = startUi.title ? `title="${escapeHtml(startUi.title)}"` : "";
+      const autoStatus = getApiMatchStatusText(match);
+      let statusLine = "";
+      if (match.status === STATUS_PENDING) {
+        if (!editable && playability.reason) {
+          statusLine = auto.status === "idle"
+            ? playability.reason
+            : `${playability.reason} - ${autoStatus}`;
+        } else if (auto.status !== "idle") {
+          statusLine = autoStatus;
+        }
+      } else if (!isByeCompletion && auto.status !== "completed") {
+        statusLine = autoStatus;
+      }
+      const matchCellText = `Runde ${match.round} / Spiel ${match.number}`;
+      const matchCellHelpText = "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
+      const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
+      const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
+      const saveHelpText = `Speichert Legs f\u00fcr ${player1} vs ${player2}. Sieger wird automatisch aus den Legs bestimmt. Sieger muss ${legsToWin} Legs erreichen.`;
+      const rowClasses = [
+        "ata-match-card",
+        isCompleted ? "ata-row-completed" : "",
+        isByeCompletion ? "ata-row-bye" : "",
+        isAutoStarted ? "ata-row-live" : "",
+        isReadyPending ? "ata-row-ready" : "",
+        isSuggestedNext ? "ata-row-next" : "",
+        isKoFinal ? "ata-row-final" : "",
+        isBlockedPending ? "ata-row-blocked" : "",
+        !editable ? "ata-row-inactive" : "",
+      ].filter(Boolean).join(" ");
+      const statusBadgeText = isByeCompletion ? "Freilos (Bye)" : (isCompleted ? "Abgeschlossen" : "Offen");
+      const contextPillClass = isByeCompletion
+        ? "ata-match-context-pill ata-match-context-bye"
+        : (isCompleted ? "ata-match-context-pill ata-match-context-completed" : "ata-match-context-pill ata-match-context-open");
+      const contextText = `${stageLabel}, ${matchCellText}, ${statusBadgeText}`;
+      const summaryText = isCompleted
+        ? (isByeCompletion
+          ? `Weiter (Bye): ${winner}`
+          : (isKoFinal ? `Champion: ${winner} (${match.legs.p1}:${match.legs.p2})` : `Sieger: ${winner} (${match.legs.p1}:${match.legs.p2})`))
+        : "";
+      const advanceClasses = [
+        "ata-match-advance-pill",
+        isByeCompletion ? "ata-match-advance-bye" : "",
+        isKoFinal ? "ata-match-advance-final" : "",
+      ].filter(Boolean).join(" ");
+
+      const buildPairingPlayerHtml = (name, participantId) => {
+        const classes = ["ata-pairing-player"];
+        if (isOpenSlot(name)) {
+          classes.push("ata-open-slot");
+          return `<span class="${classes.join(" ")}">${escapeHtml(name)}</span>`;
+        }
+        if (isCompleted && match.winnerId) {
+          if (participantId === match.winnerId) {
+            classes.push("is-winner");
+            if (isKoFinal) {
+              classes.push("is-champion");
+            }
+          } else if (participantId === match.player1Id || participantId === match.player2Id) {
+            classes.push("is-loser");
+          }
+        }
+        return `<span class="${classes.join(" ")}">${escapeHtml(name)}</span>`;
+      };
+
+      const player1PairingHtml = buildPairingPlayerHtml(player1, match.player1Id);
+      const player2PairingHtml = buildPairingPlayerHtml(player2, match.player2Id);
+
+      const editorHtml = editable
+        ? `
+          <div class="ata-match-editor">
+            <div class="ata-score-grid">
+              <input
+                type="number"
+                min="0"
+                max="${legsToWin}"
+                data-field="legs-p1"
+                data-match-id="${escapeHtml(match.id)}"
+                value="${match.legs.p1}"
+                aria-label="${escapeHtml(legsP1HelpText)}"
+                title="${escapeHtml(legsP1HelpText)}"
+              >
+              <input
+                type="number"
+                min="0"
+                max="${legsToWin}"
+                data-field="legs-p2"
+                data-match-id="${escapeHtml(match.id)}"
+                value="${match.legs.p2}"
+                aria-label="${escapeHtml(legsP2HelpText)}"
+                title="${escapeHtml(legsP2HelpText)}"
+              >
+            </div>
+            <div class="ata-editor-actions">
+              <button type="button" class="ata-btn" data-action="save-match" data-match-id="${escapeHtml(match.id)}" title="${escapeHtml(saveHelpText)}">Speichern</button>
+              <button type="button" class="ata-btn ata-btn-primary" data-action="start-match" data-match-id="${escapeHtml(match.id)}" ${startDisabledAttr} ${startTitleAttr}>${escapeHtml(startUi.label)}</button>
+            </div>
+          </div>
+        `
+        : "";
+
+      const summaryHtml = summaryText
+        ? `<span class="${escapeHtml(advanceClasses)}">${escapeHtml(summaryText)}</span>`
+        : "";
+      const nextPillHtml = isSuggestedNext
+        ? `<span class="ata-match-next-pill" title="Empfohlene n\u00e4chste Paarung (PDC: Next Match)">N\u00e4chstes Match</span>`
+        : "";
+      const finalPillHtml = isKoFinal
+        ? `<span class="ata-match-final-pill" title="Finale">🏆 Finale</span>`
+        : "";
+      const statusLineHtml = statusLine
+        ? `<div class="ata-match-note">${escapeHtml(statusLine)}</div>`
+        : "";
+
+      return `
+        <article class="${escapeHtml(rowClasses)}" data-match-id="${escapeHtml(match.id)}">
+          <div class="ata-match-card-head">
+            <div class="ata-match-title-row">
+              <div class="ata-match-pairing">${player1PairingHtml} <span class="ata-vs">vs</span> ${player2PairingHtml}</div>
+              <div class="ata-match-meta-inline">
+                ${finalPillHtml}
+                ${nextPillHtml}
+                <span class="${contextPillClass}" title="${escapeHtml(matchCellHelpText)}">${escapeHtml(contextText)}</span>
+              </div>
+            </div>
+            ${summaryHtml}
+          </div>
+          ${editorHtml}
+          ${statusLineHtml}
+        </article>
+      `;
+    }).join("");
+
+    const cardsHtml = cards || `<p class="ata-small">Keine Matches vorhanden.</p>`;
+    const resultHeadingLinks = [
+      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Erklärung zur API-Halbautomatik öffnen", title: "README: API-Halbautomatik" },
+      { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
+    ];
+    const nextMatchHelpLinks = renderInfoLinks([
+      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Ablauf der Ergebnisführung öffnen", title: "README: API-Halbautomatik und Ergebnisführung" },
+      { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Turniermodus-Kontext öffnen", title: "README: Turniermodi" },
+    ]);
+    const nextHintHtml = suggestedNextMatchId
+      ? `<p class="ata-small ata-next-hint">Hinweis: Die Markierung "Nächstes Match" zeigt die empfohlene nächste Paarung (PDC: Next Match) ${nextMatchHelpLinks}.</p>`
+      : "";
+    const sortButtonsHtml = sortOptions.map((option) => `
+      <button type="button" class="ata-segmented-btn" data-action="set-matches-sort" data-sort-mode="${option.id}" data-active="${sortMode === option.id ? "1" : "0"}">${escapeHtml(option.label)}</button>
+    `).join("");
+
+    return `
+      <section class="ata-card tournamentCard ata-matches-card">
+        ${renderSectionHeading("Ergebnisführung", resultHeadingLinks)}
+        <p class="ata-small">API-Halbautomatik: Match per Klick starten, Ergebnis wird automatisch synchronisiert. Manuelle Eingabe bleibt als Fallback aktiv. ${renderInfoLinks([
+          { href: README_API_AUTOMATION_URL, kind: "tech", label: "Voraussetzungen und Ablauf öffnen", title: "README: API-Halbautomatik" },
+        ])}</p>
+        <div class="ata-matches-toolbar">
+          <div class="ata-segmented" role="group" aria-label="Match-Sortierung">${sortButtonsHtml}</div>
+        </div>
+        ${nextHintHtml}
+        <div class="ata-match-list">${cardsHtml}</div>
+      </section>
+    `;
+  }
+
+  function renderStandingsTable(rows, headline, headingLinks = []) {
+    const bodyRows = rows.map((row) => `
+      <tr>
+        <td>${row.rank}</td>
+        <td>${escapeHtml(row.name)}</td>
+        <td>${row.played}</td>
+        <td>${row.wins}</td>
+        <td>${row.draws || 0}</td>
+        <td>${row.losses}</td>
+        <td>${row.points}</td>
+        <td>${row.legDiff}</td>
+        <td>${row.legsFor}</td>
+        <td>${row.tiebreakState === "playoff_required" ? "Playoff" : "-"}</td>
+      </tr>
+    `).join("");
+
+    return `
+      <div class="ata-card">
+        ${renderSectionHeading(headline, headingLinks)}
+        <div class="ata-table-wrap">
+          <table class="ata-table tournamentRanking">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Sp</th>
+                <th>S</th>
+                <th>U</th>
+                <th>N</th>
+                <th>Pkt</th>
+                <th>LegDiff</th>
+                <th>Legs+</th>
+                <th>TB</th>
+              </tr>
+            </thead>
+            <tbody>${bodyRows}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+
+  function renderLeagueSchedule(tournament) {
+    const matches = getMatchesByStage(tournament, MATCH_STAGE_LEAGUE);
+    if (!matches.length) {
+      return "";
+    }
+    const rows = matches.map((match) => `
+      <tr>
+        <td>R${match.round}</td>
+        <td>${escapeHtml(participantNameById(tournament, match.player1Id))}</td>
+        <td>${escapeHtml(participantNameById(tournament, match.player2Id))}</td>
+        <td>${match.status === STATUS_COMPLETED ? escapeHtml(participantNameById(tournament, match.winnerId)) : "-"}</td>
+        <td>${match.status === STATUS_COMPLETED ? `${match.legs.p1}:${match.legs.p2}` : "-"}</td>
+      </tr>
+    `).join("");
+
+    return `
+      <div class="ata-card">
+        <h3>Liga-Spielplan</h3>
+        <div class="ata-table-wrap">
+          <table class="ata-table tournamentRanking">
+            <thead>
+              <tr>
+                <th>Runde</th>
+                <th>Spieler 1</th>
+                <th>Spieler 2</th>
+                <th>Winner</th>
+                <th>Legs</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+
+  function renderStaticBracketFallback(tournament) {
+    const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
+    if (!koMatches.length) {
+      return `<p class="ata-small">Kein KO-Turnierbaum vorhanden.</p>`;
+    }
+
+    const rounds = new Map();
+    koMatches.forEach((match) => {
+      if (!rounds.has(match.round)) {
+        rounds.set(match.round, []);
+      }
+      rounds.get(match.round).push(match);
+    });
+
+    const roundHtml = [...rounds.entries()]
+      .sort((left, right) => left[0] - right[0])
+      .map(([roundNumber, matches]) => {
+        const matchesHtml = matches
+          .sort((a, b) => a.number - b.number)
+          .map((match) => {
+            const isCompleted = isCompletedMatchResultValid(tournament, match);
+            const isBye = isCompleted && isByeMatchResult(match);
+            const player1Name = participantNameById(tournament, match.player1Id);
+            const player2Name = participantNameById(tournament, match.player2Id);
+            const hasLegScores = isCompleted && Number.isFinite(match?.legs?.p1) && Number.isFinite(match?.legs?.p2);
+            const winnerId = isCompleted ? normalizeText(match.winnerId) : "";
+            const player1IsWinner = Boolean(winnerId) && normalizeText(match.player1Id) === winnerId;
+            const player2IsWinner = Boolean(winnerId) && normalizeText(match.player2Id) === winnerId;
+            const player1Classes = [
+              "ata-bracket-player",
+              player1Name === "\u2205 offen" ? "ata-open-slot" : "",
+              player1IsWinner ? "is-winner" : "",
+              (isCompleted && !isBye && !player1IsWinner && normalizeText(match.player1Id)) ? "is-loser" : "",
+            ].filter(Boolean).join(" ");
+            const player2Classes = [
+              "ata-bracket-player",
+              player2Name === "\u2205 offen" ? "ata-open-slot" : "",
+              player2IsWinner ? "is-winner" : "",
+              (isCompleted && !isBye && !player2IsWinner && normalizeText(match.player2Id)) ? "is-loser" : "",
+            ].filter(Boolean).join(" ");
+            const statusBadgeClass = isBye
+              ? "ata-match-status ata-match-status-bye"
+              : (isCompleted ? "ata-match-status ata-match-status-completed" : "ata-match-status ata-match-status-open");
+            const statusBadgeText = isBye ? "Freilos (Bye)" : (isCompleted ? "Abgeschlossen" : "Offen");
+            const statusText = !isCompleted
+              ? "Noch nicht abgeschlossen."
+                : isBye
+                ? `Freilos (Bye): ${escapeHtml(participantNameById(tournament, match.winnerId))}`
+                : `Gewinner: ${escapeHtml(participantNameById(tournament, match.winnerId))} (${match.legs.p1}:${match.legs.p2})`;
+            return `
+              <div class="ata-bracket-match">
+                <div class="${player1Classes}">
+                  <span>${escapeHtml(player1Name)}</span>
+                  ${hasLegScores ? `<span class="ata-bracket-score ${player1IsWinner ? "is-win" : (isBye ? "" : "is-loss")}">${match.legs.p1}</span>` : ""}
+                </div>
+                <div class="${player2Classes}">
+                  <span>${escapeHtml(player2Name)}</span>
+                  ${hasLegScores ? `<span class="ata-bracket-score ${player2IsWinner ? "is-win" : (isBye ? "" : "is-loss")}">${match.legs.p2}</span>` : ""}
+                </div>
+                <div><span class="${statusBadgeClass}">${statusBadgeText}</span></div>
+                <div class="ata-small">${statusText}</div>
+              </div>
+            `;
+          }).join("");
+
+        return `
+          <div class="ata-bracket-round">
+            <strong>Runde ${roundNumber}</strong>
+            ${matchesHtml}
+          </div>
+        `;
+      }).join("");
+
+    return `<div class="ata-bracket-grid">${roundHtml}</div>`;
+  }
+
+
+  function renderViewTab() {
+    const tournament = state.store.tournament;
+    if (!tournament) {
+      return `<section class="ata-card tournamentCard"><h3>Keine Turnierdaten</h3><p>Bitte zuerst ein Turnier erstellen.</p></section>`;
+    }
+
+    let html = "";
+    const fallbackVisible = state.bracket.failed ? "1" : "0";
+
+    if (tournament.mode === "league") {
+      const standings = standingsForMatches(tournament, getMatchesByStage(tournament, MATCH_STAGE_LEAGUE));
+      html += renderStandingsTable(standings, "Liga-Tabelle", [
+        { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
+      ]);
+      html += renderLeagueSchedule(tournament);
+    } else if (tournament.mode === "groups_ko") {
+      const standingsMap = groupStandingsMap(tournament);
+      const groupCards = [];
+      const blockedGroups = [];
+      standingsMap.forEach((entry) => {
+        groupCards.push(renderStandingsTable(entry.rows, `Tabelle ${entry.group.name}`, [
+          { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
+        ]));
+        if (entry.groupResolution?.status === "playoff_required") {
+          blockedGroups.push(`${entry.group.name}: ${entry.groupResolution.reason}`);
+        }
+      });
+      html += `<div class="ata-group-grid">${groupCards.join("")}</div>`;
+      if (blockedGroups.length) {
+        html += `
+          <section class="ata-card tournamentCard">
+            ${renderSectionHeading("Gruppenentscheidung offen", [
+              { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
+            ])}
+            <p class="ata-small">KO-Qualifikation ist blockiert, bis folgende DRA-Entscheidungen geklärt sind:</p>
+            <ul class="ata-small">
+              ${blockedGroups.map((text) => `<li>${escapeHtml(text)}</li>`).join("")}
+            </ul>
+          </section>
+        `;
+      }
+    }
+
+    if (tournament.mode === "ko" || tournament.mode === "groups_ko") {
+      html += `
+        <section class="ata-card tournamentCard">
+          ${renderSectionHeading("KO-Turnierbaum", [
+            { href: DRA_GUI_RULE_BYE_URL, kind: "rule", label: "DRA-Regelerklärung zu Freilosen öffnen", title: "DRA-Regeln in der GUI: Freilos (Bye)" },
+          ])}
+          <div class="ata-bracket-dock" id="ata-bracket-dock">
+            <div class="ata-bracket-shell">
+              <iframe id="ata-bracket-frame" class="ata-bracket-frame" title="Turnierbaum" sandbox="allow-scripts allow-same-origin"></iframe>
+              <div class="ata-bracket-fallback" id="ata-bracket-fallback" data-visible="${fallbackVisible}">
+                ${renderStaticBracketFallback(tournament)}
+              </div>
+            </div>
+          </div>
+          <div class="ata-actions" style="margin-top: 10px;">
+            <button type="button" class="ata-btn" data-action="retry-bracket">Turnierbaum neu laden</button>
+          </div>
+          <p class="ata-small">CDN-Render aktiv. Der HTML-Fallback wird nur bei Fehlern oder Timeout angezeigt.</p>
+        </section>
+      `;
+    }
+
+    return html || `<section class="ata-card tournamentCard"><h3>Turnierbaum</h3><p>Keine Daten.</p></section>`;
+  }
+
+  function renderIOTab() {
+    return `
+      <section class="ata-card tournamentCard">
+        <h3>Export</h3>
+        <div class="ata-actions">
+          <button type="button" class="ata-btn ata-btn-primary" data-action="export-file">JSON herunterladen</button>
+          <button type="button" class="ata-btn" data-action="export-clipboard">JSON in Zwischenablage</button>
+        </div>
+      </section>
+      <section class="ata-card tournamentCard">
+        <h3>Import</h3>
+        <div class="ata-field">
+          <label for="ata-import-file">Datei importieren</label>
+          <input id="ata-import-file" type="file" accept=".json,application/json">
+        </div>
+        <div class="ata-field" style="margin-top: 10px;">
+          <label for="ata-import-text">JSON einf\u00fcgen</label>
+          <textarea id="ata-import-text" placeholder="{ ... }"></textarea>
+        </div>
+        <div class="ata-actions" style="margin-top: 10px;">
+          <button type="button" class="ata-btn" data-action="import-text">Eingef\u00fcgtes JSON importieren</button>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderSettingsTab() {
+    const debugEnabled = state.store.settings.debug ? "checked" : "";
+    const autoLobbyEnabled = state.store.settings.featureFlags.autoLobbyStart ? "checked" : "";
+    const randomizeKoEnabled = state.store.settings.featureFlags.randomizeKoRound1 ? "checked" : "";
+    const koDrawLockDefaultEnabled = state.store.settings.featureFlags.koDrawLockDefault !== false ? "checked" : "";
+    const activeKoDrawLocked = state.store?.tournament?.mode === "ko"
+      ? (state.store?.tournament?.ko?.drawLocked !== false ? "checked" : "")
+      : "";
+    const activeKoDrawLockDisabledAttr = state.store?.tournament?.mode === "ko" ? "" : "disabled";
+    const modeLimitSummary = buildModeParticipantLimitSummary();
+    const tieBreakProfile = normalizeTieBreakProfile(
+      state.store?.tournament?.rules?.tieBreakProfile,
+      TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE,
+    );
+    const tieBreakDisabledAttr = state.store?.tournament ? "" : "disabled";
+    const apiSyncHelpLinks = renderInfoLinks([
+      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Erkl\u00e4rung zur API-Halbautomatik \u00f6ffnen", title: "README: API-Halbautomatik" },
+      { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole \u00f6ffnen", title: "README: Info-Symbole" },
+    ]);
+    const koDrawHelpLinks = renderInfoLinks([
+      { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Erkl\u00e4rung zu Turniermodi \u00f6ffnen", title: "README: Turniermodi und Open Draw" },
+      { href: DRA_GUI_RULE_OPEN_DRAW_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zu Open Draw \u00f6ffnen", title: "DRA-Regeln in der GUI: Open Draw" },
+    ]);
+    const koDrawLockHelpLinks = renderInfoLinks([
+      { href: DRA_GUI_RULE_DRAW_LOCK_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zu Draw-Lock \u00f6ffnen", title: "DRA-Regeln in der GUI: Draw-Lock" },
+    ]);
+
+    return `
+      <section class="ata-card tournamentCard">
+        ${renderSectionHeading("Debug und Feature-Flags", [
+          { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen-Dokumentation \u00f6ffnen", title: "README: Einstellungen" },
+          { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole \u00f6ffnen", title: "README: Info-Symbole" },
+        ])}
+        <div class="ata-toggle">
+          <div>
+            <strong>Debug-Mode</strong>
+            <div class="ata-small">Aktiviert detaillierte Logs in der Browser-Konsole.</div>
+          </div>
+          <input type="checkbox" id="ata-setting-debug" data-action="toggle-debug" ${debugEnabled}>
+        </div>
+        <div class="ata-toggle">
+          <div>
+            <strong>Automatischer Lobby-Start + API-Sync ${apiSyncHelpLinks}</strong>
+            <div class="ata-small">Standard: AUS. Aktiviert Matchstart per Klick und automatische Ergebnis\u00fcbernahme aus der Autodarts-API.</div>
+          </div>
+          <input type="checkbox" id="ata-setting-autolobby" data-action="toggle-autolobby" ${autoLobbyEnabled}>
+        </div>
+        <div class="ata-toggle">
+          <div>
+            <strong>KO-Erstrunde zuf\u00e4llig mischen (Standard) ${koDrawHelpLinks}</strong>
+            <div class="ata-small">Standard: EIN. Neue KO-Turniere nutzen damit Open Draw (zuf\u00e4llige Reihenfolge, PDC-konforme Freilose).</div>
+          </div>
+          <input type="checkbox" id="ata-setting-randomize-ko" data-action="toggle-randomize-ko" ${randomizeKoEnabled}>
+        </div>
+        <div class="ata-toggle">
+          <div>
+            <strong>KO-Draw sperren (Standard) ${koDrawLockHelpLinks}</strong>
+            <div class="ata-small">Standard: EIN. Neue KO-Turniere behalten den initialen Draw unver\u00e4ndert.</div>
+          </div>
+          <input type="checkbox" id="ata-setting-ko-draw-lock-default" data-action="toggle-ko-draw-lock-default" ${koDrawLockDefaultEnabled}>
+        </div>
+      </section>
+      <section class="ata-card tournamentCard">
+        ${renderSectionHeading("KO Draw-Lock (aktives Turnier)", [
+          { href: DRA_GUI_RULE_DRAW_LOCK_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zu Draw-Lock \u00f6ffnen", title: "DRA-Regeln in der GUI: Draw-Lock" },
+        ])}
+        <div class="ata-toggle">
+          <div>
+            <strong>Draw unver\u00e4nderlich halten</strong>
+            <div class="ata-small">Wenn aktiv, bleibt die KO-Struktur dieses Turniers bestehen und wird nicht automatisch neu ausgelost.</div>
+          </div>
+          <input type="checkbox" id="ata-setting-ko-draw-locked" data-action="set-ko-draw-locked" ${activeKoDrawLocked} ${activeKoDrawLockDisabledAttr}>
+        </div>
+        <p class="ata-small">Nur f\u00fcr den Modus KO (Straight Knockout) verf\u00fcgbar.</p>
+      </section>
+      <section class="ata-card tournamentCard">
+        ${renderSectionHeading("Promoter Tie-Break-Profil", [
+          { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zum Tie-Break \u00f6ffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
+        ])}
+        <div class="ata-field">
+          <label for="ata-setting-tiebreak">Profil pro Turnier</label>
+          <select id="ata-setting-tiebreak" data-action="set-tiebreak-mode" ${tieBreakDisabledAttr}>
+            <option value="${TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE ? "selected" : ""}>Promoter H2H + Mini-Tabelle (empfohlen)</option>
+            <option value="${TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF ? "selected" : ""}>Promoter Punkte + LegDiff</option>
+          </select>
+        </div>
+        <p class="ata-small"><strong>Promoter H2H + Mini-Tabelle:</strong> Punkte (2/1/0), danach Direktvergleich (2er-Gleichstand), Teilgruppen-Leg-Differenz (3+), Gesamt-Leg-Differenz, Legs gewonnen; verbleibender Gleichstand = &bdquo;Playoff erforderlich&ldquo;.</p>
+        <p class="ata-small"><strong>Promoter Punkte + LegDiff:</strong> vereinfachte Sortierung \u00fcber Punkte, Gesamt-Leg-Differenz und Legs gewonnen (legacy-kompatibel).</p>
+      </section>
+      <section class="ata-card tournamentCard">
+        ${renderSectionHeading("DRA Checkliste (nicht automatisierbar)", [
+          { href: DRA_GUI_RULE_CHECKLIST_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zur Checkliste \u00f6ffnen", title: "DRA-Regeln in der GUI: Checkliste" },
+        ])}
+        <ul class="ata-small">
+          <li>Start-/Wurfreihenfolge und Bull-Off-Entscheidungen werden durch den Spielleiter vor Ort best\u00e4tigt.</li>
+          <li>Practice/Anspielzeit und Board-Etikette werden organisatorisch durchgesetzt.</li>
+          <li>Tie-Break-Entscheidungen bei verbleibendem Gleichstand erfolgen als Promoter-Entscheidung.</li>
+          <li>Unklare Sonderf\u00e4lle werden dokumentiert und manuell entschieden, bevor der Turnierfortschritt fortgesetzt wird.</li>
+        </ul>
+      </section>
+      <section class="ata-card tournamentCard">
+        ${renderSectionHeading("Regelbasis und Limits", [
+          { href: DRA_GUI_RULE_PARTICIPANT_LIMITS_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zu Limits \u00f6ffnen", title: "DRA-Regeln in der GUI: Teilnehmerlimits" },
+        ])}
+        <p class="ata-small">Aktive Modus-Limits: ${escapeHtml(modeLimitSummary)}.</p>
+        <p class="ata-small">Die DRA-Regeln setzen kein fixes globales Teilnehmermaximum. Die Grenzen oben sind bewusst f\u00fcr faire Turnierdauer und stabile Darstellung gesetzt.</p>
+      </section>
+      <section class="ata-card tournamentCard">
+        ${renderSectionHeading("Storage", [
+          { href: README_BASE_URL, kind: "tech", label: "Hinweise zu Storage und Import \u00f6ffnen", title: "README: Import, Migration und Persistenz" },
+        ])}
+        <p class="ata-small"><code>${escapeHtml(STORAGE_KEY)}</code>, schemaVersion ${STORAGE_SCHEMA_VERSION}</p>
+      </section>
+    `;
+  }
+
+  function ensureHost() {
+    let host = document.getElementById(UI_HOST_ID);
+    if (!host) {
+      host = document.createElement("div");
+      host.id = UI_HOST_ID;
+      document.documentElement.appendChild(host);
+    }
+    if (!(host instanceof HTMLElement)) {
+      throw new Error("ATA host element not available.");
+    }
+    state.host = host;
+
+    if (!host.shadowRoot) {
+      host.attachShadow({ mode: "open" });
+    }
+    state.shadowRoot = host.shadowRoot;
+  }
+
+
+  function renderShell() {
+    if (!state.shadowRoot) {
+      return;
+    }
+
+    state.shadowRoot.innerHTML = buildShellHtml();
+    bindUiHandlers();
+    if (state.activeTab === "view") {
+      queueBracketRender();
+      syncBracketFallbackVisibility();
+    }
+  }
+
+
+  function bindUiHandlers() {
+    const shadow = state.shadowRoot;
+    if (!shadow) {
+      return;
+    }
+
+    shadow.querySelectorAll("[data-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tabId = button.getAttribute("data-tab");
+        if (!TAB_IDS.includes(tabId)) {
+          return;
+        }
+        state.activeTab = tabId;
+        state.store.ui.activeTab = tabId;
+        schedulePersist();
+        renderShell();
+      });
+    });
+
+    shadow.querySelectorAll("[data-action='set-matches-sort']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const sortMode = sanitizeMatchesSortMode(button.getAttribute("data-sort-mode"), MATCH_SORT_MODE_READY_FIRST);
+        if (state.store.ui.matchesSortMode === sortMode) {
+          return;
+        }
+        state.store.ui.matchesSortMode = sortMode;
+        schedulePersist();
+        renderShell();
+      });
+    });
+
+    const createForm = shadow.getElementById("ata-create-form");
+    if (createForm instanceof HTMLFormElement) {
+      syncCreateFormDependencies(createForm);
+      const handleDraftInputChange = (event) => {
+        const target = event?.target;
+        const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
+          ? normalizeText(target.name || "")
+          : "";
+        if (isCreateDraftPresetField(fieldName)) {
+          setCreateFormPresetValue(createForm, X01_PRESET_CUSTOM);
+        }
+        syncCreateFormDependencies(createForm);
+        updateCreateDraftFromForm(createForm, true);
+      };
+      createForm.addEventListener("input", handleDraftInputChange);
+      createForm.addEventListener("change", handleDraftInputChange);
+      createForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        handleCreateTournament(createForm);
+      });
+
+      const applyPresetButton = createForm.querySelector("[data-action='apply-pdc-preset']");
+      if (applyPresetButton instanceof HTMLButtonElement) {
+        applyPresetButton.addEventListener("click", () => {
+          applyPdcPresetToCreateForm(createForm);
+        });
+      }
+    }
+
+    const shuffleParticipantsButton = shadow.querySelector("[data-action='shuffle-participants']");
+    if (shuffleParticipantsButton && createForm instanceof HTMLFormElement) {
+      shuffleParticipantsButton.addEventListener("click", () => handleShuffleParticipants(createForm));
+    }
+
+    shadow.querySelectorAll("[data-action='close-drawer']").forEach((button) => {
+      button.addEventListener("click", () => closeDrawer());
+    });
+
+    shadow.querySelectorAll("[data-action='save-match']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const matchId = button.getAttribute("data-match-id");
+        if (matchId) {
+          handleSaveMatchResult(matchId);
+        }
+      });
+    });
+
+    shadow.querySelectorAll("[data-action='start-match']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const matchId = button.getAttribute("data-match-id");
+        if (!matchId) {
+          return;
+        }
+        handleStartMatch(matchId).catch((error) => {
+          logError("api", "Start-match handler failed unexpectedly.", error);
+          setNotice("error", "Matchstart ist unerwartet fehlgeschlagen.");
+        });
+      });
+    });
+
+    const resetButton = shadow.querySelector("[data-action='reset-tournament']");
+    if (resetButton) {
+      resetButton.addEventListener("click", () => {
+        handleResetTournament();
+      });
+    }
+
+    const exportFileButton = shadow.querySelector("[data-action='export-file']");
+    if (exportFileButton) {
+      exportFileButton.addEventListener("click", () => handleExportFile());
+    }
+
+    const exportClipboardButton = shadow.querySelector("[data-action='export-clipboard']");
+    if (exportClipboardButton) {
+      exportClipboardButton.addEventListener("click", () => handleExportClipboard());
+    }
+
+    const importTextButton = shadow.querySelector("[data-action='import-text']");
+    if (importTextButton) {
+      importTextButton.addEventListener("click", () => handleImportFromTextarea());
+    }
+
+    const fileInput = shadow.getElementById("ata-import-file");
+    if (fileInput instanceof HTMLInputElement) {
+      fileInput.addEventListener("change", () => handleImportFromFile(fileInput));
+    }
+
+    const debugToggle = shadow.getElementById("ata-setting-debug");
+    if (debugToggle instanceof HTMLInputElement) {
+      debugToggle.addEventListener("change", () => {
+        state.store.settings.debug = debugToggle.checked;
+        schedulePersist();
+        setNotice("success", `Debug-Mode ${debugToggle.checked ? "aktiviert" : "deaktiviert"}.`, 1800);
+      });
+    }
+
+    const autoLobbyToggle = shadow.getElementById("ata-setting-autolobby");
+    if (autoLobbyToggle instanceof HTMLInputElement) {
+      autoLobbyToggle.addEventListener("change", () => {
+        state.store.settings.featureFlags.autoLobbyStart = autoLobbyToggle.checked;
+        if (!autoLobbyToggle.checked) {
+          state.apiAutomation.authBackoffUntil = 0;
+        }
+        schedulePersist();
+        setNotice("info", `Auto-Lobby + API-Sync: ${autoLobbyToggle.checked ? "ON" : "OFF"}.`, 2200);
+        if (autoLobbyToggle.checked) {
+          syncPendingApiMatches().catch((error) => {
+            logWarn("api", "Immediate sync after toggle failed.", error);
+          });
+        }
+      });
+    }
+
+    const randomizeKoToggle = shadow.getElementById("ata-setting-randomize-ko");
+    if (randomizeKoToggle instanceof HTMLInputElement) {
+      randomizeKoToggle.addEventListener("change", () => {
+        state.store.settings.featureFlags.randomizeKoRound1 = randomizeKoToggle.checked;
+        state.store.ui.createDraft = normalizeCreateDraft({
+          ...state.store.ui.createDraft,
+          randomizeKoRound1: randomizeKoToggle.checked,
+        }, state.store.settings);
+        schedulePersist();
+        setNotice("info", `KO-Erstrunden-Mix: ${randomizeKoToggle.checked ? "ON" : "OFF"}.`, 2200);
+        if (state.activeTab === "tournament" && !state.store.tournament) {
+          renderShell();
+        }
+      });
+    }
+
+    const koDrawLockDefaultToggle = shadow.getElementById("ata-setting-ko-draw-lock-default");
+    if (koDrawLockDefaultToggle instanceof HTMLInputElement) {
+      koDrawLockDefaultToggle.addEventListener("change", () => {
+        state.store.settings.featureFlags.koDrawLockDefault = koDrawLockDefaultToggle.checked;
+        schedulePersist();
+        setNotice("info", `KO Draw-Lock (Standard): ${koDrawLockDefaultToggle.checked ? "ON" : "OFF"}.`, 2200);
+      });
+    }
+
+    const koDrawLockedToggle = shadow.getElementById("ata-setting-ko-draw-locked");
+    if (koDrawLockedToggle instanceof HTMLInputElement) {
+      koDrawLockedToggle.addEventListener("change", () => {
+        const result = setTournamentKoDrawLocked(koDrawLockedToggle.checked);
+        if (!result.ok) {
+          setNotice("error", result.message || "KO Draw-Lock konnte nicht gesetzt werden.");
+          return;
+        }
+        if (result.changed) {
+          setNotice("success", `KO Draw-Lock ${koDrawLockedToggle.checked ? "aktiviert" : "deaktiviert"}.`, 1800);
+        }
+      });
+    }
+
+    const tieBreakSelect = shadow.getElementById("ata-setting-tiebreak");
+    if (tieBreakSelect instanceof HTMLSelectElement) {
+      tieBreakSelect.addEventListener("change", () => {
+        const result = setTournamentTieBreakProfile(tieBreakSelect.value);
+        if (!result.ok) {
+          setNotice("error", result.message || "Tie-Break-Profil konnte nicht gesetzt werden.");
+          return;
+        }
+        if (result.changed) {
+          setNotice("success", "Tie-Break-Profil aktualisiert.", 1800);
+        }
+      });
+    }
+
+    const retryBracketButton = shadow.querySelector("[data-action='retry-bracket']");
+    if (retryBracketButton) {
+      retryBracketButton.addEventListener("click", () => queueBracketRender(true));
+    }
+
+    const drawer = shadow.querySelector(".ata-drawer");
+    if (drawer) {
+      drawer.addEventListener("keydown", handleDrawerKeydown);
+    }
+  }
+
+
+  function handleDrawerKeydown(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeDrawer();
+      return;
+    }
+
+    if (event.key !== "Tab" || !state.drawerOpen) {
+      return;
+    }
+
+    const drawer = state.shadowRoot?.querySelector(".ata-drawer");
+    if (!drawer) {
+      return;
+    }
+
+    const focusables = Array.from(drawer.querySelectorAll(
+      "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
+    )).filter((element) => !element.hasAttribute("disabled"));
+
+    if (!focusables.length) {
+      return;
+    }
+
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const current = drawer.getRootNode().activeElement;
+
+    if (event.shiftKey && current === first) {
+      event.preventDefault();
+      last.focus();
+      return;
+    }
+
+    if (!event.shiftKey && current === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+
+  function openDrawer() {
+    state.lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    state.drawerOpen = true;
+    renderShell();
+    const firstInteractive = state.shadowRoot?.querySelector(".ata-drawer button, .ata-drawer input, .ata-drawer select, .ata-drawer textarea");
+    if (firstInteractive instanceof HTMLElement) {
+      firstInteractive.focus();
+    }
+  }
+
+
+  function closeDrawer() {
+    state.drawerOpen = false;
+    renderShell();
+    if (state.lastFocused instanceof HTMLElement) {
+      state.lastFocused.focus();
+    }
+  }
+
+
+  function toggleDrawer() {
+    if (state.drawerOpen) {
+      closeDrawer();
+    } else {
+      openDrawer();
+    }
+  }
+
+
+  function isCreateDraftPresetField(fieldName) {
+    return [
+      "mode",
+      "bestOfLegs",
+      "startScore",
+      "x01InMode",
+      "x01OutMode",
+      "x01BullMode",
+      "x01BullOffMode",
+      "x01MaxRounds",
+    ].includes(normalizeText(fieldName || ""));
+  }
+
+
+  function setCreateFormPresetValue(form, presetId) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const presetInput = form.querySelector("#ata-x01-preset");
+    if (!(presetInput instanceof HTMLInputElement)) {
+      return;
+    }
+    const normalizedPreset = sanitizeX01Preset(presetId, X01_PRESET_CUSTOM);
+    presetInput.value = normalizedPreset;
+  }
+
+
+  function refreshCreateFormPresetBadge(form) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const presetInput = form.querySelector("#ata-x01-preset");
+    const presetBadge = form.querySelector(".ata-preset-pill");
+    if (!(presetInput instanceof HTMLInputElement) || !(presetBadge instanceof HTMLElement)) {
+      return;
+    }
+    let presetId = sanitizeX01Preset(presetInput.value, X01_PRESET_CUSTOM);
+    if (presetId === X01_PRESET_PDC_STANDARD) {
+      const formData = new FormData(form);
+      const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
+      if (!isPdcCompliantMatchSetup(draft)) {
+        presetId = X01_PRESET_CUSTOM;
+        presetInput.value = presetId;
+      }
+    }
+    presetBadge.textContent = presetId === X01_PRESET_PDC_STANDARD
+      ? "Preset aktiv: PDC-Standard"
+      : "Preset aktiv: Individuell";
+  }
+
+
+  function syncCreateFormDependencies(form) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const bullOffSelect = form.querySelector("#ata-x01-bulloff");
+    const bullModeSelect = form.querySelector("#ata-x01-bullmode");
+    if (!(bullOffSelect instanceof HTMLSelectElement) || !(bullModeSelect instanceof HTMLSelectElement)) {
+      refreshCreateFormPresetBadge(form);
+      return;
+    }
+
+    const disableBullMode = normalizeText(bullOffSelect.value) === "Off";
+    bullModeSelect.disabled = disableBullMode;
+    bullModeSelect.title = disableBullMode
+      ? "Bull-Modus ist bei Bull-off = Off ohne Wirkung und daher schreibgesch\u00fctzt."
+      : "";
+
+    let hiddenBullMode = form.querySelector("#ata-x01-bullmode-hidden");
+    if (disableBullMode) {
+      if (!(hiddenBullMode instanceof HTMLInputElement)) {
+        hiddenBullMode = document.createElement("input");
+        hiddenBullMode.type = "hidden";
+        hiddenBullMode.id = "ata-x01-bullmode-hidden";
+        hiddenBullMode.name = "x01BullMode";
+        bullModeSelect.insertAdjacentElement("afterend", hiddenBullMode);
+      }
+      hiddenBullMode.value = sanitizeX01BullMode(bullModeSelect.value);
+    } else if (hiddenBullMode instanceof HTMLElement) {
+      hiddenBullMode.remove();
+    }
+
+    refreshCreateFormPresetBadge(form);
+  }
+
+
+  function applyPdcPresetToCreateForm(form) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const pdcSettings = buildPdcX01Settings();
+    const pdcMode = "ko";
+    const pdcBestOfLegs = 5;
+    const assignments = [
+      ["#ata-mode", pdcMode],
+      ["#ata-bestof", String(pdcBestOfLegs)],
+      ["#ata-startscore", String(pdcSettings.baseScore)],
+      ["#ata-x01-inmode", pdcSettings.inMode],
+      ["#ata-x01-outmode", pdcSettings.outMode],
+      ["#ata-x01-bullmode", pdcSettings.bullMode],
+      ["#ata-x01-bulloff", pdcSettings.bullOffMode],
+      ["#ata-x01-maxrounds", String(pdcSettings.maxRounds)],
+    ];
+
+    assignments.forEach(([selector, value]) => {
+      const field = form.querySelector(selector);
+      if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement) {
+        field.value = value;
+      }
+    });
+
+    setCreateFormPresetValue(form, X01_PRESET_PDC_STANDARD);
+    syncCreateFormDependencies(form);
+    updateCreateDraftFromForm(form, true);
+    setNotice("info", "PDC-Preset wurde auf KO, Best of 5 und die X01-Felder angewendet.", 2400);
+  }
+
+
+  function readCreateDraftInput(formData) {
+    return {
+      name: formData.get("name"),
+      mode: formData.get("mode"),
+      bestOfLegs: formData.get("bestOfLegs"),
+      startScore: formData.get("startScore"),
+      x01Preset: formData.get("x01Preset"),
+      x01InMode: formData.get("x01InMode"),
+      x01OutMode: formData.get("x01OutMode"),
+      x01BullMode: formData.get("x01BullMode"),
+      x01MaxRounds: formData.get("x01MaxRounds"),
+      x01BullOffMode: formData.get("x01BullOffMode"),
+      participantsText: String(formData.get("participants") || ""),
+      randomizeKoRound1: formData.get("randomizeKoRound1") !== null,
+    };
+  }
+
+
+  function updateCreateDraftFromForm(form, persist = true) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const formData = new FormData(form);
+    const nextDraft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
+    const currentDraft = state.store.ui.createDraft || {};
+    const changed = JSON.stringify(nextDraft) !== JSON.stringify(currentDraft);
+    if (!changed) {
+      return;
+    }
+    state.store.ui.createDraft = nextDraft;
+    if (persist) {
+      schedulePersist();
+    }
+  }
+
+
+  function handleShuffleParticipants(form) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const participantField = form.querySelector("#ata-participants");
+    if (!(participantField instanceof HTMLTextAreaElement)) {
+      return;
+    }
+    const participants = parseParticipantLines(participantField.value);
+    if (participants.length < 2) {
+      setNotice("info", "Mindestens zwei Teilnehmer zum Mischen eingeben.", 2200);
+      return;
+    }
+    const shuffledNames = shuffleArray(participants.map((participant) => participant.name));
+    participantField.value = shuffledNames.join("\n");
+    updateCreateDraftFromForm(form, true);
+    setNotice("success", "Teilnehmer wurden zuf\u00e4llig gemischt.", 1800);
+  }
+
+
+  function handleCreateTournament(form) {
+    syncCreateFormDependencies(form);
+    const formData = new FormData(form);
+    const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
+    state.store.ui.createDraft = draft;
+    const participants = parseParticipantLines(formData.get("participants"));
+    const config = {
+      name: draft.name,
+      mode: draft.mode,
+      bestOfLegs: draft.bestOfLegs,
+      startScore: draft.startScore,
+      x01Preset: draft.x01Preset,
+      x01InMode: draft.x01InMode,
+      x01OutMode: draft.x01OutMode,
+      x01BullMode: draft.x01BullMode,
+      x01MaxRounds: draft.x01MaxRounds,
+      x01BullOffMode: draft.x01BullOffMode,
+      lobbyVisibility: "private",
+      randomizeKoRound1: draft.randomizeKoRound1,
+      koDrawLocked: state.store.settings.featureFlags.koDrawLockDefault !== false,
+      participants,
+    };
+
+    const result = createTournamentSession(config);
+    if (!result.ok) {
+      setNotice("error", result.message || "Turnier konnte nicht erstellt werden.");
+      return;
+    }
+    setNotice("success", "Turnier wurde erstellt.");
+  }
+
+
+  function getMatchFieldElement(shadow, fieldName, matchId) {
+    const candidates = Array.from(shadow.querySelectorAll(`[data-field="${fieldName}"]`));
+    return candidates.find((candidate) => candidate.getAttribute("data-match-id") === matchId) || null;
+  }
+
+
+  function handleSaveMatchResult(matchId) {
+    const shadow = state.shadowRoot;
+    if (!shadow) {
+      return;
+    }
+    const tournament = state.store.tournament;
+    if (!tournament) {
+      return;
+    }
+    const match = findMatch(tournament, matchId);
+    if (!match) {
+      setNotice("error", "Match nicht gefunden.");
+      return;
+    }
+    const editability = getMatchEditability(tournament, match);
+    if (!editability.editable) {
+      setNotice("error", editability.reason || "Match ist nicht freigeschaltet.");
+      return;
+    }
+    const legsP1Input = getMatchFieldElement(shadow, "legs-p1", matchId);
+    const legsP2Input = getMatchFieldElement(shadow, "legs-p2", matchId);
+
+    if (!(legsP1Input instanceof HTMLInputElement) || !(legsP2Input instanceof HTMLInputElement)) {
+      return;
+    }
+
+    const p1Legs = clampInt(legsP1Input.value, 0, 0, 99);
+    const p2Legs = clampInt(legsP2Input.value, 0, 0, 99);
+    if (p1Legs === p2Legs) {
+      setNotice("error", "Ung\u00fcltiges Ergebnis: Bei Best-of ist kein Gleichstand m\u00f6glich.");
+      return;
+    }
+
+    const winnerId = p1Legs > p2Legs ? match.player1Id : match.player2Id;
+
+    const result = updateMatchResult(matchId, winnerId, {
+      p1: p1Legs,
+      p2: p2Legs,
+    }, "manual");
+
+    if (result.ok) {
+      setNotice("success", "Match gespeichert.", 1800);
+    } else {
+      setNotice("error", result.message || "Match konnte nicht gespeichert werden.");
+    }
+  }
+
+
+  function handleResetTournament() {
+    const confirmed = window.confirm("Soll das Turnier wirklich gel\u00f6scht werden? Dieser Schritt kann nicht r\u00fcckg\u00e4ngig gemacht werden.");
+    if (!confirmed) {
+      return;
+    }
+
+    resetTournamentSession();
+    setNotice("success", "Turnier wurde gel\u00f6scht.");
+  }
+
+
+  function exportDataPayload() {
+    return {
+      schemaVersion: STORAGE_SCHEMA_VERSION,
+      exportedAt: nowIso(),
+      tournament: state.store.tournament,
+    };
+  }
+
+
+  function handleExportFile() {
+    const payload = exportDataPayload();
+    const text = JSON.stringify(payload, null, 2);
+    const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `ata-export-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNotice("success", "JSON-Datei exportiert.", 2000);
+  }
+
+
+  async function handleExportClipboard() {
+    try {
+      const payload = exportDataPayload();
+      const text = JSON.stringify(payload, null, 2);
+      await navigator.clipboard.writeText(text);
+      setNotice("success", "JSON in Zwischenablage kopiert.", 2000);
+    } catch (error) {
+      setNotice("error", "Kopieren in Zwischenablage fehlgeschlagen.");
+      logWarn("io", "Clipboard write failed.", error);
+    }
+  }
+
+
+  function handleImportFromTextarea() {
+    const textarea = state.shadowRoot?.getElementById("ata-import-text");
+    if (!(textarea instanceof HTMLTextAreaElement)) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(textarea.value);
+      const result = importTournamentPayload(parsed);
+      if (result.ok) {
+        setNotice("success", "JSON erfolgreich importiert.");
+      } else {
+        setNotice("error", result.message || "Import fehlgeschlagen.");
+      }
+    } catch (error) {
+      setNotice("error", "JSON konnte nicht geparst werden.");
+      logWarn("io", "Import parse failed.", error);
+    }
+  }
+
+
+  function handleImportFromFile(fileInput) {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result || "{}"));
+        const result = importTournamentPayload(parsed);
+        if (result.ok) {
+          setNotice("success", "Datei erfolgreich importiert.");
+        } else {
+          setNotice("error", result.message || "Datei konnte nicht importiert werden.");
+        }
+      } catch (error) {
+        setNotice("error", "Datei enth\u00e4lt kein g\u00fcltiges JSON.");
+        logWarn("io", "File import parse failed.", error);
+      }
+    };
+    reader.onerror = () => {
+      setNotice("error", "Datei konnte nicht gelesen werden.");
+    };
+    reader.readAsText(file);
+  }
+
+// Runtime layer: bootstrap wiring only.
+
+// Runtime layer: bootstrap wiring only.
 
   async function init() {
     await loadPersistedStore();

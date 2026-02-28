@@ -7,24 +7,40 @@ Die vollständige Ordner- und Dateikarte inklusive Build-/Runtime-Verbindungen s
 Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einzelnes Userscript ausgeliefert (`dist/autodarts-tournament-assistant.user.js`).
 
 - `src/core`: Konstanten, State, Utilities, Events, Logging
-- `src/data`: Storage, Normalisierung, Migration
-- `src/domain`: Turniererstellung, KO-Engine, Gruppen-/Liga-Logik, Ergebnislogik, DRA-Tie-Break
-- `src/infra`: API-Client, API-Automation, Route-Hooks
-- `src/ui`: Rendering, Tabs, Handler, Styles
-- `src/bracket`: Bracket-Payload, Iframe-Template, Message-Bridge
-- `src/runtime`: Lifecycle, Public API, Bootstrap
+- `src/domain`: fachliche Turnierregeln, pure Match-/KO-/Standings-Logik
+- `src/data`: Storage-I/O, Normalisierung, Migration
+- `src/bracket`: low-level Bracket-Payload, Iframe-Template und Frame-Transport
+- `src/app`: Orchestrierung zwischen Domain, Persistenz, Bracket und UI
+- `src/infra`: API-Client, API-Automation, DOM-Autodetect, History-Import, Route-Hooks
+- `src/ui`: Rendering, View-Helper, Handler, Styles
+- `src/runtime`: nur Bootstrap-/Wiring-Dateien
+
+## Ziel-DAG
+- `core -> (none)`
+- `domain -> core`
+- `data -> core, domain`
+- `bracket -> core, domain`
+- `app -> core, data, domain, bracket`
+- `infra -> core, app`
+- `ui -> core, app`
+- `runtime -> core, app, infra, ui`
 
 ## Build und Distribution
 - Der Build läuft ohne npm/Node über `scripts/build.ps1`.
 - Die Reihenfolge ist deterministisch über `build/manifest.json`.
+- Die Versionsquelle liegt in `build/version.json` und wird beim Build in Header und `APP_VERSION` injiziert.
 - CSS liegt in `src/ui/styles/main.css` und wird beim Build in das Bundle eingebettet.
 - Die Ausgabe bleibt eine einzelne Datei in `dist/` (Loader-kompatibel).
+- `dist/*` bleibt ein generiertes Artefakt und wird nicht manuell gepflegt.
 
 ## Runtime
 - Runtime-Guard: `window.__ATA_RUNTIME_BOOTSTRAPPED`
 - Public API: `window.__ATA_RUNTIME`
   - `openDrawer`, `closeDrawer`, `toggleDrawer`, `isReady`, `version`
   - `runSelfTests()` für lokale Diagnose
+- `src/runtime/bootstrap.js` startet den Ablauf.
+- `src/app/public-api.js` veröffentlicht die Runtime-API.
+- `src/app/browser-lifecycle.js`, `src/infra/dom-autodetect.js` und `src/infra/history-import.js` tragen die eigentliche Browser-/DOM-Logik.
 
 ## Datenmodell
 - Storage-Key: `ata:tournament:v1`
@@ -61,6 +77,10 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
 
 ## Qualitätssicherung
 - `scripts/qa.ps1`: Orchestrierung
+- `scripts/qa-architecture.ps1`: Layer-Regeln und verbotene Seiteneffekte
 - `scripts/qa-encoding.ps1`: UTF-8/Umlaute/Mojibake
 - `scripts/qa-regelcheck.ps1`: Regelpunkt-zu-Code-Mapping
+- `scripts/test-domain.ps1`: isolierter Domain-Harness ohne npm und ohne Mock-DOM
+- `scripts/test-runtime-contract.ps1`: Runtime-API- und Selftest-Contract gegen `dist/*`
+- `scripts/qa-build-discipline.ps1`: Versionsquelle und generiertes `dist/*`
 - Runtime-Selbsttests: `window.__ATA_RUNTIME.runSelfTests()`

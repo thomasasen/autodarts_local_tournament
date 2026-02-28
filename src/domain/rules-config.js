@@ -1,6 +1,5 @@
 ﻿// Auto-generated module split from dist source.
-  function setTournamentTieBreakProfile(profile) {
-    const tournament = state.store.tournament;
+  function applyTournamentTieBreakProfile(tournament, profile) {
     if (!tournament) {
       return { ok: false, message: "Kein aktives Turnier vorhanden." };
     }
@@ -16,16 +15,11 @@
       ...(tournament.rules || {}),
       tieBreakProfile: nextProfile,
     });
-    refreshDerivedMatches(tournament);
-    tournament.updatedAt = nowIso();
-    schedulePersist();
-    renderShell();
     return { ok: true, changed: true };
   }
 
 
-  function setTournamentKoDrawLocked(drawLocked) {
-    const tournament = state.store.tournament;
+  function applyTournamentKoDrawLocked(tournament, drawLocked) {
     if (!tournament) {
       return { ok: false, message: "Kein aktives Turnier vorhanden." };
     }
@@ -41,10 +35,6 @@
       ...(tournament.ko || {}),
       drawLocked: nextDrawLocked,
     }, normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED), nextDrawLocked);
-    refreshDerivedMatches(tournament);
-    tournament.updatedAt = nowIso();
-    schedulePersist();
-    renderShell();
     return { ok: true, changed: true };
   }
 

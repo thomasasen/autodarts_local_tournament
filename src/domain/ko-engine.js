@@ -1,34 +1,4 @@
 // Auto-generated module split from dist source.
-  function clearMatchResult(match) {
-    match.status = STATUS_PENDING;
-    match.winnerId = null;
-    match.source = null;
-    match.legs = { p1: 0, p2: 0 };
-    match.stats = normalizeMatchStats(null);
-    setMatchResultKind(match, null);
-    resetMatchAutomationMeta(match);
-    match.updatedAt = nowIso();
-  }
-
-
-  function assignPlayerSlot(match, slot, participantId) {
-    const field = slot === 1 ? "player1Id" : "player2Id";
-    const currentValue = match[field] || null;
-    const nextValue = participantId || null;
-    if (currentValue === nextValue) {
-      return false;
-    }
-    match[field] = nextValue;
-    const hasStoredResult = match.status === STATUS_COMPLETED
-      || Boolean(match.winnerId || match.source || match.legs?.p1 || match.legs?.p2);
-    if (hasStoredResult) {
-      clearMatchResult(match);
-    }
-    match.updatedAt = nowIso();
-    return true;
-  }
-
-
   function findKoNextMatch(tournament, match) {
     const nextRound = match.round + 1;
     const nextNumber = Math.ceil(match.number / 2);
@@ -386,13 +356,6 @@
       return false;
     }
 
-    const backupSnapshot = cloneSerializable(tournament);
-    if (backupSnapshot) {
-      persistKoMigrationBackup(backupSnapshot, "ko-engine-v3-migration").catch((error) => {
-        logWarn("storage", "KO migration backup write failed.", error);
-      });
-    }
-
     tournament.ko = {
       ...normalizedKo,
       drawMode,
@@ -400,11 +363,6 @@
       engineVersion: KO_ENGINE_VERSION,
     };
     tournament.updatedAt = nowIso();
-
-    logDebug("ko", "KO tournament migrated to engine v3.", {
-      drawMode,
-      participantCount: Array.isArray(tournament.participants) ? tournament.participants.length : 0,
-    });
 
     return true;
   }
@@ -525,30 +483,4 @@
     }
     tournament.results = nextResults;
     return true;
-  }
-
-
-  function refreshDerivedMatches(tournament) {
-    if (!tournament) {
-      return false;
-    }
-
-    let changedAny = false;
-    for (let i = 0; i < 8; i += 1) {
-      let changed = false;
-      changed = migrateKoTournamentToV3(tournament, KO_DRAW_MODE_SEEDED) || changed;
-      changed = resolveGroupsToKoAssignments(tournament) || changed;
-      changed = synchronizeKoBracketState(tournament) || changed;
-      changed = normalizeCompletedMatchResults(tournament) || changed;
-      changed = synchronizeKoBracketState(tournament) || changed;
-      if (tournament.mode === "groups_ko") {
-        changed = advanceKoWinners(tournament) || changed;
-      }
-      changed = refreshTournamentResultsIndex(tournament) || changed;
-      changedAny = changedAny || changed;
-      if (!changed) {
-        break;
-      }
-    }
-    return changedAny;
   }

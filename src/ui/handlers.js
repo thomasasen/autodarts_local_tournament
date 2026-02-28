@@ -508,17 +508,12 @@
       participants,
     };
 
-    const errors = validateCreateConfig(config);
-    if (errors.length) {
-      setNotice("error", errors.join(" "));
+    const result = createTournamentSession(config);
+    if (!result.ok) {
+      setNotice("error", result.message || "Turnier konnte nicht erstellt werden.");
       return;
     }
-
-    state.store.tournament = createTournament(config);
-    schedulePersist();
     setNotice("success", "Turnier wurde erstellt.");
-    state.activeTab = "matches";
-    renderShell();
   }
 
 
@@ -581,13 +576,9 @@
     if (!confirmed) {
       return;
     }
-    state.store.tournament = null;
-    state.apiAutomation.startingMatchId = "";
-    state.apiAutomation.authBackoffUntil = 0;
-    schedulePersist();
+
+    resetTournamentSession();
     setNotice("success", "Turnier wurde gel\u00f6scht.");
-    state.activeTab = "tournament";
-    renderShell();
   }
 
 
@@ -629,37 +620,6 @@
   }
 
 
-  function importPayload(rawObject) {
-    if (!rawObject || typeof rawObject !== "object") {
-      return { ok: false, message: "JSON ist leer oder ung\u00fcltig." };
-    }
-
-    let tournament = rawObject.tournament || null;
-    if (!tournament && rawObject.mode && rawObject.participants) {
-      tournament = rawObject;
-    }
-
-    const normalizedTournament = normalizeTournament(
-      tournament,
-      state.store.settings.featureFlags.koDrawLockDefault !== false,
-    );
-    if (!normalizedTournament) {
-      return { ok: false, message: "Turnierdaten konnten nicht validiert werden." };
-    }
-
-    const participantCountError = getParticipantCountError(normalizedTournament.mode, normalizedTournament.participants.length);
-    if (participantCountError) {
-      return { ok: false, message: participantCountError };
-    }
-
-    refreshDerivedMatches(normalizedTournament);
-    state.store.tournament = normalizedTournament;
-    schedulePersist();
-    renderShell();
-    return { ok: true };
-  }
-
-
   function handleImportFromTextarea() {
     const textarea = state.shadowRoot?.getElementById("ata-import-text");
     if (!(textarea instanceof HTMLTextAreaElement)) {
@@ -668,11 +628,9 @@
 
     try {
       const parsed = JSON.parse(textarea.value);
-      const result = importPayload(parsed);
+      const result = importTournamentPayload(parsed);
       if (result.ok) {
         setNotice("success", "JSON erfolgreich importiert.");
-        state.activeTab = "matches";
-        renderShell();
       } else {
         setNotice("error", result.message || "Import fehlgeschlagen.");
       }
@@ -693,11 +651,9 @@
     reader.onload = () => {
       try {
         const parsed = JSON.parse(String(reader.result || "{}"));
-        const result = importPayload(parsed);
+        const result = importTournamentPayload(parsed);
         if (result.ok) {
           setNotice("success", "Datei erfolgreich importiert.");
-          state.activeTab = "matches";
-          renderShell();
         } else {
           setNotice("error", result.message || "Datei konnte nicht importiert werden.");
         }

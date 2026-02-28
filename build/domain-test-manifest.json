@@ -1,0 +1,22 @@
+{
+  "files": [
+    "src/core/constants.js",
+    "src/core/utils.js",
+    "src/data/normalization.js",
+    "src/data/migration.js",
+    "src/domain/match-state.js",
+    "src/domain/standings-dra.js",
+    "src/domain/groups.js",
+    "src/domain/results.js",
+    "src/domain/tournament-create.js",
+    "src/domain/ko-engine.js",
+    "src/domain/rules-config.js"
+  ],
+  "tests": [
+    "tests/test-harness.js",
+    "tests/domain-isolation.js",
+    "tests/unit-ko-engine.js",
+    "tests/unit-rules-config.js",
+    "tests/unit-standings-dra.js"
+  ]
+}

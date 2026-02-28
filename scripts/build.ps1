@@ -1,5 +1,6 @@
 param(
   [string]$ManifestPath = "build/manifest.json",
+  [string]$VersionPath = "build/version.json",
   [string]$CssPath = "src/ui/styles/main.css",
   [string]$LogoPath = "assets/pdc_logo.png",
   [string]$OutputPath = "dist/autodarts-tournament-assistant.user.js"
@@ -14,12 +15,16 @@ function Resolve-RepoPath([string]$RelativePath) {
 }
 
 $manifestFull = Resolve-RepoPath $ManifestPath
+$versionFull = Resolve-RepoPath $VersionPath
 $cssFull = Resolve-RepoPath $CssPath
 $logoFull = Resolve-RepoPath $LogoPath
 $outputFull = Resolve-RepoPath $OutputPath
 
 if (-not (Test-Path $manifestFull)) {
   throw "Manifest not found: $manifestFull"
+}
+if (-not (Test-Path $versionFull)) {
+  throw "Version file not found: $versionFull"
 }
 if (-not (Test-Path $cssFull)) {
   throw "CSS file not found: $cssFull"
@@ -29,8 +34,13 @@ if (-not (Test-Path $logoFull)) {
 }
 
 $manifest = Get-Content $manifestFull -Raw -Encoding utf8 | ConvertFrom-Json
+$versionConfig = Get-Content $versionFull -Raw -Encoding utf8 | ConvertFrom-Json
 if (-not $manifest.files -or $manifest.files.Count -eq 0) {
   throw "Manifest contains no files."
+}
+$appVersion = [string]$versionConfig.appVersion
+if (-not $appVersion) {
+  throw "Version file contains no appVersion."
 }
 
 $parts = New-Object System.Collections.Generic.List[string]
@@ -49,6 +59,7 @@ $bundle = ($parts -join "`n`n") + "`n"
 $cssRaw = Get-Content $cssFull -Raw -Encoding utf8
 $cssRaw = $cssRaw.Trim("`r", "`n")
 $cssEscaped = $cssRaw.Replace('`', '``').Replace('${', '\${')
+$bundle = $bundle.Replace('__ATA_APP_VERSION__', $appVersion)
 $bundle = $bundle.Replace('__ATA_UI_MAIN_CSS__', $cssEscaped)
 $logoBytes = [System.IO.File]::ReadAllBytes($logoFull)
 $logoBase64 = [Convert]::ToBase64String($logoBytes)
@@ -61,6 +72,9 @@ if ($bundle.Contains('__ATA_UI_MAIN_CSS__')) {
 }
 if ($bundle.Contains('__ATA_PDC_LOGO_DATA_URI__')) {
   throw "Logo placeholder replacement failed."
+}
+if ($bundle.Contains('__ATA_APP_VERSION__')) {
+  throw "Version placeholder replacement failed."
 }
 
 $bundle = $bundle -replace "`r`n", "`n"

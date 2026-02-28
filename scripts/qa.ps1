@@ -9,13 +9,21 @@ function Resolve-RepoPath([string]$RelativePath) {
 }
 
 $buildScript = Resolve-RepoPath "scripts/build.ps1"
+$architectureScript = Resolve-RepoPath "scripts/qa-architecture.ps1"
+$buildDisciplineScript = Resolve-RepoPath "scripts/qa-build-discipline.ps1"
 $encodingScript = Resolve-RepoPath "scripts/qa-encoding.ps1"
 $rulesScript = Resolve-RepoPath "scripts/qa-regelcheck.ps1"
+$domainTestScript = Resolve-RepoPath "scripts/test-domain.ps1"
+$runtimeContractScript = Resolve-RepoPath "scripts/test-runtime-contract.ps1"
 $distPath = Resolve-RepoPath "dist/autodarts-tournament-assistant.user.js"
 
 & $buildScript
+& $architectureScript
 & $encodingScript
 & $rulesScript
+& $domainTestScript
+& $runtimeContractScript
+& $buildDisciplineScript
 
 $dist = Get-Content $distPath -Raw -Encoding utf8
 if (-not ($dist -match 'runSelfTests')) {

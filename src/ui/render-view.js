@@ -225,16 +225,4 @@
   }
 
 
-  function syncBracketFallbackVisibility() {
-    const shadow = state.shadowRoot;
-    if (!shadow || state.activeTab !== "view") {
-      return;
-    }
-    const fallback = shadow.getElementById("ata-bracket-fallback");
-    if (!(fallback instanceof HTMLElement)) {
-      return;
-    }
-    fallback.setAttribute("data-visible", state.bracket.failed ? "1" : "0");
-  }
-
 

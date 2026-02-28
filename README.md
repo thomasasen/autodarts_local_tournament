@@ -399,21 +399,35 @@ autodarts_local_tournament/
 |  |- core/
 |  |- data/
 |  |- domain/
+|  |- app/
 |  |- infra/
 |  |- ui/
 |  |  |- styles/
+|  |  `- render-helpers.js
 |  |- bracket/
 |  |- runtime/
 |- build/
 |  |- manifest.json
+|  |- version.json
+|  `- domain-test-manifest.json
 |- scripts/
 |  |- build.ps1
 |  |- qa.ps1
+|  |- qa-architecture.ps1
+|  |- qa-build-discipline.ps1
 |  |- qa-encoding.ps1
 |  |- qa-regelcheck.ps1
+|  |- test-domain.ps1
+|  `- test-runtime-contract.ps1
 |- tests/
 |  |- fixtures/
 |  |- selftest-runtime.js
+|  |- contracts/
+|  |- domain-isolation.js
+|  |- test-harness.js
+|  |- unit-ko-engine.js
+|  |- unit-rules-config.js
+|  `- unit-standings-dra.js
 |- installer/
 |  |- Autodarts Tournament Assistant Loader.user.js
 |- dist/
@@ -436,7 +450,7 @@ Die vollständige Datei- und Verbindungsdoku steht in [docs/codebase-map.md](doc
 
 ### Hauptdateien
 - Quellcode: `src/*`
-- Build-Metadaten: `build/manifest.json`
+- Build-Metadaten: `build/manifest.json`, `build/version.json`
 - Build/QA: `scripts/*.ps1`
 - Runtime-Script: `dist/autodarts-tournament-assistant.user.js`
 - Loader-Script: `installer/Autodarts Tournament Assistant Loader.user.js`
@@ -447,11 +461,21 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1
 powershell -ExecutionPolicy Bypass -File scripts/qa.ps1
 ```
 
+Gezielte Checks:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/qa-architecture.ps1
+powershell -ExecutionPolicy Bypass -File scripts/test-domain.ps1
+powershell -ExecutionPolicy Bypass -File scripts/test-runtime-contract.ps1
+```
+
 ### Architektur
 - Shadow DOM für gekapselte UI
+- `src/app/*` als Orchestrierungsgrenze zwischen Domain, Persistenz und UI
 - SPA-Routing-Hooks für stabile Einbindung in Autodarts
 - Defensive Persistenz-Normalisierung
 - Bracket-Rendering in sandboxed iframe
+- `src/runtime/*` nur noch für Bootstrap-/Wiring
 
 ## Limitationen
 - Modus-Limits:

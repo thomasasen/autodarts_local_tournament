@@ -590,7 +590,6 @@
       updatedAt: nowIso(),
     };
 
-    refreshDerivedMatches(tournament);
     return tournament;
   }
 

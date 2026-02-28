@@ -35,8 +35,7 @@
   }
 
 
-  function updateMatchResult(matchId, winnerId, legs, source, stats = null) {
-    const tournament = state.store.tournament;
+  function applyMatchResultToTournament(tournament, matchId, winnerId, legs, source, stats = null) {
     if (!tournament) {
       return { ok: false, message: "Kein aktives Turnier vorhanden." };
     }
@@ -102,11 +101,6 @@
       auto.lastError = null;
     }
     match.updatedAt = now;
-
-    refreshDerivedMatches(tournament);
-    tournament.updatedAt = now;
-    schedulePersist();
-    renderShell();
     return { ok: true };
   }
 

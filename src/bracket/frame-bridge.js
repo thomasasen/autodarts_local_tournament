@@ -1,115 +1,70 @@
 ﻿// Auto-generated module split from dist source.
-  function applyBracketFrameHeight(height) {
-    const frame = state.bracket.iframe;
+  function applyBracketFrameHeight(frame, bracketState, height) {
     if (!(frame instanceof HTMLIFrameElement)) {
       return;
     }
     const nextHeight = clampInt(height, 0, 420, 12000);
-    if (!nextHeight || Math.abs(nextHeight - state.bracket.frameHeight) < 2) {
+    if (!nextHeight || Math.abs(nextHeight - bracketState.frameHeight) < 2) {
       return;
     }
-    state.bracket.frameHeight = nextHeight;
+    bracketState.frameHeight = nextHeight;
     frame.style.height = `${nextHeight}px`;
   }
 
 
-  function queueBracketRender(forceReload = false) {
-    const tournament = state.store.tournament;
-    if (!tournament || (tournament.mode !== "ko" && tournament.mode !== "groups_ko")) {
-      return;
+  function resolveBracketFrameElement(shadowRoot) {
+    if (!shadowRoot) {
+      return null;
     }
-    const shadow = state.shadowRoot;
-    if (!shadow) {
-      return;
-    }
-    const frame = shadow.getElementById("ata-bracket-frame");
-    if (!(frame instanceof HTMLIFrameElement)) {
-      return;
-    }
+    const frame = shadowRoot.getElementById("ata-bracket-frame");
+    return frame instanceof HTMLIFrameElement ? frame : null;
+  }
 
-    const payload = buildBracketPayload(tournament);
-    if (!payload) {
-      return;
+
+  function resetBracketFrameState(bracketState, frame, srcdoc) {
+    bracketState.ready = false;
+    bracketState.failed = false;
+    bracketState.frameHeight = 0;
+    bracketState.lastError = "";
+    frame.style.removeProperty("height");
+    frame.srcdoc = srcdoc;
+  }
+
+
+  function clearBracketFrameTimeout(bracketState) {
+    if (bracketState.timeoutHandle) {
+      clearTimeout(bracketState.timeoutHandle);
+      bracketState.timeoutHandle = null;
     }
+  }
 
-    if (forceReload || state.bracket.iframe !== frame) {
-      state.bracket.iframe = frame;
-      state.bracket.ready = false;
-      state.bracket.failed = false;
-      state.bracket.frameHeight = 0;
-      state.bracket.lastError = "";
-      frame.style.removeProperty("height");
-      syncBracketFallbackVisibility();
-      frame.srcdoc = buildBracketFrameSrcdoc();
-    }
 
-    if (state.bracket.timeoutHandle) {
-      clearTimeout(state.bracket.timeoutHandle);
-      state.bracket.timeoutHandle = null;
-    }
+  function armBracketFrameTimeout(bracketState, onTimeout, timeoutMs) {
+    bracketState.timeoutHandle = window.setTimeout(() => {
+      bracketState.timeoutHandle = null;
+      onTimeout();
+    }, timeoutMs);
+  }
 
-    state.bracket.timeoutHandle = window.setTimeout(() => {
-      state.bracket.failed = true;
-      state.bracket.lastError = "Turnierbaum-Render-Timeout";
-      syncBracketFallbackVisibility();
-      setNotice("error", "CDN-Turnierbaum-Timeout, Fallback bleibt aktiv.", 3200);
-      logWarn("bracket", "Iframe bracket render timeout.");
-    }, 7000);
 
-    if (state.bracket.ready && frame.contentWindow) {
+  function postBracketRenderPayload(frame, payload) {
+    if (frame instanceof HTMLIFrameElement && frame.contentWindow) {
       frame.contentWindow.postMessage({ type: "ata:render-bracket", payload }, "*");
     }
   }
 
 
-  function handleBracketMessage(event) {
-    const frame = state.bracket.iframe;
-    if (!frame || event.source !== frame.contentWindow) {
-      return;
+  function readBracketFrameMessage(event, frame) {
+    if (!(frame instanceof HTMLIFrameElement) || event.source !== frame.contentWindow) {
+      return null;
     }
 
     const data = event.data;
     if (!data || typeof data !== "object") {
-      return;
+      return null;
     }
 
-    if (data.type === "ata:bracket-frame-ready") {
-      state.bracket.ready = true;
-      const payload = buildBracketPayload(state.store.tournament);
-      if (payload && frame.contentWindow) {
-        frame.contentWindow.postMessage({ type: "ata:render-bracket", payload }, "*");
-      }
-      return;
-    }
-
-    if (data.type === "ata:bracket-frame-height") {
-      applyBracketFrameHeight(data.height);
-      return;
-    }
-
-    if (data.type === "ata:bracket-rendered") {
-      if (state.bracket.timeoutHandle) {
-        clearTimeout(state.bracket.timeoutHandle);
-        state.bracket.timeoutHandle = null;
-      }
-      state.bracket.failed = false;
-      state.bracket.lastError = "";
-      syncBracketFallbackVisibility();
-      logDebug("bracket", "Bracket rendered successfully.");
-      return;
-    }
-
-    if (data.type === "ata:bracket-error") {
-      if (state.bracket.timeoutHandle) {
-        clearTimeout(state.bracket.timeoutHandle);
-        state.bracket.timeoutHandle = null;
-      }
-      state.bracket.failed = true;
-      state.bracket.lastError = normalizeText(data.message || "Unbekannter Fehler");
-      syncBracketFallbackVisibility();
-      setNotice("error", `Turnierbaum-Fehler: ${state.bracket.lastError}. Fallback aktiv.`, 3600);
-      logWarn("bracket", "Bracket render error.", data);
-    }
+    return data;
   }
 
 
