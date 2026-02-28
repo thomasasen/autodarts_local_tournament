@@ -170,6 +170,16 @@ Screenshot-Kontext:
 ### Nachprüfen im PDF
 - [DRA-RULE_BOOK.pdf#page=20](DRA-RULE_BOOK.pdf#page=20)
 
+Screenshot-Kontext:
+
+Liga-Ansicht mit Tabelle, Spielplan und sichtbarer Tie-Break-Spalte:
+
+![Liga-Tabelle und Spielplan im Turnierbaum](../assets/ss_Turnierbaum_Liga.png)
+
+Gruppenphase + KO mit Gruppentabellen und nachgelagertem KO-Turnierbaum:
+
+![Gruppentabellen und KO-Baum im Turnierbaum](../assets/ss_Turnierbaum_Gruppenphaseplusko.png)
+
 <a id="dra-gui-rule-checklist"></a>
 ## DRA-Checkliste (manuelle Entscheidungen)
 

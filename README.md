@@ -207,6 +207,12 @@ Tab: `Turnier`
   - Single-Board-Flow auf einem Board
 - Die globale Kalibrierung erfolgt über das Zeitprofil im Tab `Einstellungen`.
 
+Beispiel der Live-Zeitprognose im Turnierformular:
+
+![Live-Zeitprognose für ein Turnier](assets/ss_Turnier_Zeitprognose.png)
+
+Die Anzeige bündelt Teilnehmerzahl, geplante Spielanzahl, durchschnittliche Matchdauer, aktives Zeitprofil und eine realistische Spannweite in einem kompakten Überblick.
+
 ### Nach dem Anlegen
 Im aktiven Turnier siehst du die wichtigsten Tags sofort:
 - Format (`KO`, `Liga`, `Gruppenphase + KO`)
@@ -267,10 +273,22 @@ Tab: `Turnierbaum`
 - KO-Baum wird im iframe über `brackets-viewer` gerendert.
 - Bei CDN-Problemen zeigt die App einen HTML-Fallback.
 - Freilose, abgeschlossene Spiele und Finale sind visuell markiert.
+- Je nach Modus zeigt der Tab unterschiedliche Ansichten:
+  - `KO`: klassischer Turnierbaum mit offenen Slots, Freilosen und Finale.
+  - `Liga`: Tabelle und vollständiger Spielplan in einer gemeinsamen Ansicht.
+  - `Gruppenphase + KO`: Gruppentabellen oben, KO-Turnierbaum darunter.
 
 ![Turnierbaum direkt nach dem Start](assets/ss_Turnierbaum_neu-gestartet.png)
 ![Turnierbaum nach übernommenen Matchdaten](assets/Turnierbaum_aktualisierter-turnierbaum-nach-uebernahme-der-matchdaten.png)
 ![Turnierbaum mit abgeschlossenem Finale](assets/ss_Turnierbaum_Finale.png)
+
+Liga-Ansicht mit Tabelle und Spielplan:
+
+![Liga-Ansicht im Turnierbaum](assets/ss_Turnierbaum_Liga.png)
+
+Gruppenphase + KO mit Gruppentabellen und KO-Turnierbaum:
+
+![Gruppenphase plus KO im Turnierbaum](assets/ss_Turnierbaum_Gruppenphaseplusko.png)
 
 ## Import und Export
 Tab: `Import/Export`
