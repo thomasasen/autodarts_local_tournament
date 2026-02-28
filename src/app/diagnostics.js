@@ -639,6 +639,7 @@
         "Migration: v2 -> v4 setzt Tie-Break-Profil",
         migrated.schemaVersion === 4
           && migrated.tournament?.rules?.tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE
+          && migrated.settings?.tournamentTimeProfile === TOURNAMENT_TIME_PROFILE_NORMAL
           && migrated.settings?.featureFlags?.koDrawLockDefault === true,
         `schema=${migrated.schemaVersion}, profile=${migrated.tournament?.rules?.tieBreakProfile}`,
       );
@@ -657,4 +658,3 @@
       version: APP_VERSION,
     };
   }
-

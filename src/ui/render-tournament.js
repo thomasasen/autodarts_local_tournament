@@ -8,6 +8,7 @@
       const startScoreOptions = X01_START_SCORE_OPTIONS.map((score) => (
         `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${score}</option>`
       )).join("");
+      const durationEstimate = estimateTournamentDurationFromDraft(draft, state.store.settings);
       const pdcCompliantSetup = isPdcCompliantMatchSetup(draft);
       const pdcPresetActive = draft.x01Preset === X01_PRESET_PDC_STANDARD && pdcCompliantSetup;
       const presetStatusLabel = pdcPresetActive ? "Preset aktiv: PDC-Standard" : "Preset aktiv: Individuell";
@@ -134,6 +135,9 @@
                 <div class="ata-field">
                   <label for="ata-participants">Teilnehmer (eine Zeile pro Person)</label>
                   <textarea id="ata-participants" name="participants" placeholder="Max Mustermann&#10;Erika Musterfrau">${escapeHtml(draft.participantsText)}</textarea>
+                </div>
+                <div id="ata-create-duration-estimate">
+                  ${renderTournamentDurationEstimate(durationEstimate)}
                 </div>
                 <div class="ata-actions">
                   <button type="button" class="ata-btn ata-btn-sm" data-action="shuffle-participants">Teilnehmer mischen</button>

@@ -7,7 +7,7 @@ Die vollständige Ordner- und Dateikarte inklusive Build-/Runtime-Verbindungen s
 Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einzelnes Userscript ausgeliefert (`dist/autodarts-tournament-assistant.user.js`).
 
 - `src/core`: Konstanten, State, Utilities, Events, Logging
-- `src/domain`: fachliche Turnierregeln, pure Match-/KO-/Standings-Logik
+- `src/domain`: fachliche Turnierregeln, pure Match-/KO-/Standings-/Zeitprognose-Logik
 - `src/data`: Storage-I/O, Normalisierung, Migration
 - `src/bracket`: low-level Bracket-Payload, Iframe-Template und Frame-Transport
 - `src/app`: Orchestrierung zwischen Domain, Persistenz, Bracket und UI
@@ -47,10 +47,22 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
 - `schemaVersion: 4`
 - Neues Regelobjekt pro Turnier:
   - `tournament.rules.tieBreakProfile: "promoter_h2h_minitable" | "promoter_points_legdiff"`
+- Neues globales Settings-Feld:
+  - `settings.tournamentTimeProfile: "fast" | "normal" | "slow"`
 - KO-spezifisch:
   - `settings.featureFlags.koDrawLockDefault: boolean`
   - `tournament.ko.drawLocked: boolean`
   - `tournament.ko.placement: number[]`
+
+## Zeitprognose
+- Die Turnierzeit-Prognose lebt als pure Domain-Logik in `src/domain/tournament-duration.js`.
+- Grundlage der Schätzung:
+  - Modus und Teilnehmerzahl
+  - erwartete Legs pro Match aus `Best of`
+  - X01-Setup (`Startscore`, `In`, `Out`, `Bull-off`, `Bull-Modus`, `Max Runden`)
+  - globales Zeitprofil (`fast | normal | slow`)
+- Die UI rendert daraus einen Live-Block im Turnierformular.
+- `src/ui/handlers.js` aktualisiert diesen Block gezielt bei jedem Formular-Input, ohne die gesamte Shell neu zu rendern.
 
 ## Regelmodell (DRA/PDC)
 - Standard: `promoter_h2h_minitable` (auch bei Migration von Bestandsdaten).

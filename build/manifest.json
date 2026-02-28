@@ -11,6 +11,7 @@
                   "src/domain/match-state.js",
                   "src/domain/rules-config.js",
                   "src/domain/tournament-create.js",
+                  "src/domain/tournament-duration.js",
                   "src/domain/standings-dra.js",
                   "src/domain/groups.js",
                   "src/domain/ko-engine.js",

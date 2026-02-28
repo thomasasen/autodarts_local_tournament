@@ -83,6 +83,7 @@ Nach Installation ist links im Hauptmenü der neue Eintrag sichtbar. Darüber ö
   - KO-Erstrunde als Hybrid-Draw (`seeded` oder `open_draw`)
   - X01-Preset-Button für Matchanlage (PDC-Defaults + Custom-Status)
   - Kompaktes Formular-Layout (Konfiguration + Teilnehmerbereich)
+  - Live-Prognose für die voraussichtliche Turnierzeit
   - Teilnehmerliste kann per Button gemischt werden
   - Formularentwurf bleibt erhalten (z. B. beim Moduswechsel)
 - Import/Export:
@@ -187,6 +188,24 @@ Tab: `Turnier`
   - die UI neu gerendert wird
 - Wenn `Bull-off = Off`, wird `Bull mode` automatisch read-only deaktiviert.
 - Bei manuellen Änderungen an X01-Feldern springt der Preset-Status auf `Individuell`.
+
+### Voraussichtliche Turnierzeit
+- In der rechten Spalte unter `Teilnehmer` wird eine Live-Prognose angezeigt.
+- Die Berechnung aktualisiert sich bei jeder Änderung im Formular:
+  - Teilnehmerzahl und Modus
+  - `Best of Legs`
+  - `Startpunkte`
+  - `In-Modus`, `Out-Modus`
+  - `Bull-off`, `Bull-Modus`
+  - `Max Runden`
+- Die Schätzung zeigt:
+  - Hauptwert `ca. Xh Ym`
+  - realistische Spannweite
+  - Anzahl geplanter Spiele
+  - durchschnittliche Matchdauer
+- Annahme:
+  - Single-Board-Flow auf einem Board
+- Die globale Kalibrierung erfolgt über das Zeitprofil im Tab `Einstellungen`.
 
 ### Nach dem Anlegen
 Im aktiven Turnier siehst du die wichtigsten Tags sofort:
@@ -315,6 +334,21 @@ Legende für die eingeblendeten Hilfelinks:
 - Bezug: DRA `6.12.1` (veröffentlichter Draw bleibt bestehen).
 - Im Tab `Einstellungen` kann das aktive KO-Turnier bei Bedarf explizit entsperrt werden.
 - Warum: Verhindert unfaire oder versehentliche Nachauslosung während laufendem Turnier.
+
+### Turnierzeit-Prognose
+- Zeitprofil:
+  - `Schnell`
+  - `Normal` (empfohlen)
+  - `Langsam`
+- Das Profil wirkt als globaler Kalibrierungsfaktor für die Live-Prognose im Tab `Turnier`.
+- Unabhängig vom Profil bleiben die fachlichen Einflussgrößen erhalten:
+  - Modus und Teilnehmerzahl
+  - `Best of Legs`
+  - `Startpunkte`
+  - `In` / `Out`
+  - `Bull-off` / `Bull-Modus`
+  - `Max Runden`
+- Warum: lokale Felder spielen unterschiedlich schnell; das Profil erlaubt eine saubere Anpassung, ohne die eigentliche Turnierlogik zu verändern.
 
 ### Promoter Tie-Break-Profil
 - `Promoter H2H + Mini-Tabelle` (empfohlen):

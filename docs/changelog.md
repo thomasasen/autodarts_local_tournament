@@ -1,5 +1,18 @@
 ﻿# Changelog
 
+## Unreleased
+- Turnierzeit-Prognose ergänzt:
+  - neue pure Domain-Datei `src/domain/tournament-duration.js`
+  - Live-Schätzung in der Turnieranlage unter `Teilnehmer`
+  - Berechnung berücksichtigt Modus, Teilnehmerzahl, `Best of`, `Startpunkte`, `In`, `Out`, `Bull-off`, `Bull-Modus` und `Max Runden`
+  - Ausgabe als Hauptwert plus realistische Spannweite
+- Neue globale Einstellung:
+  - `settings.tournamentTimeProfile` mit `fast | normal | slow`
+  - Select im Tab `Einstellungen` zur Kalibrierung lokaler Spielgeschwindigkeit
+- Tests und Doku erweitert:
+  - neue Domain-Unit-Tests für Matchanzahl und Zeitlogik
+  - README, Architektur- und Codebase-Dokumentation aktualisiert
+
 ## 0.3.4
 - DRA-Compliance-Hardening umgesetzt:
   - Storage auf `schemaVersion: 4` angehoben.

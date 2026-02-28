@@ -65,6 +65,7 @@
   function createDefaultStore() {
     const settings = {
       debug: false,
+      tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
       featureFlags: {
         autoLobbyStart: false,
         randomizeKoRound1: true,
@@ -171,6 +172,12 @@
   function sanitizeX01MaxRounds(value) {
     const rounds = clampInt(value, 50, 15, 80);
     return X01_MAX_ROUNDS_OPTIONS.includes(rounds) ? rounds : 50;
+  }
+
+
+  function sanitizeTournamentTimeProfile(value, fallback = TOURNAMENT_TIME_PROFILE_NORMAL) {
+    const profile = normalizeText(value || "").toLowerCase();
+    return TOURNAMENT_TIME_PROFILES.includes(profile) ? profile : fallback;
   }
 
 
@@ -630,6 +637,10 @@
     const defaultKoDrawLocked = input?.settings?.featureFlags?.koDrawLockDefault !== false;
     const settings = {
       debug: Boolean(input?.settings?.debug),
+      tournamentTimeProfile: sanitizeTournamentTimeProfile(
+        input?.settings?.tournamentTimeProfile,
+        defaults.settings.tournamentTimeProfile,
+      ),
       featureFlags: {
         autoLobbyStart: Boolean(input?.settings?.featureFlags?.autoLobbyStart),
         randomizeKoRound1: input?.settings?.featureFlags?.randomizeKoRound1 !== false,

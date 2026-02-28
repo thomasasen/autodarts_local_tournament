@@ -53,6 +53,7 @@ autodarts_local_tournament/
 |  |  |- match-state.js
 |  |  |- rules-config.js
 |  |  |- tournament-create.js
+|  |  |- tournament-duration.js
 |  |  |- standings-dra.js
 |  |  |- groups.js
 |  |  |- ko-engine.js
@@ -113,6 +114,7 @@ autodarts_local_tournament/
 |  |- test-harness.js
 |  |- domain-isolation.js
 |  |- unit-ko-engine.js
+|  |- unit-tournament-duration.js
 |  |- unit-rules-config.js
 |  `- unit-standings-dra.js
 |  `- fixtures/
@@ -368,6 +370,7 @@ Die drei Dateien zusammen bilden die Persistenzstrecke:
 | `src/domain/match-state.js` | gemeinsame Match-Mutationen | `clearMatchResult()` und `assignPlayerSlot()` als reine Match-Helfer | `src/domain/ko-engine.js`, `src/domain/groups.js`, `src/domain/results.js` |
 | `src/domain/rules-config.js` | pure Regel-Mutationen | ändert Tie-Break-Profil und KO-Draw-Lock nur am übergebenen Turnierobjekt | `src/data/normalization.js`, `src/app/tournament-actions.js` |
 | `src/domain/tournament-create.js` | reine Turniererzeugung | Match-Factory, Round-Robin-Pairings, Seed- und Bye-Logik, Gruppenbildung, KO-Struktur, Validation, `createTournament` | `src/data/normalization.js`, `src/domain/ko-engine.js`, `src/app/tournament-actions.js`, `src/app/diagnostics.js` |
+| `src/domain/tournament-duration.js` | pure Zeitprognose | berechnet Matchanzahl, erwartete Legs, Matchdauer und Spannweite für die Turnieranlage ohne DOM-/State-Abhängigkeiten | `src/data/normalization.js`, `src/domain/tournament-create.js`, `src/ui/render-tournament.js`, `src/ui/render-settings.js`, `tests/unit-tournament-duration.js` |
 | `src/domain/standings-dra.js` | Tabellen- und Tie-Break-Motor | berechnet Punkte, Leg-Differenzen, Direktvergleich, Mini-Tabelle und `playoff_required` | `src/data/normalization.js`, `src/domain/groups.js`, `src/ui/render-view.js`, `src/runtime/public-api.js` |
 | `src/domain/groups.js` | Gruppen-zu-KO-Auflösung | berechnet Gruppentabellen pro Gruppe und belegt bei `groups_ko` die KO-Halbfinal-Slots | `src/domain/standings-dra.js`, `src/domain/ko-engine.js`, `src/ui/render-view.js` |
 | `src/domain/ko-engine.js` | fachlicher KO-Motor | Winner-Advancement, Draw-Lock, Byes, KO-Meta-Snapshots, v3-Migration und Ergebnisvalidierung ohne Persistenz-/Logging-Seiteneffekte | `src/data/normalization.js`, `src/domain/groups.js`, `src/domain/tournament-create.js`, `src/domain/match-state.js`, `src/app/derived-state.js` |
@@ -406,13 +409,13 @@ Hier liegt die eigentliche Turnierlogik. Wenn sich eine fachliche Regel ändert,
 |---|---|---|---|
 | `src/ui/render-shell.js` | äußerer Drawer-Rahmen | rendert Shadow-DOM-Shell, Tabs, Notices und Runtime-Status-Bar | `src/ui/render-tabs.js`, `src/infra/api-client.js`, `src/ui/handlers.js` |
 | `src/ui/render-tabs.js` | Tab-Verteiler | entscheidet, welcher Tab-Renderer für den aktiven Tab ausgeführt wird | `src/ui/render-tournament.js`, `src/ui/render-matches.js`, `src/ui/render-view.js`, `src/ui/render-io.js`, `src/ui/render-settings.js` |
-| `src/ui/render-helpers.js` | UI-Helfer | `renderInfoLinks()` und `renderSectionHeading()` als reine Render-Helfer außerhalb von `core` | `src/ui/render-*.js` |
-| `src/ui/render-tournament.js` | Turnieranlage und Turnierübersicht | rendert Neues-Turnier-Formular, PDC-Preset-Hinweise, aktives Turnier und Reset-Bereich | `src/data/normalization.js`, `src/ui/render-helpers.js`, `src/ui/handlers.js` |
+| `src/ui/render-helpers.js` | UI-Helfer | `renderInfoLinks()`, Abschnitts- und Turnierzeit-Helfer für wiederverwendbare HTML-Bausteine | `src/ui/render-*.js` |
+| `src/ui/render-tournament.js` | Turnieranlage und Turnierübersicht | rendert Neues-Turnier-Formular, PDC-Preset-Hinweise, Live-Zeitprognose, aktives Turnier und Reset-Bereich | `src/data/normalization.js`, `src/domain/tournament-duration.js`, `src/ui/render-helpers.js`, `src/ui/handlers.js` |
 | `src/ui/render-matches.js` | Matchliste und Matchaktionen | rendert Editoren, Status und API-Start-Buttons; Sortierung und `Nächstes Match` kommen aus `src/app/match-view-models.js` | `src/app/match-view-models.js`, `src/domain/results.js`, `src/infra/api-automation.js` |
 | `src/ui/render-view.js` | Tabellen- und Bracket-Ansicht | rendert Liga-/Gruppentabellen, Fallback-Bracket und den Einstieg ins iframe-Bracket | `src/domain/standings-dra.js`, `src/domain/groups.js`, `src/domain/ko-engine.js`, `src/bracket/*` |
 | `src/ui/render-io.js` | Import/Export-Tab | rendert Export- und Import-Oberfläche | `src/ui/handlers.js`, `src/data/storage.js` |
-| `src/ui/render-settings.js` | Settings-Tab | rendert Debug-Flag, API-Automation, KO-Defaults, Tie-Break-Profil und Storage-Hinweise | `src/data/normalization.js`, `src/ui/render-helpers.js`, `src/ui/handlers.js` |
-| `src/ui/handlers.js` | UI-Orchestrator | erstellt Host, rendert Shell, bindet Events, liest Formulare und delegiert Turnier-/Match-Aktionen in `src/app/*` | `src/ui/render-shell.js`, `src/app/tournament-actions.js`, `src/app/match-actions.js`, `src/infra/api-automation.js`, `src/app/bracket-controller.js` |
+| `src/ui/render-settings.js` | Settings-Tab | rendert Debug-Flag, API-Automation, KO-Defaults, Zeitprofil, Tie-Break-Profil und Storage-Hinweise | `src/data/normalization.js`, `src/domain/tournament-duration.js`, `src/ui/render-helpers.js`, `src/ui/handlers.js` |
+| `src/ui/handlers.js` | UI-Orchestrator | erstellt Host, rendert Shell, bindet Events, liest Formulare, aktualisiert die Live-Zeitprognose und delegiert Turnier-/Match-Aktionen in `src/app/*` | `src/ui/render-shell.js`, `src/app/tournament-actions.js`, `src/app/match-actions.js`, `src/infra/api-automation.js`, `src/app/bracket-controller.js`, `src/domain/tournament-duration.js` |
 
 `handlers.js` ist die Datei, in der Bedienung, State-Änderung und Re-Render zusammenlaufen. Die Render-Dateien bleiben dagegen weitgehend beschreibend.
 

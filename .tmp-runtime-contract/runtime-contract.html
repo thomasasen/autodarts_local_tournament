@@ -1,4 +1,42 @@
-﻿// ==UserScript==
+﻿<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <title>ATA Runtime Contract</title>
+  </head>
+  <body>
+    <script>
+const RUNTIME_API_CONTRACT = Object.freeze({
+  globalKey: "__ATA_RUNTIME",
+  requiredKeys: Object.freeze([
+    "version",
+    "isReady",
+    "openDrawer",
+    "closeDrawer",
+    "toggleDrawer",
+    "runSelfTests",
+  ]),
+  functionKeys: Object.freeze([
+    "isReady",
+    "openDrawer",
+    "closeDrawer",
+    "toggleDrawer",
+    "runSelfTests",
+  ]),
+});
+
+const GLOBALS_CONTRACT = Object.freeze({
+  requiredKeys: Object.freeze([
+    "__ATA_RUNTIME_BOOTSTRAPPED",
+    "__ATA_RUNTIME",
+  ]),
+  forbiddenNewAtaGlobals: Object.freeze([
+    "__ATA_APP",
+    "__ATA_TEST_CONTRACTS",
+  ]),
+});
+
+// ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
 // @version      0.3.3
@@ -3369,21 +3407,21 @@
     [TOURNAMENT_TIME_PROFILE_FAST]: Object.freeze({
       id: TOURNAMENT_TIME_PROFILE_FAST,
       label: "Schnell",
-      description: "F\u00fcr z\u00fcgige Felder mit wenig Verz\u00f6gerung zwischen den Matches.",
+      description: "Fuer zuegige Felder mit wenig Verzoegerung zwischen den Matches.",
       legPaceMultiplier: 0.88,
       highPaddingExtra: 0.00,
     }),
     [TOURNAMENT_TIME_PROFILE_NORMAL]: Object.freeze({
       id: TOURNAMENT_TIME_PROFILE_NORMAL,
       label: "Normal",
-      description: "Ausgewogener Standard f\u00fcr lokale Turniere.",
+      description: "Ausgewogener Standard fuer lokale Turniere.",
       legPaceMultiplier: 1.00,
       highPaddingExtra: 0.00,
     }),
     [TOURNAMENT_TIME_PROFILE_SLOW]: Object.freeze({
       id: TOURNAMENT_TIME_PROFILE_SLOW,
       label: "Langsam",
-      description: "F\u00fcr gemischte Felder oder langsamere Board-Wechsel.",
+      description: "Fuer gemischte Felder oder langsamere Board-Wechsel.",
       legPaceMultiplier: 1.15,
       highPaddingExtra: 0.02,
     }),
@@ -3396,7 +3434,7 @@
   }
 
 
-  function getTournamentDurationCombination(n, k) {
+  function getTournamentDurationBinomialCoefficient(n, k) {
     if (!Number.isFinite(n) || !Number.isFinite(k) || k < 0 || k > n) {
       return 0;
     }
@@ -3418,7 +3456,7 @@
     let expectedLegs = 0;
     for (let totalLegs = legsToWin; totalLegs < legsToWin * 2; totalLegs += 1) {
       const probability = 2
-        * getTournamentDurationCombination(totalLegs - 1, legsToWin - 1)
+        * getTournamentDurationBinomialCoefficient(totalLegs - 1, legsToWin - 1)
         * Math.pow(0.5, totalLegs);
       expectedLegs += totalLegs * probability;
     }
@@ -4852,8 +4890,8 @@
   <div id="brackets-root">
     <div id="ata-brackets-viewer" class="brackets-viewer"></div>
   </div>
-  <script src="${I18NEXT_JS}"></script>
-  <script src="${BRACKETS_VIEWER_JS}"></script>
+  <script src="${I18NEXT_JS}"><\/script>
+  <script src="${BRACKETS_VIEWER_JS}"><\/script>
   <script>
     (function () {
       var msgEl = document.getElementById("msg");
@@ -5078,7 +5116,7 @@
       post({ type: "ata:bracket-frame-ready" });
       scheduleHeightReport();
     })();
-  </script>
+  <\/script>
 </body>
 </html>
     `;
@@ -8815,8 +8853,8 @@
 
   function renderTournamentDurationEstimate(estimate) {
     const helpLinks = renderInfoLinks([
-      { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erkl\u00e4rung zur Turnierzeit-Prognose \u00f6ffnen", title: "README: Turnier anlegen" },
-      { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen f\u00fcr das Zeitprofil \u00f6ffnen", title: "README: Einstellungen" },
+      { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erklaerung zur Turnierzeit-Prognose oeffnen", title: "README: Turnier anlegen" },
+      { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen fuer das Zeitprofil oeffnen", title: "README: Einstellungen" },
     ]);
     const estimateReason = normalizeText(estimate?.reason || "");
 
@@ -8828,7 +8866,7 @@
             ${helpLinks}
           </div>
           <div class="ata-estimate-value ata-estimate-value-pending">Noch nicht berechenbar</div>
-          <p class="ata-small">${escapeHtml(estimateReason || "Die Sch\u00e4tzung startet, sobald die Konfiguration f\u00fcr den gew\u00e4hlten Modus g\u00fcltig ist.")}</p>
+          <p class="ata-small">${escapeHtml(estimateReason || "Die Schaetzung startet, sobald die Konfiguration fuer den gewaehlten Modus gueltig ist.")}</p>
           <p class="ata-small">Annahme: Single-Board-Flow auf einem Board.</p>
         </section>
       `;
@@ -10485,3 +10523,75 @@
   });
 })();
 
+
+(async function () {
+  const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+  let api = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    api = window[RUNTIME_API_CONTRACT.globalKey] || null;
+    if (api && typeof api.isReady === "function" && api.isReady()) {
+      break;
+    }
+    await wait(50);
+  }
+
+  const result = {
+    ok: true,
+    failures: [],
+    runtimeKeys: api ? Object.keys(api).sort() : [],
+    ataGlobals: Object.keys(window).filter((key) => key.startsWith("__ATA_")).sort(),
+    selfTests: null,
+  };
+
+  if (!api) {
+    result.ok = false;
+    result.failures.push("Runtime API wurde nicht initialisiert.");
+  } else {
+    for (const key of RUNTIME_API_CONTRACT.requiredKeys) {
+      if (!(key in api)) {
+        result.ok = false;
+        result.failures.push(`Runtime API Key fehlt: ${key}`);
+      }
+    }
+
+    for (const key of RUNTIME_API_CONTRACT.functionKeys) {
+      if (typeof api[key] !== "function") {
+        result.ok = false;
+        result.failures.push(`Runtime API Funktion fehlt: ${key}`);
+      }
+    }
+
+    if (typeof api.runSelfTests === "function") {
+      const selfTestResult = api.runSelfTests();
+      result.selfTests = {
+        ok: Boolean(selfTestResult?.ok),
+        passed: Number(selfTestResult?.passed || 0),
+        failed: Number(selfTestResult?.failed || 0),
+      };
+      if (!selfTestResult?.ok) {
+        result.ok = false;
+        result.failures.push(`Runtime-Selftests fehlgeschlagen (${selfTestResult?.failed || 0} Fehler).`);
+      }
+    }
+  }
+
+  for (const key of GLOBALS_CONTRACT.requiredKeys) {
+    if (!(key in window)) {
+      result.ok = false;
+      result.failures.push(`Global fehlt: ${key}`);
+    }
+  }
+
+  for (const key of GLOBALS_CONTRACT.forbiddenNewAtaGlobals) {
+    if (key in window) {
+      result.ok = false;
+      result.failures.push(`Unerwartetes ATA-Global gefunden: ${key}`);
+    }
+  }
+
+  document.body.innerHTML = `<pre id="ata-runtime-contract-result">${JSON.stringify(result)}</pre>`;
+  document.title = result.ok ? "PASS" : "FAIL";
+})();
+    </script>
+  </body>
+</html>

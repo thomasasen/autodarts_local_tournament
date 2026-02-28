@@ -1,0 +1,6 @@
+<!DOCTYPE html>
+<html lang="de"><head>
+    <meta charset="utf-8">
+    <title>PASS</title>
+  </head>
+  <body><pre id="ata-runtime-contract-result">{"ok":true,"failures":[],"runtimeKeys":["closeDrawer","isReady","openDrawer","runSelfTests","toggleDrawer","version"],"ataGlobals":["__ATA_RUNTIME","__ATA_RUNTIME_BOOTSTRAPPED"],"selfTests":{"ok":true,"passed":19,"failed":0}}</pre></body><div id="ata-ui-host"></div></html>

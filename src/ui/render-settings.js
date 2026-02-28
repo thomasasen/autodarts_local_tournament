@@ -1,6 +1,18 @@
 // Auto-generated module split from dist source.
   function renderSettingsTab() {
     const debugEnabled = state.store.settings.debug ? "checked" : "";
+    const tournamentTimeProfile = sanitizeTournamentTimeProfile(
+      state.store.settings.tournamentTimeProfile,
+      TOURNAMENT_TIME_PROFILE_NORMAL,
+    );
+    const tournamentTimeProfileOptions = TOURNAMENT_TIME_PROFILES.map((profileId) => {
+      const profileMeta = getTournamentTimeProfileMeta(profileId);
+      const selectedAttr = tournamentTimeProfile === profileId ? "selected" : "";
+      const label = profileId === TOURNAMENT_TIME_PROFILE_NORMAL
+        ? `${profileMeta.label} (empfohlen)`
+        : profileMeta.label;
+      return `<option value="${profileMeta.id}" ${selectedAttr}>${escapeHtml(label)}</option>`;
+    }).join("");
     const autoLobbyEnabled = state.store.settings.featureFlags.autoLobbyStart ? "checked" : "";
     const randomizeKoEnabled = state.store.settings.featureFlags.randomizeKoRound1 ? "checked" : "";
     const koDrawLockDefaultEnabled = state.store.settings.featureFlags.koDrawLockDefault !== false ? "checked" : "";
@@ -62,6 +74,20 @@
         </div>
       </section>
       <section class="ata-card tournamentCard">
+        ${renderSectionHeading("Turnierzeit-Prognose", [
+          { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erkl\u00e4rung zur Turnierzeit-Prognose \u00f6ffnen", title: "README: Turnier anlegen" },
+          { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen-Dokumentation \u00f6ffnen", title: "README: Einstellungen" },
+        ])}
+        <div class="ata-field">
+          <label for="ata-setting-tournament-time-profile">Zeitprofil</label>
+          <select id="ata-setting-tournament-time-profile" data-action="set-tournament-time-profile">
+            ${tournamentTimeProfileOptions}
+          </select>
+        </div>
+        <p class="ata-small">Die Sch\u00e4tzung im Tab <code>Turnier</code> rechnet immer mit Startscore, Best of, In/Out, Bull-off, Bull-Modus und diesem globalen Zeitprofil.</p>
+        <p class="ata-small"><strong>Schnell:</strong> z\u00fcgige Abl\u00e4ufe. <strong>Normal:</strong> ausgewogener Standard. <strong>Langsam:</strong> konservativer f\u00fcr gemischte Felder und l\u00e4ngere Wechselzeiten.</p>
+      </section>
+      <section class="ata-card tournamentCard">
         ${renderSectionHeading("KO Draw-Lock (aktives Turnier)", [
           { href: DRA_GUI_RULE_DRAW_LOCK_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zu Draw-Lock \u00f6ffnen", title: "DRA-Regeln in der GUI: Draw-Lock" },
         ])}
@@ -114,4 +140,3 @@
       </section>
     `;
   }
-

@@ -75,6 +75,14 @@
   const X01_BULL_OFF_MODES = Object.freeze(["Off", "Normal", "Official"]);
   const X01_MAX_ROUNDS_OPTIONS = Object.freeze([15, 20, 50, 80]);
   const X01_START_SCORE_OPTIONS = Object.freeze([121, 170, 301, 501, 701, 901]);
+  const TOURNAMENT_TIME_PROFILE_FAST = "fast";
+  const TOURNAMENT_TIME_PROFILE_NORMAL = "normal";
+  const TOURNAMENT_TIME_PROFILE_SLOW = "slow";
+  const TOURNAMENT_TIME_PROFILES = Object.freeze([
+    TOURNAMENT_TIME_PROFILE_FAST,
+    TOURNAMENT_TIME_PROFILE_NORMAL,
+    TOURNAMENT_TIME_PROFILE_SLOW,
+  ]);
   const MATCH_SORT_MODE_READY_FIRST = "ready_first";
   const MATCH_SORT_MODE_ROUND = "round";
   const MATCH_SORT_MODE_STATUS = "status";

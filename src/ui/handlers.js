@@ -66,6 +66,7 @@
     const createForm = shadow.getElementById("ata-create-form");
     if (createForm instanceof HTMLFormElement) {
       syncCreateFormDependencies(createForm);
+      refreshCreateFormDurationEstimate(createForm);
       const handleDraftInputChange = (event) => {
         const target = event?.target;
         const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
@@ -76,6 +77,7 @@
         }
         syncCreateFormDependencies(createForm);
         updateCreateDraftFromForm(createForm, true);
+        refreshCreateFormDurationEstimate(createForm);
       };
       createForm.addEventListener("input", handleDraftInputChange);
       createForm.addEventListener("change", handleDraftInputChange);
@@ -198,6 +200,19 @@
         state.store.settings.featureFlags.koDrawLockDefault = koDrawLockDefaultToggle.checked;
         schedulePersist();
         setNotice("info", `KO Draw-Lock (Standard): ${koDrawLockDefaultToggle.checked ? "ON" : "OFF"}.`, 2200);
+      });
+    }
+
+    const tournamentTimeProfileSelect = shadow.getElementById("ata-setting-tournament-time-profile");
+    if (tournamentTimeProfileSelect instanceof HTMLSelectElement) {
+      tournamentTimeProfileSelect.addEventListener("change", () => {
+        const profileId = sanitizeTournamentTimeProfile(
+          tournamentTimeProfileSelect.value,
+          TOURNAMENT_TIME_PROFILE_NORMAL,
+        );
+        state.store.settings.tournamentTimeProfile = profileId;
+        schedulePersist();
+        setNotice("info", `Turnierzeit-Profil: ${getTournamentTimeProfileMeta(profileId).label}.`, 2200);
       });
     }
 
@@ -425,6 +440,7 @@
     setCreateFormPresetValue(form, X01_PRESET_PDC_STANDARD);
     syncCreateFormDependencies(form);
     updateCreateDraftFromForm(form, true);
+    refreshCreateFormDurationEstimate(form);
     setNotice("info", "PDC-Preset wurde auf KO, Best of 5 und die X01-Felder angewendet.", 2400);
   }
 
@@ -465,6 +481,21 @@
   }
 
 
+  function refreshCreateFormDurationEstimate(form) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const estimateHost = form.querySelector("#ata-create-duration-estimate");
+    if (!(estimateHost instanceof HTMLElement)) {
+      return;
+    }
+    const formData = new FormData(form);
+    const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
+    const estimate = estimateTournamentDurationFromDraft(draft, state.store.settings);
+    estimateHost.innerHTML = renderTournamentDurationEstimate(estimate);
+  }
+
+
   function handleShuffleParticipants(form) {
     if (!(form instanceof HTMLFormElement)) {
       return;
@@ -481,6 +512,7 @@
     const shuffledNames = shuffleArray(participants.map((participant) => participant.name));
     participantField.value = shuffledNames.join("\n");
     updateCreateDraftFromForm(form, true);
+    refreshCreateFormDurationEstimate(form);
     setNotice("success", "Teilnehmer wurden zuf\u00e4llig gemischt.", 1800);
   }
 

@@ -391,6 +391,73 @@
         background: rgba(255, 255, 255, 0.05);
       }
 
+      .ata-estimate-card {
+        display: grid;
+        gap: 8px;
+        border: 1px solid rgba(255, 211, 79, 0.34);
+        border-radius: var(--ata-radius-md);
+        padding: 10px;
+        background:
+          radial-gradient(circle at 100% 0%, rgba(255, 211, 79, 0.12), transparent 40%),
+          rgba(17, 28, 56, 0.86);
+      }
+
+      .ata-estimate-card-pending {
+        border-color: rgba(188, 205, 245, 0.28);
+        background:
+          radial-gradient(circle at 100% 0%, rgba(188, 205, 245, 0.12), transparent 42%),
+          rgba(17, 28, 56, 0.82);
+      }
+
+      .ata-estimate-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .ata-estimate-head strong {
+        font-size: 14px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .ata-estimate-value {
+        font-size: 30px;
+        line-height: 1;
+        font-weight: 900;
+        color: #fff1c5;
+      }
+
+      .ata-estimate-value-pending {
+        font-size: 20px;
+        color: #edf3ff;
+      }
+
+      .ata-estimate-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .ata-estimate-meta span,
+      .ata-estimate-range {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.08);
+        padding: 3px 9px;
+        font-size: 12px;
+        line-height: 1.2;
+      }
+
+      .ata-estimate-range {
+        width: fit-content;
+        border-color: rgba(255, 211, 79, 0.44);
+        color: #fff1c5;
+      }
+
       .ata-field {
         display: grid;
         gap: var(--ata-space-1);
