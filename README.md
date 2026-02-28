@@ -27,6 +27,7 @@ Der Assistent erweitert die Autodarts-Oberfläche um einen eigenen Bereich für:
 15. [Quellen](#quellen)
 
 ## Dokumentation
+Zusätzliche Detaildoku zur Zeitberechnung: [docs/tournament-duration.md](docs/tournament-duration.md)
 | Dokument | Inhalt | Für wen |
 |---|---|---|
 | [docs/codebase-map.md](docs/codebase-map.md) | Vollständige technische Codebasis-Karte mit Ordnerlogik, Dateirollen, Build-/Runtime-Fluss und Diagrammen | Entwickler / Maintainer |
@@ -190,6 +191,7 @@ Tab: `Turnier`
 - Bei manuellen Änderungen an X01-Feldern springt der Preset-Status auf `Individuell`.
 
 ### Voraussichtliche Turnierzeit
+- Details zur Formel, zu den Faktoren und zur Benchmark-Basis: [docs/tournament-duration.md](docs/tournament-duration.md)
 - In der rechten Spalte unter `Teilnehmer` wird eine Live-Prognose angezeigt.
 - Die Berechnung aktualisiert sich bei jeder Änderung im Formular:
   - Teilnehmerzahl und Modus
@@ -354,6 +356,8 @@ Legende für die eingeblendeten Hilfelinks:
 - Warum: Verhindert unfaire oder versehentliche Nachauslosung während laufendem Turnier.
 
 ### Turnierzeit-Prognose
+- Details zur Berechnungsgrundlage: [docs/tournament-duration.md](docs/tournament-duration.md)
+- Das Profil kalibriert sowohl die Leg-Geschwindigkeit als auch die Zeit zwischen Matches und Turnierphasen.
 - Zeitprofil:
   - `Schnell`
   - `Normal` (empfohlen)
@@ -539,6 +543,10 @@ powershell -ExecutionPolicy Bypass -File scripts/test-runtime-contract.ps1
 - DOM-Autodetect bleibt best-effort
 
 ## Quellen
+- Turnierdauer-Benchmarks:
+  - https://www.aboutthedarts.com/how-to/calculate-the-time-required-for-your-darts-tournament/
+  - https://www.bognorregis.com/darts/
+  - https://gameandentertain.com/how-long-does-a-game-of-darts-last/
 - DRA (offizielle Regelbasis):
   - https://www.thedra.co.uk/dra-rulebook
   - [docs/DRA-RULE_BOOK.pdf](docs/DRA-RULE_BOOK.pdf)

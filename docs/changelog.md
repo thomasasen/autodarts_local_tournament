@@ -1,6 +1,10 @@
 ﻿# Changelog
 
 ## Unreleased
+- Turnierzeit-Prognose nachkalibriert:
+  - Zeitprofil beeinflusst jetzt auch Match-/Phasenübergänge statt nur die Leg-Geschwindigkeit
+  - Score-Faktoren für kurze und lange X01-Distanzen näher an externen Richtwerten ausgerichtet
+  - neue Dokumentation `docs/tournament-duration.md` mit Formel, Parametern und Benchmark-Basis
 - Turnierzeit-Prognose ergänzt:
   - neue pure Domain-Datei `src/domain/tournament-duration.js`
   - Live-Schätzung in der Turnieranlage unter `Teilnehmer`

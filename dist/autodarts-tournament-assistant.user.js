@@ -3329,16 +3329,16 @@
 // Domain layer: deterministic single-board tournament duration estimation.
 
   const TOURNAMENT_DURATION_BASE_LEG_MINUTES = 3.75;
-  const TOURNAMENT_DURATION_RESULT_ENTRY_MINUTES = 1.6;
+  const TOURNAMENT_DURATION_RESULT_ENTRY_MINUTES = 0.80;
   const TOURNAMENT_DURATION_LOW_FACTOR = 0.90;
   const TOURNAMENT_DURATION_HIGH_BASE_PADDING = 0.12;
   const TOURNAMENT_DURATION_SCORE_FACTORS = Object.freeze({
-    121: 0.55,
-    170: 0.63,
-    301: 0.80,
+    121: 0.50,
+    170: 0.58,
+    301: 0.74,
     501: 1.00,
-    701: 1.15,
-    901: 1.28,
+    701: 1.24,
+    901: 1.42,
   });
   const TOURNAMENT_DURATION_IN_FACTORS = Object.freeze({
     Straight: 1.00,
@@ -3371,6 +3371,8 @@
       label: "Schnell",
       description: "F\u00fcr z\u00fcgige Felder mit wenig Verz\u00f6gerung zwischen den Matches.",
       legPaceMultiplier: 0.88,
+      matchTransitionMinutes: 0.55,
+      phaseTransitionMultiplier: 0.90,
       highPaddingExtra: 0.00,
     }),
     [TOURNAMENT_TIME_PROFILE_NORMAL]: Object.freeze({
@@ -3378,6 +3380,8 @@
       label: "Normal",
       description: "Ausgewogener Standard f\u00fcr lokale Turniere.",
       legPaceMultiplier: 1.00,
+      matchTransitionMinutes: 0.80,
+      phaseTransitionMultiplier: 1.00,
       highPaddingExtra: 0.00,
     }),
     [TOURNAMENT_TIME_PROFILE_SLOW]: Object.freeze({
@@ -3385,6 +3389,8 @@
       label: "Langsam",
       description: "F\u00fcr gemischte Felder oder langsamere Board-Wechsel.",
       legPaceMultiplier: 1.15,
+      matchTransitionMinutes: 1.15,
+      phaseTransitionMultiplier: 1.15,
       highPaddingExtra: 0.02,
     }),
   });
@@ -3509,6 +3515,10 @@
       x01: x01Settings,
       expectedLegs: 0,
       legMinutes: 0,
+      resultEntryMinutes: TOURNAMENT_DURATION_RESULT_ENTRY_MINUTES,
+      matchTransitionMinutes: 0,
+      bullOffOverheadMinutes: 0,
+      matchOverheadMinutes: 0,
       matchMinutes: 0,
       matchCount: 0,
       phaseOverheadMinutes: 0,
@@ -3533,11 +3543,14 @@
       * (TOURNAMENT_DURATION_IN_FACTORS[x01Settings.inMode] || 1)
       * (TOURNAMENT_DURATION_OUT_FACTORS[x01Settings.outMode] || 1)
       * bullModeFactor;
-    const matchMinutes = (expectedLegs * legMinutes)
-      + TOURNAMENT_DURATION_RESULT_ENTRY_MINUTES
-      + (TOURNAMENT_DURATION_BULL_OFF_OVERHEAD[x01Settings.bullOffMode] || 0);
+    const bullOffOverheadMinutes = TOURNAMENT_DURATION_BULL_OFF_OVERHEAD[x01Settings.bullOffMode] || 0;
+    const matchOverheadMinutes = TOURNAMENT_DURATION_RESULT_ENTRY_MINUTES
+      + profile.matchTransitionMinutes
+      + bullOffOverheadMinutes;
+    const matchMinutes = (expectedLegs * legMinutes) + matchOverheadMinutes;
     const matchCount = getTournamentDurationMatchCount(mode, participantCount);
-    const phaseOverheadMinutes = getTournamentDurationPhaseOverheadMinutes(mode, participantCount);
+    const phaseOverheadMinutes = getTournamentDurationPhaseOverheadMinutes(mode, participantCount)
+      * profile.phaseTransitionMultiplier;
     const likelyMinutes = (matchCount * matchMinutes) + phaseOverheadMinutes;
     const highPadding = TOURNAMENT_DURATION_HIGH_BASE_PADDING
       + (TOURNAMENT_DURATION_MAX_ROUNDS_HIGH_PADDING[x01Settings.maxRounds] || 0)
@@ -3547,6 +3560,9 @@
     estimate.ready = true;
     estimate.expectedLegs = expectedLegs;
     estimate.legMinutes = legMinutes;
+    estimate.matchTransitionMinutes = profile.matchTransitionMinutes;
+    estimate.bullOffOverheadMinutes = bullOffOverheadMinutes;
+    estimate.matchOverheadMinutes = matchOverheadMinutes;
     estimate.matchMinutes = matchMinutes;
     estimate.matchCount = matchCount;
     estimate.phaseOverheadMinutes = phaseOverheadMinutes;

@@ -114,6 +114,83 @@ test("Tournament duration: score and profile change the likely duration", () => 
 });
 
 
+test("Tournament duration: profile also changes transition overhead", () => {
+  const fastEstimate = estimateTournamentDuration({
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(16),
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_FAST,
+  });
+  const slowEstimate = estimateTournamentDuration({
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(16),
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_SLOW,
+  });
+
+  assert(fastEstimate.matchTransitionMinutes < slowEstimate.matchTransitionMinutes, "Slow profile should add more between-match time.");
+  assert(fastEstimate.matchOverheadMinutes < slowEstimate.matchOverheadMinutes, "Slow profile should increase match overhead.");
+  assert(fastEstimate.phaseOverheadMinutes < slowEstimate.phaseOverheadMinutes, "Slow profile should also widen phase overhead.");
+});
+
+
+test("Tournament duration: start score scaling separates short and long x01 distances", () => {
+  const shortDistance = estimateTournamentDuration({
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 301,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(16),
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+  const standardDistance = estimateTournamentDuration({
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(16),
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+  const longDistance = estimateTournamentDuration({
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 701,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(16),
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  assert(shortDistance.legMinutes < standardDistance.legMinutes, "301 should be faster than 501.");
+  assert(standardDistance.legMinutes < longDistance.legMinutes, "701 should be slower than 501.");
+  assert(shortDistance.matchMinutes < standardDistance.matchMinutes, "301 should reduce match duration.");
+  assert(standardDistance.matchMinutes < longDistance.matchMinutes, "701 should increase match duration.");
+});
+
+
 test("Tournament duration: invalid participant count stays pending", () => {
   const estimate = estimateTournamentDurationFromDraft({
     mode: "groups_ko",

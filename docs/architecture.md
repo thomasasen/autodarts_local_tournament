@@ -55,6 +55,7 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
   - `tournament.ko.placement: number[]`
 
 ## Zeitprognose
+- Details zur Formel und zur externen Kalibrierung stehen in `docs/tournament-duration.md`.
 - Die Turnierzeit-Prognose lebt als pure Domain-Logik in `src/domain/tournament-duration.js`.
 - Grundlage der Schätzung:
   - Modus und Teilnehmerzahl
