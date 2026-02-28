@@ -10,20 +10,33 @@ Der Assistent erweitert die Autodarts-Oberfläche um einen eigenen Bereich für:
 - API-Halbautomatik (Start per Klick + Ergebnis-Sync)
 
 ## Inhalt
-1. [Schnellstart (empfohlen)](#schnellstart-empfohlen)
-2. [Erste Orientierung in Autodarts](#erste-orientierung-in-autodarts)
-3. [Funktionen](#funktionen)
-4. [Turniermodi](#turniermodi)
-5. [Turnier anlegen](#turnier-anlegen)
-6. [API-Halbautomatik](#api-halbautomatik)
-7. [Turnierbaum](#turnierbaum)
-8. [Import und Export](#import-und-export)
-9. [Einstellungen](#einstellungen)
-10. [Regelbasis und Limits](#regelbasis-und-limits)
-11. [Troubleshooting](#troubleshooting)
-12. [Entwicklung](#entwicklung)
-13. [Limitationen](#limitationen)
-14. [Quellen](#quellen)
+1. [Dokumentation](#dokumentation)
+2. [Schnellstart (empfohlen)](#schnellstart-empfohlen)
+3. [Erste Orientierung in Autodarts](#erste-orientierung-in-autodarts)
+4. [Funktionen](#funktionen)
+5. [Turniermodi](#turniermodi)
+6. [Turnier anlegen](#turnier-anlegen)
+7. [API-Halbautomatik](#api-halbautomatik)
+8. [Turnierbaum](#turnierbaum)
+9. [Import und Export](#import-und-export)
+10. [Einstellungen](#einstellungen)
+11. [Regelbasis und Limits](#regelbasis-und-limits)
+12. [Troubleshooting](#troubleshooting)
+13. [Entwicklung](#entwicklung)
+14. [Limitationen](#limitationen)
+15. [Quellen](#quellen)
+
+## Dokumentation
+| Dokument | Inhalt | Für wen |
+|---|---|---|
+| [docs/codebase-map.md](docs/codebase-map.md) | Vollständige technische Codebasis-Karte mit Ordnerlogik, Dateirollen, Build-/Runtime-Fluss und Diagrammen | Entwickler / Maintainer |
+| [docs/architecture.md](docs/architecture.md) | Kompakter Überblick über Schichten, Persistenz, KO-Logik, Runtime und Qualitätsbausteine | Entwickler / technischer Überblick |
+| [docs/refactor-guide.md](docs/refactor-guide.md) | Änderungsregeln, Modulgrenzen und empfohlener Build-/QA-Ablauf | Entwickler bei Änderungen |
+| [docs/selector-strategy.md](docs/selector-strategy.md) | DOM-/Selector-Strategie für die automatische Ergebnisübernahme | Entwickler für Autodetect/API-Debugging |
+| [docs/pdc-dra-compliance.md](docs/pdc-dra-compliance.md) | Überblick, welche PDC/DRA-Regelpunkte fachlich umgesetzt sind | Turnierlogik / Regelbezug |
+| [docs/dra-compliance-matrix.md](docs/dra-compliance-matrix.md) | Detailmatrix zu Regel-Mappings, Tie-Break-Profilen und Migration | Entwickler / Regel-Review |
+| [docs/dra-regeln-gui.md](docs/dra-regeln-gui.md) | GUI-bezogene Regelerklärungen für Info-/Regel-Links in der Oberfläche | Nutzer / Turnierleitung / Entwickler |
+| [docs/changelog.md](docs/changelog.md) | Historie der Releases und Funktionsänderungen | Nutzer / Entwickler |
 
 ## Schnellstart (empfohlen)
 Installationsablauf im Stil von "Schnellstart (empfohlen)" aus den Theme-Skripten:
@@ -407,6 +420,9 @@ autodarts_local_tournament/
 |  |- autodarts-tournament-assistant.user.js
 |- docs/
 |  |- architecture.md
+|  |- codebase-map.md
+|  |- dra-compliance-matrix.md
+|  |- dra-regeln-gui.md
 |  |- pdc-dra-compliance.md
 |  |- refactor-guide.md
 |  |- selector-strategy.md
@@ -415,6 +431,8 @@ autodarts_local_tournament/
 |- README.md
 |- LICENSE
 ```
+
+Die vollständige Datei- und Verbindungsdoku steht in [docs/codebase-map.md](docs/codebase-map.md).
 
 ### Hauptdateien
 - Quellcode: `src/*`
