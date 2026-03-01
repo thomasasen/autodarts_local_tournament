@@ -15,7 +15,7 @@
       ko: null,
       bestOfLegs: 3,
       startScore: 501,
-      x01: buildPdcX01Settings(),
+      x01: buildPresetX01Settings(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC),
       rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
       participants: participantList(4, "").map((entry, index) => ({ id: ["A", "B", "C", "D"][index], name: ["A", "B", "C", "D"][index] })),
       groups: [],
@@ -47,7 +47,7 @@
       ko: null,
       bestOfLegs: 3,
       startScore: 501,
-      x01: buildPdcX01Settings(),
+      x01: buildPresetX01Settings(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC),
       rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
       participants: [
         { id: "A", name: "A" },
@@ -69,4 +69,3 @@
     const blocked = rows.filter((row) => row.tiebreakState === "playoff_required");
     assertEqual(blocked.length, 3);
   });
-

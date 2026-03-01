@@ -593,6 +593,11 @@
         gap: var(--ata-space-2);
       }
 
+      .ata-form-inline-actions #ata-preset-select {
+        flex: 1 1 320px;
+        min-width: 240px;
+      }
+
       .ata-preset-pill {
         display: inline-flex;
         align-items: center;
@@ -1543,7 +1548,9 @@
   const KO_DRAW_MODE_SEEDED = "seeded";
   const KO_DRAW_MODE_OPEN_DRAW = "open_draw";
   const X01_VARIANT = "X01";
-  const X01_PRESET_PDC_STANDARD = "pdc_standard";
+  const X01_PRESET_LEGACY_PDC_STANDARD = "pdc_standard";
+  const X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL = "pdc_european_tour_official";
+  const X01_PRESET_PDC_501_DOUBLE_OUT_BASIC = "pdc_501_double_out_basic";
   const X01_PRESET_CUSTOM = "custom";
   const X01_IN_MODES = Object.freeze(["Straight", "Double", "Master"]);
   const X01_OUT_MODES = Object.freeze(["Straight", "Double", "Master"]);
@@ -1866,21 +1873,268 @@
     }
   }
 
+  // Source of truth for shipped presets:
+  // - "PDC European Tour (Official)" models the default round setup this project can represent honestly:
+  //   KO, Best of 11 Legs, 501, Straight In, Double Out.
+  // - PDC World Championship style set-play is intentionally not shipped as an "official" preset here,
+  //   because the AutoDarts lobby payload only supports legs/first-to-N, not sets.
+  function getCreatePresetDefinitions() {
+    return Object.freeze({
+      [X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL]: Object.freeze({
+        id: X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL,
+        label: "PDC European Tour (Official)",
+        shortLabel: "PDC European Tour",
+        description: "European Tour default round format: KO, Best of 11 Legs (First to 6), 501, Straight In, Double Out, Bull 25/50.",
+        notes: Object.freeze([
+          "Bull-off Normal is the AutoDarts mapping used by this preset.",
+          "Max Runden 50 remains a technical AutoDarts limit and is not part of the PDC rule claim.",
+        ]),
+        apply: Object.freeze({
+          mode: "ko",
+          bestOfLegs: 11,
+          startScore: 501,
+          x01InMode: "Straight",
+          x01OutMode: "Double",
+          x01BullMode: "25/50",
+          x01BullOffMode: "Normal",
+          x01MaxRounds: 50,
+          lobbyVisibility: "private",
+        }),
+      }),
+      [X01_PRESET_PDC_501_DOUBLE_OUT_BASIC]: Object.freeze({
+        id: X01_PRESET_PDC_501_DOUBLE_OUT_BASIC,
+        label: "PDC 501 / Double Out (Basic)",
+        shortLabel: "PDC 501 / DO Basic",
+        description: "Compatibility preset for the former 'PDC-Standard': KO, Best of 5 Legs, 501, Straight In, Double Out, Bull 25/50.",
+        notes: Object.freeze([
+          "This is not an official PDC event format.",
+          "Kept to preserve older saved drafts and tournaments without silently changing their match length.",
+        ]),
+        apply: Object.freeze({
+          mode: "ko",
+          bestOfLegs: 5,
+          startScore: 501,
+          x01InMode: "Straight",
+          x01OutMode: "Double",
+          x01BullMode: "25/50",
+          x01BullOffMode: "Normal",
+          x01MaxRounds: 50,
+          lobbyVisibility: "private",
+        }),
+      }),
+    });
+  }
+
+
+  function getCreatePresetOrder() {
+    return Object.freeze([
+      X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL,
+      X01_PRESET_PDC_501_DOUBLE_OUT_BASIC,
+    ]);
+  }
+
+
+  function getCreatePresetAliasMap() {
+    return Object.freeze({
+      [X01_PRESET_LEGACY_PDC_STANDARD]: X01_PRESET_PDC_501_DOUBLE_OUT_BASIC,
+    });
+  }
+
+
+  function getDefaultCreatePresetId() {
+    return X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL;
+  }
+
+
+  function getCreatePresetDefinition(presetId) {
+    const presetDefinitions = getCreatePresetDefinitions();
+    const normalizedPreset = normalizeText(presetId || "").toLowerCase();
+    const canonicalPreset = getCreatePresetAliasMap()[normalizedPreset] || normalizedPreset;
+    return presetDefinitions[canonicalPreset] || null;
+  }
+
+
+  function getCreatePresetCatalog() {
+    const presetDefinitions = getCreatePresetDefinitions();
+    return getCreatePresetOrder().map((presetId) => presetDefinitions[presetId]);
+  }
+
+
+  function getCreatePresetLabel(presetId) {
+    return getCreatePresetDefinition(presetId)?.label || "Individuell";
+  }
+
+
+  function buildPresetX01Settings(presetId) {
+    const preset = getCreatePresetDefinition(presetId);
+    if (!preset) {
+      return null;
+    }
+    const apply = preset.apply;
+    return {
+      presetId: preset.id,
+      variant: X01_VARIANT,
+      baseScore: apply.startScore,
+      inMode: apply.x01InMode,
+      outMode: apply.x01OutMode,
+      bullMode: apply.x01BullMode,
+      maxRounds: apply.x01MaxRounds,
+      bullOffMode: apply.x01BullOffMode,
+      lobbyVisibility: apply.lobbyVisibility,
+    };
+  }
+
+
+  function buildExplicitX01Settings(rawInput, fallbackStartScore = 501) {
+    const input = rawInput && typeof rawInput === "object" ? rawInput : {};
+    return {
+      presetId: X01_PRESET_CUSTOM,
+      variant: X01_VARIANT,
+      baseScore: sanitizeStartScore(input.baseScore ?? fallbackStartScore),
+      inMode: sanitizeX01InMode(input.inMode),
+      outMode: sanitizeX01OutMode(input.outMode),
+      bullMode: sanitizeX01BullMode(input.bullMode),
+      maxRounds: sanitizeX01MaxRounds(input.maxRounds),
+      bullOffMode: sanitizeX01BullOffMode(input.bullOffMode || input.bullOff),
+      lobbyVisibility: sanitizeLobbyVisibility(input.lobbyVisibility ?? input.isPrivate),
+    };
+  }
+
+
+  function isSameX01Settings(left, right) {
+    return Boolean(left && right)
+      && left.baseScore === right.baseScore
+      && left.inMode === right.inMode
+      && left.outMode === right.outMode
+      && left.bullMode === right.bullMode
+      && left.maxRounds === right.maxRounds
+      && left.bullOffMode === right.bullOffMode
+      && left.lobbyVisibility === right.lobbyVisibility;
+  }
+
+
+  function matchesPresetX01Settings(input, presetId) {
+    const presetX01 = buildPresetX01Settings(presetId);
+    if (!presetX01) {
+      return false;
+    }
+    const fallbackStartScore = input?.baseScore ?? input?.startScore ?? presetX01.baseScore;
+    const normalized = buildExplicitX01Settings({
+      baseScore: input?.baseScore ?? input?.startScore,
+      inMode: input?.inMode ?? input?.x01InMode,
+      outMode: input?.outMode ?? input?.x01OutMode,
+      bullMode: input?.bullMode ?? input?.x01BullMode,
+      maxRounds: input?.maxRounds ?? input?.x01MaxRounds,
+      bullOffMode: input?.bullOffMode ?? input?.x01BullOffMode,
+      lobbyVisibility: input?.lobbyVisibility,
+    }, fallbackStartScore);
+    return isSameX01Settings(normalized, presetX01);
+  }
+
+
+  function matchesCreatePresetSetup(input, presetId) {
+    const preset = getCreatePresetDefinition(presetId);
+    if (!preset) {
+      return false;
+    }
+    const apply = preset.apply;
+    const mode = normalizeText(input?.mode || "").toLowerCase();
+    if (mode !== apply.mode) {
+      return false;
+    }
+    if (sanitizeBestOf(input?.bestOfLegs) !== apply.bestOfLegs) {
+      return false;
+    }
+    const x01Input = input?.x01 && typeof input.x01 === "object"
+      ? input.x01
+      : input;
+    return matchesPresetX01Settings(x01Input, preset.id);
+  }
+
+
+  function validateCreatePresetDefinitions() {
+    return getCreatePresetCatalog().map((preset) => {
+      const apply = preset.apply || {};
+      const issues = [];
+      const normalizedX01 = buildExplicitX01Settings({
+        baseScore: apply.startScore,
+        inMode: apply.x01InMode,
+        outMode: apply.x01OutMode,
+        bullMode: apply.x01BullMode,
+        maxRounds: apply.x01MaxRounds,
+        bullOffMode: apply.x01BullOffMode,
+        lobbyVisibility: apply.lobbyVisibility,
+      }, apply.startScore);
+
+      if (!normalizeText(preset.id)) {
+        issues.push("missing id");
+      }
+      if (!normalizeText(preset.label)) {
+        issues.push("missing label");
+      }
+      if (!normalizeText(preset.description)) {
+        issues.push("missing description");
+      }
+      if (!Array.isArray(preset.notes) || !preset.notes.length) {
+        issues.push("missing notes");
+      }
+      if (apply.mode !== "ko") {
+        issues.push("mode must be ko");
+      }
+      if (sanitizeBestOf(apply.bestOfLegs) !== apply.bestOfLegs) {
+        issues.push("invalid bestOfLegs");
+      }
+      if (normalizedX01.baseScore !== apply.startScore) {
+        issues.push("invalid startScore");
+      }
+      if (normalizedX01.inMode !== apply.x01InMode) {
+        issues.push("invalid in mode");
+      }
+      if (normalizedX01.outMode !== apply.x01OutMode) {
+        issues.push("invalid out mode");
+      }
+      if (normalizedX01.bullMode !== apply.x01BullMode) {
+        issues.push("invalid bull mode");
+      }
+      if (normalizedX01.maxRounds !== apply.x01MaxRounds) {
+        issues.push("invalid max rounds");
+      }
+      if (normalizedX01.bullOffMode !== apply.x01BullOffMode) {
+        issues.push("invalid bull-off mode");
+      }
+      if (normalizedX01.lobbyVisibility !== apply.lobbyVisibility) {
+        issues.push("invalid lobby visibility");
+      }
+      if (!isSameX01Settings(buildPresetX01Settings(preset.id), normalizedX01)) {
+        issues.push("preset x01 projection failed");
+      }
+
+      return {
+        id: preset.id,
+        ok: issues.length === 0,
+        issues,
+      };
+    });
+  }
+
+
   function createDefaultCreateDraft(settings = null) {
     const defaultRandomize = settings?.featureFlags?.randomizeKoRound1 !== false;
-    const pdcSettings = buildPdcX01Settings();
+    const defaultPresetId = getDefaultCreatePresetId();
+    const presetX01 = buildPresetX01Settings(defaultPresetId);
+    const apply = getCreatePresetDefinition(defaultPresetId)?.apply || {};
     return {
       name: "",
-      mode: "ko",
-      bestOfLegs: 5,
-      startScore: pdcSettings.baseScore,
-      x01Preset: pdcSettings.presetId,
-      x01InMode: pdcSettings.inMode,
-      x01OutMode: pdcSettings.outMode,
-      x01BullMode: pdcSettings.bullMode,
-      x01MaxRounds: pdcSettings.maxRounds,
-      x01BullOffMode: pdcSettings.bullOffMode,
-      lobbyVisibility: pdcSettings.lobbyVisibility,
+      mode: apply.mode || "ko",
+      bestOfLegs: apply.bestOfLegs || 11,
+      startScore: presetX01?.baseScore || 501,
+      x01Preset: defaultPresetId,
+      x01InMode: presetX01?.inMode || "Straight",
+      x01OutMode: presetX01?.outMode || "Double",
+      x01BullMode: presetX01?.bullMode || "25/50",
+      x01MaxRounds: presetX01?.maxRounds || 50,
+      x01BullOffMode: presetX01?.bullOffMode || "Normal",
+      lobbyVisibility: presetX01?.lobbyVisibility || "private",
       participantsText: "",
       randomizeKoRound1: Boolean(defaultRandomize),
     };
@@ -1889,32 +2143,34 @@
 
   function normalizeCreateDraft(rawDraft, settings = null) {
     const base = createDefaultCreateDraft(settings);
-    const modeRaw = normalizeText(rawDraft?.mode || base.mode);
-    const mode = ["ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : base.mode;
     const hasDraftObject = rawDraft && typeof rawDraft === "object";
     const hasExplicitPreset = hasDraftObject && Object.prototype.hasOwnProperty.call(rawDraft, "x01Preset");
-    const rawPreset = hasExplicitPreset
-      ? sanitizeX01Preset(rawDraft?.x01Preset, base.x01Preset)
+    const requestedPresetId = hasExplicitPreset
+      ? sanitizeX01Preset(rawDraft?.x01Preset, X01_PRESET_CUSTOM)
       : (hasDraftObject ? X01_PRESET_CUSTOM : base.x01Preset);
-    let x01Settings = normalizeTournamentX01Settings({
-      presetId: rawPreset,
-      baseScore: rawDraft?.startScore ?? base.startScore,
-      inMode: rawDraft?.x01InMode ?? base.x01InMode,
-      outMode: rawDraft?.x01OutMode ?? base.x01OutMode,
-      bullMode: rawDraft?.x01BullMode ?? base.x01BullMode,
-      maxRounds: rawDraft?.x01MaxRounds ?? base.x01MaxRounds,
-      bullOffMode: rawDraft?.x01BullOffMode ?? base.x01BullOffMode,
-      lobbyVisibility: rawDraft?.lobbyVisibility ?? base.lobbyVisibility,
-    }, rawDraft?.startScore ?? base.startScore);
-    if (rawPreset === X01_PRESET_PDC_STANDARD) {
-      x01Settings = buildPdcX01Settings();
-    }
-    return {
+    const requestedPreset = getCreatePresetDefinition(requestedPresetId);
+    const presetApply = requestedPreset?.apply || null;
+    const modeFallback = presetApply?.mode || base.mode;
+    const modeRaw = normalizeText(rawDraft?.mode ?? modeFallback);
+    const mode = ["ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : modeFallback;
+    const bestOfFallback = presetApply?.bestOfLegs ?? base.bestOfLegs;
+    const startScoreFallback = presetApply?.startScore ?? base.startScore;
+    const x01Settings = normalizeTournamentX01Settings({
+      presetId: X01_PRESET_CUSTOM,
+      baseScore: rawDraft?.startScore ?? startScoreFallback,
+      inMode: rawDraft?.x01InMode ?? presetApply?.x01InMode ?? base.x01InMode,
+      outMode: rawDraft?.x01OutMode ?? presetApply?.x01OutMode ?? base.x01OutMode,
+      bullMode: rawDraft?.x01BullMode ?? presetApply?.x01BullMode ?? base.x01BullMode,
+      maxRounds: rawDraft?.x01MaxRounds ?? presetApply?.x01MaxRounds ?? base.x01MaxRounds,
+      bullOffMode: rawDraft?.x01BullOffMode ?? presetApply?.x01BullOffMode ?? base.x01BullOffMode,
+      lobbyVisibility: rawDraft?.lobbyVisibility ?? presetApply?.lobbyVisibility ?? base.lobbyVisibility,
+    }, rawDraft?.startScore ?? startScoreFallback);
+    const draft = {
       name: normalizeText(rawDraft?.name || base.name),
       mode,
-      bestOfLegs: sanitizeBestOf(rawDraft?.bestOfLegs ?? base.bestOfLegs),
+      bestOfLegs: sanitizeBestOf(rawDraft?.bestOfLegs ?? bestOfFallback),
       startScore: x01Settings.baseScore,
-      x01Preset: x01Settings.presetId,
+      x01Preset: X01_PRESET_CUSTOM,
       x01InMode: x01Settings.inMode,
       x01OutMode: x01Settings.outMode,
       x01BullMode: x01Settings.bullMode,
@@ -1926,6 +2182,12 @@
         ? rawDraft.randomizeKoRound1
         : base.randomizeKoRound1,
     };
+    if (requestedPreset && matchesCreatePresetSetup(draft, requestedPreset.id)) {
+      draft.x01Preset = requestedPreset.id;
+    } else if (!hasDraftObject) {
+      draft.x01Preset = base.x01Preset;
+    }
+    return draft;
   }
 
 
@@ -2001,10 +2263,14 @@
   }
 
 
-  function sanitizeX01Preset(value, fallback = X01_PRESET_PDC_STANDARD) {
+  function sanitizeX01Preset(value, fallback = getDefaultCreatePresetId()) {
     const preset = normalizeText(value || "").toLowerCase();
-    if (preset === X01_PRESET_CUSTOM || preset === X01_PRESET_PDC_STANDARD) {
+    if (preset === X01_PRESET_CUSTOM) {
       return preset;
+    }
+    const canonicalPreset = getCreatePresetAliasMap()[preset] || preset;
+    if (getCreatePresetDefinitions()[canonicalPreset]) {
+      return canonicalPreset;
     }
     return fallback;
   }
@@ -2092,89 +2358,49 @@
   }
 
 
-  function buildPdcX01Settings() {
-    return {
-      presetId: X01_PRESET_PDC_STANDARD,
-      variant: X01_VARIANT,
-      baseScore: 501,
-      inMode: "Straight",
-      outMode: "Double",
-      bullMode: "25/50",
-      maxRounds: 50,
-      bullOffMode: "Normal",
-      lobbyVisibility: "private",
-    };
-  }
-
-
   function normalizeTournamentX01Settings(rawX01, fallbackStartScore = 501) {
     const hasRawObject = rawX01 && typeof rawX01 === "object";
     const input = hasRawObject ? rawX01 : {};
     const rawPreset = normalizeText(input.presetId || input.preset || "").toLowerCase();
     const hasExplicitPreset = Boolean(rawPreset);
     const presetId = hasExplicitPreset ? sanitizeX01Preset(rawPreset, X01_PRESET_CUSTOM) : X01_PRESET_CUSTOM;
-
-    if (presetId === X01_PRESET_PDC_STANDARD) {
-      return buildPdcX01Settings();
-    }
-
-    return {
-      presetId: X01_PRESET_CUSTOM,
-      variant: X01_VARIANT,
-      baseScore: sanitizeStartScore(input.baseScore ?? fallbackStartScore),
-      inMode: sanitizeX01InMode(input.inMode),
-      outMode: sanitizeX01OutMode(input.outMode),
-      bullMode: sanitizeX01BullMode(input.bullMode),
-      maxRounds: sanitizeX01MaxRounds(input.maxRounds),
-      bullOffMode: sanitizeX01BullOffMode(input.bullOffMode || input.bullOff),
-      lobbyVisibility: sanitizeLobbyVisibility(input.lobbyVisibility ?? input.isPrivate),
-    };
-  }
-
-
-  function isPdcX01Settings(input) {
-    const pdc = buildPdcX01Settings();
-    const fallbackStartScore = input?.baseScore ?? input?.startScore ?? pdc.baseScore;
-    const normalized = normalizeTournamentX01Settings({
-      presetId: X01_PRESET_CUSTOM,
-      baseScore: fallbackStartScore,
-      inMode: input?.inMode ?? input?.x01InMode,
-      outMode: input?.outMode ?? input?.x01OutMode,
-      bullMode: input?.bullMode ?? input?.x01BullMode,
-      maxRounds: input?.maxRounds ?? input?.x01MaxRounds,
-      bullOffMode: input?.bullOffMode ?? input?.x01BullOffMode,
-      lobbyVisibility: input?.lobbyVisibility,
-    }, fallbackStartScore);
-    return normalized.baseScore === pdc.baseScore
-      && normalized.inMode === pdc.inMode
-      && normalized.outMode === pdc.outMode
-      && normalized.bullMode === pdc.bullMode
-      && normalized.maxRounds === pdc.maxRounds
-      && normalized.bullOffMode === pdc.bullOffMode
-      && normalized.lobbyVisibility === pdc.lobbyVisibility;
-  }
-
-
-  function isPdcCompliantMatchSetup(input) {
-    const mode = normalizeText(input?.mode || "").toLowerCase();
-    if (mode !== "ko") {
-      return false;
-    }
-    if (sanitizeBestOf(input?.bestOfLegs) < 3) {
-      return false;
-    }
-    const x01Input = input?.x01 && typeof input.x01 === "object"
-      ? input.x01
-      : {
-        baseScore: input?.startScore ?? input?.baseScore,
-        inMode: input?.x01InMode ?? input?.inMode,
-        outMode: input?.x01OutMode ?? input?.outMode,
-        bullMode: input?.x01BullMode ?? input?.bullMode,
-        maxRounds: input?.x01MaxRounds ?? input?.maxRounds,
-        bullOffMode: input?.x01BullOffMode ?? input?.bullOffMode,
-        lobbyVisibility: input?.lobbyVisibility,
+    const presetX01 = buildPresetX01Settings(presetId);
+    const normalized = buildExplicitX01Settings({
+      baseScore: input.baseScore ?? presetX01?.baseScore ?? fallbackStartScore,
+      inMode: input.inMode ?? presetX01?.inMode,
+      outMode: input.outMode ?? presetX01?.outMode,
+      bullMode: input.bullMode ?? presetX01?.bullMode,
+      maxRounds: input.maxRounds ?? presetX01?.maxRounds,
+      bullOffMode: input.bullOffMode || input.bullOff || presetX01?.bullOffMode,
+      lobbyVisibility: input.lobbyVisibility ?? input.isPrivate ?? presetX01?.lobbyVisibility,
+    }, input.baseScore ?? presetX01?.baseScore ?? fallbackStartScore);
+    if (presetX01 && isSameX01Settings(normalized, presetX01)) {
+      return {
+        ...presetX01,
+        presetId,
       };
-    return isPdcX01Settings(x01Input);
+    }
+    return normalized;
+  }
+
+
+  function isEuropeanTourOfficialMatchSetup(input) {
+    return matchesCreatePresetSetup(input, X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL);
+  }
+
+
+  function getAppliedCreatePresetId(input) {
+    const requestedPresetId = sanitizeX01Preset(
+      input?.x01Preset ?? input?.presetId ?? input?.x01?.presetId,
+      X01_PRESET_CUSTOM,
+    );
+    const requestedPreset = getCreatePresetDefinition(requestedPresetId);
+    if (!requestedPreset) {
+      return X01_PRESET_CUSTOM;
+    }
+    return matchesCreatePresetSetup(input, requestedPreset.id)
+      ? requestedPreset.id
+      : X01_PRESET_CUSTOM;
   }
 
 
@@ -5731,7 +5957,32 @@
     }
 
     try {
-      const compliant = isPdcCompliantMatchSetup({
+      const presetChecks = validateCreatePresetDefinitions();
+      const europeanTourPreset = getCreatePresetDefinition(X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL);
+      record(
+        "Preset-Schema: European Tour + Basic vollständig validiert",
+        presetChecks.every((entry) => entry.ok)
+          && europeanTourPreset?.apply?.bestOfLegs === 11
+          && europeanTourPreset?.apply?.startScore === 501,
+        presetChecks.map((entry) => `${entry.id}:${entry.ok ? "ok" : entry.issues.join("/")}`).join(", "),
+      );
+    } catch (error) {
+      record("Preset-Schema: European Tour + Basic vollständig validiert", false, String(error?.message || error));
+    }
+
+    try {
+      const compliant = isEuropeanTourOfficialMatchSetup({
+        mode: "ko",
+        bestOfLegs: 11,
+        startScore: 501,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+      });
+      const wrongBestOf = isEuropeanTourOfficialMatchSetup({
         mode: "ko",
         bestOfLegs: 5,
         startScore: 501,
@@ -5742,24 +5993,53 @@
         x01BullOffMode: "Normal",
         lobbyVisibility: "private",
       });
-      const notCompliantBestOfOne = isPdcCompliantMatchSetup({
-        mode: "ko",
-        bestOfLegs: 1,
-        startScore: 501,
-        x01InMode: "Straight",
-        x01OutMode: "Double",
-        x01BullMode: "25/50",
-        x01MaxRounds: 50,
-        x01BullOffMode: "Normal",
-        lobbyVisibility: "private",
-      });
       record(
-        "PDC-Setup: KO + Best of >=3 + PDC-X01 erforderlich",
-        compliant && !notCompliantBestOfOne,
-        `compliant=${compliant}, bo1=${notCompliantBestOfOne}`,
+        "Preset-Setup: European Tour Official erfordert KO + Best of 11 + 501/SI/DO",
+        compliant && !wrongBestOf,
+        `official=${compliant}, wrongBestOf=${wrongBestOf}`,
       );
     } catch (error) {
-      record("PDC-Setup: KO + Best of >=3 + PDC-X01 erforderlich", false, String(error?.message || error));
+      record("Preset-Setup: European Tour Official erfordert KO + Best of 11 + 501/SI/DO", false, String(error?.message || error));
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      const previousDraft = cloneSerializable(state.store.ui?.createDraft);
+      try {
+        state.store.tournament = null;
+        state.store.ui.createDraft = createDefaultCreateDraft(state.store.settings);
+        renderShell();
+        const createForm = state.shadowRoot?.getElementById("ata-create-form");
+        const presetSelect = createForm?.querySelector("#ata-preset-select");
+        if (!(createForm instanceof HTMLFormElement) || !(presetSelect instanceof HTMLSelectElement)) {
+          throw new Error("Create form or preset select missing.");
+        }
+        presetSelect.value = X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL;
+        applySelectedPresetToCreateForm(createForm);
+        const europeanTourDraft = normalizeCreateDraft(readCreateDraftInput(new FormData(createForm)), state.store.settings);
+
+        presetSelect.value = X01_PRESET_PDC_501_DOUBLE_OUT_BASIC;
+        applySelectedPresetToCreateForm(createForm);
+        const basicDraft = normalizeCreateDraft(readCreateDraftInput(new FormData(createForm)), state.store.settings);
+
+        record(
+          "Preset-UI: Auswahl + Anwenden setzt alle Formularfelder konsistent",
+          europeanTourDraft.x01Preset === X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL
+            && europeanTourDraft.mode === "ko"
+            && europeanTourDraft.bestOfLegs === 11
+            && basicDraft.x01Preset === X01_PRESET_PDC_501_DOUBLE_OUT_BASIC
+            && basicDraft.bestOfLegs === 5
+            && basicDraft.startScore === 501
+            && basicDraft.x01OutMode === "Double",
+          `et=${europeanTourDraft.bestOfLegs}/${europeanTourDraft.x01Preset}, basic=${basicDraft.bestOfLegs}/${basicDraft.x01Preset}`,
+        );
+      } catch (error) {
+        record("Preset-UI: Auswahl + Anwenden setzt alle Formularfelder konsistent", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+        state.store.ui.createDraft = previousDraft || createDefaultCreateDraft(state.store.settings);
+        renderShell();
+      }
     }
 
     try {
@@ -5830,7 +6110,7 @@
         mode: "ko",
         bestOfLegs: 3,
         startScore: 501,
-        x01Preset: X01_PRESET_PDC_STANDARD,
+        x01Preset: X01_PRESET_CUSTOM,
         x01InMode: "Straight",
         x01OutMode: "Double",
         x01BullMode: "25/50",
@@ -5860,7 +6140,7 @@
         mode: "ko",
         bestOfLegs: 3,
         startScore: 501,
-        x01Preset: X01_PRESET_PDC_STANDARD,
+        x01Preset: X01_PRESET_CUSTOM,
         x01InMode: "Straight",
         x01OutMode: "Double",
         x01BullMode: "25/50",
@@ -5901,7 +6181,7 @@
         ko: null,
         bestOfLegs: 3,
         startScore: 501,
-        x01: buildPdcX01Settings(),
+        x01: buildPresetX01Settings(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC),
         rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
         participants: [
           { id: "A", name: "A" },
@@ -5937,7 +6217,7 @@
         mode: "groups_ko",
         bestOfLegs: 3,
         startScore: 501,
-        x01Preset: X01_PRESET_PDC_STANDARD,
+        x01Preset: X01_PRESET_CUSTOM,
         x01InMode: "Straight",
         x01OutMode: "Double",
         x01BullMode: "25/50",
@@ -5985,7 +6265,7 @@
         ko: null,
         bestOfLegs: 3,
         startScore: 501,
-        x01: buildPdcX01Settings(),
+        x01: buildPresetX01Settings(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC),
         rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
         participants: [
           { id: "A", name: "A" },
@@ -6135,7 +6415,7 @@
           ko: null,
           bestOfLegs: 3,
           startScore: 501,
-          x01: buildPdcX01Settings(),
+          x01: buildPresetX01Settings(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC),
           rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
           participants: [
             { id: "P1", name: "Tanja Mueller" },
@@ -6204,7 +6484,7 @@
           ko: null,
           bestOfLegs: 1,
           startScore: 501,
-          x01: buildPdcX01Settings(),
+          x01: buildPresetX01Settings(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC),
           rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
           participants: [
             { id: "P1", name: "Tommy" },
@@ -6281,7 +6561,7 @@
           mode: "league",
           bestOfLegs: 3,
           startScore: 501,
-          x01: buildPdcX01Settings(),
+          x01: buildPresetX01Settings(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC),
           participants: [{ id: "A", name: "A" }, { id: "B", name: "B" }],
           groups: [],
           matches: [],
@@ -6299,7 +6579,7 @@
         `schema=${migrated.schemaVersion}, profile=${migrated.tournament?.rules?.tieBreakProfile}`,
       );
     } catch (error) {
-      record("Migration: v2 -> v3 setzt Tie-Break-Regeln", false, String(error?.message || error));
+      record("Migration: v2 -> v4 setzt Tie-Break-Profil", false, String(error?.message || error));
     }
 
     const passed = results.filter((entry) => entry.ok).length;
@@ -8936,10 +9216,14 @@
         `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${score}</option>`
       )).join("");
       const durationEstimate = estimateTournamentDurationFromDraft(draft, state.store.settings);
-      const pdcCompliantSetup = isPdcCompliantMatchSetup(draft);
-      const pdcPresetActive = draft.x01Preset === X01_PRESET_PDC_STANDARD && pdcCompliantSetup;
-      const presetStatusLabel = pdcPresetActive ? "Preset aktiv: PDC-Standard" : "Preset aktiv: Individuell";
-      const pdcPresetHint = "PDC-Preset setzt KO, Best of 5, 501, Straight In, Double Out, Bull-off Normal, Bull 25/50 und Max. Runden 50.";
+      const activePresetId = getAppliedCreatePresetId(draft);
+      const presetStatusLabel = `Preset aktiv: ${getCreatePresetLabel(activePresetId)}`;
+      const presetOptions = [
+        ...getCreatePresetCatalog().map((preset) => (
+          `<option value="${preset.id}" ${draft.x01Preset === preset.id ? "selected" : ""}>${escapeHtml(preset.label)}</option>`
+        )),
+        `<option value="${X01_PRESET_CUSTOM}" ${draft.x01Preset === X01_PRESET_CUSTOM ? "selected" : ""}>Individuell / Manuell</option>`,
+      ].join("");
       const bullModeDisabled = draft.x01BullOffMode === "Off";
       const bullModeDisabledAttr = bullModeDisabled ? "disabled" : "";
       const bullModeHiddenInput = bullModeDisabled
@@ -9040,9 +9324,12 @@
                     <span id="ata-lobby-fixed" class="ata-field-readonly">Privat</span>
                   </div>
                   <div class="ata-field ata-field-span-3">
-                    <label for="ata-apply-pdc-preset">Preset</label>
+                    <label for="ata-preset-select">Preset</label>
                     <div class="ata-form-inline-actions">
-                      <button id="ata-apply-pdc-preset" type="button" class="ata-btn ata-btn-sm" data-action="apply-pdc-preset">PDC-Preset anwenden</button>
+                      <select id="ata-preset-select" data-role="preset-select" aria-label="Preset auswählen">
+                        ${presetOptions}
+                      </select>
+                      <button id="ata-apply-preset" type="button" class="ata-btn ata-btn-sm" data-action="apply-selected-preset">Preset anwenden</button>
                       <span class="ata-preset-pill">${escapeHtml(presetStatusLabel)}</span>
                     </div>
                   </div>
@@ -9054,8 +9341,9 @@
                   </div>
                   <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
                 </div>
-                <p class="ata-small ata-create-help">${escapeHtml(pdcPresetHint)}</p>
-                <p class="ata-small ata-create-help">Best of 1 ist kein PDC-Standardprofil; für das Badge gilt Best of mindestens 3 Legs.</p>
+                <p class="ata-small ata-create-help">PDC European Tour (Official): KO, Best of 11 Legs (First to 6), 501, Straight In, Double Out, Bull 25/50. Bull-off Normal und Max Runden 50 bleiben technische AutoDarts-Werte.</p>
+                <p class="ata-small ata-create-help">PDC 501 / Double Out (Basic): kompatibler Ersatz für das frühere irreführende „PDC-Standard“-Preset. Ehrlich benannt, aber kein offizielles PDC-Eventformat.</p>
+                <p class="ata-small ata-create-help">PDC World Championship im echten Set-Format wird bewusst nicht als offizielles Preset angeboten, weil AutoDarts hier nur Legs / First to N unterstützt.</p>
                 <p class="ata-small ata-create-help">Bull-off = Off deaktiviert Bull-Modus automatisch (schreibgesch\u00fctzt).</p>
               </div>
               <aside class="ata-create-side">
@@ -9090,7 +9378,8 @@
     )).join("");
     const participantsCount = tournament.participants.length;
     const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
-    const x01PresetLabel = x01Settings.presetId === X01_PRESET_PDC_STANDARD ? "PDC-Standard" : "Individuell";
+    const activePresetId = getAppliedCreatePresetId(tournament);
+    const x01PresetLabel = getCreatePresetLabel(activePresetId);
     const x01BullModeLabel = x01Settings.bullOffMode === "Off"
       ? "Bull-Modus deaktiviert"
       : `Bull-Modus ${x01Settings.bullMode}`;
@@ -9110,7 +9399,7 @@
         : []),
     ];
     const x01Tags = [
-      { text: `X01 ${x01PresetLabel}`, cls: "ata-info-tag ata-info-tag-key" },
+      { text: `Preset ${x01PresetLabel}`, cls: "ata-info-tag ata-info-tag-key" },
       { text: `${x01Settings.inMode} In`, cls: "ata-info-tag" },
       { text: `${x01Settings.outMode} Out`, cls: "ata-info-tag" },
       { text: `Bull-off ${x01Settings.bullOffMode}`, cls: "ata-info-tag" },
@@ -9847,10 +10136,10 @@
         handleCreateTournament(createForm);
       });
 
-      const applyPresetButton = createForm.querySelector("[data-action='apply-pdc-preset']");
+      const applyPresetButton = createForm.querySelector("[data-action='apply-selected-preset']");
       if (applyPresetButton instanceof HTMLButtonElement) {
         applyPresetButton.addEventListener("click", () => {
-          applyPdcPresetToCreateForm(createForm);
+          applySelectedPresetToCreateForm(createForm);
         });
       }
     }
@@ -10106,11 +10395,15 @@
       return;
     }
     const presetInput = form.querySelector("#ata-x01-preset");
+    const presetSelect = form.querySelector("#ata-preset-select");
     if (!(presetInput instanceof HTMLInputElement)) {
       return;
     }
     const normalizedPreset = sanitizeX01Preset(presetId, X01_PRESET_CUSTOM);
     presetInput.value = normalizedPreset;
+    if (presetSelect instanceof HTMLSelectElement) {
+      presetSelect.value = normalizedPreset;
+    }
   }
 
 
@@ -10123,18 +10416,11 @@
     if (!(presetInput instanceof HTMLInputElement) || !(presetBadge instanceof HTMLElement)) {
       return;
     }
-    let presetId = sanitizeX01Preset(presetInput.value, X01_PRESET_CUSTOM);
-    if (presetId === X01_PRESET_PDC_STANDARD) {
-      const formData = new FormData(form);
-      const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
-      if (!isPdcCompliantMatchSetup(draft)) {
-        presetId = X01_PRESET_CUSTOM;
-        presetInput.value = presetId;
-      }
-    }
-    presetBadge.textContent = presetId === X01_PRESET_PDC_STANDARD
-      ? "Preset aktiv: PDC-Standard"
-      : "Preset aktiv: Individuell";
+    const formData = new FormData(form);
+    const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
+    const presetId = getAppliedCreatePresetId(draft);
+    presetInput.value = presetId;
+    presetBadge.textContent = `Preset aktiv: ${getCreatePresetLabel(presetId)}`;
   }
 
 
@@ -10173,22 +10459,34 @@
   }
 
 
-  function applyPdcPresetToCreateForm(form) {
+  function applySelectedPresetToCreateForm(form) {
     if (!(form instanceof HTMLFormElement)) {
       return;
     }
-    const pdcSettings = buildPdcX01Settings();
-    const pdcMode = "ko";
-    const pdcBestOfLegs = 5;
+    const presetSelect = form.querySelector("#ata-preset-select");
+    if (!(presetSelect instanceof HTMLSelectElement)) {
+      return;
+    }
+    const presetId = sanitizeX01Preset(presetSelect.value, X01_PRESET_CUSTOM);
+    const preset = getCreatePresetDefinition(presetId);
+    if (!preset) {
+      setCreateFormPresetValue(form, X01_PRESET_CUSTOM);
+      syncCreateFormDependencies(form);
+      updateCreateDraftFromForm(form, true);
+      refreshCreateFormDurationEstimate(form);
+      setNotice("info", "Individuelles Preset bleibt aktiv; Felder wurden nicht überschrieben.", 2400);
+      return;
+    }
+    const apply = preset.apply;
     const assignments = [
-      ["#ata-mode", pdcMode],
-      ["#ata-bestof", String(pdcBestOfLegs)],
-      ["#ata-startscore", String(pdcSettings.baseScore)],
-      ["#ata-x01-inmode", pdcSettings.inMode],
-      ["#ata-x01-outmode", pdcSettings.outMode],
-      ["#ata-x01-bullmode", pdcSettings.bullMode],
-      ["#ata-x01-bulloff", pdcSettings.bullOffMode],
-      ["#ata-x01-maxrounds", String(pdcSettings.maxRounds)],
+      ["#ata-mode", apply.mode],
+      ["#ata-bestof", String(apply.bestOfLegs)],
+      ["#ata-startscore", String(apply.startScore)],
+      ["#ata-x01-inmode", apply.x01InMode],
+      ["#ata-x01-outmode", apply.x01OutMode],
+      ["#ata-x01-bullmode", apply.x01BullMode],
+      ["#ata-x01-bulloff", apply.x01BullOffMode],
+      ["#ata-x01-maxrounds", String(apply.x01MaxRounds)],
     ];
 
     assignments.forEach(([selector, value]) => {
@@ -10198,11 +10496,11 @@
       }
     });
 
-    setCreateFormPresetValue(form, X01_PRESET_PDC_STANDARD);
+    setCreateFormPresetValue(form, preset.id);
     syncCreateFormDependencies(form);
     updateCreateDraftFromForm(form, true);
     refreshCreateFormDurationEstimate(form);
-    setNotice("info", "PDC-Preset wurde auf KO, Best of 5 und die X01-Felder angewendet.", 2400);
+    setNotice("info", `Preset „${preset.label}“ wurde auf alle Turnierfelder angewendet.`, 2600);
   }
 
 

@@ -538,6 +538,11 @@
         gap: var(--ata-space-2);
       }
 
+      .ata-form-inline-actions #ata-preset-select {
+        flex: 1 1 320px;
+        min-width: 240px;
+      }
+
       .ata-preset-pill {
         display: inline-flex;
         align-items: center;

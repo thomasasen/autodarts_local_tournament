@@ -67,7 +67,9 @@
   const KO_DRAW_MODE_SEEDED = "seeded";
   const KO_DRAW_MODE_OPEN_DRAW = "open_draw";
   const X01_VARIANT = "X01";
-  const X01_PRESET_PDC_STANDARD = "pdc_standard";
+  const X01_PRESET_LEGACY_PDC_STANDARD = "pdc_standard";
+  const X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL = "pdc_european_tour_official";
+  const X01_PRESET_PDC_501_DOUBLE_OUT_BASIC = "pdc_501_double_out_basic";
   const X01_PRESET_CUSTOM = "custom";
   const X01_IN_MODES = Object.freeze(["Straight", "Double", "Master"]);
   const X01_OUT_MODES = Object.freeze(["Straight", "Double", "Master"]);

@@ -59,7 +59,7 @@ test("Tournament duration: groups + KO uses current two-group bracket logic", ()
     mode: "groups_ko",
     bestOfLegs: 5,
     startScore: 501,
-    x01Preset: X01_PRESET_PDC_STANDARD,
+    x01Preset: X01_PRESET_PDC_501_DOUBLE_OUT_BASIC,
     x01InMode: "Straight",
     x01OutMode: "Double",
     x01BullMode: "25/50",

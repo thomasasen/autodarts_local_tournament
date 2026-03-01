@@ -9,10 +9,14 @@
         `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${score}</option>`
       )).join("");
       const durationEstimate = estimateTournamentDurationFromDraft(draft, state.store.settings);
-      const pdcCompliantSetup = isPdcCompliantMatchSetup(draft);
-      const pdcPresetActive = draft.x01Preset === X01_PRESET_PDC_STANDARD && pdcCompliantSetup;
-      const presetStatusLabel = pdcPresetActive ? "Preset aktiv: PDC-Standard" : "Preset aktiv: Individuell";
-      const pdcPresetHint = "PDC-Preset setzt KO, Best of 5, 501, Straight In, Double Out, Bull-off Normal, Bull 25/50 und Max. Runden 50.";
+      const activePresetId = getAppliedCreatePresetId(draft);
+      const presetStatusLabel = `Preset aktiv: ${getCreatePresetLabel(activePresetId)}`;
+      const presetOptions = [
+        ...getCreatePresetCatalog().map((preset) => (
+          `<option value="${preset.id}" ${draft.x01Preset === preset.id ? "selected" : ""}>${escapeHtml(preset.label)}</option>`
+        )),
+        `<option value="${X01_PRESET_CUSTOM}" ${draft.x01Preset === X01_PRESET_CUSTOM ? "selected" : ""}>Individuell / Manuell</option>`,
+      ].join("");
       const bullModeDisabled = draft.x01BullOffMode === "Off";
       const bullModeDisabledAttr = bullModeDisabled ? "disabled" : "";
       const bullModeHiddenInput = bullModeDisabled
@@ -113,9 +117,12 @@
                     <span id="ata-lobby-fixed" class="ata-field-readonly">Privat</span>
                   </div>
                   <div class="ata-field ata-field-span-3">
-                    <label for="ata-apply-pdc-preset">Preset</label>
+                    <label for="ata-preset-select">Preset</label>
                     <div class="ata-form-inline-actions">
-                      <button id="ata-apply-pdc-preset" type="button" class="ata-btn ata-btn-sm" data-action="apply-pdc-preset">PDC-Preset anwenden</button>
+                      <select id="ata-preset-select" data-role="preset-select" aria-label="Preset auswählen">
+                        ${presetOptions}
+                      </select>
+                      <button id="ata-apply-preset" type="button" class="ata-btn ata-btn-sm" data-action="apply-selected-preset">Preset anwenden</button>
                       <span class="ata-preset-pill">${escapeHtml(presetStatusLabel)}</span>
                     </div>
                   </div>
@@ -127,8 +134,9 @@
                   </div>
                   <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
                 </div>
-                <p class="ata-small ata-create-help">${escapeHtml(pdcPresetHint)}</p>
-                <p class="ata-small ata-create-help">Best of 1 ist kein PDC-Standardprofil; für das Badge gilt Best of mindestens 3 Legs.</p>
+                <p class="ata-small ata-create-help">PDC European Tour (Official): KO, Best of 11 Legs (First to 6), 501, Straight In, Double Out, Bull 25/50. Bull-off Normal und Max Runden 50 bleiben technische AutoDarts-Werte.</p>
+                <p class="ata-small ata-create-help">PDC 501 / Double Out (Basic): kompatibler Ersatz für das frühere irreführende „PDC-Standard“-Preset. Ehrlich benannt, aber kein offizielles PDC-Eventformat.</p>
+                <p class="ata-small ata-create-help">PDC World Championship im echten Set-Format wird bewusst nicht als offizielles Preset angeboten, weil AutoDarts hier nur Legs / First to N unterstützt.</p>
                 <p class="ata-small ata-create-help">Bull-off = Off deaktiviert Bull-Modus automatisch (schreibgesch\u00fctzt).</p>
               </div>
               <aside class="ata-create-side">
@@ -163,7 +171,8 @@
     )).join("");
     const participantsCount = tournament.participants.length;
     const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
-    const x01PresetLabel = x01Settings.presetId === X01_PRESET_PDC_STANDARD ? "PDC-Standard" : "Individuell";
+    const activePresetId = getAppliedCreatePresetId(tournament);
+    const x01PresetLabel = getCreatePresetLabel(activePresetId);
     const x01BullModeLabel = x01Settings.bullOffMode === "Off"
       ? "Bull-Modus deaktiviert"
       : `Bull-Modus ${x01Settings.bullMode}`;
@@ -183,7 +192,7 @@
         : []),
     ];
     const x01Tags = [
-      { text: `X01 ${x01PresetLabel}`, cls: "ata-info-tag ata-info-tag-key" },
+      { text: `Preset ${x01PresetLabel}`, cls: "ata-info-tag ata-info-tag-key" },
       { text: `${x01Settings.inMode} In`, cls: "ata-info-tag" },
       { text: `${x01Settings.outMode} Out`, cls: "ata-info-tag" },
       { text: `Bull-off ${x01Settings.bullOffMode}`, cls: "ata-info-tag" },

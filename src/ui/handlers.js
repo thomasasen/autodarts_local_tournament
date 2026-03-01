@@ -86,10 +86,10 @@
         handleCreateTournament(createForm);
       });
 
-      const applyPresetButton = createForm.querySelector("[data-action='apply-pdc-preset']");
+      const applyPresetButton = createForm.querySelector("[data-action='apply-selected-preset']");
       if (applyPresetButton instanceof HTMLButtonElement) {
         applyPresetButton.addEventListener("click", () => {
-          applyPdcPresetToCreateForm(createForm);
+          applySelectedPresetToCreateForm(createForm);
         });
       }
     }
@@ -345,11 +345,15 @@
       return;
     }
     const presetInput = form.querySelector("#ata-x01-preset");
+    const presetSelect = form.querySelector("#ata-preset-select");
     if (!(presetInput instanceof HTMLInputElement)) {
       return;
     }
     const normalizedPreset = sanitizeX01Preset(presetId, X01_PRESET_CUSTOM);
     presetInput.value = normalizedPreset;
+    if (presetSelect instanceof HTMLSelectElement) {
+      presetSelect.value = normalizedPreset;
+    }
   }
 
 
@@ -362,18 +366,11 @@
     if (!(presetInput instanceof HTMLInputElement) || !(presetBadge instanceof HTMLElement)) {
       return;
     }
-    let presetId = sanitizeX01Preset(presetInput.value, X01_PRESET_CUSTOM);
-    if (presetId === X01_PRESET_PDC_STANDARD) {
-      const formData = new FormData(form);
-      const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
-      if (!isPdcCompliantMatchSetup(draft)) {
-        presetId = X01_PRESET_CUSTOM;
-        presetInput.value = presetId;
-      }
-    }
-    presetBadge.textContent = presetId === X01_PRESET_PDC_STANDARD
-      ? "Preset aktiv: PDC-Standard"
-      : "Preset aktiv: Individuell";
+    const formData = new FormData(form);
+    const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
+    const presetId = getAppliedCreatePresetId(draft);
+    presetInput.value = presetId;
+    presetBadge.textContent = `Preset aktiv: ${getCreatePresetLabel(presetId)}`;
   }
 
 
@@ -412,22 +409,34 @@
   }
 
 
-  function applyPdcPresetToCreateForm(form) {
+  function applySelectedPresetToCreateForm(form) {
     if (!(form instanceof HTMLFormElement)) {
       return;
     }
-    const pdcSettings = buildPdcX01Settings();
-    const pdcMode = "ko";
-    const pdcBestOfLegs = 5;
+    const presetSelect = form.querySelector("#ata-preset-select");
+    if (!(presetSelect instanceof HTMLSelectElement)) {
+      return;
+    }
+    const presetId = sanitizeX01Preset(presetSelect.value, X01_PRESET_CUSTOM);
+    const preset = getCreatePresetDefinition(presetId);
+    if (!preset) {
+      setCreateFormPresetValue(form, X01_PRESET_CUSTOM);
+      syncCreateFormDependencies(form);
+      updateCreateDraftFromForm(form, true);
+      refreshCreateFormDurationEstimate(form);
+      setNotice("info", "Individuelles Preset bleibt aktiv; Felder wurden nicht überschrieben.", 2400);
+      return;
+    }
+    const apply = preset.apply;
     const assignments = [
-      ["#ata-mode", pdcMode],
-      ["#ata-bestof", String(pdcBestOfLegs)],
-      ["#ata-startscore", String(pdcSettings.baseScore)],
-      ["#ata-x01-inmode", pdcSettings.inMode],
-      ["#ata-x01-outmode", pdcSettings.outMode],
-      ["#ata-x01-bullmode", pdcSettings.bullMode],
-      ["#ata-x01-bulloff", pdcSettings.bullOffMode],
-      ["#ata-x01-maxrounds", String(pdcSettings.maxRounds)],
+      ["#ata-mode", apply.mode],
+      ["#ata-bestof", String(apply.bestOfLegs)],
+      ["#ata-startscore", String(apply.startScore)],
+      ["#ata-x01-inmode", apply.x01InMode],
+      ["#ata-x01-outmode", apply.x01OutMode],
+      ["#ata-x01-bullmode", apply.x01BullMode],
+      ["#ata-x01-bulloff", apply.x01BullOffMode],
+      ["#ata-x01-maxrounds", String(apply.x01MaxRounds)],
     ];
 
     assignments.forEach(([selector, value]) => {
@@ -437,11 +446,11 @@
       }
     });
 
-    setCreateFormPresetValue(form, X01_PRESET_PDC_STANDARD);
+    setCreateFormPresetValue(form, preset.id);
     syncCreateFormDependencies(form);
     updateCreateDraftFromForm(form, true);
     refreshCreateFormDurationEstimate(form);
-    setNotice("info", "PDC-Preset wurde auf KO, Best of 5 und die X01-Felder angewendet.", 2400);
+    setNotice("info", `Preset „${preset.label}“ wurde auf alle Turnierfelder angewendet.`, 2600);
   }
 
 

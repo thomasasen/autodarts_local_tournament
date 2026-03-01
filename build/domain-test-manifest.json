@@ -17,6 +17,7 @@
     "tests/test-harness.js",
     "tests/domain-isolation.js",
     "tests/unit-ko-engine.js",
+    "tests/unit-presets.js",
     "tests/unit-tournament-duration.js",
     "tests/unit-rules-config.js",
     "tests/unit-standings-dra.js"

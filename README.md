@@ -82,7 +82,7 @@ Nach Installation ist links im Hauptmenü der neue Eintrag sichtbar. Darüber ö
   - HTML-Fallback bei CDN-Fehler/Timeout
 - Turnieranlage:
   - KO-Erstrunde als Hybrid-Draw (`seeded` oder `open_draw`)
-  - X01-Preset-Button für Matchanlage (PDC-Defaults + Custom-Status)
+  - Preset-Auswahl mit offiziellem European-Tour-Format, Basic-Kompatibilitätsprofil und Custom-Status
   - Kompaktes Formular-Layout (Konfiguration + Teilnehmerbereich)
   - Live-Prognose für die voraussichtliche Turnierzeit
   - Teilnehmerliste kann per Button gemischt werden
@@ -154,33 +154,28 @@ Tab: `Turnier`
 | `Max Runden` | `15`, `20`, `50`, `80` | Upper bound für Matchdauer in der Lobby | Verhindert hängende/zu lange Matches |
 | `Spielmodus` | fix `Legs (First to N aus Best of)` | Nicht umstellbar in der UI | Verhindert inkonsistente Kombinationen im lokalen Flow |
 | `Lobby` | fix `Privat` | Sichtbarkeit der API-Lobby | Lokales Turnier bleibt bewusst privat/sicher |
-| `Preset` | Button `PDC-Preset anwenden` | Setzt PDC-konformes X01-Setup | Schnelles Setup ohne manuelle Einzelkonfiguration |
+| `Preset` | Auswahlfeld + Button `Preset anwenden` | Setzt alle Preset-relevanten Turnierfelder konsistent | Offizielle und kompatible Profile bleiben klar getrennt |
 | `KO-Erstrunde zufällig mischen` | Checkbox `ON/OFF` | `open_draw` oder `seeded` in Runde 1 | Transparente Entscheidung zwischen Zufall und Setzlogik |
 | `Teilnehmer` | Je Spieler eine Zeile | Teilnehmerliste inkl. Reihenfolge | Reihenfolge ist bei `seeded` zugleich Seed-Reihenfolge |
 | `Teilnehmer mischen` | Button | Mischt Teilnehmertextliste | Praktisch für spontane Auslosung vor Start |
 
-### PDC-Standard-Preset
-- Bei Neuanlage ist standardmäßig `PDC Standard` aktiv.
-- Das Preset wird per Button auf die Felder angewendet (kein Dropdown-Select).
-- Das Preset setzt:
-  - Turniermodus `KO`
-  - `Best of Legs` auf `5`
-  - Matchart `X01`
-  - X01 `501`
-  - `Straight In`
-  - `Double Out`
-  - Bull mode `25/50`
-  - Bull-off `Normal`
-  - Max Runden `50`
-  - Lobby `Privat` (fix)
-- Der Spielmodus bleibt `Legs`; `Best-of Legs` ist führend für die Matchlänge und wird API-seitig als `First to N Legs` umgesetzt.
-- `Best of 1` gilt nicht als PDC-Standardprofil im Tool.
-- Das PDC-Logo-Badge erscheint, wenn das Setup vollständig passt:
-  - KO
-  - Best of mindestens 3 Legs
-  - 501 Straight In, Double Out, Bull 25/50, Bull-off Normal, Max Runden 50
+### Preset-Katalog
+- Bei Neuanlage ist standardmäßig `PDC European Tour (Official)` aktiv.
+- Das Preset wird über Auswahlfeld + Button `Preset anwenden` auf alle relevanten Turnierfelder angewendet.
+- Der Spielmodus bleibt immer `Legs`; `Best-of Legs` ist führend für die Matchlänge und wird API-seitig als `First to N Legs` umgesetzt.
 
-![PDC-Referenzlogo](assets/pdc_logo.png)
+| Preset | Parameter | Hinweise |
+|---|---|---|
+| `PDC European Tour (Official)` | `KO`, `Best of 11`, `501`, `Straight In`, `Double Out`, `Bull 25/50`, `Bull-off Normal`, `Max Runden 50`, `Lobby privat` | Offizielles Default-Rundenformat. `Bull-off Normal` und `Max Runden 50` sind AutoDarts-/Technikwerte; `Max Runden` ist **keine** PDC-Fachregel. |
+| `PDC 501 / Double Out (Basic)` | `KO`, `Best of 5`, `501`, `Straight In`, `Double Out`, `Bull 25/50`, `Bull-off Normal`, `Max Runden 50`, `Lobby privat` | Ehrlich benanntes Kompatibilitätsprofil für das frühere irreführende `PDC Standard`. **Kein** offizielles PDC-Eventformat. |
+| `Individuell / Manuell` | aktuelle Formularwerte | Status nach manuellen Änderungen an Preset-Feldern. |
+
+### Nicht enthaltene PDC-Formate
+- `PDC World Championship` wird bewusst **nicht** als offizielles Preset ausgeliefert.
+- Grund:
+  - Das Format arbeitet mit `Sets` (Best of Sets; ein Set besteht aus `Best of 5 Legs`).
+  - Die AutoDarts-/ATA-Integration kann hier nur `Legs / First to N` abbilden.
+- Deshalb behauptet die App an dieser Stelle **kein** echtes WM-Format.
 
 ### Verhalten beim Formular
 - Das Eingabeformular speichert einen Entwurf.
@@ -188,7 +183,8 @@ Tab: `Turnier`
   - der Modus gewechselt wird
   - die UI neu gerendert wird
 - Wenn `Bull-off = Off`, wird `Bull mode` automatisch read-only deaktiviert.
-- Bei manuellen Änderungen an X01-Feldern springt der Preset-Status auf `Individuell`.
+- Bei manuellen Änderungen an Preset-relevanten Feldern springt der Preset-Status auf `Individuell`.
+- Legacy-Drafts und Legacy-Turniere mit der alten Preset-ID `pdc_standard` werden automatisch auf `PDC 501 / Double Out (Basic)` abgebildet, damit gespeicherte `Best of 5`-Turniere nicht still auf `Best of 11` umspringen.
 
 ### Voraussichtliche Turnierzeit
 - Details zur Formel, zu den Faktoren und zur Benchmark-Basis: [docs/tournament-duration.md](docs/tournament-duration.md)

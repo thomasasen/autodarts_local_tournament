@@ -49,6 +49,10 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
   - `tournament.rules.tieBreakProfile: "promoter_h2h_minitable" | "promoter_points_legdiff"`
 - Neues globales Settings-Feld:
   - `settings.tournamentTimeProfile: "fast" | "normal" | "slow"`
+- Turnier-Presetlogik:
+  - `ui.createDraft.x01Preset` hält das aktuell aktive Create-Preset
+  - Default ist `pdc_european_tour_official`
+  - Legacy `pdc_standard` wird auf `pdc_501_double_out_basic` normalisiert
 - KO-spezifisch:
   - `settings.featureFlags.koDrawLockDefault: boolean`
   - `tournament.ko.drawLocked: boolean`

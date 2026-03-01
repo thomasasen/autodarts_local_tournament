@@ -44,7 +44,7 @@
       mode: "ko",
       bestOfLegs: overrides.bestOfLegs || 3,
       startScore: overrides.startScore || 501,
-      x01Preset: overrides.x01Preset || X01_PRESET_PDC_STANDARD,
+      x01Preset: overrides.x01Preset || X01_PRESET_CUSTOM,
       x01InMode: overrides.x01InMode || "Straight",
       x01OutMode: overrides.x01OutMode || "Double",
       x01BullMode: overrides.x01BullMode || "25/50",
@@ -64,7 +64,7 @@
       mode: "league",
       bestOfLegs: overrides.bestOfLegs || 3,
       startScore: overrides.startScore || 501,
-      x01Preset: overrides.x01Preset || X01_PRESET_PDC_STANDARD,
+      x01Preset: overrides.x01Preset || X01_PRESET_CUSTOM,
       x01InMode: overrides.x01InMode || "Straight",
       x01OutMode: overrides.x01OutMode || "Double",
       x01BullMode: overrides.x01BullMode || "25/50",
@@ -104,4 +104,3 @@
       generatedAt: nowIso(),
     };
   }
-

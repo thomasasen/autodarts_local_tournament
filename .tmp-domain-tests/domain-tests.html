@@ -74,7 +74,9 @@
   const KO_DRAW_MODE_SEEDED = "seeded";
   const KO_DRAW_MODE_OPEN_DRAW = "open_draw";
   const X01_VARIANT = "X01";
-  const X01_PRESET_PDC_STANDARD = "pdc_standard";
+  const X01_PRESET_LEGACY_PDC_STANDARD = "pdc_standard";
+  const X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL = "pdc_european_tour_official";
+  const X01_PRESET_PDC_501_DOUBLE_OUT_BASIC = "pdc_501_double_out_basic";
   const X01_PRESET_CUSTOM = "custom";
   const X01_IN_MODES = Object.freeze(["Straight", "Double", "Master"]);
   const X01_OUT_MODES = Object.freeze(["Straight", "Double", "Master"]);
@@ -271,21 +273,268 @@
     return shuffled;
   }
 
+  // Source of truth for shipped presets:
+  // - "PDC European Tour (Official)" models the default round setup this project can represent honestly:
+  //   KO, Best of 11 Legs, 501, Straight In, Double Out.
+  // - PDC World Championship style set-play is intentionally not shipped as an "official" preset here,
+  //   because the AutoDarts lobby payload only supports legs/first-to-N, not sets.
+  function getCreatePresetDefinitions() {
+    return Object.freeze({
+      [X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL]: Object.freeze({
+        id: X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL,
+        label: "PDC European Tour (Official)",
+        shortLabel: "PDC European Tour",
+        description: "European Tour default round format: KO, Best of 11 Legs (First to 6), 501, Straight In, Double Out, Bull 25/50.",
+        notes: Object.freeze([
+          "Bull-off Normal is the AutoDarts mapping used by this preset.",
+          "Max Runden 50 remains a technical AutoDarts limit and is not part of the PDC rule claim.",
+        ]),
+        apply: Object.freeze({
+          mode: "ko",
+          bestOfLegs: 11,
+          startScore: 501,
+          x01InMode: "Straight",
+          x01OutMode: "Double",
+          x01BullMode: "25/50",
+          x01BullOffMode: "Normal",
+          x01MaxRounds: 50,
+          lobbyVisibility: "private",
+        }),
+      }),
+      [X01_PRESET_PDC_501_DOUBLE_OUT_BASIC]: Object.freeze({
+        id: X01_PRESET_PDC_501_DOUBLE_OUT_BASIC,
+        label: "PDC 501 / Double Out (Basic)",
+        shortLabel: "PDC 501 / DO Basic",
+        description: "Compatibility preset for the former 'PDC-Standard': KO, Best of 5 Legs, 501, Straight In, Double Out, Bull 25/50.",
+        notes: Object.freeze([
+          "This is not an official PDC event format.",
+          "Kept to preserve older saved drafts and tournaments without silently changing their match length.",
+        ]),
+        apply: Object.freeze({
+          mode: "ko",
+          bestOfLegs: 5,
+          startScore: 501,
+          x01InMode: "Straight",
+          x01OutMode: "Double",
+          x01BullMode: "25/50",
+          x01BullOffMode: "Normal",
+          x01MaxRounds: 50,
+          lobbyVisibility: "private",
+        }),
+      }),
+    });
+  }
+
+
+  function getCreatePresetOrder() {
+    return Object.freeze([
+      X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL,
+      X01_PRESET_PDC_501_DOUBLE_OUT_BASIC,
+    ]);
+  }
+
+
+  function getCreatePresetAliasMap() {
+    return Object.freeze({
+      [X01_PRESET_LEGACY_PDC_STANDARD]: X01_PRESET_PDC_501_DOUBLE_OUT_BASIC,
+    });
+  }
+
+
+  function getDefaultCreatePresetId() {
+    return X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL;
+  }
+
+
+  function getCreatePresetDefinition(presetId) {
+    const presetDefinitions = getCreatePresetDefinitions();
+    const normalizedPreset = normalizeText(presetId || "").toLowerCase();
+    const canonicalPreset = getCreatePresetAliasMap()[normalizedPreset] || normalizedPreset;
+    return presetDefinitions[canonicalPreset] || null;
+  }
+
+
+  function getCreatePresetCatalog() {
+    const presetDefinitions = getCreatePresetDefinitions();
+    return getCreatePresetOrder().map((presetId) => presetDefinitions[presetId]);
+  }
+
+
+  function getCreatePresetLabel(presetId) {
+    return getCreatePresetDefinition(presetId)?.label || "Individuell";
+  }
+
+
+  function buildPresetX01Settings(presetId) {
+    const preset = getCreatePresetDefinition(presetId);
+    if (!preset) {
+      return null;
+    }
+    const apply = preset.apply;
+    return {
+      presetId: preset.id,
+      variant: X01_VARIANT,
+      baseScore: apply.startScore,
+      inMode: apply.x01InMode,
+      outMode: apply.x01OutMode,
+      bullMode: apply.x01BullMode,
+      maxRounds: apply.x01MaxRounds,
+      bullOffMode: apply.x01BullOffMode,
+      lobbyVisibility: apply.lobbyVisibility,
+    };
+  }
+
+
+  function buildExplicitX01Settings(rawInput, fallbackStartScore = 501) {
+    const input = rawInput && typeof rawInput === "object" ? rawInput : {};
+    return {
+      presetId: X01_PRESET_CUSTOM,
+      variant: X01_VARIANT,
+      baseScore: sanitizeStartScore(input.baseScore ?? fallbackStartScore),
+      inMode: sanitizeX01InMode(input.inMode),
+      outMode: sanitizeX01OutMode(input.outMode),
+      bullMode: sanitizeX01BullMode(input.bullMode),
+      maxRounds: sanitizeX01MaxRounds(input.maxRounds),
+      bullOffMode: sanitizeX01BullOffMode(input.bullOffMode || input.bullOff),
+      lobbyVisibility: sanitizeLobbyVisibility(input.lobbyVisibility ?? input.isPrivate),
+    };
+  }
+
+
+  function isSameX01Settings(left, right) {
+    return Boolean(left && right)
+      && left.baseScore === right.baseScore
+      && left.inMode === right.inMode
+      && left.outMode === right.outMode
+      && left.bullMode === right.bullMode
+      && left.maxRounds === right.maxRounds
+      && left.bullOffMode === right.bullOffMode
+      && left.lobbyVisibility === right.lobbyVisibility;
+  }
+
+
+  function matchesPresetX01Settings(input, presetId) {
+    const presetX01 = buildPresetX01Settings(presetId);
+    if (!presetX01) {
+      return false;
+    }
+    const fallbackStartScore = input?.baseScore ?? input?.startScore ?? presetX01.baseScore;
+    const normalized = buildExplicitX01Settings({
+      baseScore: input?.baseScore ?? input?.startScore,
+      inMode: input?.inMode ?? input?.x01InMode,
+      outMode: input?.outMode ?? input?.x01OutMode,
+      bullMode: input?.bullMode ?? input?.x01BullMode,
+      maxRounds: input?.maxRounds ?? input?.x01MaxRounds,
+      bullOffMode: input?.bullOffMode ?? input?.x01BullOffMode,
+      lobbyVisibility: input?.lobbyVisibility,
+    }, fallbackStartScore);
+    return isSameX01Settings(normalized, presetX01);
+  }
+
+
+  function matchesCreatePresetSetup(input, presetId) {
+    const preset = getCreatePresetDefinition(presetId);
+    if (!preset) {
+      return false;
+    }
+    const apply = preset.apply;
+    const mode = normalizeText(input?.mode || "").toLowerCase();
+    if (mode !== apply.mode) {
+      return false;
+    }
+    if (sanitizeBestOf(input?.bestOfLegs) !== apply.bestOfLegs) {
+      return false;
+    }
+    const x01Input = input?.x01 && typeof input.x01 === "object"
+      ? input.x01
+      : input;
+    return matchesPresetX01Settings(x01Input, preset.id);
+  }
+
+
+  function validateCreatePresetDefinitions() {
+    return getCreatePresetCatalog().map((preset) => {
+      const apply = preset.apply || {};
+      const issues = [];
+      const normalizedX01 = buildExplicitX01Settings({
+        baseScore: apply.startScore,
+        inMode: apply.x01InMode,
+        outMode: apply.x01OutMode,
+        bullMode: apply.x01BullMode,
+        maxRounds: apply.x01MaxRounds,
+        bullOffMode: apply.x01BullOffMode,
+        lobbyVisibility: apply.lobbyVisibility,
+      }, apply.startScore);
+
+      if (!normalizeText(preset.id)) {
+        issues.push("missing id");
+      }
+      if (!normalizeText(preset.label)) {
+        issues.push("missing label");
+      }
+      if (!normalizeText(preset.description)) {
+        issues.push("missing description");
+      }
+      if (!Array.isArray(preset.notes) || !preset.notes.length) {
+        issues.push("missing notes");
+      }
+      if (apply.mode !== "ko") {
+        issues.push("mode must be ko");
+      }
+      if (sanitizeBestOf(apply.bestOfLegs) !== apply.bestOfLegs) {
+        issues.push("invalid bestOfLegs");
+      }
+      if (normalizedX01.baseScore !== apply.startScore) {
+        issues.push("invalid startScore");
+      }
+      if (normalizedX01.inMode !== apply.x01InMode) {
+        issues.push("invalid in mode");
+      }
+      if (normalizedX01.outMode !== apply.x01OutMode) {
+        issues.push("invalid out mode");
+      }
+      if (normalizedX01.bullMode !== apply.x01BullMode) {
+        issues.push("invalid bull mode");
+      }
+      if (normalizedX01.maxRounds !== apply.x01MaxRounds) {
+        issues.push("invalid max rounds");
+      }
+      if (normalizedX01.bullOffMode !== apply.x01BullOffMode) {
+        issues.push("invalid bull-off mode");
+      }
+      if (normalizedX01.lobbyVisibility !== apply.lobbyVisibility) {
+        issues.push("invalid lobby visibility");
+      }
+      if (!isSameX01Settings(buildPresetX01Settings(preset.id), normalizedX01)) {
+        issues.push("preset x01 projection failed");
+      }
+
+      return {
+        id: preset.id,
+        ok: issues.length === 0,
+        issues,
+      };
+    });
+  }
+
+
   function createDefaultCreateDraft(settings = null) {
     const defaultRandomize = settings?.featureFlags?.randomizeKoRound1 !== false;
-    const pdcSettings = buildPdcX01Settings();
+    const defaultPresetId = getDefaultCreatePresetId();
+    const presetX01 = buildPresetX01Settings(defaultPresetId);
+    const apply = getCreatePresetDefinition(defaultPresetId)?.apply || {};
     return {
       name: "",
-      mode: "ko",
-      bestOfLegs: 5,
-      startScore: pdcSettings.baseScore,
-      x01Preset: pdcSettings.presetId,
-      x01InMode: pdcSettings.inMode,
-      x01OutMode: pdcSettings.outMode,
-      x01BullMode: pdcSettings.bullMode,
-      x01MaxRounds: pdcSettings.maxRounds,
-      x01BullOffMode: pdcSettings.bullOffMode,
-      lobbyVisibility: pdcSettings.lobbyVisibility,
+      mode: apply.mode || "ko",
+      bestOfLegs: apply.bestOfLegs || 11,
+      startScore: presetX01?.baseScore || 501,
+      x01Preset: defaultPresetId,
+      x01InMode: presetX01?.inMode || "Straight",
+      x01OutMode: presetX01?.outMode || "Double",
+      x01BullMode: presetX01?.bullMode || "25/50",
+      x01MaxRounds: presetX01?.maxRounds || 50,
+      x01BullOffMode: presetX01?.bullOffMode || "Normal",
+      lobbyVisibility: presetX01?.lobbyVisibility || "private",
       participantsText: "",
       randomizeKoRound1: Boolean(defaultRandomize),
     };
@@ -294,32 +543,34 @@
 
   function normalizeCreateDraft(rawDraft, settings = null) {
     const base = createDefaultCreateDraft(settings);
-    const modeRaw = normalizeText(rawDraft?.mode || base.mode);
-    const mode = ["ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : base.mode;
     const hasDraftObject = rawDraft && typeof rawDraft === "object";
     const hasExplicitPreset = hasDraftObject && Object.prototype.hasOwnProperty.call(rawDraft, "x01Preset");
-    const rawPreset = hasExplicitPreset
-      ? sanitizeX01Preset(rawDraft?.x01Preset, base.x01Preset)
+    const requestedPresetId = hasExplicitPreset
+      ? sanitizeX01Preset(rawDraft?.x01Preset, X01_PRESET_CUSTOM)
       : (hasDraftObject ? X01_PRESET_CUSTOM : base.x01Preset);
-    let x01Settings = normalizeTournamentX01Settings({
-      presetId: rawPreset,
-      baseScore: rawDraft?.startScore ?? base.startScore,
-      inMode: rawDraft?.x01InMode ?? base.x01InMode,
-      outMode: rawDraft?.x01OutMode ?? base.x01OutMode,
-      bullMode: rawDraft?.x01BullMode ?? base.x01BullMode,
-      maxRounds: rawDraft?.x01MaxRounds ?? base.x01MaxRounds,
-      bullOffMode: rawDraft?.x01BullOffMode ?? base.x01BullOffMode,
-      lobbyVisibility: rawDraft?.lobbyVisibility ?? base.lobbyVisibility,
-    }, rawDraft?.startScore ?? base.startScore);
-    if (rawPreset === X01_PRESET_PDC_STANDARD) {
-      x01Settings = buildPdcX01Settings();
-    }
-    return {
+    const requestedPreset = getCreatePresetDefinition(requestedPresetId);
+    const presetApply = requestedPreset?.apply || null;
+    const modeFallback = presetApply?.mode || base.mode;
+    const modeRaw = normalizeText(rawDraft?.mode ?? modeFallback);
+    const mode = ["ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : modeFallback;
+    const bestOfFallback = presetApply?.bestOfLegs ?? base.bestOfLegs;
+    const startScoreFallback = presetApply?.startScore ?? base.startScore;
+    const x01Settings = normalizeTournamentX01Settings({
+      presetId: X01_PRESET_CUSTOM,
+      baseScore: rawDraft?.startScore ?? startScoreFallback,
+      inMode: rawDraft?.x01InMode ?? presetApply?.x01InMode ?? base.x01InMode,
+      outMode: rawDraft?.x01OutMode ?? presetApply?.x01OutMode ?? base.x01OutMode,
+      bullMode: rawDraft?.x01BullMode ?? presetApply?.x01BullMode ?? base.x01BullMode,
+      maxRounds: rawDraft?.x01MaxRounds ?? presetApply?.x01MaxRounds ?? base.x01MaxRounds,
+      bullOffMode: rawDraft?.x01BullOffMode ?? presetApply?.x01BullOffMode ?? base.x01BullOffMode,
+      lobbyVisibility: rawDraft?.lobbyVisibility ?? presetApply?.lobbyVisibility ?? base.lobbyVisibility,
+    }, rawDraft?.startScore ?? startScoreFallback);
+    const draft = {
       name: normalizeText(rawDraft?.name || base.name),
       mode,
-      bestOfLegs: sanitizeBestOf(rawDraft?.bestOfLegs ?? base.bestOfLegs),
+      bestOfLegs: sanitizeBestOf(rawDraft?.bestOfLegs ?? bestOfFallback),
       startScore: x01Settings.baseScore,
-      x01Preset: x01Settings.presetId,
+      x01Preset: X01_PRESET_CUSTOM,
       x01InMode: x01Settings.inMode,
       x01OutMode: x01Settings.outMode,
       x01BullMode: x01Settings.bullMode,
@@ -331,6 +582,12 @@
         ? rawDraft.randomizeKoRound1
         : base.randomizeKoRound1,
     };
+    if (requestedPreset && matchesCreatePresetSetup(draft, requestedPreset.id)) {
+      draft.x01Preset = requestedPreset.id;
+    } else if (!hasDraftObject) {
+      draft.x01Preset = base.x01Preset;
+    }
+    return draft;
   }
 
 
@@ -406,10 +663,14 @@
   }
 
 
-  function sanitizeX01Preset(value, fallback = X01_PRESET_PDC_STANDARD) {
+  function sanitizeX01Preset(value, fallback = getDefaultCreatePresetId()) {
     const preset = normalizeText(value || "").toLowerCase();
-    if (preset === X01_PRESET_CUSTOM || preset === X01_PRESET_PDC_STANDARD) {
+    if (preset === X01_PRESET_CUSTOM) {
       return preset;
+    }
+    const canonicalPreset = getCreatePresetAliasMap()[preset] || preset;
+    if (getCreatePresetDefinitions()[canonicalPreset]) {
+      return canonicalPreset;
     }
     return fallback;
   }
@@ -497,89 +758,49 @@
   }
 
 
-  function buildPdcX01Settings() {
-    return {
-      presetId: X01_PRESET_PDC_STANDARD,
-      variant: X01_VARIANT,
-      baseScore: 501,
-      inMode: "Straight",
-      outMode: "Double",
-      bullMode: "25/50",
-      maxRounds: 50,
-      bullOffMode: "Normal",
-      lobbyVisibility: "private",
-    };
-  }
-
-
   function normalizeTournamentX01Settings(rawX01, fallbackStartScore = 501) {
     const hasRawObject = rawX01 && typeof rawX01 === "object";
     const input = hasRawObject ? rawX01 : {};
     const rawPreset = normalizeText(input.presetId || input.preset || "").toLowerCase();
     const hasExplicitPreset = Boolean(rawPreset);
     const presetId = hasExplicitPreset ? sanitizeX01Preset(rawPreset, X01_PRESET_CUSTOM) : X01_PRESET_CUSTOM;
-
-    if (presetId === X01_PRESET_PDC_STANDARD) {
-      return buildPdcX01Settings();
-    }
-
-    return {
-      presetId: X01_PRESET_CUSTOM,
-      variant: X01_VARIANT,
-      baseScore: sanitizeStartScore(input.baseScore ?? fallbackStartScore),
-      inMode: sanitizeX01InMode(input.inMode),
-      outMode: sanitizeX01OutMode(input.outMode),
-      bullMode: sanitizeX01BullMode(input.bullMode),
-      maxRounds: sanitizeX01MaxRounds(input.maxRounds),
-      bullOffMode: sanitizeX01BullOffMode(input.bullOffMode || input.bullOff),
-      lobbyVisibility: sanitizeLobbyVisibility(input.lobbyVisibility ?? input.isPrivate),
-    };
-  }
-
-
-  function isPdcX01Settings(input) {
-    const pdc = buildPdcX01Settings();
-    const fallbackStartScore = input?.baseScore ?? input?.startScore ?? pdc.baseScore;
-    const normalized = normalizeTournamentX01Settings({
-      presetId: X01_PRESET_CUSTOM,
-      baseScore: fallbackStartScore,
-      inMode: input?.inMode ?? input?.x01InMode,
-      outMode: input?.outMode ?? input?.x01OutMode,
-      bullMode: input?.bullMode ?? input?.x01BullMode,
-      maxRounds: input?.maxRounds ?? input?.x01MaxRounds,
-      bullOffMode: input?.bullOffMode ?? input?.x01BullOffMode,
-      lobbyVisibility: input?.lobbyVisibility,
-    }, fallbackStartScore);
-    return normalized.baseScore === pdc.baseScore
-      && normalized.inMode === pdc.inMode
-      && normalized.outMode === pdc.outMode
-      && normalized.bullMode === pdc.bullMode
-      && normalized.maxRounds === pdc.maxRounds
-      && normalized.bullOffMode === pdc.bullOffMode
-      && normalized.lobbyVisibility === pdc.lobbyVisibility;
-  }
-
-
-  function isPdcCompliantMatchSetup(input) {
-    const mode = normalizeText(input?.mode || "").toLowerCase();
-    if (mode !== "ko") {
-      return false;
-    }
-    if (sanitizeBestOf(input?.bestOfLegs) < 3) {
-      return false;
-    }
-    const x01Input = input?.x01 && typeof input.x01 === "object"
-      ? input.x01
-      : {
-        baseScore: input?.startScore ?? input?.baseScore,
-        inMode: input?.x01InMode ?? input?.inMode,
-        outMode: input?.x01OutMode ?? input?.outMode,
-        bullMode: input?.x01BullMode ?? input?.bullMode,
-        maxRounds: input?.x01MaxRounds ?? input?.maxRounds,
-        bullOffMode: input?.x01BullOffMode ?? input?.bullOffMode,
-        lobbyVisibility: input?.lobbyVisibility,
+    const presetX01 = buildPresetX01Settings(presetId);
+    const normalized = buildExplicitX01Settings({
+      baseScore: input.baseScore ?? presetX01?.baseScore ?? fallbackStartScore,
+      inMode: input.inMode ?? presetX01?.inMode,
+      outMode: input.outMode ?? presetX01?.outMode,
+      bullMode: input.bullMode ?? presetX01?.bullMode,
+      maxRounds: input.maxRounds ?? presetX01?.maxRounds,
+      bullOffMode: input.bullOffMode || input.bullOff || presetX01?.bullOffMode,
+      lobbyVisibility: input.lobbyVisibility ?? input.isPrivate ?? presetX01?.lobbyVisibility,
+    }, input.baseScore ?? presetX01?.baseScore ?? fallbackStartScore);
+    if (presetX01 && isSameX01Settings(normalized, presetX01)) {
+      return {
+        ...presetX01,
+        presetId,
       };
-    return isPdcX01Settings(x01Input);
+    }
+    return normalized;
+  }
+
+
+  function isEuropeanTourOfficialMatchSetup(input) {
+    return matchesCreatePresetSetup(input, X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL);
+  }
+
+
+  function getAppliedCreatePresetId(input) {
+    const requestedPresetId = sanitizeX01Preset(
+      input?.x01Preset ?? input?.presetId ?? input?.x01?.presetId,
+      X01_PRESET_CUSTOM,
+    );
+    const requestedPreset = getCreatePresetDefinition(requestedPresetId);
+    if (!requestedPreset) {
+      return X01_PRESET_CUSTOM;
+    }
+    return matchesCreatePresetSetup(input, requestedPreset.id)
+      ? requestedPreset.id
+      : X01_PRESET_CUSTOM;
   }
 
 
@@ -2086,16 +2307,16 @@
 // Domain layer: deterministic single-board tournament duration estimation.
 
   const TOURNAMENT_DURATION_BASE_LEG_MINUTES = 3.75;
-  const TOURNAMENT_DURATION_RESULT_ENTRY_MINUTES = 1.6;
+  const TOURNAMENT_DURATION_RESULT_ENTRY_MINUTES = 0.80;
   const TOURNAMENT_DURATION_LOW_FACTOR = 0.90;
   const TOURNAMENT_DURATION_HIGH_BASE_PADDING = 0.12;
   const TOURNAMENT_DURATION_SCORE_FACTORS = Object.freeze({
-    121: 0.55,
-    170: 0.63,
-    301: 0.80,
+    121: 0.50,
+    170: 0.58,
+    301: 0.74,
     501: 1.00,
-    701: 1.15,
-    901: 1.28,
+    701: 1.24,
+    901: 1.42,
   });
   const TOURNAMENT_DURATION_IN_FACTORS = Object.freeze({
     Straight: 1.00,
@@ -2128,6 +2349,8 @@
       label: "Schnell",
       description: "F\u00fcr z\u00fcgige Felder mit wenig Verz\u00f6gerung zwischen den Matches.",
       legPaceMultiplier: 0.88,
+      matchTransitionMinutes: 0.55,
+      phaseTransitionMultiplier: 0.90,
       highPaddingExtra: 0.00,
     }),
     [TOURNAMENT_TIME_PROFILE_NORMAL]: Object.freeze({
@@ -2135,6 +2358,8 @@
       label: "Normal",
       description: "Ausgewogener Standard f\u00fcr lokale Turniere.",
       legPaceMultiplier: 1.00,
+      matchTransitionMinutes: 0.80,
+      phaseTransitionMultiplier: 1.00,
       highPaddingExtra: 0.00,
     }),
     [TOURNAMENT_TIME_PROFILE_SLOW]: Object.freeze({
@@ -2142,6 +2367,8 @@
       label: "Langsam",
       description: "F\u00fcr gemischte Felder oder langsamere Board-Wechsel.",
       legPaceMultiplier: 1.15,
+      matchTransitionMinutes: 1.15,
+      phaseTransitionMultiplier: 1.15,
       highPaddingExtra: 0.02,
     }),
   });
@@ -2266,6 +2493,10 @@
       x01: x01Settings,
       expectedLegs: 0,
       legMinutes: 0,
+      resultEntryMinutes: TOURNAMENT_DURATION_RESULT_ENTRY_MINUTES,
+      matchTransitionMinutes: 0,
+      bullOffOverheadMinutes: 0,
+      matchOverheadMinutes: 0,
       matchMinutes: 0,
       matchCount: 0,
       phaseOverheadMinutes: 0,
@@ -2290,11 +2521,14 @@
       * (TOURNAMENT_DURATION_IN_FACTORS[x01Settings.inMode] || 1)
       * (TOURNAMENT_DURATION_OUT_FACTORS[x01Settings.outMode] || 1)
       * bullModeFactor;
-    const matchMinutes = (expectedLegs * legMinutes)
-      + TOURNAMENT_DURATION_RESULT_ENTRY_MINUTES
-      + (TOURNAMENT_DURATION_BULL_OFF_OVERHEAD[x01Settings.bullOffMode] || 0);
+    const bullOffOverheadMinutes = TOURNAMENT_DURATION_BULL_OFF_OVERHEAD[x01Settings.bullOffMode] || 0;
+    const matchOverheadMinutes = TOURNAMENT_DURATION_RESULT_ENTRY_MINUTES
+      + profile.matchTransitionMinutes
+      + bullOffOverheadMinutes;
+    const matchMinutes = (expectedLegs * legMinutes) + matchOverheadMinutes;
     const matchCount = getTournamentDurationMatchCount(mode, participantCount);
-    const phaseOverheadMinutes = getTournamentDurationPhaseOverheadMinutes(mode, participantCount);
+    const phaseOverheadMinutes = getTournamentDurationPhaseOverheadMinutes(mode, participantCount)
+      * profile.phaseTransitionMultiplier;
     const likelyMinutes = (matchCount * matchMinutes) + phaseOverheadMinutes;
     const highPadding = TOURNAMENT_DURATION_HIGH_BASE_PADDING
       + (TOURNAMENT_DURATION_MAX_ROUNDS_HIGH_PADDING[x01Settings.maxRounds] || 0)
@@ -2304,6 +2538,9 @@
     estimate.ready = true;
     estimate.expectedLegs = expectedLegs;
     estimate.legMinutes = legMinutes;
+    estimate.matchTransitionMinutes = profile.matchTransitionMinutes;
+    estimate.bullOffOverheadMinutes = bullOffOverheadMinutes;
+    estimate.matchOverheadMinutes = matchOverheadMinutes;
     estimate.matchMinutes = matchMinutes;
     estimate.matchCount = matchCount;
     estimate.phaseOverheadMinutes = phaseOverheadMinutes;
@@ -2926,7 +3163,7 @@
       mode: "ko",
       bestOfLegs: overrides.bestOfLegs || 3,
       startScore: overrides.startScore || 501,
-      x01Preset: overrides.x01Preset || X01_PRESET_PDC_STANDARD,
+      x01Preset: overrides.x01Preset || X01_PRESET_CUSTOM,
       x01InMode: overrides.x01InMode || "Straight",
       x01OutMode: overrides.x01OutMode || "Double",
       x01BullMode: overrides.x01BullMode || "25/50",
@@ -2946,7 +3183,7 @@
       mode: "league",
       bestOfLegs: overrides.bestOfLegs || 3,
       startScore: overrides.startScore || 501,
-      x01Preset: overrides.x01Preset || X01_PRESET_PDC_STANDARD,
+      x01Preset: overrides.x01Preset || X01_PRESET_CUSTOM,
       x01InMode: overrides.x01InMode || "Straight",
       x01OutMode: overrides.x01OutMode || "Double",
       x01BullMode: overrides.x01BullMode || "25/50",
@@ -3079,6 +3316,121 @@
     assertEqual(tournament.ko.drawLocked, true);
   });
 
+test("Preset definitions: schema self-check passes for all shipped presets", () => {
+  const checks = validateCreatePresetDefinitions();
+  assertEqual(checks.length, 2, "Expected two shipped presets.");
+  checks.forEach((entry) => {
+    assert(entry.ok, `Preset ${entry.id} invalid: ${entry.issues.join(", ")}`);
+  });
+});
+
+
+test("Preset definitions: European Tour official stays pinned to the documented values", () => {
+  const preset = getCreatePresetDefinition(X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL);
+  assert(Boolean(preset), "European Tour preset should exist.");
+  assertEqual(preset.label, "PDC European Tour (Official)");
+  assertDeepEqual(preset.apply, {
+    mode: "ko",
+    bestOfLegs: 11,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    lobbyVisibility: "private",
+  });
+});
+
+
+test("Preset defaults: new create draft starts with European Tour official", () => {
+  const draft = createDefaultCreateDraft();
+  assertEqual(draft.x01Preset, X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL);
+  assertEqual(draft.mode, "ko");
+  assertEqual(draft.bestOfLegs, 11);
+  assertEqual(draft.startScore, 501);
+  assertEqual(draft.x01InMode, "Straight");
+  assertEqual(draft.x01OutMode, "Double");
+  assertEqual(draft.x01BullMode, "25/50");
+  assertEqual(draft.x01BullOffMode, "Normal");
+  assertEqual(draft.x01MaxRounds, 50);
+});
+
+
+test("Preset normalization: legacy pdc_standard maps to the honest basic compatibility preset", () => {
+  const draft = normalizeCreateDraft({
+    x01Preset: X01_PRESET_LEGACY_PDC_STANDARD,
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+  });
+  assertEqual(draft.x01Preset, X01_PRESET_PDC_501_DOUBLE_OUT_BASIC);
+  assertEqual(draft.bestOfLegs, 5);
+});
+
+
+test("Preset detection: European Tour badge only applies to the full KO + BO11 setup", () => {
+  const officialPresetId = getAppliedCreatePresetId({
+    mode: "ko",
+    bestOfLegs: 11,
+    x01Preset: X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    lobbyVisibility: "private",
+  });
+  const downgradedPresetId = getAppliedCreatePresetId({
+    mode: "ko",
+    bestOfLegs: 5,
+    x01Preset: X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    lobbyVisibility: "private",
+  });
+  assertEqual(officialPresetId, X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL);
+  assertEqual(downgradedPresetId, X01_PRESET_CUSTOM);
+});
+
+
+test("Preset migration: stored legacy tournament preset ids stay backward compatible", () => {
+  const tournament = normalizeTournament({
+    id: "legacy-preset",
+    name: "Legacy PDC",
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01: {
+      presetId: X01_PRESET_LEGACY_PDC_STANDARD,
+      baseScore: 501,
+      inMode: "Straight",
+      outMode: "Double",
+      bullMode: "25/50",
+      maxRounds: 50,
+      bullOffMode: "Normal",
+      lobbyVisibility: "private",
+    },
+    participants: participantList(2, "LP"),
+    groups: [],
+    matches: [],
+    results: [],
+  }, true);
+  assert(Boolean(tournament), "Normalized tournament should exist.");
+  assertEqual(tournament.x01.presetId, X01_PRESET_PDC_501_DOUBLE_OUT_BASIC);
+  assertEqual(tournament.bestOfLegs, 5);
+});
+
 test("Tournament duration: default store uses normal profile", () => {
   const store = createDefaultStore();
   assertEqual(store.settings.tournamentTimeProfile, TOURNAMENT_TIME_PROFILE_NORMAL);
@@ -3140,7 +3492,7 @@ test("Tournament duration: groups + KO uses current two-group bracket logic", ()
     mode: "groups_ko",
     bestOfLegs: 5,
     startScore: 501,
-    x01Preset: X01_PRESET_PDC_STANDARD,
+    x01Preset: X01_PRESET_PDC_501_DOUBLE_OUT_BASIC,
     x01InMode: "Straight",
     x01OutMode: "Double",
     x01BullMode: "25/50",
@@ -3192,6 +3544,83 @@ test("Tournament duration: score and profile change the likely duration", () => 
   assert(fastEstimate.likelyMinutes < slowEstimate.likelyMinutes, "Harder setup should take longer.");
   assertEqual(fastEstimate.profile.id, TOURNAMENT_TIME_PROFILE_FAST);
   assertEqual(slowEstimate.profile.id, TOURNAMENT_TIME_PROFILE_SLOW);
+});
+
+
+test("Tournament duration: profile also changes transition overhead", () => {
+  const fastEstimate = estimateTournamentDuration({
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(16),
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_FAST,
+  });
+  const slowEstimate = estimateTournamentDuration({
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(16),
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_SLOW,
+  });
+
+  assert(fastEstimate.matchTransitionMinutes < slowEstimate.matchTransitionMinutes, "Slow profile should add more between-match time.");
+  assert(fastEstimate.matchOverheadMinutes < slowEstimate.matchOverheadMinutes, "Slow profile should increase match overhead.");
+  assert(fastEstimate.phaseOverheadMinutes < slowEstimate.phaseOverheadMinutes, "Slow profile should also widen phase overhead.");
+});
+
+
+test("Tournament duration: start score scaling separates short and long x01 distances", () => {
+  const shortDistance = estimateTournamentDuration({
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 301,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(16),
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+  const standardDistance = estimateTournamentDuration({
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(16),
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+  const longDistance = estimateTournamentDuration({
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 701,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(16),
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  assert(shortDistance.legMinutes < standardDistance.legMinutes, "301 should be faster than 501.");
+  assert(standardDistance.legMinutes < longDistance.legMinutes, "701 should be slower than 501.");
+  assert(shortDistance.matchMinutes < standardDistance.matchMinutes, "301 should reduce match duration.");
+  assert(standardDistance.matchMinutes < longDistance.matchMinutes, "701 should increase match duration.");
 });
 
 
@@ -3266,7 +3695,7 @@ test("Tournament duration: invalid participant count stays pending", () => {
       ko: null,
       bestOfLegs: 3,
       startScore: 501,
-      x01: buildPdcX01Settings(),
+      x01: buildPresetX01Settings(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC),
       rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
       participants: participantList(4, "").map((entry, index) => ({ id: ["A", "B", "C", "D"][index], name: ["A", "B", "C", "D"][index] })),
       groups: [],
@@ -3298,7 +3727,7 @@ test("Tournament duration: invalid participant count stays pending", () => {
       ko: null,
       bestOfLegs: 3,
       startScore: 501,
-      x01: buildPdcX01Settings(),
+      x01: buildPresetX01Settings(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC),
       rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
       participants: [
         { id: "A", name: "A" },

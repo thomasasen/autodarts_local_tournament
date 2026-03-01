@@ -76,7 +76,32 @@
     }
 
     try {
-      const compliant = isPdcCompliantMatchSetup({
+      const presetChecks = validateCreatePresetDefinitions();
+      const europeanTourPreset = getCreatePresetDefinition(X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL);
+      record(
+        "Preset-Schema: European Tour + Basic vollständig validiert",
+        presetChecks.every((entry) => entry.ok)
+          && europeanTourPreset?.apply?.bestOfLegs === 11
+          && europeanTourPreset?.apply?.startScore === 501,
+        presetChecks.map((entry) => `${entry.id}:${entry.ok ? "ok" : entry.issues.join("/")}`).join(", "),
+      );
+    } catch (error) {
+      record("Preset-Schema: European Tour + Basic vollständig validiert", false, String(error?.message || error));
+    }
+
+    try {
+      const compliant = isEuropeanTourOfficialMatchSetup({
+        mode: "ko",
+        bestOfLegs: 11,
+        startScore: 501,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+      });
+      const wrongBestOf = isEuropeanTourOfficialMatchSetup({
         mode: "ko",
         bestOfLegs: 5,
         startScore: 501,
@@ -87,24 +112,53 @@
         x01BullOffMode: "Normal",
         lobbyVisibility: "private",
       });
-      const notCompliantBestOfOne = isPdcCompliantMatchSetup({
-        mode: "ko",
-        bestOfLegs: 1,
-        startScore: 501,
-        x01InMode: "Straight",
-        x01OutMode: "Double",
-        x01BullMode: "25/50",
-        x01MaxRounds: 50,
-        x01BullOffMode: "Normal",
-        lobbyVisibility: "private",
-      });
       record(
-        "PDC-Setup: KO + Best of >=3 + PDC-X01 erforderlich",
-        compliant && !notCompliantBestOfOne,
-        `compliant=${compliant}, bo1=${notCompliantBestOfOne}`,
+        "Preset-Setup: European Tour Official erfordert KO + Best of 11 + 501/SI/DO",
+        compliant && !wrongBestOf,
+        `official=${compliant}, wrongBestOf=${wrongBestOf}`,
       );
     } catch (error) {
-      record("PDC-Setup: KO + Best of >=3 + PDC-X01 erforderlich", false, String(error?.message || error));
+      record("Preset-Setup: European Tour Official erfordert KO + Best of 11 + 501/SI/DO", false, String(error?.message || error));
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      const previousDraft = cloneSerializable(state.store.ui?.createDraft);
+      try {
+        state.store.tournament = null;
+        state.store.ui.createDraft = createDefaultCreateDraft(state.store.settings);
+        renderShell();
+        const createForm = state.shadowRoot?.getElementById("ata-create-form");
+        const presetSelect = createForm?.querySelector("#ata-preset-select");
+        if (!(createForm instanceof HTMLFormElement) || !(presetSelect instanceof HTMLSelectElement)) {
+          throw new Error("Create form or preset select missing.");
+        }
+        presetSelect.value = X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL;
+        applySelectedPresetToCreateForm(createForm);
+        const europeanTourDraft = normalizeCreateDraft(readCreateDraftInput(new FormData(createForm)), state.store.settings);
+
+        presetSelect.value = X01_PRESET_PDC_501_DOUBLE_OUT_BASIC;
+        applySelectedPresetToCreateForm(createForm);
+        const basicDraft = normalizeCreateDraft(readCreateDraftInput(new FormData(createForm)), state.store.settings);
+
+        record(
+          "Preset-UI: Auswahl + Anwenden setzt alle Formularfelder konsistent",
+          europeanTourDraft.x01Preset === X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL
+            && europeanTourDraft.mode === "ko"
+            && europeanTourDraft.bestOfLegs === 11
+            && basicDraft.x01Preset === X01_PRESET_PDC_501_DOUBLE_OUT_BASIC
+            && basicDraft.bestOfLegs === 5
+            && basicDraft.startScore === 501
+            && basicDraft.x01OutMode === "Double",
+          `et=${europeanTourDraft.bestOfLegs}/${europeanTourDraft.x01Preset}, basic=${basicDraft.bestOfLegs}/${basicDraft.x01Preset}`,
+        );
+      } catch (error) {
+        record("Preset-UI: Auswahl + Anwenden setzt alle Formularfelder konsistent", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+        state.store.ui.createDraft = previousDraft || createDefaultCreateDraft(state.store.settings);
+        renderShell();
+      }
     }
 
     try {
@@ -175,7 +229,7 @@
         mode: "ko",
         bestOfLegs: 3,
         startScore: 501,
-        x01Preset: X01_PRESET_PDC_STANDARD,
+        x01Preset: X01_PRESET_CUSTOM,
         x01InMode: "Straight",
         x01OutMode: "Double",
         x01BullMode: "25/50",
@@ -205,7 +259,7 @@
         mode: "ko",
         bestOfLegs: 3,
         startScore: 501,
-        x01Preset: X01_PRESET_PDC_STANDARD,
+        x01Preset: X01_PRESET_CUSTOM,
         x01InMode: "Straight",
         x01OutMode: "Double",
         x01BullMode: "25/50",
@@ -246,7 +300,7 @@
         ko: null,
         bestOfLegs: 3,
         startScore: 501,
-        x01: buildPdcX01Settings(),
+        x01: buildPresetX01Settings(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC),
         rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
         participants: [
           { id: "A", name: "A" },
@@ -282,7 +336,7 @@
         mode: "groups_ko",
         bestOfLegs: 3,
         startScore: 501,
-        x01Preset: X01_PRESET_PDC_STANDARD,
+        x01Preset: X01_PRESET_CUSTOM,
         x01InMode: "Straight",
         x01OutMode: "Double",
         x01BullMode: "25/50",
@@ -330,7 +384,7 @@
         ko: null,
         bestOfLegs: 3,
         startScore: 501,
-        x01: buildPdcX01Settings(),
+        x01: buildPresetX01Settings(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC),
         rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
         participants: [
           { id: "A", name: "A" },
@@ -480,7 +534,7 @@
           ko: null,
           bestOfLegs: 3,
           startScore: 501,
-          x01: buildPdcX01Settings(),
+          x01: buildPresetX01Settings(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC),
           rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
           participants: [
             { id: "P1", name: "Tanja Mueller" },
@@ -549,7 +603,7 @@
           ko: null,
           bestOfLegs: 1,
           startScore: 501,
-          x01: buildPdcX01Settings(),
+          x01: buildPresetX01Settings(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC),
           rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
           participants: [
             { id: "P1", name: "Tommy" },
@@ -626,7 +680,7 @@
           mode: "league",
           bestOfLegs: 3,
           startScore: 501,
-          x01: buildPdcX01Settings(),
+          x01: buildPresetX01Settings(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC),
           participants: [{ id: "A", name: "A" }, { id: "B", name: "B" }],
           groups: [],
           matches: [],
@@ -644,7 +698,7 @@
         `schema=${migrated.schemaVersion}, profile=${migrated.tournament?.rules?.tieBreakProfile}`,
       );
     } catch (error) {
-      record("Migration: v2 -> v3 setzt Tie-Break-Regeln", false, String(error?.message || error));
+      record("Migration: v2 -> v4 setzt Tie-Break-Profil", false, String(error?.message || error));
     }
 
     const passed = results.filter((entry) => entry.ok).length;

@@ -1,6 +1,19 @@
 ﻿# Changelog
 
 ## Unreleased
+- Preset-Logik fachlich korrigiert:
+  - neues Default-Preset `PDC European Tour (Official)` (`KO`, `Best of 11`, `501`, `Straight In`, `Double Out`, `Bull 25/50`)
+  - bisheriges irreführendes `PDC Standard` wird nicht mehr als offizielles Preset geführt
+  - Legacy-ID `pdc_standard` wird kompatibel auf `PDC 501 / Double Out (Basic)` normalisiert
+  - `Max Runden 50` wird in UI/Doku explizit als technisches AutoDarts-Limit beschrieben, nicht als PDC-Regel
+- Turnierformular für Presets erweitert:
+  - Auswahlfeld + `Preset anwenden` statt hart verdrahtetem Einzelbutton
+  - Preset-Status bleibt konsistent und springt bei manuellen Änderungen sauber auf `Individuell`
+  - Hinweis ergänzt, dass `PDC World Championship` wegen fehlender Set-Unterstützung bewusst nicht als offizielles Preset enthalten ist
+- QA für Presets ergänzt:
+  - Schema-Selfcheck für alle Preset-Definitionen
+  - Golden-Test für `PDC European Tour (Official)`
+  - Runtime-Selbsttest für Preset-Auswahl + Apply im Formular
 - Turnierzeit-Prognose nachkalibriert:
   - Zeitprofil beeinflusst jetzt auch Match-/Phasenübergänge statt nur die Leg-Geschwindigkeit
   - Score-Faktoren für kurze und lange X01-Distanzen näher an externen Richtwerten ausgerichtet

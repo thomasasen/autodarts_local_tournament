@@ -37,6 +37,18 @@
   - `Liga (Round Robin)`
   - `Nächstes Match (Next Match)`
 
+5. **Preset-Logik (ehrlich statt irreführend)**
+- Offizielles Preset in der UI:
+  - `PDC European Tour (Official)`
+  - Default-Rundenformat: `KO`, `Best of 11 Legs (First to 6)`, `501`, `Straight In`, `Double Out`, `Bull 25/50`
+- Technische AutoDarts-Werte bleiben explizit getrennt:
+  - `Bull-off Normal` ist die technische Lobby-Abbildung im Tool
+  - `Max Runden 50` ist **kein** PDC-Regelpunkt, sondern nur ein technisches Limit für die Lobby
+- Das frühere irreführende `PDC Standard` wurde nicht als offizielles Preset weitergeführt:
+  - alte gespeicherte Daten mit `pdc_standard` landen jetzt ehrlich bei `PDC 501 / Double Out (Basic)`
+  - damit bleiben ältere `Best of 5`-Entwürfe kompatibel, ohne still auf `Best of 11` umzuschalten
+
 ## Bewusste Nicht-Automatisierung
 - Bei vollständigem Deadlock wird keine automatische Entscheidung getroffen.
 - Der Systemstatus ist `playoff_required` und erfordert eine manuelle Turnierentscheidung.
+- `PDC World Championship` wird nicht als offizielles Preset behauptet, weil das reale Format `Sets` benötigt und die AutoDarts-/ATA-Integration hier nur `Legs / First to N` abbilden kann.
