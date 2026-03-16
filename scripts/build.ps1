@@ -3,7 +3,8 @@ param(
   [string]$VersionPath = "build/version.json",
   [string]$CssPath = "src/ui/styles/main.css",
   [string]$LogoPath = "assets/pdc_logo.png",
-  [string]$OutputPath = "dist/autodarts-tournament-assistant.user.js"
+  [string]$OutputPath = "dist/autodarts-tournament-assistant.user.js",
+  [string]$OutputMetaPath = "dist/autodarts-tournament-assistant.meta.js"
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,6 +20,7 @@ $versionFull = Resolve-RepoPath $VersionPath
 $cssFull = Resolve-RepoPath $CssPath
 $logoFull = Resolve-RepoPath $LogoPath
 $outputFull = Resolve-RepoPath $OutputPath
+$outputMetaFull = Resolve-RepoPath $OutputMetaPath
 
 if (-not (Test-Path $manifestFull)) {
   throw "Manifest not found: $manifestFull"
@@ -81,11 +83,24 @@ $bundle = $bundle -replace "`r`n", "`n"
 
 Set-Content -Path $outputFull -Value $bundle -Encoding utf8
 
+$headerMatch = [regex]::Match($bundle, '(?s)^// ==UserScript==.*?// ==/UserScript==')
+if (-not $headerMatch.Success) {
+  throw "Userscript header extraction failed."
+}
+$metaBundle = ($headerMatch.Value.TrimEnd() + "`n")
+Set-Content -Path $outputMetaFull -Value $metaBundle -Encoding utf8
+
 if (-not (Test-Path $outputFull)) {
   throw "Output write failed: $outputFull"
 }
 if (-not (Get-Content $outputFull -Raw -Encoding utf8).Contains("// ==UserScript==")) {
   throw "Output is missing userscript header."
 }
+if (-not (Test-Path $outputMetaFull)) {
+  throw "Meta output write failed: $outputMetaFull"
+}
+if (-not (Get-Content $outputMetaFull -Raw -Encoding utf8).Contains("// ==UserScript==")) {
+  throw "Meta output is missing userscript header."
+}
 
-Write-Host "Build successful: $OutputPath"
+Write-Host "Build successful: $OutputPath (+ $OutputMetaPath)"

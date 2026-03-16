@@ -1,6 +1,11 @@
 ﻿# Changelog
 
 ## Unreleased
+- Runtime-Update-Pfad aus `autodarts-xconfig` technisch übernommen:
+  - neue GitHub-Update-Erkennung im Tab `Einstellungen` mit gecachtem Versionsstatus, TTL und manuellem Recheck
+  - `.meta.js`-Artefakt für leichtgewichtigen Versionsabgleich ergänzt
+  - verfügbare Updates werden zusätzlich am Sidebar-Menüeintrag `xLokales Turnier` markiert
+  - bei aktivem Loader reicht ein Reload; bei direkter Runtime-Installation öffnet der Assistent die veröffentlichte Userscript-Datei
 - Regelhärtung für DRA-konforme Entscheidungszeitpunkte:
   - Tie-Break-Profil ist nach dem ersten abgeschlossenen Gruppen-/Liga-Ergebnis gesperrt (`DRA 6.16.1`).
   - Draw-Lock-Entsperren wurde auf expliziten Promoter-Override mit Bestätigung und Zeitfenster umgestellt (`DRA 6.12.1`).

@@ -54,6 +54,10 @@ Falls Tampermonkey nicht in `play.autodarts.io` injiziert:
 Alternative ohne Loader (direkt das Runtime-Skript):
 - `https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/dist/autodarts-tournament-assistant.user.js`
 
+Hinweis zum Update-Verhalten:
+- Bei direkter Runtime-Installation zeigt der Tab `Einstellungen` eine GitHub-Update-Prüfung mit Install-Button.
+- Bei Loader-Installation reicht bei neuer GitHub-Version ein Reload von `play.autodarts.io`; der Loader lädt dann die neue Runtime.
+
 ![Sidebar-Eintrag xLokales Turnier](assets/ss_autodarts-menu-xLokales-Turnier.png)
 
 ## Erste Orientierung in Autodarts
@@ -331,6 +335,15 @@ Legende für die eingeblendeten Hilfelinks:
 - Prefix z. B. `[ATA][api]`, `[ATA][bracket]`, `[ATA][storage]`.
 - Sinnvoll für Fehlersuche bei API oder Renderproblemen.
 
+### Script-Update
+- Der Tab `Einstellungen` prüft die veröffentlichte GitHub-Version gegen die installierte Runtime-Version.
+- Die Prüfung nutzt `dist/autodarts-tournament-assistant.meta.js` als primären Versions-Endpoint und fällt bei Bedarf auf `dist/autodarts-tournament-assistant.user.js` zurück.
+- Direkt installierte Runtime:
+  - Button `Update installieren` öffnet die veröffentlichte Userscript-Datei mit Cache-Busting.
+- Loader aktiv:
+  - Bei verfügbarer neuer Runtime genügt `Neu laden`, weil der Loader die aktuelle Dist-Datei beim nächsten Seitenaufruf frisch lädt.
+- Der Sidebar-Menüeintrag `xLokales Turnier` markiert verfügbare Updates zusätzlich mit einem Punkt.
+
 ### Automatischer Lobby-Start + API-Sync
 - Standard: `AUS`.
 - Wenn aktiv:
@@ -485,6 +498,7 @@ autodarts_local_tournament/
 |- installer/
 |  |- Autodarts Tournament Assistant Loader.user.js
 |- dist/
+|  |- autodarts-tournament-assistant.meta.js
 |  |- autodarts-tournament-assistant.user.js
 |- docs/
 |  |- architecture.md
@@ -507,6 +521,7 @@ Die vollständige Datei- und Verbindungsdoku steht in [docs/codebase-map.md](doc
 - Build-Metadaten: `build/manifest.json`, `build/version.json`
 - Build/QA: `scripts/*.ps1`
 - Runtime-Script: `dist/autodarts-tournament-assistant.user.js`
+- Meta-Endpoint für Versionsabgleich: `dist/autodarts-tournament-assistant.meta.js`
 - Loader-Script: `installer/Autodarts Tournament Assistant Loader.user.js`
 
 ### Build und QA

@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.3.3
+// @version      0.3.5
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -11,9 +11,10 @@
 // @grant        GM_setValue
 // @grant        GM_xmlhttpRequest
 // @connect      cdn.jsdelivr.net
+// @connect      raw.githubusercontent.com
 // @connect      api.autodarts.io
-// @downloadURL  https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/dist/autodarts-tournament-assistant.user.js
-// @updateURL    https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/dist/autodarts-tournament-assistant.user.js
+// @downloadURL  https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.user.js
+// @updateURL    https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.meta.js
 // ==/UserScript==
 
 (function () {
@@ -21,7 +22,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.3.3";
+  const APP_VERSION = "0.3.5";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 4;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
@@ -29,6 +30,8 @@
   const UI_HOST_ID = "ata-ui-host";
   const TOGGLE_EVENT = "ata:toggle-request";
   const READY_EVENT = "ata:ready";
+  const LOADER_GUARD_KEY = "__ATA_LOADER_BOOTSTRAPPED";
+  const LOADER_MENU_ITEM_ID = "ata-loader-menu-item";
   const API_PROVIDER = "api.autodarts.io";
   const API_GS_BASE = `https://${API_PROVIDER}/gs/v0`;
   const API_AS_BASE = `https://${API_PROVIDER}/as/v0`;
@@ -50,6 +53,13 @@
   const DRA_GUI_RULE_BYE_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-bye`;
   const DRA_GUI_RULE_TIE_BREAK_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-tie-break`;
   const DRA_GUI_RULE_CHECKLIST_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-checklist`;
+  const USERSCRIPT_DOWNLOAD_URL = "https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.user.js";
+  const USERSCRIPT_UPDATE_URL = "https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.meta.js";
+  const USERSCRIPT_LOADER_URL = "https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js";
+  const UPDATE_STATUS_STORAGE_KEY = "ata:update-status:v1";
+  const UPDATE_CHECK_TTL_MS = 60 * 60 * 1000;
+  const UPDATE_AUTO_CHECK_INTERVAL_MS = 15 * 60 * 1000;
+  const UPDATE_CACHE_BUST_PARAM = "_ata_ts";
 
   const BRACKETS_VIEWER_CSS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.css";
   const BRACKETS_VIEWER_JS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.js";
@@ -338,6 +348,90 @@
         font-size: 26px;
         font-family: var(--ata-font-body);
         font-weight: 700;
+      }
+
+      .ata-update-panel {
+        border-color: rgba(188, 205, 245, 0.34);
+        background:
+          radial-gradient(circle at 100% 0%, rgba(153, 184, 245, 0.14), transparent 38%),
+          rgba(255, 255, 255, 0.08);
+      }
+
+      .ata-update-panel-available {
+        border-color: rgba(255, 160, 122, 0.58);
+        background:
+          radial-gradient(circle at 100% 0%, rgba(255, 160, 122, 0.18), transparent 42%),
+          linear-gradient(145deg, rgba(255, 116, 86, 0.12), rgba(255, 196, 118, 0.08));
+      }
+
+      .ata-update-panel-current {
+        border-color: rgba(108, 224, 163, 0.42);
+        background:
+          radial-gradient(circle at 100% 0%, rgba(108, 224, 163, 0.14), transparent 40%),
+          rgba(255, 255, 255, 0.07);
+      }
+
+      .ata-update-panel-error {
+        border-color: rgba(252, 129, 129, 0.48);
+        background:
+          radial-gradient(circle at 100% 0%, rgba(252, 129, 129, 0.16), transparent 42%),
+          rgba(255, 255, 255, 0.07);
+      }
+
+      .ata-update-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .ata-update-summary {
+        display: grid;
+        gap: 4px;
+      }
+
+      .ata-update-title-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .ata-update-dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 999px;
+        background: rgba(164, 190, 255, 0.96);
+        box-shadow: 0 0 0 3px rgba(164, 190, 255, 0.16);
+      }
+
+      .ata-update-panel-available .ata-update-dot {
+        background: #ff8b73;
+        box-shadow: 0 0 0 3px rgba(255, 139, 115, 0.18);
+      }
+
+      .ata-update-panel-current .ata-update-dot {
+        background: #6ce0a3;
+        box-shadow: 0 0 0 3px rgba(108, 224, 163, 0.18);
+      }
+
+      .ata-update-panel-error .ata-update-dot {
+        background: #ff8a8a;
+        box-shadow: 0 0 0 3px rgba(255, 138, 138, 0.18);
+      }
+
+      .ata-update-title {
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .ata-update-copy {
+        margin: 0;
+      }
+
+      .ata-update-actions {
+        align-items: center;
       }
 
       .ata-heading-row {
@@ -1656,6 +1750,21 @@
       pendingConfirmationByLobby: {},
       pendingDrawUnlockOverride: null,
     },
+    updateStatus: {
+      capable: false,
+      status: "idle",
+      installedVersion: "",
+      remoteVersion: "",
+      available: false,
+      checkedAt: 0,
+      sourceUrl: "",
+      downloadUrl: USERSCRIPT_DOWNLOAD_URL,
+      error: "",
+      stale: false,
+      validators: {},
+    },
+    updateStatusSignature: "",
+    updateCheckPromise: null,
     runtimeStatusSignature: "",
     cleanupStack: [],
   };
@@ -6001,6 +6110,87 @@
     addListener(window, "beforeunload", cleanupRuntime, { once: true });
   }
 
+// App layer: update-status orchestration for UI refresh and loader menu hint.
+
+  function getUpdateStatusSignature(updateStatus) {
+    return JSON.stringify({
+      capable: Boolean(updateStatus?.capable),
+      status: normalizeText(updateStatus?.status || ""),
+      installedVersion: normalizeText(updateStatus?.installedVersion || ""),
+      remoteVersion: normalizeText(updateStatus?.remoteVersion || ""),
+      available: Boolean(updateStatus?.available),
+      checkedAt: Number(updateStatus?.checkedAt || 0),
+      sourceUrl: normalizeText(updateStatus?.sourceUrl || ""),
+      error: normalizeText(updateStatus?.error || ""),
+      stale: Boolean(updateStatus?.stale),
+    });
+  }
+
+
+  function syncLoaderMenuUpdateIndicator() {
+    const button = document.getElementById(LOADER_MENU_ITEM_ID);
+    if (!(button instanceof HTMLElement)) {
+      return;
+    }
+
+    const hasUpdate = Boolean(state.updateStatus?.available);
+    const remoteVersion = normalizeText(state.updateStatus?.remoteVersion || "");
+    const title = hasUpdate && remoteVersion
+      ? `xLokales Turnier - Update verfügbar (${APP_VERSION} -> ${remoteVersion})`
+      : "xLokales Turnier";
+
+    button.setAttribute("data-update-state", normalizeText(state.updateStatus?.status || "idle"));
+    button.setAttribute("title", title);
+    button.setAttribute("aria-label", title);
+
+    let dot = button.querySelector("[data-ata-loader-update-dot='1']");
+    if (hasUpdate) {
+      if (!(dot instanceof HTMLElement)) {
+        dot = document.createElement("span");
+        dot.setAttribute("data-ata-loader-update-dot", "1");
+        dot.setAttribute("aria-hidden", "true");
+        dot.style.position = "absolute";
+        dot.style.top = "0.42rem";
+        dot.style.right = "0.52rem";
+        dot.style.width = "0.58rem";
+        dot.style.height = "0.58rem";
+        dot.style.borderRadius = "999px";
+        dot.style.background = "#ff8370";
+        dot.style.boxShadow = "0 0 0 2px rgba(12,22,54,.92), 0 0 0 4px rgba(255,131,112,.18)";
+        dot.style.pointerEvents = "none";
+        if (!button.style.position) {
+          button.style.position = "relative";
+        }
+        button.appendChild(dot);
+      }
+    } else if (dot instanceof HTMLElement) {
+      dot.remove();
+    }
+  }
+
+
+  function setUpdateStatus(nextStatus = {}) {
+    const mergedStatus = {
+      ...state.updateStatus,
+      ...nextStatus,
+      installedVersion: APP_VERSION,
+      downloadUrl: USERSCRIPT_DOWNLOAD_URL,
+    };
+    const nextSignature = getUpdateStatusSignature(mergedStatus);
+    state.updateStatus = mergedStatus;
+
+    if (nextSignature === state.updateStatusSignature) {
+      syncLoaderMenuUpdateIndicator();
+      return;
+    }
+
+    state.updateStatusSignature = nextSignature;
+    syncLoaderMenuUpdateIndicator();
+    if (state.shadowRoot) {
+      renderShell();
+    }
+  }
+
   function runSelfTests() {
     const results = [];
     const record = (name, ok, details = "") => {
@@ -6911,6 +7101,72 @@
       );
     } catch (error) {
       record("History Import: Host-Erkennung lehnt mehrdeutige oder routenfremde Tabellen ab", false, String(error?.message || error));
+    }
+
+    try {
+      const comparisonsOk = compareVersions("0.3.4", "0.3.3") > 0
+        && compareVersions("0.3.3", "0.3.3") === 0
+        && compareVersions("0.3.3-beta", "0.3.3") < 0;
+      const parsed = parseUserscriptVersion(`// @version ${APP_VERSION}\n`);
+      record(
+        "Update-Check: Versionsvergleich und Header-Parsing arbeiten konsistent",
+        comparisonsOk && parsed === APP_VERSION,
+        `parsed=${parsed}, gt=${compareVersions("0.3.4", "0.3.3")}`,
+      );
+    } catch (error) {
+      record("Update-Check: Versionsvergleich und Header-Parsing arbeiten konsistent", false, String(error?.message || error));
+    }
+
+    try {
+      const storageMap = {
+        [UPDATE_STATUS_STORAGE_KEY]: JSON.stringify({
+          remoteVersion: "9.9.9",
+          checkedAt: 1_770_301_234_567,
+          sourceUrl: USERSCRIPT_UPDATE_URL,
+          validators: {
+            [USERSCRIPT_UPDATE_URL]: {
+              remoteVersion: "9.9.9",
+              etag: "\"ata-update\"",
+              lastModified: "Tue, 02 Jan 2024 00:00:00 GMT",
+            },
+          },
+        }),
+      };
+      const fakeWindow = {
+        localStorage: {
+          getItem(key) {
+            return Object.prototype.hasOwnProperty.call(storageMap, key) ? storageMap[key] : null;
+          },
+          setItem(key, value) {
+            storageMap[key] = String(value);
+          },
+        },
+        fetch() {},
+      };
+      const status = readStoredUpdateStatus({
+        windowRef: fakeWindow,
+        installedVersion: APP_VERSION,
+      });
+      const resolved = createResolvedUpdateStatus({
+        capable: true,
+        installedVersion: APP_VERSION,
+        remoteVersion: "9.9.9",
+        checkedAt: 1_770_301_234_567,
+        sourceUrl: USERSCRIPT_UPDATE_URL,
+        validators: status.validators,
+      });
+      const requestUrl = new URL(buildCacheBustedUrl(USERSCRIPT_UPDATE_URL, 1_770_301_234_567));
+      record(
+        "Update-Check: gecachter Status und Cache-Bust-URL werden konsistent abgeleitet",
+        status.capable === true
+          && resolved.available === true
+          && resolved.remoteVersion === "9.9.9"
+          && requestUrl?.searchParams?.get(UPDATE_CACHE_BUST_PARAM) === "1770301234567"
+          && status.validators?.[USERSCRIPT_UPDATE_URL]?.etag === "\"ata-update\"",
+        `available=${resolved.available}, remote=${resolved.remoteVersion}, source=${status.sourceUrl || "-"}`,
+      );
+    } catch (error) {
+      record("Update-Check: gecachter Status und Cache-Bust-URL werden konsistent abgeleitet", false, String(error?.message || error));
     }
 
     try {
@@ -9667,6 +9923,482 @@
     }, 1000);
   }
 
+// Best-effort GitHub version check for direct userscript installs.
+
+  function normalizeVersion(value) {
+    return String(value || "").trim();
+  }
+
+
+  function normalizeHeaderValue(value) {
+    return String(value || "").trim();
+  }
+
+
+  function normalizeValidatorEntry(entry = {}) {
+    if (!entry || typeof entry !== "object") {
+      return null;
+    }
+
+    const remoteVersion = normalizeVersion(entry.remoteVersion);
+    const etag = normalizeHeaderValue(entry.etag);
+    const lastModified = normalizeHeaderValue(entry.lastModified);
+
+    if (!remoteVersion && !etag && !lastModified) {
+      return null;
+    }
+
+    return {
+      remoteVersion,
+      etag,
+      lastModified,
+    };
+  }
+
+
+  function normalizeValidatorsMap(values) {
+    if (!values || typeof values !== "object") {
+      return {};
+    }
+
+    return Object.keys(values).reduce((result, sourceUrl) => {
+      const normalizedSourceUrl = String(sourceUrl || "").trim();
+      if (!normalizedSourceUrl) {
+        return result;
+      }
+
+      const normalizedEntry = normalizeValidatorEntry(values[sourceUrl]);
+      if (!normalizedEntry) {
+        return result;
+      }
+
+      result[normalizedSourceUrl] = normalizedEntry;
+      return result;
+    }, {});
+  }
+
+
+  function mergeValidatorEntry(validators, sourceUrl, nextEntry) {
+    const normalizedSourceUrl = String(sourceUrl || "").trim();
+    const nextValidators = {
+      ...normalizeValidatorsMap(validators),
+    };
+
+    if (!normalizedSourceUrl) {
+      return nextValidators;
+    }
+
+    const normalizedEntry = normalizeValidatorEntry(nextEntry);
+    if (!normalizedEntry) {
+      delete nextValidators[normalizedSourceUrl];
+      return nextValidators;
+    }
+
+    nextValidators[normalizedSourceUrl] = normalizedEntry;
+    return nextValidators;
+  }
+
+
+  function getResponseHeader(response, headerName) {
+    const normalizedHeaderName = String(headerName || "").trim().toLowerCase();
+    if (!normalizedHeaderName) {
+      return "";
+    }
+
+    if (typeof response?.headers?.get === "function") {
+      return normalizeHeaderValue(response.headers.get(headerName));
+    }
+
+    if (response?.headers && typeof response.headers === "object") {
+      const matchingKey = Object.keys(response.headers).find((key) => {
+        return String(key || "").trim().toLowerCase() === normalizedHeaderName;
+      });
+      if (matchingKey) {
+        return normalizeHeaderValue(response.headers[matchingKey]);
+      }
+    }
+
+    return "";
+  }
+
+
+  function createBaseUpdateStatus(installedVersion, capable) {
+    return {
+      capable: Boolean(capable),
+      status: "idle",
+      installedVersion: normalizeVersion(installedVersion),
+      remoteVersion: "",
+      available: false,
+      checkedAt: 0,
+      sourceUrl: "",
+      downloadUrl: USERSCRIPT_DOWNLOAD_URL,
+      error: "",
+      stale: false,
+      validators: {},
+    };
+  }
+
+
+  function safeParseJson(value) {
+    if (typeof value !== "string" || !value.trim()) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(value);
+    } catch (_) {
+      return null;
+    }
+  }
+
+
+  function getUpdateStorageRef(windowRef) {
+    const storageRef = windowRef?.localStorage || null;
+    if (!storageRef || typeof storageRef.getItem !== "function" || typeof storageRef.setItem !== "function") {
+      return null;
+    }
+    return storageRef;
+  }
+
+
+  function getUpdateFetchFn(windowRef) {
+    return typeof windowRef?.fetch === "function" ? windowRef.fetch.bind(windowRef) : null;
+  }
+
+
+  function parseVersionToken(token) {
+    const rawToken = String(token || "").trim();
+    if (!rawToken) {
+      return { type: "number", value: 0 };
+    }
+    if (/^\d+$/.test(rawToken)) {
+      return { type: "number", value: Number.parseInt(rawToken, 10) };
+    }
+    return { type: "string", value: rawToken.toLowerCase() };
+  }
+
+
+  function compareVersions(leftVersion, rightVersion) {
+    const leftParts = normalizeVersion(leftVersion).split(/[.-]/);
+    const rightParts = normalizeVersion(rightVersion).split(/[.-]/);
+    const length = Math.max(leftParts.length, rightParts.length);
+
+    for (let index = 0; index < length; index += 1) {
+      const leftToken = parseVersionToken(leftParts[index]);
+      const rightToken = parseVersionToken(rightParts[index]);
+
+      if (leftToken.type === rightToken.type) {
+        if (leftToken.value > rightToken.value) {
+          return 1;
+        }
+        if (leftToken.value < rightToken.value) {
+          return -1;
+        }
+        continue;
+      }
+
+      if (leftToken.type === "number") {
+        return 1;
+      }
+      return -1;
+    }
+
+    return 0;
+  }
+
+
+  function parseUserscriptVersion(text) {
+    const match = String(text || "").match(/@version\s+([^\s]+)/i);
+    return normalizeVersion(match?.[1] || "");
+  }
+
+
+  function buildCacheBustedUrl(sourceUrl, now = Date.now()) {
+    const normalizedSourceUrl = String(sourceUrl || "").trim();
+    if (!normalizedSourceUrl) {
+      return "";
+    }
+
+    const cacheBustValue = String(Math.max(0, Number(now) || 0));
+    try {
+      const parsed = new URL(normalizedSourceUrl);
+      parsed.searchParams.set(UPDATE_CACHE_BUST_PARAM, cacheBustValue);
+      return parsed.toString();
+    } catch (_) {
+      const separator = normalizedSourceUrl.includes("?") ? "&" : "?";
+      return `${normalizedSourceUrl}${separator}${UPDATE_CACHE_BUST_PARAM}=${encodeURIComponent(cacheBustValue)}`;
+    }
+  }
+
+
+  function createResolvedUpdateStatus({
+    capable,
+    installedVersion,
+    remoteVersion,
+    checkedAt,
+    sourceUrl,
+    error = "",
+    stale = false,
+    validators = {},
+  }) {
+    const baseStatus = createBaseUpdateStatus(installedVersion, capable);
+    const normalizedRemoteVersion = normalizeVersion(remoteVersion);
+    const comparison = normalizedRemoteVersion
+      ? compareVersions(normalizedRemoteVersion, baseStatus.installedVersion)
+      : 0;
+
+    return {
+      ...baseStatus,
+      status: normalizedRemoteVersion
+        ? (comparison > 0 ? "available" : "current")
+        : (error ? "error" : "idle"),
+      remoteVersion: normalizedRemoteVersion,
+      available: normalizedRemoteVersion ? comparison > 0 : false,
+      checkedAt: Number(checkedAt) > 0 ? Number(checkedAt) : 0,
+      sourceUrl: String(sourceUrl || "").trim(),
+      error: String(error || "").trim(),
+      stale: Boolean(stale),
+      validators: normalizeValidatorsMap(validators),
+    };
+  }
+
+
+  function readStoredUpdatePayload(storageRef) {
+    if (!storageRef) {
+      return null;
+    }
+
+    try {
+      return safeParseJson(storageRef.getItem(UPDATE_STATUS_STORAGE_KEY));
+    } catch (_) {
+      return null;
+    }
+  }
+
+
+  function writeStoredUpdatePayload(storageRef, payload) {
+    if (!storageRef) {
+      return;
+    }
+
+    try {
+      storageRef.setItem(UPDATE_STATUS_STORAGE_KEY, JSON.stringify({
+        remoteVersion: normalizeVersion(payload?.remoteVersion),
+        checkedAt: Number(payload?.checkedAt) > 0 ? Number(payload.checkedAt) : 0,
+        sourceUrl: String(payload?.sourceUrl || "").trim(),
+        validators: normalizeValidatorsMap(payload?.validators),
+      }));
+    } catch (_) {
+      // Ignore storage write failures.
+    }
+  }
+
+
+  async function fetchRemoteVersion(fetchFn, options = {}) {
+    const now = Number(options.now || Date.now());
+    const validators = normalizeValidatorsMap(options.validators);
+    const candidateUrls = [USERSCRIPT_UPDATE_URL, USERSCRIPT_DOWNLOAD_URL];
+    let lastError = null;
+    let nextValidators = validators;
+
+    for (const sourceUrl of candidateUrls) {
+      const requestUrl = buildCacheBustedUrl(sourceUrl, now);
+      const cachedValidator = validators[sourceUrl] || null;
+      const headers = {};
+
+      if (cachedValidator?.etag) {
+        headers["If-None-Match"] = cachedValidator.etag;
+      }
+      if (cachedValidator?.lastModified) {
+        headers["If-Modified-Since"] = cachedValidator.lastModified;
+      }
+
+      try {
+        const response = await fetchFn(requestUrl, {
+          method: "GET",
+          cache: "no-store",
+          ...(Object.keys(headers).length ? { headers } : {}),
+        });
+        const statusCode = Number(response?.status) || 0;
+        const responseEtag = getResponseHeader(response, "etag");
+        const responseLastModified = getResponseHeader(response, "last-modified");
+
+        if (statusCode === 304) {
+          const remoteVersion = normalizeVersion(cachedValidator?.remoteVersion);
+          if (!remoteVersion) {
+            throw new Error("Version nicht gefunden.");
+          }
+
+          nextValidators = mergeValidatorEntry(nextValidators, sourceUrl, {
+            remoteVersion,
+            etag: responseEtag || cachedValidator?.etag || "",
+            lastModified: responseLastModified || cachedValidator?.lastModified || "",
+          });
+
+          return {
+            remoteVersion,
+            sourceUrl,
+            validators: nextValidators,
+          };
+        }
+
+        if (!response || !response.ok) {
+          throw new Error(`HTTP ${statusCode}`);
+        }
+
+        const version = parseUserscriptVersion(await response.text());
+        if (version) {
+          nextValidators = mergeValidatorEntry(nextValidators, sourceUrl, {
+            remoteVersion: version,
+            etag: responseEtag,
+            lastModified: responseLastModified,
+          });
+
+          return {
+            remoteVersion: version,
+            sourceUrl,
+            validators: nextValidators,
+          };
+        }
+
+        throw new Error("Version nicht gefunden.");
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError || new Error("Versionsabgleich fehlgeschlagen.");
+  }
+
+
+  function readStoredUpdateStatus(options = {}) {
+    const windowRef = options.windowRef || window;
+    const installedVersion = normalizeVersion(options.installedVersion || APP_VERSION);
+    const storageRef = options.storageRef || getUpdateStorageRef(windowRef);
+    const capable = Boolean(options.fetchFn || getUpdateFetchFn(windowRef));
+    const storedPayload = readStoredUpdatePayload(storageRef);
+
+    if (!storedPayload || typeof storedPayload !== "object") {
+      return createBaseUpdateStatus(installedVersion, capable);
+    }
+
+    return createResolvedUpdateStatus({
+      capable,
+      installedVersion,
+      remoteVersion: storedPayload.remoteVersion,
+      checkedAt: storedPayload.checkedAt,
+      sourceUrl: storedPayload.sourceUrl,
+      validators: storedPayload.validators,
+    });
+  }
+
+
+  function shouldRefreshUpdateStatus(updateStatus, now = Date.now()) {
+    const checkedAt = Number(updateStatus?.checkedAt || 0);
+    if (checkedAt <= 0) {
+      return true;
+    }
+    return Number(now) - checkedAt >= UPDATE_CHECK_TTL_MS;
+  }
+
+
+  async function resolveLatestUpdateStatus(options = {}) {
+    const windowRef = options.windowRef || window;
+    const installedVersion = normalizeVersion(options.installedVersion || APP_VERSION);
+    const force = Boolean(options.force);
+    const now = Number(options.now || Date.now());
+    const fetchFn = options.fetchFn || getUpdateFetchFn(windowRef);
+    const storageRef = options.storageRef || getUpdateStorageRef(windowRef);
+    const cachedStatus = readStoredUpdateStatus({
+      windowRef,
+      installedVersion,
+      fetchFn,
+      storageRef,
+    });
+
+    if (!fetchFn) {
+      return cachedStatus;
+    }
+
+    if (!force && !shouldRefreshUpdateStatus(cachedStatus, now)) {
+      return cachedStatus;
+    }
+
+    try {
+      const remoteInfo = await fetchRemoteVersion(fetchFn, {
+        now,
+        validators: cachedStatus.validators,
+      });
+      const nextStatus = createResolvedUpdateStatus({
+        capable: true,
+        installedVersion,
+        remoteVersion: remoteInfo.remoteVersion,
+        checkedAt: now,
+        sourceUrl: remoteInfo.sourceUrl,
+        validators: remoteInfo.validators,
+      });
+      writeStoredUpdatePayload(storageRef, nextStatus);
+      return nextStatus;
+    } catch (error) {
+      const message = String(error?.message || "Update-Prüfung fehlgeschlagen.").trim();
+      if (cachedStatus.checkedAt > 0 && cachedStatus.remoteVersion) {
+        const staleStatus = {
+          ...cachedStatus,
+          error: message,
+          stale: true,
+          checkedAt: now,
+        };
+        writeStoredUpdatePayload(storageRef, staleStatus);
+        return staleStatus;
+      }
+
+      const errorStatus = createResolvedUpdateStatus({
+        capable: true,
+        installedVersion,
+        remoteVersion: "",
+        checkedAt: now,
+        sourceUrl: "",
+        error: message,
+        validators: cachedStatus.validators,
+      });
+      writeStoredUpdatePayload(storageRef, errorStatus);
+      return errorStatus;
+    }
+  }
+
+
+  function isLoaderRuntimeActive(windowRef = window) {
+    return Boolean(windowRef?.[LOADER_GUARD_KEY]);
+  }
+
+
+  function openUserscriptInstall(windowRef = window) {
+    const installUrl = buildCacheBustedUrl(USERSCRIPT_DOWNLOAD_URL, Date.now()) || USERSCRIPT_DOWNLOAD_URL;
+    if (typeof windowRef?.open === "function") {
+      const openedWindow = windowRef.open(installUrl, "_blank", "noopener,noreferrer");
+      if (openedWindow && typeof openedWindow.focus === "function") {
+        openedWindow.focus();
+      }
+      return Boolean(openedWindow);
+    }
+
+    if (windowRef?.location) {
+      windowRef.location.href = installUrl;
+      return true;
+    }
+
+    return false;
+  }
+
+
+  function reloadForLoaderUpdate(windowRef = window) {
+    if (typeof windowRef?.location?.reload === "function") {
+      windowRef.location.reload();
+      return true;
+    }
+    return false;
+  }
+
 // Presentation layer: UI rendering and interaction wiring.
 
   function renderInfoLinks(links) {
@@ -10541,6 +11273,104 @@
     `;
   }
 
+  function formatUpdateCheckedAt(timestamp) {
+    const value = Number(timestamp || 0);
+    if (value <= 0) {
+      return "";
+    }
+
+    try {
+      return new Intl.DateTimeFormat("de-DE", {
+        dateStyle: "short",
+        timeStyle: "short",
+      }).format(new Date(value));
+    } catch (_) {
+      return "";
+    }
+  }
+
+
+  function getUpdatePanelState(updateStatus) {
+    if (!updateStatus?.capable) {
+      return "";
+    }
+
+    const normalizedStatus = normalizeText(updateStatus.status || "").toLowerCase();
+    if (["available", "current", "checking", "error"].includes(normalizedStatus)) {
+      return normalizedStatus;
+    }
+    return normalizeText(updateStatus.remoteVersion || "") ? "current" : "checking";
+  }
+
+
+  function renderUpdatePanel() {
+    const updateStatus = state.updateStatus;
+    if (!updateStatus?.capable) {
+      return `
+        <section class="ata-card tournamentCard">
+          ${renderSectionHeading("Script-Update", [
+            { href: README_BASE_URL, kind: "tech", label: "README zur Installation öffnen", title: "README: Schnellstart" },
+          ])}
+          <p class="ata-small">Die Update-Prüfung ist in diesem Kontext nicht verfügbar, weil keine Browser-Fetch-API bereitsteht.</p>
+        </section>
+      `;
+    }
+
+    const panelState = getUpdatePanelState(updateStatus);
+    const installedVersion = normalizeText(updateStatus.installedVersion || APP_VERSION) || APP_VERSION;
+    const remoteVersion = normalizeText(updateStatus.remoteVersion || "");
+    const checkedAtText = formatUpdateCheckedAt(updateStatus.checkedAt);
+    const loaderActive = isLoaderRuntimeActive();
+    let titleText = "GitHub-Version wird geprüft";
+    let copyText = "Die Versionsprüfung läuft oder es liegt noch kein erfolgreicher GitHub-Abgleich vor.";
+
+    if (panelState === "available") {
+      titleText = loaderActive ? "Neue Version bereit" : "Update verfügbar";
+      copyText = loaderActive
+        ? `Installiert: v${installedVersion}. Auf GitHub liegt bereits v${remoteVersion}. Da der Loader aktiv ist, reicht ein Reload von play.autodarts.io.`
+        : `Installiert: v${installedVersion}. Auf GitHub liegt bereits v${remoteVersion}.`;
+    } else if (panelState === "current") {
+      titleText = "Version ist aktuell";
+      copyText = remoteVersion
+        ? `Installiert ist bereits die aktuelle GitHub-Version v${remoteVersion}.`
+        : `Installierte Version: v${installedVersion}.`;
+    } else if (panelState === "error") {
+      titleText = "Update-Prüfung fehlgeschlagen";
+      copyText = normalizeText(updateStatus.error || "Die GitHub-Version konnte nicht gelesen werden.");
+    }
+
+    if (checkedAtText) {
+      copyText = `${copyText} ${updateStatus.stale ? "Letzter erfolgreicher Stand" : "Geprüft"}: ${checkedAtText}.`;
+    }
+
+    return `
+      <section class="ata-card tournamentCard ata-update-panel ata-update-panel-${escapeHtml(panelState || "checking")}">
+        ${renderSectionHeading("Script-Update", [
+          { href: README_BASE_URL, kind: "tech", label: "README zur Installation öffnen", title: "README: Schnellstart" },
+        ])}
+        <div class="ata-update-head">
+          <div class="ata-update-summary">
+            <div class="ata-update-title-row">
+              <span class="ata-update-dot" aria-hidden="true"></span>
+              <strong class="ata-update-title">${escapeHtml(titleText)}</strong>
+            </div>
+            <p class="ata-small ata-update-copy">${escapeHtml(copyText)}</p>
+          </div>
+          <div class="ata-actions ata-update-actions">
+            <button type="button" class="ata-btn ata-btn-sm" data-action="check-update" ${panelState === "checking" ? "disabled" : ""}>${panelState === "checking" ? "Prüfe..." : "Neu prüfen"}</button>
+            ${panelState === "available"
+              ? (loaderActive
+                ? `<button type="button" class="ata-btn ata-btn-sm ata-btn-primary" data-action="reload-update">Neu laden</button>`
+                : `<button type="button" class="ata-btn ata-btn-sm ata-btn-primary" data-action="install-update">Update installieren</button>`)
+              : ""}
+          </div>
+        </div>
+        <p class="ata-small">Direkt-Install: <a href="${escapeHtml(USERSCRIPT_DOWNLOAD_URL)}" target="_blank" rel="noopener noreferrer">Runtime Userscript</a> · Empfohlen: <a href="${escapeHtml(USERSCRIPT_LOADER_URL)}" target="_blank" rel="noopener noreferrer">Loader</a></p>
+      </section>
+    `;
+  }
+
+
   function renderSettingsTab() {
     const debugEnabled = state.store.settings.debug ? "checked" : "";
     const tournamentTimeProfile = sanitizeTournamentTimeProfile(
@@ -10582,6 +11412,7 @@
     ]);
 
     return `
+      ${renderUpdatePanel()}
       <section class="ata-card tournamentCard">
         ${renderSectionHeading("Debug und Feature-Flags", [
           { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen-Dokumentation \u00f6ffnen", title: "README: Einstellungen" },
@@ -10711,10 +11542,78 @@
 
     state.shadowRoot.innerHTML = buildShellHtml();
     bindUiHandlers();
+    syncLoaderMenuUpdateIndicator();
     if (state.activeTab === "view") {
       queueBracketRender();
       syncBracketFallbackVisibility();
     }
+  }
+
+
+  async function hydrateStoredUpdateStatus() {
+    setUpdateStatus(readStoredUpdateStatus({
+      windowRef: window,
+      installedVersion: APP_VERSION,
+    }));
+  }
+
+
+  function refreshUpdateStatus(options = {}) {
+    const force = Boolean(options.force);
+    const announce = Boolean(options.announce);
+
+    if (!state.updateStatus.capable) {
+      return Promise.resolve(state.updateStatus);
+    }
+    if (state.updateCheckPromise) {
+      return state.updateCheckPromise;
+    }
+    if (!force && !shouldRefreshUpdateStatus(state.updateStatus)) {
+      return Promise.resolve(state.updateStatus);
+    }
+
+    setUpdateStatus({
+      status: "checking",
+      error: "",
+      stale: Boolean(state.updateStatus.stale && state.updateStatus.checkedAt > 0),
+    });
+
+    const updatePromise = resolveLatestUpdateStatus({
+      windowRef: window,
+      installedVersion: APP_VERSION,
+      force,
+    }).then((nextStatus) => {
+      setUpdateStatus(nextStatus);
+      if (announce) {
+        if (nextStatus.status === "available") {
+          const actionText = isLoaderRuntimeActive()
+            ? `Neue Version gefunden: ${APP_VERSION} -> ${nextStatus.remoteVersion}. Ein Reload reicht, da der Loader aktiv ist.`
+            : `Neue Version gefunden: ${APP_VERSION} -> ${nextStatus.remoteVersion}.`;
+          setNotice("info", actionText, 4200);
+        } else if (nextStatus.status === "current") {
+          setNotice("success", `Kein neueres Update gefunden. Aktuell installiert: ${APP_VERSION}.`, 2800);
+        } else if (nextStatus.status === "error" || nextStatus.error) {
+          setNotice("error", nextStatus.error || "Update-Prüfung fehlgeschlagen.", 4200);
+        }
+      }
+      return nextStatus;
+    }).finally(() => {
+      state.updateCheckPromise = null;
+    });
+
+    state.updateCheckPromise = updatePromise;
+    return updatePromise;
+  }
+
+
+  function installAvailableUpdate() {
+    if (!state.updateStatus?.available) {
+      return false;
+    }
+    if (isLoaderRuntimeActive()) {
+      return reloadForLoaderUpdate(window);
+    }
+    return openUserscriptInstall(window);
   }
 
 
@@ -10962,6 +11861,41 @@
         }
         if (result.changed) {
           setNotice("success", "Tie-Break-Profil aktualisiert.", 1800);
+        }
+      });
+    }
+
+    const checkUpdateButton = shadow.querySelector("[data-action='check-update']");
+    if (checkUpdateButton instanceof HTMLButtonElement) {
+      checkUpdateButton.addEventListener("click", () => {
+        refreshUpdateStatus({
+          force: true,
+          announce: true,
+        }).catch((error) => {
+          logWarn("update", "Manual update check failed unexpectedly.", error);
+          setNotice("error", "Update-Prüfung ist fehlgeschlagen.", 4200);
+        });
+      });
+    }
+
+    const installUpdateButton = shadow.querySelector("[data-action='install-update']");
+    if (installUpdateButton instanceof HTMLButtonElement) {
+      installUpdateButton.addEventListener("click", () => {
+        const opened = installAvailableUpdate();
+        if (!opened) {
+          setNotice("error", "Update konnte nicht geöffnet werden.", 4200);
+          return;
+        }
+        setNotice("info", "Userscript-Quelle wurde zum Update geöffnet.", 3200);
+      });
+    }
+
+    const reloadUpdateButton = shadow.querySelector("[data-action='reload-update']");
+    if (reloadUpdateButton instanceof HTMLButtonElement) {
+      reloadUpdateButton.addEventListener("click", () => {
+        const reloaded = installAvailableUpdate();
+        if (!reloaded) {
+          setNotice("error", "Reload für Loader-Update konnte nicht ausgelöst werden.", 4200);
         }
       });
     }
@@ -11437,6 +12371,7 @@
 
   async function init() {
     await loadPersistedStore();
+    await hydrateStoredUpdateStatus();
     state.runtimeStatusSignature = runtimeStatusSignature();
     ensureHost();
     renderShell();
@@ -11454,8 +12389,37 @@
     }, API_SYNC_INTERVAL_MS);
     addInterval(() => {
       refreshRuntimeStatusUi();
+      syncLoaderMenuUpdateIndicator();
       renderHistoryImportButton();
     }, 1200);
+    addInterval(() => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+      refreshUpdateStatus({
+        force: false,
+        announce: false,
+      }).catch((error) => {
+        logWarn("update", "Background update check failed.", error);
+      });
+    }, UPDATE_AUTO_CHECK_INTERVAL_MS);
+    addListener(document, "visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+      refreshUpdateStatus({
+        force: false,
+        announce: false,
+      }).catch((error) => {
+        logWarn("update", "Visibility-triggered update check failed.", error);
+      });
+    });
+    refreshUpdateStatus({
+      force: false,
+      announce: false,
+    }).catch((error) => {
+      logWarn("update", "Initial update check failed.", error);
+    });
 
     state.ready = true;
     window.dispatchEvent(new CustomEvent(READY_EVENT, {

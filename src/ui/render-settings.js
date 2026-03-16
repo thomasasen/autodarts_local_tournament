@@ -1,4 +1,102 @@
 // Auto-generated module split from dist source.
+  function formatUpdateCheckedAt(timestamp) {
+    const value = Number(timestamp || 0);
+    if (value <= 0) {
+      return "";
+    }
+
+    try {
+      return new Intl.DateTimeFormat("de-DE", {
+        dateStyle: "short",
+        timeStyle: "short",
+      }).format(new Date(value));
+    } catch (_) {
+      return "";
+    }
+  }
+
+
+  function getUpdatePanelState(updateStatus) {
+    if (!updateStatus?.capable) {
+      return "";
+    }
+
+    const normalizedStatus = normalizeText(updateStatus.status || "").toLowerCase();
+    if (["available", "current", "checking", "error"].includes(normalizedStatus)) {
+      return normalizedStatus;
+    }
+    return normalizeText(updateStatus.remoteVersion || "") ? "current" : "checking";
+  }
+
+
+  function renderUpdatePanel() {
+    const updateStatus = state.updateStatus;
+    if (!updateStatus?.capable) {
+      return `
+        <section class="ata-card tournamentCard">
+          ${renderSectionHeading("Script-Update", [
+            { href: README_BASE_URL, kind: "tech", label: "README zur Installation öffnen", title: "README: Schnellstart" },
+          ])}
+          <p class="ata-small">Die Update-Prüfung ist in diesem Kontext nicht verfügbar, weil keine Browser-Fetch-API bereitsteht.</p>
+        </section>
+      `;
+    }
+
+    const panelState = getUpdatePanelState(updateStatus);
+    const installedVersion = normalizeText(updateStatus.installedVersion || APP_VERSION) || APP_VERSION;
+    const remoteVersion = normalizeText(updateStatus.remoteVersion || "");
+    const checkedAtText = formatUpdateCheckedAt(updateStatus.checkedAt);
+    const loaderActive = isLoaderRuntimeActive();
+    let titleText = "GitHub-Version wird geprüft";
+    let copyText = "Die Versionsprüfung läuft oder es liegt noch kein erfolgreicher GitHub-Abgleich vor.";
+
+    if (panelState === "available") {
+      titleText = loaderActive ? "Neue Version bereit" : "Update verfügbar";
+      copyText = loaderActive
+        ? `Installiert: v${installedVersion}. Auf GitHub liegt bereits v${remoteVersion}. Da der Loader aktiv ist, reicht ein Reload von play.autodarts.io.`
+        : `Installiert: v${installedVersion}. Auf GitHub liegt bereits v${remoteVersion}.`;
+    } else if (panelState === "current") {
+      titleText = "Version ist aktuell";
+      copyText = remoteVersion
+        ? `Installiert ist bereits die aktuelle GitHub-Version v${remoteVersion}.`
+        : `Installierte Version: v${installedVersion}.`;
+    } else if (panelState === "error") {
+      titleText = "Update-Prüfung fehlgeschlagen";
+      copyText = normalizeText(updateStatus.error || "Die GitHub-Version konnte nicht gelesen werden.");
+    }
+
+    if (checkedAtText) {
+      copyText = `${copyText} ${updateStatus.stale ? "Letzter erfolgreicher Stand" : "Geprüft"}: ${checkedAtText}.`;
+    }
+
+    return `
+      <section class="ata-card tournamentCard ata-update-panel ata-update-panel-${escapeHtml(panelState || "checking")}">
+        ${renderSectionHeading("Script-Update", [
+          { href: README_BASE_URL, kind: "tech", label: "README zur Installation öffnen", title: "README: Schnellstart" },
+        ])}
+        <div class="ata-update-head">
+          <div class="ata-update-summary">
+            <div class="ata-update-title-row">
+              <span class="ata-update-dot" aria-hidden="true"></span>
+              <strong class="ata-update-title">${escapeHtml(titleText)}</strong>
+            </div>
+            <p class="ata-small ata-update-copy">${escapeHtml(copyText)}</p>
+          </div>
+          <div class="ata-actions ata-update-actions">
+            <button type="button" class="ata-btn ata-btn-sm" data-action="check-update" ${panelState === "checking" ? "disabled" : ""}>${panelState === "checking" ? "Prüfe..." : "Neu prüfen"}</button>
+            ${panelState === "available"
+              ? (loaderActive
+                ? `<button type="button" class="ata-btn ata-btn-sm ata-btn-primary" data-action="reload-update">Neu laden</button>`
+                : `<button type="button" class="ata-btn ata-btn-sm ata-btn-primary" data-action="install-update">Update installieren</button>`)
+              : ""}
+          </div>
+        </div>
+        <p class="ata-small">Direkt-Install: <a href="${escapeHtml(USERSCRIPT_DOWNLOAD_URL)}" target="_blank" rel="noopener noreferrer">Runtime Userscript</a> · Empfohlen: <a href="${escapeHtml(USERSCRIPT_LOADER_URL)}" target="_blank" rel="noopener noreferrer">Loader</a></p>
+      </section>
+    `;
+  }
+
+
   function renderSettingsTab() {
     const debugEnabled = state.store.settings.debug ? "checked" : "";
     const tournamentTimeProfile = sanitizeTournamentTimeProfile(
@@ -40,6 +138,7 @@
     ]);
 
     return `
+      ${renderUpdatePanel()}
       <section class="ata-card tournamentCard">
         ${renderSectionHeading("Debug und Feature-Flags", [
           { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen-Dokumentation \u00f6ffnen", title: "README: Einstellungen" },

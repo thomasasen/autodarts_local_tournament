@@ -25,10 +25,78 @@
 
     state.shadowRoot.innerHTML = buildShellHtml();
     bindUiHandlers();
+    syncLoaderMenuUpdateIndicator();
     if (state.activeTab === "view") {
       queueBracketRender();
       syncBracketFallbackVisibility();
     }
+  }
+
+
+  async function hydrateStoredUpdateStatus() {
+    setUpdateStatus(readStoredUpdateStatus({
+      windowRef: window,
+      installedVersion: APP_VERSION,
+    }));
+  }
+
+
+  function refreshUpdateStatus(options = {}) {
+    const force = Boolean(options.force);
+    const announce = Boolean(options.announce);
+
+    if (!state.updateStatus.capable) {
+      return Promise.resolve(state.updateStatus);
+    }
+    if (state.updateCheckPromise) {
+      return state.updateCheckPromise;
+    }
+    if (!force && !shouldRefreshUpdateStatus(state.updateStatus)) {
+      return Promise.resolve(state.updateStatus);
+    }
+
+    setUpdateStatus({
+      status: "checking",
+      error: "",
+      stale: Boolean(state.updateStatus.stale && state.updateStatus.checkedAt > 0),
+    });
+
+    const updatePromise = resolveLatestUpdateStatus({
+      windowRef: window,
+      installedVersion: APP_VERSION,
+      force,
+    }).then((nextStatus) => {
+      setUpdateStatus(nextStatus);
+      if (announce) {
+        if (nextStatus.status === "available") {
+          const actionText = isLoaderRuntimeActive()
+            ? `Neue Version gefunden: ${APP_VERSION} -> ${nextStatus.remoteVersion}. Ein Reload reicht, da der Loader aktiv ist.`
+            : `Neue Version gefunden: ${APP_VERSION} -> ${nextStatus.remoteVersion}.`;
+          setNotice("info", actionText, 4200);
+        } else if (nextStatus.status === "current") {
+          setNotice("success", `Kein neueres Update gefunden. Aktuell installiert: ${APP_VERSION}.`, 2800);
+        } else if (nextStatus.status === "error" || nextStatus.error) {
+          setNotice("error", nextStatus.error || "Update-Prüfung fehlgeschlagen.", 4200);
+        }
+      }
+      return nextStatus;
+    }).finally(() => {
+      state.updateCheckPromise = null;
+    });
+
+    state.updateCheckPromise = updatePromise;
+    return updatePromise;
+  }
+
+
+  function installAvailableUpdate() {
+    if (!state.updateStatus?.available) {
+      return false;
+    }
+    if (isLoaderRuntimeActive()) {
+      return reloadForLoaderUpdate(window);
+    }
+    return openUserscriptInstall(window);
   }
 
 
@@ -276,6 +344,41 @@
         }
         if (result.changed) {
           setNotice("success", "Tie-Break-Profil aktualisiert.", 1800);
+        }
+      });
+    }
+
+    const checkUpdateButton = shadow.querySelector("[data-action='check-update']");
+    if (checkUpdateButton instanceof HTMLButtonElement) {
+      checkUpdateButton.addEventListener("click", () => {
+        refreshUpdateStatus({
+          force: true,
+          announce: true,
+        }).catch((error) => {
+          logWarn("update", "Manual update check failed unexpectedly.", error);
+          setNotice("error", "Update-Prüfung ist fehlgeschlagen.", 4200);
+        });
+      });
+    }
+
+    const installUpdateButton = shadow.querySelector("[data-action='install-update']");
+    if (installUpdateButton instanceof HTMLButtonElement) {
+      installUpdateButton.addEventListener("click", () => {
+        const opened = installAvailableUpdate();
+        if (!opened) {
+          setNotice("error", "Update konnte nicht geöffnet werden.", 4200);
+          return;
+        }
+        setNotice("info", "Userscript-Quelle wurde zum Update geöffnet.", 3200);
+      });
+    }
+
+    const reloadUpdateButton = shadow.querySelector("[data-action='reload-update']");
+    if (reloadUpdateButton instanceof HTMLButtonElement) {
+      reloadUpdateButton.addEventListener("click", () => {
+        const reloaded = installAvailableUpdate();
+        if (!reloaded) {
+          setNotice("error", "Reload für Loader-Update konnte nicht ausgelöst werden.", 4200);
         }
       });
     }

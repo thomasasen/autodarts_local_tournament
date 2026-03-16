@@ -912,6 +912,72 @@
     }
 
     try {
+      const comparisonsOk = compareVersions("0.3.4", "0.3.3") > 0
+        && compareVersions("0.3.3", "0.3.3") === 0
+        && compareVersions("0.3.3-beta", "0.3.3") < 0;
+      const parsed = parseUserscriptVersion(`// @version ${APP_VERSION}\n`);
+      record(
+        "Update-Check: Versionsvergleich und Header-Parsing arbeiten konsistent",
+        comparisonsOk && parsed === APP_VERSION,
+        `parsed=${parsed}, gt=${compareVersions("0.3.4", "0.3.3")}`,
+      );
+    } catch (error) {
+      record("Update-Check: Versionsvergleich und Header-Parsing arbeiten konsistent", false, String(error?.message || error));
+    }
+
+    try {
+      const storageMap = {
+        [UPDATE_STATUS_STORAGE_KEY]: JSON.stringify({
+          remoteVersion: "9.9.9",
+          checkedAt: 1_770_301_234_567,
+          sourceUrl: USERSCRIPT_UPDATE_URL,
+          validators: {
+            [USERSCRIPT_UPDATE_URL]: {
+              remoteVersion: "9.9.9",
+              etag: "\"ata-update\"",
+              lastModified: "Tue, 02 Jan 2024 00:00:00 GMT",
+            },
+          },
+        }),
+      };
+      const fakeWindow = {
+        localStorage: {
+          getItem(key) {
+            return Object.prototype.hasOwnProperty.call(storageMap, key) ? storageMap[key] : null;
+          },
+          setItem(key, value) {
+            storageMap[key] = String(value);
+          },
+        },
+        fetch() {},
+      };
+      const status = readStoredUpdateStatus({
+        windowRef: fakeWindow,
+        installedVersion: APP_VERSION,
+      });
+      const resolved = createResolvedUpdateStatus({
+        capable: true,
+        installedVersion: APP_VERSION,
+        remoteVersion: "9.9.9",
+        checkedAt: 1_770_301_234_567,
+        sourceUrl: USERSCRIPT_UPDATE_URL,
+        validators: status.validators,
+      });
+      const requestUrl = new URL(buildCacheBustedUrl(USERSCRIPT_UPDATE_URL, 1_770_301_234_567));
+      record(
+        "Update-Check: gecachter Status und Cache-Bust-URL werden konsistent abgeleitet",
+        status.capable === true
+          && resolved.available === true
+          && resolved.remoteVersion === "9.9.9"
+          && requestUrl?.searchParams?.get(UPDATE_CACHE_BUST_PARAM) === "1770301234567"
+          && status.validators?.[USERSCRIPT_UPDATE_URL]?.etag === "\"ata-update\"",
+        `available=${resolved.available}, remote=${resolved.remoteVersion}, source=${status.sourceUrl || "-"}`,
+      );
+    } catch (error) {
+      record("Update-Check: gecachter Status und Cache-Bust-URL werden konsistent abgeleitet", false, String(error?.message || error));
+    }
+
+    try {
       const rawStoreV2 = {
         schemaVersion: 2,
         settings: { debug: false, featureFlags: { autoLobbyStart: false, randomizeKoRound1: true } },

@@ -12,9 +12,10 @@
 // @grant        GM_setValue
 // @grant        GM_xmlhttpRequest
 // @connect      cdn.jsdelivr.net
+// @connect      raw.githubusercontent.com
 // @connect      api.autodarts.io
-// @downloadURL  https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/dist/autodarts-tournament-assistant.user.js
-// @updateURL    https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/dist/autodarts-tournament-assistant.user.js
+// @downloadURL  https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.user.js
+// @updateURL    https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.meta.js
 // ==/UserScript==
 
 (function () {
@@ -30,6 +31,8 @@
   const UI_HOST_ID = "ata-ui-host";
   const TOGGLE_EVENT = "ata:toggle-request";
   const READY_EVENT = "ata:ready";
+  const LOADER_GUARD_KEY = "__ATA_LOADER_BOOTSTRAPPED";
+  const LOADER_MENU_ITEM_ID = "ata-loader-menu-item";
   const API_PROVIDER = "api.autodarts.io";
   const API_GS_BASE = `https://${API_PROVIDER}/gs/v0`;
   const API_AS_BASE = `https://${API_PROVIDER}/as/v0`;
@@ -51,6 +54,13 @@
   const DRA_GUI_RULE_BYE_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-bye`;
   const DRA_GUI_RULE_TIE_BREAK_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-tie-break`;
   const DRA_GUI_RULE_CHECKLIST_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-checklist`;
+  const USERSCRIPT_DOWNLOAD_URL = "https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.user.js";
+  const USERSCRIPT_UPDATE_URL = "https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.meta.js";
+  const USERSCRIPT_LOADER_URL = "https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js";
+  const UPDATE_STATUS_STORAGE_KEY = "ata:update-status:v1";
+  const UPDATE_CHECK_TTL_MS = 60 * 60 * 1000;
+  const UPDATE_AUTO_CHECK_INTERVAL_MS = 15 * 60 * 1000;
+  const UPDATE_CACHE_BUST_PARAM = "_ata_ts";
 
   const BRACKETS_VIEWER_CSS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.css";
   const BRACKETS_VIEWER_JS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.js";

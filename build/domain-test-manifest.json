@@ -2,6 +2,7 @@
   "files": [
     "src/core/constants.js",
     "src/core/utils.js",
+    "src/infra/update-check.js",
     "src/data/normalization.js",
     "src/data/migration.js",
     "src/domain/match-state.js",
@@ -19,6 +20,7 @@
     "tests/unit-tournament-scenarios.js",
     "tests/unit-ko-engine.js",
     "tests/unit-presets.js",
+    "tests/unit-update-check.js",
     "tests/unit-tournament-duration.js",
     "tests/unit-rules-config.js",
     "tests/unit-standings-dra.js"

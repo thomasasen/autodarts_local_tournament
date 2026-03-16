@@ -285,6 +285,90 @@
         font-weight: 700;
       }
 
+      .ata-update-panel {
+        border-color: rgba(188, 205, 245, 0.34);
+        background:
+          radial-gradient(circle at 100% 0%, rgba(153, 184, 245, 0.14), transparent 38%),
+          rgba(255, 255, 255, 0.08);
+      }
+
+      .ata-update-panel-available {
+        border-color: rgba(255, 160, 122, 0.58);
+        background:
+          radial-gradient(circle at 100% 0%, rgba(255, 160, 122, 0.18), transparent 42%),
+          linear-gradient(145deg, rgba(255, 116, 86, 0.12), rgba(255, 196, 118, 0.08));
+      }
+
+      .ata-update-panel-current {
+        border-color: rgba(108, 224, 163, 0.42);
+        background:
+          radial-gradient(circle at 100% 0%, rgba(108, 224, 163, 0.14), transparent 40%),
+          rgba(255, 255, 255, 0.07);
+      }
+
+      .ata-update-panel-error {
+        border-color: rgba(252, 129, 129, 0.48);
+        background:
+          radial-gradient(circle at 100% 0%, rgba(252, 129, 129, 0.16), transparent 42%),
+          rgba(255, 255, 255, 0.07);
+      }
+
+      .ata-update-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .ata-update-summary {
+        display: grid;
+        gap: 4px;
+      }
+
+      .ata-update-title-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .ata-update-dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 999px;
+        background: rgba(164, 190, 255, 0.96);
+        box-shadow: 0 0 0 3px rgba(164, 190, 255, 0.16);
+      }
+
+      .ata-update-panel-available .ata-update-dot {
+        background: #ff8b73;
+        box-shadow: 0 0 0 3px rgba(255, 139, 115, 0.18);
+      }
+
+      .ata-update-panel-current .ata-update-dot {
+        background: #6ce0a3;
+        box-shadow: 0 0 0 3px rgba(108, 224, 163, 0.18);
+      }
+
+      .ata-update-panel-error .ata-update-dot {
+        background: #ff8a8a;
+        box-shadow: 0 0 0 3px rgba(255, 138, 138, 0.18);
+      }
+
+      .ata-update-title {
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .ata-update-copy {
+        margin: 0;
+      }
+
+      .ata-update-actions {
+        align-items: center;
+      }
+
       .ata-heading-row {
         display: flex;
         align-items: center;

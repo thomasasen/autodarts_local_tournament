@@ -30,7 +30,7 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
 - Die Reihenfolge ist deterministisch über `build/manifest.json`.
 - Die Versionsquelle liegt in `build/version.json` und wird beim Build in Header und `APP_VERSION` injiziert.
 - CSS liegt in `src/ui/styles/main.css` und wird beim Build in das Bundle eingebettet.
-- Die Ausgabe bleibt eine einzelne Datei in `dist/` (Loader-kompatibel).
+- Der Build erzeugt `dist/autodarts-tournament-assistant.user.js` plus den leichten Versions-Endpoint `dist/autodarts-tournament-assistant.meta.js`.
 - `dist/*` bleibt ein generiertes Artefakt und wird nicht manuell gepflegt.
 
 ## Runtime
@@ -41,6 +41,7 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
 - `src/runtime/bootstrap.js` startet den Ablauf.
 - `src/app/public-api.js` veröffentlicht die Runtime-API.
 - `src/app/browser-lifecycle.js`, `src/infra/dom-autodetect.js` und `src/infra/history-import.js` tragen die eigentliche Browser-/DOM-Logik.
+- `src/infra/update-check.js` prüft best-effort die veröffentlichte GitHub-Version; `src/app/update-status.js` spiegelt den Status in UI und Loader-Menü.
 
 ## Datenmodell
 - Storage-Key: `ata:tournament:v1`
@@ -100,4 +101,5 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
 - `scripts/test-domain.ps1`: isolierter Domain-Harness ohne npm und ohne Mock-DOM
 - `scripts/test-runtime-contract.ps1`: Runtime-API- und Selftest-Contract gegen `dist/*`
 - `scripts/qa-build-discipline.ps1`: Versionsquelle und generiertes `dist/*`
+- `tests/unit-update-check.js`: Regressionen für Versionvergleich, TTL, Fallback und Cache-Busting
 - Runtime-Selbsttests: `window.__ATA_RUNTIME.runSelfTests()`
