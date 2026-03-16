@@ -99,6 +99,10 @@
 
   function renderSettingsTab() {
     const debugEnabled = state.store.settings.debug ? "checked" : "";
+    const debugReport = buildMatchStartDebugReport(state.store);
+    const debugReportText = JSON.stringify(debugReport, null, 2);
+    const hasMatchStartDebugSessions = debugReport.sessionCount > 0;
+    const debugActionDisabledAttr = hasMatchStartDebugSessions ? "" : "disabled";
     const tournamentTimeProfile = sanitizeTournamentTimeProfile(
       state.store.settings.tournamentTimeProfile,
       TOURNAMENT_TIME_PROFILE_NORMAL,
@@ -147,10 +151,18 @@
         <div class="ata-toggle">
           <div>
             <strong>Debug-Mode</strong>
-            <div class="ata-small">Aktiviert detaillierte Logs in der Browser-Konsole.</div>
+            <div class="ata-small">Aktiviert detaillierte Logs in der Browser-Konsole sowie ein persistiertes Matchstart-Debug-Protokoll ohne Auth-Token.</div>
           </div>
           <input type="checkbox" id="ata-setting-debug" data-action="toggle-debug" ${debugEnabled}>
         </div>
+        <div class="ata-actions ata-debug-actions">
+          <button type="button" class="ata-btn ata-btn-sm" data-action="copy-matchstart-debug" ${debugActionDisabledAttr}>Matchstart-Debug kopieren</button>
+          <button type="button" class="ata-btn ata-btn-sm" data-action="clear-matchstart-debug" ${debugActionDisabledAttr}>Matchstart-Debug leeren</button>
+        </div>
+        <p class="ata-small">Erfasst Vorprüfung, Lobby-Payload, API-Schritte, bullMode-Fallback, vorsichtiges Lobby-Cleanup und Fehlerdetails der letzten Matchstarts.</p>
+        ${hasMatchStartDebugSessions
+          ? `<pre class="ata-debug-log">${escapeHtml(debugReportText)}</pre>`
+          : `<p class="ata-small">Noch keine Matchstart-Debugdaten vorhanden. Debug-Mode aktivieren, Match testen und das Protokoll danach hier kopieren.</p>`}
         <div class="ata-toggle">
           <div>
             <strong>Automatischer Lobby-Start + API-Sync ${apiSyncHelpLinks}</strong>

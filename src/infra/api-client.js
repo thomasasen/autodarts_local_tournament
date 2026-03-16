@@ -301,6 +301,11 @@
   }
 
 
+  async function deleteLobby(lobbyId, token) {
+    return apiRequestJson("DELETE", `${API_GS_BASE}/lobbies/${encodeURIComponent(lobbyId)}`, null, token);
+  }
+
+
   async function addLobbyPlayer(lobbyId, name, boardId, token) {
     return apiRequestJson("POST", `${API_GS_BASE}/lobbies/${encodeURIComponent(lobbyId)}/players`, { name, boardId }, token);
   }

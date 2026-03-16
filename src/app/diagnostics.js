@@ -224,6 +224,62 @@
     }
 
     try {
+      const retry = shouldRetryLobbyCreateWithBullModeFallback(
+        { status: 400, message: "bull mode validation failed" },
+        { settings: { bullMode: "50/50" } },
+      );
+      const noRetry = shouldRetryLobbyCreateWithBullModeFallback(
+        { status: 400, message: "different validation failed" },
+        { settings: { bullMode: "50/50" } },
+      );
+      record(
+        "Matchstart-Helfer: bullMode-Fallback wird nur bei passendem 400er aktiviert",
+        retry === true && noRetry === false,
+        `retry=${retry}, noRetry=${noRetry}`,
+      );
+    } catch (error) {
+      record("Matchstart-Helfer: bullMode-Fallback wird nur bei passendem 400er aktiviert", false, String(error?.message || error));
+    }
+
+    try {
+      const cleanupBeforeStart = shouldCleanupFailedMatchStartLobby("lobby-debug-1", false);
+      const cleanupAfterStartRequest = shouldCleanupFailedMatchStartLobby("lobby-debug-1", true);
+      record(
+        "Matchstart-Helfer: Lobby-Cleanup nur vor Start-Request",
+        cleanupBeforeStart === true && cleanupAfterStartRequest === false,
+        `before=${cleanupBeforeStart}, after=${cleanupAfterStartRequest}`,
+      );
+    } catch (error) {
+      record("Matchstart-Helfer: Lobby-Cleanup nur vor Start-Request", false, String(error?.message || error));
+    }
+
+    try {
+      const store = createDefaultStore();
+      recordMatchStartDebugSession(store, finalizeMatchStartDebugSession(
+        createMatchStartDebugSession({
+          tournamentId: "dbg-t-1",
+          matchId: "dbg-m-1",
+        }),
+        "success",
+        {
+          lobbyId: "dbg-lobby-1",
+          summary: { reasonCode: "started", message: "ok" },
+        },
+      ));
+      const report = buildMatchStartDebugReport(store, { limit: 3 });
+      record(
+        "Debug-Report: Runtime API-Daten sind strukturiert und begrenzt",
+        report?.sessionCount === 1
+          && Array.isArray(report?.sessions)
+          && report.sessions[0]?.matchId === "dbg-m-1"
+          && report.sessions[0]?.lobbyId === "dbg-lobby-1",
+        `count=${report?.sessionCount || 0}, first=${report?.sessions?.[0]?.matchId || "-"}`,
+      );
+    } catch (error) {
+      record("Debug-Report: Runtime API-Daten sind strukturiert und begrenzt", false, String(error?.message || error));
+    }
+
+    try {
       const tournament = createTournament({
         name: "DrawLockOn",
         mode: "ko",

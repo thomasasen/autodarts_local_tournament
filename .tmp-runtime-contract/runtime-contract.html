@@ -14,6 +14,7 @@ const RUNTIME_API_CONTRACT = Object.freeze({
     "openDrawer",
     "closeDrawer",
     "toggleDrawer",
+    "getDebugReport",
     "runSelfTests",
   ]),
   functionKeys: Object.freeze([
@@ -21,6 +22,7 @@ const RUNTIME_API_CONTRACT = Object.freeze({
     "openDrawer",
     "closeDrawer",
     "toggleDrawer",
+    "getDebugReport",
     "runSelfTests",
   ]),
 });
@@ -1434,6 +1436,25 @@ const GLOBALS_CONTRACT = Object.freeze({
         line-height: 1.3;
       }
 
+      .ata-debug-actions {
+        margin-bottom: var(--ata-space-2);
+      }
+
+      .ata-debug-log {
+        margin: 0;
+        padding: 12px;
+        max-height: 320px;
+        overflow: auto;
+        border: 1px solid rgba(188, 205, 245, 0.26);
+        border-radius: var(--ata-radius-sm);
+        background: rgba(17, 27, 49, 0.72);
+        color: #eaf1ff;
+        font-size: 12px;
+        line-height: 1.4;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
       .ata-group-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -1965,6 +1986,489 @@ const GLOBALS_CONTRACT = Object.freeze({
     return shuffled;
   }
 
+  const MATCH_START_DEBUG_SESSION_LIMIT = 12;
+  const MATCH_START_DEBUG_STEP_LIMIT = 48;
+  const MATCH_START_DEBUG_REPORT_SESSION_LIMIT = 5;
+
+
+  function createDefaultDebugData() {
+    return {
+      matchStartSessions: [],
+    };
+  }
+
+
+  function cloneDebugValue(value, fallbackValue = null) {
+    const cloned = cloneSerializable(value);
+    if (cloned === null && value !== null && value !== undefined) {
+      return fallbackValue;
+    }
+    return cloned;
+  }
+
+
+  function normalizeMatchStartCleanup(rawCleanup) {
+    const cleanup = rawCleanup && typeof rawCleanup === "object" ? rawCleanup : {};
+    return {
+      attempted: Boolean(cleanup.attempted),
+      ok: Boolean(cleanup.ok),
+      skippedReason: normalizeText(cleanup.skippedReason || ""),
+      message: normalizeText(cleanup.message || ""),
+      error: cloneDebugValue(cleanup.error, null),
+    };
+  }
+
+
+  function normalizeMatchStartDebugStep(rawStep) {
+    const step = rawStep && typeof rawStep === "object" ? rawStep : {};
+    return {
+      at: normalizeText(step.at || nowIso()) || nowIso(),
+      step: normalizeText(step.step || "unknown") || "unknown",
+      status: normalizeText(step.status || "info") || "info",
+      details: cloneDebugValue(step.details, {}),
+    };
+  }
+
+
+  function normalizeMatchStartDebugSession(rawSession) {
+    const session = rawSession && typeof rawSession === "object" ? rawSession : {};
+    const steps = Array.isArray(session.steps)
+      ? session.steps.map((entry) => normalizeMatchStartDebugStep(entry)).slice(-MATCH_START_DEBUG_STEP_LIMIT)
+      : [];
+    return {
+      id: normalizeText(session.id || uuid("matchstart-debug")) || uuid("matchstart-debug"),
+      kind: "match_start",
+      startedAt: normalizeText(session.startedAt || nowIso()) || nowIso(),
+      finishedAt: normalizeText(session.finishedAt || "") || null,
+      outcome: normalizeText(session.outcome || "running") || "running",
+      matchId: normalizeText(session.matchId || ""),
+      tournamentId: normalizeText(session.tournamentId || ""),
+      lobbyId: normalizeText(session.lobbyId || "") || null,
+      context: cloneDebugValue(session.context, {}) || {},
+      summary: cloneDebugValue(session.summary, {}) || {},
+      payload: cloneDebugValue(session.payload, null),
+      cleanup: normalizeMatchStartCleanup(session.cleanup),
+      steps,
+    };
+  }
+
+
+  function normalizeDebugData(rawDebugData) {
+    const debugData = rawDebugData && typeof rawDebugData === "object" ? rawDebugData : {};
+    const matchStartSessions = Array.isArray(debugData.matchStartSessions)
+      ? debugData.matchStartSessions.map((entry) => normalizeMatchStartDebugSession(entry)).slice(-MATCH_START_DEBUG_SESSION_LIMIT)
+      : [];
+    return {
+      matchStartSessions,
+    };
+  }
+
+
+  function createMatchStartDebugSession(context = {}) {
+    return normalizeMatchStartDebugSession({
+      id: uuid("matchstart-debug"),
+      startedAt: nowIso(),
+      finishedAt: null,
+      outcome: "running",
+      matchId: normalizeText(context.matchId || ""),
+      tournamentId: normalizeText(context.tournamentId || ""),
+      lobbyId: normalizeText(context.lobbyId || "") || null,
+      context: cloneDebugValue(context, {}) || {},
+      summary: {},
+      payload: null,
+      cleanup: normalizeMatchStartCleanup(null),
+      steps: [],
+    });
+  }
+
+
+  function appendMatchStartDebugStep(session, step, status, details = null) {
+    if (!session || typeof session !== "object") {
+      return session;
+    }
+    if (!Array.isArray(session.steps)) {
+      session.steps = [];
+    }
+    session.steps.push(normalizeMatchStartDebugStep({
+      at: nowIso(),
+      step,
+      status,
+      details,
+    }));
+    if (session.steps.length > MATCH_START_DEBUG_STEP_LIMIT) {
+      session.steps = session.steps.slice(-MATCH_START_DEBUG_STEP_LIMIT);
+    }
+    return session;
+  }
+
+
+  function finalizeMatchStartDebugSession(session, outcome, details = {}) {
+    if (!session || typeof session !== "object") {
+      return normalizeMatchStartDebugSession({
+        outcome,
+        summary: cloneDebugValue(details, {}),
+      });
+    }
+
+    session.finishedAt = nowIso();
+    session.outcome = normalizeText(outcome || session.outcome || "completed") || "completed";
+    if (Object.prototype.hasOwnProperty.call(details, "lobbyId")) {
+      session.lobbyId = normalizeText(details.lobbyId || "") || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(details, "payload")) {
+      session.payload = cloneDebugValue(details.payload, null);
+    }
+    if (Object.prototype.hasOwnProperty.call(details, "summary")) {
+      session.summary = cloneDebugValue(details.summary, {}) || {};
+    }
+    if (Object.prototype.hasOwnProperty.call(details, "cleanup")) {
+      session.cleanup = normalizeMatchStartCleanup(details.cleanup);
+    }
+    return normalizeMatchStartDebugSession(session);
+  }
+
+
+  function recordMatchStartDebugSession(store, session) {
+    if (!store || typeof store !== "object" || !session) {
+      return null;
+    }
+    const debugData = normalizeDebugData(store.debugData);
+    const normalizedSession = normalizeMatchStartDebugSession(session);
+    debugData.matchStartSessions.push(normalizedSession);
+    debugData.matchStartSessions = debugData.matchStartSessions.slice(-MATCH_START_DEBUG_SESSION_LIMIT);
+    store.debugData = debugData;
+    return normalizedSession;
+  }
+
+
+  function clearMatchStartDebugSessions(store) {
+    if (!store || typeof store !== "object") {
+      return;
+    }
+    store.debugData = createDefaultDebugData();
+  }
+
+
+  function getMatchStartDebugSessions(store) {
+    return normalizeDebugData(store?.debugData).matchStartSessions;
+  }
+
+
+  function buildMatchStartDebugReport(store, options = {}) {
+    const limit = clampInt(
+      options.limit,
+      MATCH_START_DEBUG_REPORT_SESSION_LIMIT,
+      1,
+      MATCH_START_DEBUG_SESSION_LIMIT,
+    );
+    const sessions = getMatchStartDebugSessions(store);
+    return {
+      appVersion: APP_VERSION,
+      generatedAt: nowIso(),
+      debugEnabled: Boolean(store?.settings?.debug),
+      sessionCount: sessions.length,
+      tournament: store?.tournament
+        ? {
+          id: normalizeText(store.tournament.id || ""),
+          name: normalizeText(store.tournament.name || ""),
+          mode: normalizeText(store.tournament.mode || ""),
+          bestOfLegs: Number(store.tournament.bestOfLegs || 0),
+          startScore: Number(store.tournament.startScore || 0),
+          matchCount: Array.isArray(store.tournament.matches) ? store.tournament.matches.length : 0,
+        }
+        : null,
+      sessions: cloneDebugValue(sessions.slice(-limit), []) || [],
+    };
+  }
+
+
+  function serializeMatchStartError(error, extractErrorText = null) {
+    const fallbackText = typeof extractErrorText === "function"
+      ? normalizeText(extractErrorText(error))
+      : "";
+    const message = normalizeText(error?.message || fallbackText || "Unbekannter API-Fehler.") || "Unbekannter API-Fehler.";
+    return {
+      name: normalizeText(error?.name || ""),
+      status: Number(error?.status || 0),
+      message,
+      body: cloneDebugValue(error?.body, null),
+    };
+  }
+
+
+  function shouldRetryLobbyCreateWithBullModeFallback(error, payload, extractErrorText = null) {
+    const status = Number(error?.status || 0);
+    const fallbackText = typeof extractErrorText === "function"
+      ? extractErrorText(error)
+      : normalizeText(error?.message || "");
+    const errorText = normalizeLookup(fallbackText || error?.message || "");
+    const selectedBullMode = normalizeText(payload?.settings?.bullMode || "");
+    return status === 400 && errorText.includes("bull mode") && selectedBullMode !== "25/50";
+  }
+
+
+  function shouldCleanupFailedMatchStartLobby(lobbyId, startRequested) {
+    return Boolean(normalizeText(lobbyId || "")) && !Boolean(startRequested);
+  }
+
+
+  async function createLobbyWithBullModeFallback(lobbyPayload, token, deps = {}) {
+    const createLobbyFn = typeof deps.createLobby === "function" ? deps.createLobby : null;
+    if (!createLobbyFn) {
+      throw new Error("createLobby fehlt.");
+    }
+    const extractErrorText = typeof deps.extractErrorText === "function"
+      ? deps.extractErrorText
+      : ((error) => normalizeText(error?.message || ""));
+    const emitStep = typeof deps.onStep === "function" ? deps.onStep : null;
+    let effectivePayload = cloneDebugValue(lobbyPayload, {}) || {};
+
+    try {
+      emitStep?.({
+        step: "create_lobby",
+        status: "pending",
+        details: { payload: effectivePayload },
+      });
+      const lobby = await createLobbyFn(effectivePayload, token);
+      emitStep?.({
+        step: "create_lobby",
+        status: "ok",
+        details: { payload: effectivePayload },
+      });
+      return {
+        lobby,
+        payload: effectivePayload,
+        usedBullModeFallback: false,
+      };
+    } catch (error) {
+      const errorInfo = serializeMatchStartError(error, extractErrorText);
+      const shouldRetry = shouldRetryLobbyCreateWithBullModeFallback(error, effectivePayload, extractErrorText);
+      emitStep?.({
+        step: "create_lobby",
+        status: "error",
+        details: {
+          error: errorInfo,
+          retryingBullModeFallback: shouldRetry,
+        },
+      });
+      if (!shouldRetry) {
+        throw error;
+      }
+
+      effectivePayload = cloneDebugValue(effectivePayload, {}) || {};
+      if (!effectivePayload.settings || typeof effectivePayload.settings !== "object") {
+        effectivePayload.settings = {};
+      }
+      effectivePayload.settings.bullMode = "25/50";
+      emitStep?.({
+        step: "create_lobby_retry",
+        status: "pending",
+        details: { payload: effectivePayload, reason: "bull_mode_fallback_25_50" },
+      });
+      const lobby = await createLobbyFn(effectivePayload, token);
+      emitStep?.({
+        step: "create_lobby_retry",
+        status: "ok",
+        details: { payload: effectivePayload, reason: "bull_mode_fallback_25_50" },
+      });
+      return {
+        lobby,
+        payload: effectivePayload,
+        usedBullModeFallback: true,
+      };
+    }
+  }
+
+
+  async function executeMatchStartApiFlow(input, deps = {}) {
+    const createLobbyFn = typeof deps.createLobby === "function" ? deps.createLobby : null;
+    const addLobbyPlayerFn = typeof deps.addLobbyPlayer === "function" ? deps.addLobbyPlayer : null;
+    const startLobbyFn = typeof deps.startLobby === "function" ? deps.startLobby : null;
+    if (!createLobbyFn || !addLobbyPlayerFn || !startLobbyFn) {
+      throw new Error("Matchstart-Flow benötigt createLobby, addLobbyPlayer und startLobby.");
+    }
+
+    const deleteLobbyFn = typeof deps.deleteLobby === "function" ? deps.deleteLobby : null;
+    const extractErrorText = typeof deps.extractErrorText === "function"
+      ? deps.extractErrorText
+      : ((error) => normalizeText(error?.message || ""));
+    const emitStep = typeof deps.onStep === "function" ? deps.onStep : null;
+    const boardId = normalizeText(input?.boardId || "");
+    const token = normalizeText(input?.token || "");
+    const player1Name = normalizeText(input?.participant1Name || "");
+    const player2Name = normalizeText(input?.participant2Name || "");
+    let createdLobbyId = "";
+    let startRequested = false;
+    let usedBullModeFallback = false;
+    let effectivePayload = cloneDebugValue(input?.lobbyPayload, {}) || {};
+
+    emitStep?.({
+      step: "request_init",
+      status: "info",
+      details: {
+        matchId: normalizeText(input?.matchId || ""),
+        boardId,
+        participant1Name: player1Name,
+        participant2Name: player2Name,
+        payload: effectivePayload,
+      },
+    });
+
+    try {
+      const createOutcome = await createLobbyWithBullModeFallback(effectivePayload, token, {
+        createLobby: createLobbyFn,
+        extractErrorText,
+        onStep: emitStep,
+      });
+      effectivePayload = cloneDebugValue(createOutcome.payload, {}) || {};
+      usedBullModeFallback = Boolean(createOutcome.usedBullModeFallback);
+      createdLobbyId = normalizeText(createOutcome?.lobby?.id || createOutcome?.lobby?.uuid || "");
+      if (!createdLobbyId) {
+        throw new Error("Lobby konnte nicht erstellt werden (keine Lobby-ID).");
+      }
+
+      emitStep?.({
+        step: "lobby_created",
+        status: "ok",
+        details: {
+          lobbyId: createdLobbyId,
+          usedBullModeFallback,
+        },
+      });
+
+      emitStep?.({
+        step: "add_player_1",
+        status: "pending",
+        details: {
+          lobbyId: createdLobbyId,
+          name: player1Name,
+          boardId,
+        },
+      });
+      await addLobbyPlayerFn(createdLobbyId, player1Name, boardId, token);
+      emitStep?.({
+        step: "add_player_1",
+        status: "ok",
+        details: {
+          lobbyId: createdLobbyId,
+          name: player1Name,
+          boardId,
+        },
+      });
+
+      emitStep?.({
+        step: "add_player_2",
+        status: "pending",
+        details: {
+          lobbyId: createdLobbyId,
+          name: player2Name,
+          boardId,
+        },
+      });
+      await addLobbyPlayerFn(createdLobbyId, player2Name, boardId, token);
+      emitStep?.({
+        step: "add_player_2",
+        status: "ok",
+        details: {
+          lobbyId: createdLobbyId,
+          name: player2Name,
+          boardId,
+        },
+      });
+
+      emitStep?.({
+        step: "start_lobby",
+        status: "pending",
+        details: { lobbyId: createdLobbyId },
+      });
+      startRequested = true;
+      await startLobbyFn(createdLobbyId, token);
+      emitStep?.({
+        step: "start_lobby",
+        status: "ok",
+        details: { lobbyId: createdLobbyId },
+      });
+
+      return {
+        ok: true,
+        lobbyId: createdLobbyId,
+        effectivePayload,
+        usedBullModeFallback,
+        startRequested: true,
+        cleanup: normalizeMatchStartCleanup(null),
+        error: null,
+      };
+    } catch (error) {
+      const cleanup = normalizeMatchStartCleanup(null);
+      if (shouldCleanupFailedMatchStartLobby(createdLobbyId, startRequested) && deleteLobbyFn) {
+        cleanup.attempted = true;
+        emitStep?.({
+          step: "cleanup_lobby",
+          status: "pending",
+          details: { lobbyId: createdLobbyId },
+        });
+        try {
+          await deleteLobbyFn(createdLobbyId, token);
+          cleanup.ok = true;
+          cleanup.message = "Ungestartete Lobby wurde bereinigt.";
+          emitStep?.({
+            step: "cleanup_lobby",
+            status: "ok",
+            details: {
+              lobbyId: createdLobbyId,
+              message: cleanup.message,
+            },
+          });
+        } catch (cleanupError) {
+          cleanup.ok = false;
+          cleanup.message = normalizeText(extractErrorText(cleanupError) || cleanupError?.message || "Lobby-Cleanup fehlgeschlagen.")
+            || "Lobby-Cleanup fehlgeschlagen.";
+          cleanup.error = serializeMatchStartError(cleanupError, extractErrorText);
+          emitStep?.({
+            step: "cleanup_lobby",
+            status: "error",
+            details: {
+              lobbyId: createdLobbyId,
+              error: cleanup.error,
+            },
+          });
+        }
+      } else {
+        cleanup.skippedReason = !createdLobbyId
+          ? "no_lobby_created"
+          : (startRequested ? "start_already_requested" : "delete_lobby_unavailable");
+        emitStep?.({
+          step: "cleanup_lobby",
+          status: "skipped",
+          details: {
+            lobbyId: createdLobbyId || null,
+            skippedReason: cleanup.skippedReason,
+          },
+        });
+      }
+
+      emitStep?.({
+        step: "flow_error",
+        status: "error",
+        details: {
+          lobbyId: createdLobbyId || null,
+          error: serializeMatchStartError(error, extractErrorText),
+          cleanup,
+        },
+      });
+
+      return {
+        ok: false,
+        lobbyId: createdLobbyId || null,
+        effectivePayload,
+        usedBullModeFallback,
+        startRequested,
+        cleanup,
+        error,
+      };
+    }
+  }
+
   function logDebug(category, message, ...args) {
     if (!state.store.settings.debug) {
       return;
@@ -2384,6 +2888,7 @@ const GLOBALS_CONTRACT = Object.freeze({
         matchesSortMode: MATCH_SORT_MODE_READY_FIRST,
         createDraft: createDefaultCreateDraft(settings),
       },
+      debugData: createDefaultDebugData(),
       tournament: null,
     };
   }
@@ -2923,6 +3428,7 @@ const GLOBALS_CONTRACT = Object.freeze({
         matchesSortMode: sanitizeMatchesSortMode(input?.ui?.matchesSortMode, defaults.ui.matchesSortMode),
         createDraft: normalizeCreateDraft(input?.ui?.createDraft, settings),
       },
+      debugData: normalizeDebugData(input?.debugData),
       tournament: normalizeTournament(input?.tournament, defaultKoDrawLocked),
     };
   }
@@ -6480,6 +6986,62 @@ const GLOBALS_CONTRACT = Object.freeze({
     }
 
     try {
+      const retry = shouldRetryLobbyCreateWithBullModeFallback(
+        { status: 400, message: "bull mode validation failed" },
+        { settings: { bullMode: "50/50" } },
+      );
+      const noRetry = shouldRetryLobbyCreateWithBullModeFallback(
+        { status: 400, message: "different validation failed" },
+        { settings: { bullMode: "50/50" } },
+      );
+      record(
+        "Matchstart-Helfer: bullMode-Fallback wird nur bei passendem 400er aktiviert",
+        retry === true && noRetry === false,
+        `retry=${retry}, noRetry=${noRetry}`,
+      );
+    } catch (error) {
+      record("Matchstart-Helfer: bullMode-Fallback wird nur bei passendem 400er aktiviert", false, String(error?.message || error));
+    }
+
+    try {
+      const cleanupBeforeStart = shouldCleanupFailedMatchStartLobby("lobby-debug-1", false);
+      const cleanupAfterStartRequest = shouldCleanupFailedMatchStartLobby("lobby-debug-1", true);
+      record(
+        "Matchstart-Helfer: Lobby-Cleanup nur vor Start-Request",
+        cleanupBeforeStart === true && cleanupAfterStartRequest === false,
+        `before=${cleanupBeforeStart}, after=${cleanupAfterStartRequest}`,
+      );
+    } catch (error) {
+      record("Matchstart-Helfer: Lobby-Cleanup nur vor Start-Request", false, String(error?.message || error));
+    }
+
+    try {
+      const store = createDefaultStore();
+      recordMatchStartDebugSession(store, finalizeMatchStartDebugSession(
+        createMatchStartDebugSession({
+          tournamentId: "dbg-t-1",
+          matchId: "dbg-m-1",
+        }),
+        "success",
+        {
+          lobbyId: "dbg-lobby-1",
+          summary: { reasonCode: "started", message: "ok" },
+        },
+      ));
+      const report = buildMatchStartDebugReport(store, { limit: 3 });
+      record(
+        "Debug-Report: Runtime API-Daten sind strukturiert und begrenzt",
+        report?.sessionCount === 1
+          && Array.isArray(report?.sessions)
+          && report.sessions[0]?.matchId === "dbg-m-1"
+          && report.sessions[0]?.lobbyId === "dbg-lobby-1",
+        `count=${report?.sessionCount || 0}, first=${report?.sessions?.[0]?.matchId || "-"}`,
+      );
+    } catch (error) {
+      record("Debug-Report: Runtime API-Daten sind strukturiert und begrenzt", false, String(error?.message || error));
+    }
+
+    try {
       const tournament = createTournament({
         name: "DrawLockOn",
         mode: "ko",
@@ -7286,6 +7848,7 @@ const GLOBALS_CONTRACT = Object.freeze({
       openDrawer,
       closeDrawer,
       toggleDrawer,
+      getDebugReport: () => buildMatchStartDebugReport(state.store),
       runSelfTests,
     };
 
@@ -7595,6 +8158,11 @@ const GLOBALS_CONTRACT = Object.freeze({
 
   async function createLobby(payload, token) {
     return apiRequestJson("POST", `${API_GS_BASE}/lobbies`, payload, token);
+  }
+
+
+  async function deleteLobby(lobbyId, token) {
+    return apiRequestJson("DELETE", `${API_GS_BASE}/lobbies/${encodeURIComponent(lobbyId)}`, null, token);
   }
 
 
@@ -8046,6 +8614,17 @@ const GLOBALS_CONTRACT = Object.freeze({
   }
 
 
+  function storeMatchStartDebugSessionIfEnabled(session, outcome, details = {}) {
+    if (!session || !state.store.settings.debug) {
+      return null;
+    }
+    const finalized = finalizeMatchStartDebugSession(session, outcome, details);
+    recordMatchStartDebugSession(state.store, finalized);
+    logDebug("api", "Matchstart debug session stored.", finalized);
+    return finalized;
+  }
+
+
   function openMatchPage(lobbyId) {
     if (!normalizeText(lobbyId)) {
       return;
@@ -8417,6 +8996,15 @@ const GLOBALS_CONTRACT = Object.freeze({
       };
     }
 
+    const duplicates = getDuplicateParticipantNames(tournament);
+    if (duplicates.length) {
+      return {
+        label: "Match starten",
+        disabled: true,
+        title: "Teilnehmernamen müssen für Auto-Sync eindeutig sein.",
+      };
+    }
+
     if (!getAuthTokenFromCookie()) {
       return {
         label: "Match starten",
@@ -8499,108 +9087,258 @@ const GLOBALS_CONTRACT = Object.freeze({
     }
 
     const auto = ensureMatchAutoMeta(match);
+    const editability = getMatchEditability(tournament, match);
+    const duplicates = getDuplicateParticipantNames(tournament);
+    const activeMatch = findActiveStartedMatch(tournament, match.id);
+    const token = getAuthTokenFromCookie();
+    const boardId = getBoardId();
+    const participant1 = participantById(tournament, match.player1Id);
+    const participant2 = participantById(tournament, match.player2Id);
+    const preflight = {
+      route: routeKey(),
+      autoLobbyEnabled: Boolean(state.store.settings.featureFlags.autoLobbyStart),
+      hasExistingLobby: Boolean(auto.lobbyId),
+      editability: {
+        editable: Boolean(editability.editable),
+        reason: normalizeText(editability.reason || ""),
+      },
+      duplicateNames: duplicates.slice(),
+      activeStartedMatchId: normalizeText(activeMatch?.id || ""),
+      tokenPresent: Boolean(token),
+      boardId: normalizeText(boardId || ""),
+      boardValid: isValidBoardId(boardId),
+      participant1Name: normalizeText(participant1?.name || ""),
+      participant2Name: normalizeText(participant2?.name || ""),
+      currentStartingMatchId: normalizeText(state.apiAutomation.startingMatchId || ""),
+    };
+    const debugSession = state.store.settings.debug
+      ? createMatchStartDebugSession({
+        route: preflight.route,
+        tournamentId: normalizeText(tournament.id || ""),
+        tournamentName: normalizeText(tournament.name || ""),
+        tournamentMode: normalizeText(tournament.mode || ""),
+        bestOfLegs: Number(tournament.bestOfLegs || 0),
+        startScore: Number(tournament.startScore || 0),
+        matchId: normalizeText(match.id || ""),
+        participant1Name: preflight.participant1Name,
+        participant2Name: preflight.participant2Name,
+      })
+      : null;
+    const recordDebugStep = (step, status, details = null) => {
+      if (!debugSession) {
+        return;
+      }
+      appendMatchStartDebugStep(debugSession, step, status, details);
+      logDebug("api", `Matchstart ${step} [${status}]`, details || {});
+    };
+    const persistDebugBeforeNavigation = async () => {
+      if (!debugSession) {
+        return;
+      }
+      try {
+        await persistStore();
+      } catch (persistError) {
+        schedulePersist();
+        logWarn("storage", "Persisting matchstart debug before navigation failed; scheduled retry.", persistError);
+      }
+    };
+    const scheduleDebugPersist = () => {
+      if (debugSession) {
+        schedulePersist();
+      }
+    };
+    if (debugSession) {
+      debugSession.context.preflight = cloneSerializable(preflight) || {};
+      recordDebugStep("preflight", "info", preflight);
+    }
+
     if (auto.lobbyId) {
+      recordDebugStep("open_existing_lobby", "info", { lobbyId: auto.lobbyId });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "existing_lobby", {
+        lobbyId: auto.lobbyId,
+        summary: {
+          reasonCode: "existing_lobby",
+          message: "Match war bereits mit einer Lobby verknüpft.",
+        },
+      });
+      await persistDebugBeforeNavigation();
       openMatchPage(auto.lobbyId);
       return;
     }
 
     if (!state.store.settings.featureFlags.autoLobbyStart) {
+      recordDebugStep("blocked", "info", { reasonCode: "autolobby_disabled" });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
+        summary: {
+          reasonCode: "autolobby_disabled",
+          message: "Auto-Lobby ist deaktiviert.",
+        },
+      });
+      scheduleDebugPersist();
       setNotice("info", "Auto-Lobby ist deaktiviert. Bitte im Tab Einstellungen aktivieren.");
       return;
     }
 
-    const editability = getMatchEditability(tournament, match);
     if (!editability.editable) {
+      recordDebugStep("blocked", "error", {
+        reasonCode: "match_not_editable",
+        reason: editability.reason || "Match kann aktuell nicht gestartet werden.",
+      });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
+        summary: {
+          reasonCode: "match_not_editable",
+          message: editability.reason || "Match kann aktuell nicht gestartet werden.",
+        },
+      });
+      scheduleDebugPersist();
       setNotice("error", editability.reason || "Match kann aktuell nicht gestartet werden.");
       return;
     }
 
-    const duplicates = getDuplicateParticipantNames(tournament);
     if (duplicates.length) {
+      recordDebugStep("blocked", "error", {
+        reasonCode: "duplicate_names",
+        duplicateNames: duplicates,
+      });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
+        summary: {
+          reasonCode: "duplicate_names",
+          message: "Für Auto-Sync müssen Teilnehmernamen eindeutig sein.",
+        },
+      });
+      scheduleDebugPersist();
       setNotice("error", "F\u00fcr Auto-Sync m\u00fcssen Teilnehmernamen eindeutig sein.");
       return;
     }
 
-    const activeMatch = findActiveStartedMatch(tournament, match.id);
     if (activeMatch) {
       const activeAuto = ensureMatchAutoMeta(activeMatch);
+      recordDebugStep("blocked", "info", {
+        reasonCode: "active_match_exists",
+        activeMatchId: activeMatch.id,
+        activeLobbyId: normalizeText(activeAuto.lobbyId || ""),
+      });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
+        lobbyId: normalizeText(activeAuto.lobbyId || "") || null,
+        summary: {
+          reasonCode: "active_match_exists",
+          message: "Es läuft bereits ein aktives Match.",
+          activeMatchId: activeMatch.id,
+        },
+      });
       setNotice("info", "Es l\u00e4uft bereits ein aktives Match. Weiterleitung dorthin.");
       if (activeAuto.lobbyId) {
+        await persistDebugBeforeNavigation();
         openMatchPage(activeAuto.lobbyId);
+      } else {
+        scheduleDebugPersist();
       }
       return;
     }
 
-    const token = getAuthTokenFromCookie();
     if (!token) {
+      recordDebugStep("blocked", "error", { reasonCode: "missing_auth_token" });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
+        summary: {
+          reasonCode: "missing_auth_token",
+          message: "Kein Autodarts-Token gefunden. Bitte einloggen und Seite neu laden.",
+        },
+      });
+      scheduleDebugPersist();
       setNotice("error", "Kein Autodarts-Token gefunden. Bitte einloggen und Seite neu laden.");
       return;
     }
 
-    const boardId = getBoardId();
     if (!boardId) {
+      recordDebugStep("blocked", "error", { reasonCode: "missing_board_id" });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
+        summary: {
+          reasonCode: "missing_board_id",
+          message: "Board-ID fehlt. Bitte einmal manuell eine Lobby öffnen und Board auswählen.",
+        },
+      });
+      scheduleDebugPersist();
       setNotice("error", "Board-ID fehlt. Bitte einmal manuell eine Lobby \u00f6ffnen und Board ausw\u00e4hlen.");
       return;
     }
     if (!isValidBoardId(boardId)) {
+      recordDebugStep("blocked", "error", {
+        reasonCode: "invalid_board_id",
+        boardId,
+      });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
+        summary: {
+          reasonCode: "invalid_board_id",
+          message: `Board-ID ist ungültig (${boardId}). Bitte in einer manuellen Lobby ein echtes Board auswählen.`,
+        },
+      });
+      scheduleDebugPersist();
       setNotice("error", `Board-ID ist ung\u00fcltig (${boardId}). Bitte in einer manuellen Lobby ein echtes Board ausw\u00e4hlen.`);
       return;
     }
 
-    const participant1 = participantById(tournament, match.player1Id);
-    const participant2 = participantById(tournament, match.player2Id);
     if (!participant1 || !participant2) {
+      recordDebugStep("blocked", "error", {
+        reasonCode: "participant_mapping_incomplete",
+        participant1Id: normalizeText(match.player1Id || ""),
+        participant2Id: normalizeText(match.player2Id || ""),
+      });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
+        summary: {
+          reasonCode: "participant_mapping_incomplete",
+          message: "Teilnehmerzuordnung im Match ist unvollständig.",
+        },
+      });
+      scheduleDebugPersist();
       setNotice("error", "Teilnehmerzuordnung im Match ist unvollst\u00e4ndig.");
       return;
     }
 
-    let createdLobbyId = "";
+    const initialLobbyPayload = buildLobbyCreatePayload(tournament);
+    if (debugSession) {
+      debugSession.context.initialPayload = cloneSerializable(initialLobbyPayload) || {};
+    }
+    let flowResult = null;
     state.apiAutomation.startingMatchId = match.id;
     renderShell();
 
     try {
-      let lobbyPayload = buildLobbyCreatePayload(tournament);
-      let lobby = null;
-      try {
-        logDebug("api", "Creating lobby with tournament payload.", {
+      flowResult = await executeMatchStartApiFlow(
+        {
           matchId: match.id,
-          legs: lobbyPayload.legs,
-          settings: lobbyPayload.settings,
-        });
-        lobby = await createLobby(lobbyPayload, token);
-      } catch (createError) {
-        const errorStatus = Number(createError?.status || 0);
-        const errorText = normalizeLookup(createError?.message || apiBodyToErrorText(createError?.body) || "");
-        const shouldRetryWithBullFallback = errorStatus === 400 && errorText.includes("bull mode");
-        if (!shouldRetryWithBullFallback) {
-          throw createError;
-        }
+          token,
+          boardId,
+          participant1Name: participant1.name,
+          participant2Name: participant2.name,
+          lobbyPayload: initialLobbyPayload,
+        },
+        {
+          createLobby,
+          addLobbyPlayer,
+          startLobby,
+          deleteLobby,
+          extractErrorText: (error) => normalizeText(error?.message || apiBodyToErrorText(error?.body) || ""),
+          onStep: (entry) => {
+            recordDebugStep(entry.step, entry.status, entry.details);
+          },
+        },
+      );
 
-        // Fallback for backend validation variants that reject selected bullMode values.
-        lobbyPayload = cloneSerializable(lobbyPayload) || buildLobbyCreatePayload(tournament);
-        if (!lobbyPayload.settings || typeof lobbyPayload.settings !== "object") {
-          lobbyPayload.settings = {};
-        }
-        lobbyPayload.settings.bullMode = "25/50";
-        logWarn("api", "Retrying lobby create with bullMode fallback 25/50.", {
-          matchId: match.id,
-          legs: lobbyPayload.legs,
-          settings: lobbyPayload.settings,
-        });
-        lobby = await createLobby(lobbyPayload, token);
-      }
-      createdLobbyId = normalizeText(lobby?.id || lobby?.uuid || "");
-      if (!createdLobbyId) {
-        throw createApiError(0, "Lobby konnte nicht erstellt werden (keine Lobby-ID).", lobby);
+      if (!flowResult.ok) {
+        throw flowResult.error || new Error("Matchstart-Flow fehlgeschlagen.");
       }
 
-      await addLobbyPlayer(createdLobbyId, participant1.name, boardId, token);
-      await addLobbyPlayer(createdLobbyId, participant2.name, boardId, token);
-      await startLobby(createdLobbyId, token);
+      if (flowResult.usedBullModeFallback) {
+        logWarn("api", "Lobby create required bullMode fallback 25/50.", {
+          matchId: match.id,
+          lobbyId: flowResult.lobbyId,
+          payload: flowResult.effectivePayload,
+        });
+      }
 
       const now = nowIso();
       auto.provider = API_PROVIDER;
-      auto.lobbyId = createdLobbyId;
+      auto.lobbyId = flowResult.lobbyId;
       auto.status = "started";
       auto.startedAt = auto.startedAt || now;
       auto.finishedAt = null;
@@ -8609,6 +9347,22 @@ const GLOBALS_CONTRACT = Object.freeze({
       match.updatedAt = now;
       tournament.updatedAt = now;
 
+      recordDebugStep("persist_store", "pending", {
+        reason: "before_redirect",
+        lobbyId: flowResult.lobbyId,
+      });
+      recordDebugStep("redirect", "pending", { lobbyId: flowResult.lobbyId });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "success", {
+        lobbyId: flowResult.lobbyId,
+        payload: flowResult.effectivePayload,
+        cleanup: flowResult.cleanup,
+        summary: {
+          reasonCode: "started",
+          message: "Match gestartet. Weiterleitung ins Match.",
+          usedBullModeFallback: flowResult.usedBullModeFallback,
+          boardId,
+        },
+      });
       try {
         await persistStore();
       } catch (persistError) {
@@ -8617,20 +9371,47 @@ const GLOBALS_CONTRACT = Object.freeze({
       }
       renderShell();
       setNotice("success", "Match gestartet. Weiterleitung ins Match.");
-      openMatchPage(createdLobbyId);
+      openMatchPage(flowResult.lobbyId);
     } catch (error) {
       const message = normalizeText(error?.message || apiBodyToErrorText(error?.body) || "Unbekannter API-Fehler.") || "Unbekannter API-Fehler.";
       const now = nowIso();
       auto.provider = API_PROVIDER;
-      auto.lobbyId = createdLobbyId || auto.lobbyId || null;
+      auto.lobbyId = flowResult?.cleanup?.ok ? null : (normalizeText(flowResult?.lobbyId || "") || auto.lobbyId || null);
       auto.status = "error";
       auto.lastError = message;
       auto.lastSyncAt = now;
       match.updatedAt = now;
       tournament.updatedAt = now;
+      recordDebugStep("match_state_error", "info", {
+        lobbyId: auto.lobbyId,
+        message,
+      });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "error", {
+        lobbyId: auto.lobbyId,
+        payload: flowResult?.effectivePayload || initialLobbyPayload,
+        cleanup: flowResult?.cleanup,
+        summary: {
+          reasonCode: "start_failed",
+          message,
+          usedBullModeFallback: Boolean(flowResult?.usedBullModeFallback),
+          boardId,
+        },
+      });
       schedulePersist();
       renderShell();
       setNotice("error", `Matchstart fehlgeschlagen: ${message}`);
+      if (flowResult?.cleanup?.attempted && flowResult.cleanup.ok) {
+        logWarn("api", "Ungestartete Lobby wurde nach fehlgeschlagenem Matchstart bereinigt.", {
+          matchId: match.id,
+          lobbyId: flowResult.lobbyId,
+        });
+      } else if (flowResult?.cleanup?.attempted && !flowResult.cleanup.ok) {
+        logWarn("api", "Cleanup for failed matchstart lobby did not complete.", {
+          matchId: match.id,
+          lobbyId: flowResult.lobbyId,
+          cleanup: flowResult.cleanup,
+        });
+      }
       logWarn("api", "Match start failed.", error);
     } finally {
       state.apiAutomation.startingMatchId = "";
@@ -11553,6 +12334,10 @@ const GLOBALS_CONTRACT = Object.freeze({
 
   function renderSettingsTab() {
     const debugEnabled = state.store.settings.debug ? "checked" : "";
+    const debugReport = buildMatchStartDebugReport(state.store);
+    const debugReportText = JSON.stringify(debugReport, null, 2);
+    const hasMatchStartDebugSessions = debugReport.sessionCount > 0;
+    const debugActionDisabledAttr = hasMatchStartDebugSessions ? "" : "disabled";
     const tournamentTimeProfile = sanitizeTournamentTimeProfile(
       state.store.settings.tournamentTimeProfile,
       TOURNAMENT_TIME_PROFILE_NORMAL,
@@ -11601,10 +12386,18 @@ const GLOBALS_CONTRACT = Object.freeze({
         <div class="ata-toggle">
           <div>
             <strong>Debug-Mode</strong>
-            <div class="ata-small">Aktiviert detaillierte Logs in der Browser-Konsole.</div>
+            <div class="ata-small">Aktiviert detaillierte Logs in der Browser-Konsole sowie ein persistiertes Matchstart-Debug-Protokoll ohne Auth-Token.</div>
           </div>
           <input type="checkbox" id="ata-setting-debug" data-action="toggle-debug" ${debugEnabled}>
         </div>
+        <div class="ata-actions ata-debug-actions">
+          <button type="button" class="ata-btn ata-btn-sm" data-action="copy-matchstart-debug" ${debugActionDisabledAttr}>Matchstart-Debug kopieren</button>
+          <button type="button" class="ata-btn ata-btn-sm" data-action="clear-matchstart-debug" ${debugActionDisabledAttr}>Matchstart-Debug leeren</button>
+        </div>
+        <p class="ata-small">Erfasst Vorprüfung, Lobby-Payload, API-Schritte, bullMode-Fallback, vorsichtiges Lobby-Cleanup und Fehlerdetails der letzten Matchstarts.</p>
+        ${hasMatchStartDebugSessions
+          ? `<pre class="ata-debug-log">${escapeHtml(debugReportText)}</pre>`
+          : `<p class="ata-small">Noch keine Matchstart-Debugdaten vorhanden. Debug-Mode aktivieren, Match testen und das Protokoll danach hier kopieren.</p>`}
         <div class="ata-toggle">
           <div>
             <strong>Automatischer Lobby-Start + API-Sync ${apiSyncHelpLinks}</strong>
@@ -11923,6 +12716,30 @@ const GLOBALS_CONTRACT = Object.freeze({
         state.store.settings.debug = debugToggle.checked;
         schedulePersist();
         setNotice("success", `Debug-Mode ${debugToggle.checked ? "aktiviert" : "deaktiviert"}.`, 1800);
+      });
+    }
+
+    const copyMatchStartDebugButton = shadow.querySelector("[data-action='copy-matchstart-debug']");
+    if (copyMatchStartDebugButton instanceof HTMLButtonElement) {
+      copyMatchStartDebugButton.addEventListener("click", async () => {
+        try {
+          const report = buildMatchStartDebugReport(state.store);
+          await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
+          setNotice("success", "Matchstart-Debug in Zwischenablage kopiert.", 2200);
+        } catch (error) {
+          setNotice("error", "Matchstart-Debug konnte nicht kopiert werden.");
+          logWarn("debug", "Clipboard write for matchstart debug failed.", error);
+        }
+      });
+    }
+
+    const clearMatchStartDebugButton = shadow.querySelector("[data-action='clear-matchstart-debug']");
+    if (clearMatchStartDebugButton instanceof HTMLButtonElement) {
+      clearMatchStartDebugButton.addEventListener("click", () => {
+        clearMatchStartDebugSessions(state.store);
+        schedulePersist();
+        renderShell();
+        setNotice("success", "Matchstart-Debug wurde geleert.", 1800);
       });
     }
 

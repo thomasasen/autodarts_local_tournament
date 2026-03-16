@@ -1,6 +1,12 @@
 ﻿# Changelog
 
 ## Unreleased
+- Matchstart robuster und besser debugbar gemacht:
+  - `Match starten` nutzt jetzt einen testbaren Start-Flow mit strukturierter Schrittverfolgung.
+  - fehlgeschlagene, noch nicht gestartete Lobbys werden vorsichtig per `DELETE /lobbies/{id}` bereinigt.
+  - bullMode-Validierungsfehler behalten den bestehenden Fallback auf `25/50`, jetzt mit explizitem Debug-Nachweis.
+  - Debug-Mode speichert ein kopierbares Matchstart-Protokoll im Tab `Einstellungen` und stellt es zusätzlich über `__ATA_RUNTIME.getDebugReport()` bereit.
+  - Matchstart wird bei doppelten Teilnehmernamen bereits in der UI als nicht API-tauglich blockiert.
 - Runtime-Update-Pfad aus `autodarts-xconfig` technisch übernommen:
   - neue GitHub-Update-Erkennung im Tab `Einstellungen` mit gecachtem Versionsstatus, TTL und manuellem Recheck
   - `.meta.js`-Artefakt für leichtgewichtigen Versionsabgleich ergänzt

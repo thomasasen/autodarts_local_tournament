@@ -1331,6 +1331,25 @@
         line-height: 1.3;
       }
 
+      .ata-debug-actions {
+        margin-bottom: var(--ata-space-2);
+      }
+
+      .ata-debug-log {
+        margin: 0;
+        padding: 12px;
+        max-height: 320px;
+        overflow: auto;
+        border: 1px solid rgba(188, 205, 245, 0.26);
+        border-radius: var(--ata-radius-sm);
+        background: rgba(17, 27, 49, 0.72);
+        color: #eaf1ff;
+        font-size: 12px;
+        line-height: 1.4;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
       .ata-group-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));

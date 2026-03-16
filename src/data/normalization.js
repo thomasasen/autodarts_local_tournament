@@ -335,6 +335,7 @@
         matchesSortMode: MATCH_SORT_MODE_READY_FIRST,
         createDraft: createDefaultCreateDraft(settings),
       },
+      debugData: createDefaultDebugData(),
       tournament: null,
     };
   }
@@ -874,6 +875,7 @@
         matchesSortMode: sanitizeMatchesSortMode(input?.ui?.matchesSortMode, defaults.ui.matchesSortMode),
         createDraft: normalizeCreateDraft(input?.ui?.createDraft, settings),
       },
+      debugData: normalizeDebugData(input?.debugData),
       tournament: normalizeTournament(input?.tournament, defaultKoDrawLocked),
     };
   }

@@ -273,6 +273,7 @@ Auf `/history/matches/{id}` kann das Tool ein Ergebnis direkt aus der Statistik 
 - Nur ein aktives API-Match gleichzeitig (Single-Board-Flow).
 - Duplikatnamen werden für API-Sync blockiert.
 - Ungültige Ergebnisse werden abgewiesen.
+- Wenn ein Matchstart vor dem eigentlichen `start` scheitert, wird eine bereits erstellte, aber noch ungestartete Lobby vorsichtig gelöscht.
 - Bei mehrdeutigen Zuordnungen wird absichtlich nicht automatisch übernommen.
 
 ## Statusmeldungen
@@ -393,6 +394,8 @@ Legende für die eingeblendeten Hilfelinks:
 ### Debug-Mode
 - Aktiviert ausführliche Logs in der Browser-Konsole.
 - Prefix z. B. `[ATA][api]`, `[ATA][bracket]`, `[ATA][storage]`.
+- Zusätzlich wird im Tab `Einstellungen` ein kopierbares Matchstart-Debug-Protokoll gespeichert.
+- Das Protokoll enthält Vorprüfung, Lobby-Payload, API-Schritte, Fallback-/Cleanup-Infos und Fehlerdetails, aber bewusst kein Auth-Token.
 - Sinnvoll für Fehlersuche bei API oder Renderproblemen.
 
 ### Script-Update
@@ -408,6 +411,8 @@ Legende für die eingeblendeten Hilfelinks:
 - Standard: `AUS`.
 - Wenn aktiv:
   - `Match starten` erstellt Lobby, fügt Spieler hinzu, startet Match.
+  - Duplikatnamen werden bereits vor dem Klick als nicht API-tauglich blockiert.
+  - Fehlgeschlagene, noch nicht gestartete Lobbys werden vorsichtig bereinigt.
   - Ergebnis wird automatisch aus der API übernommen.
 - Warum: weniger manuelle Schritte, geringeres Risiko für Übertragungsfehler.
 

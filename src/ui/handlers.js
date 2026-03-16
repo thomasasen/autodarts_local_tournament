@@ -229,6 +229,30 @@
       });
     }
 
+    const copyMatchStartDebugButton = shadow.querySelector("[data-action='copy-matchstart-debug']");
+    if (copyMatchStartDebugButton instanceof HTMLButtonElement) {
+      copyMatchStartDebugButton.addEventListener("click", async () => {
+        try {
+          const report = buildMatchStartDebugReport(state.store);
+          await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
+          setNotice("success", "Matchstart-Debug in Zwischenablage kopiert.", 2200);
+        } catch (error) {
+          setNotice("error", "Matchstart-Debug konnte nicht kopiert werden.");
+          logWarn("debug", "Clipboard write for matchstart debug failed.", error);
+        }
+      });
+    }
+
+    const clearMatchStartDebugButton = shadow.querySelector("[data-action='clear-matchstart-debug']");
+    if (clearMatchStartDebugButton instanceof HTMLButtonElement) {
+      clearMatchStartDebugButton.addEventListener("click", () => {
+        clearMatchStartDebugSessions(state.store);
+        schedulePersist();
+        renderShell();
+        setNotice("success", "Matchstart-Debug wurde geleert.", 1800);
+      });
+    }
+
     const autoLobbyToggle = shadow.getElementById("ata-setting-autolobby");
     if (autoLobbyToggle instanceof HTMLInputElement) {
       autoLobbyToggle.addEventListener("change", () => {

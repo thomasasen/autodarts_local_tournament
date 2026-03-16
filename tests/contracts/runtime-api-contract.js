@@ -6,6 +6,7 @@ const RUNTIME_API_CONTRACT = Object.freeze({
     "openDrawer",
     "closeDrawer",
     "toggleDrawer",
+    "getDebugReport",
     "runSelfTests",
   ]),
   functionKeys: Object.freeze([
@@ -13,6 +14,7 @@ const RUNTIME_API_CONTRACT = Object.freeze({
     "openDrawer",
     "closeDrawer",
     "toggleDrawer",
+    "getDebugReport",
     "runSelfTests",
   ]),
 });

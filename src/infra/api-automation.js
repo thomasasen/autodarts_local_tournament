@@ -386,6 +386,17 @@
   }
 
 
+  function storeMatchStartDebugSessionIfEnabled(session, outcome, details = {}) {
+    if (!session || !state.store.settings.debug) {
+      return null;
+    }
+    const finalized = finalizeMatchStartDebugSession(session, outcome, details);
+    recordMatchStartDebugSession(state.store, finalized);
+    logDebug("api", "Matchstart debug session stored.", finalized);
+    return finalized;
+  }
+
+
   function openMatchPage(lobbyId) {
     if (!normalizeText(lobbyId)) {
       return;
@@ -757,6 +768,15 @@
       };
     }
 
+    const duplicates = getDuplicateParticipantNames(tournament);
+    if (duplicates.length) {
+      return {
+        label: "Match starten",
+        disabled: true,
+        title: "Teilnehmernamen müssen für Auto-Sync eindeutig sein.",
+      };
+    }
+
     if (!getAuthTokenFromCookie()) {
       return {
         label: "Match starten",
@@ -839,108 +859,258 @@
     }
 
     const auto = ensureMatchAutoMeta(match);
+    const editability = getMatchEditability(tournament, match);
+    const duplicates = getDuplicateParticipantNames(tournament);
+    const activeMatch = findActiveStartedMatch(tournament, match.id);
+    const token = getAuthTokenFromCookie();
+    const boardId = getBoardId();
+    const participant1 = participantById(tournament, match.player1Id);
+    const participant2 = participantById(tournament, match.player2Id);
+    const preflight = {
+      route: routeKey(),
+      autoLobbyEnabled: Boolean(state.store.settings.featureFlags.autoLobbyStart),
+      hasExistingLobby: Boolean(auto.lobbyId),
+      editability: {
+        editable: Boolean(editability.editable),
+        reason: normalizeText(editability.reason || ""),
+      },
+      duplicateNames: duplicates.slice(),
+      activeStartedMatchId: normalizeText(activeMatch?.id || ""),
+      tokenPresent: Boolean(token),
+      boardId: normalizeText(boardId || ""),
+      boardValid: isValidBoardId(boardId),
+      participant1Name: normalizeText(participant1?.name || ""),
+      participant2Name: normalizeText(participant2?.name || ""),
+      currentStartingMatchId: normalizeText(state.apiAutomation.startingMatchId || ""),
+    };
+    const debugSession = state.store.settings.debug
+      ? createMatchStartDebugSession({
+        route: preflight.route,
+        tournamentId: normalizeText(tournament.id || ""),
+        tournamentName: normalizeText(tournament.name || ""),
+        tournamentMode: normalizeText(tournament.mode || ""),
+        bestOfLegs: Number(tournament.bestOfLegs || 0),
+        startScore: Number(tournament.startScore || 0),
+        matchId: normalizeText(match.id || ""),
+        participant1Name: preflight.participant1Name,
+        participant2Name: preflight.participant2Name,
+      })
+      : null;
+    const recordDebugStep = (step, status, details = null) => {
+      if (!debugSession) {
+        return;
+      }
+      appendMatchStartDebugStep(debugSession, step, status, details);
+      logDebug("api", `Matchstart ${step} [${status}]`, details || {});
+    };
+    const persistDebugBeforeNavigation = async () => {
+      if (!debugSession) {
+        return;
+      }
+      try {
+        await persistStore();
+      } catch (persistError) {
+        schedulePersist();
+        logWarn("storage", "Persisting matchstart debug before navigation failed; scheduled retry.", persistError);
+      }
+    };
+    const scheduleDebugPersist = () => {
+      if (debugSession) {
+        schedulePersist();
+      }
+    };
+    if (debugSession) {
+      debugSession.context.preflight = cloneSerializable(preflight) || {};
+      recordDebugStep("preflight", "info", preflight);
+    }
+
     if (auto.lobbyId) {
+      recordDebugStep("open_existing_lobby", "info", { lobbyId: auto.lobbyId });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "existing_lobby", {
+        lobbyId: auto.lobbyId,
+        summary: {
+          reasonCode: "existing_lobby",
+          message: "Match war bereits mit einer Lobby verknüpft.",
+        },
+      });
+      await persistDebugBeforeNavigation();
       openMatchPage(auto.lobbyId);
       return;
     }
 
     if (!state.store.settings.featureFlags.autoLobbyStart) {
+      recordDebugStep("blocked", "info", { reasonCode: "autolobby_disabled" });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
+        summary: {
+          reasonCode: "autolobby_disabled",
+          message: "Auto-Lobby ist deaktiviert.",
+        },
+      });
+      scheduleDebugPersist();
       setNotice("info", "Auto-Lobby ist deaktiviert. Bitte im Tab Einstellungen aktivieren.");
       return;
     }
 
-    const editability = getMatchEditability(tournament, match);
     if (!editability.editable) {
+      recordDebugStep("blocked", "error", {
+        reasonCode: "match_not_editable",
+        reason: editability.reason || "Match kann aktuell nicht gestartet werden.",
+      });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
+        summary: {
+          reasonCode: "match_not_editable",
+          message: editability.reason || "Match kann aktuell nicht gestartet werden.",
+        },
+      });
+      scheduleDebugPersist();
       setNotice("error", editability.reason || "Match kann aktuell nicht gestartet werden.");
       return;
     }
 
-    const duplicates = getDuplicateParticipantNames(tournament);
     if (duplicates.length) {
+      recordDebugStep("blocked", "error", {
+        reasonCode: "duplicate_names",
+        duplicateNames: duplicates,
+      });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
+        summary: {
+          reasonCode: "duplicate_names",
+          message: "Für Auto-Sync müssen Teilnehmernamen eindeutig sein.",
+        },
+      });
+      scheduleDebugPersist();
       setNotice("error", "F\u00fcr Auto-Sync m\u00fcssen Teilnehmernamen eindeutig sein.");
       return;
     }
 
-    const activeMatch = findActiveStartedMatch(tournament, match.id);
     if (activeMatch) {
       const activeAuto = ensureMatchAutoMeta(activeMatch);
+      recordDebugStep("blocked", "info", {
+        reasonCode: "active_match_exists",
+        activeMatchId: activeMatch.id,
+        activeLobbyId: normalizeText(activeAuto.lobbyId || ""),
+      });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
+        lobbyId: normalizeText(activeAuto.lobbyId || "") || null,
+        summary: {
+          reasonCode: "active_match_exists",
+          message: "Es läuft bereits ein aktives Match.",
+          activeMatchId: activeMatch.id,
+        },
+      });
       setNotice("info", "Es l\u00e4uft bereits ein aktives Match. Weiterleitung dorthin.");
       if (activeAuto.lobbyId) {
+        await persistDebugBeforeNavigation();
         openMatchPage(activeAuto.lobbyId);
+      } else {
+        scheduleDebugPersist();
       }
       return;
     }
 
-    const token = getAuthTokenFromCookie();
     if (!token) {
+      recordDebugStep("blocked", "error", { reasonCode: "missing_auth_token" });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
+        summary: {
+          reasonCode: "missing_auth_token",
+          message: "Kein Autodarts-Token gefunden. Bitte einloggen und Seite neu laden.",
+        },
+      });
+      scheduleDebugPersist();
       setNotice("error", "Kein Autodarts-Token gefunden. Bitte einloggen und Seite neu laden.");
       return;
     }
 
-    const boardId = getBoardId();
     if (!boardId) {
+      recordDebugStep("blocked", "error", { reasonCode: "missing_board_id" });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
+        summary: {
+          reasonCode: "missing_board_id",
+          message: "Board-ID fehlt. Bitte einmal manuell eine Lobby öffnen und Board auswählen.",
+        },
+      });
+      scheduleDebugPersist();
       setNotice("error", "Board-ID fehlt. Bitte einmal manuell eine Lobby \u00f6ffnen und Board ausw\u00e4hlen.");
       return;
     }
     if (!isValidBoardId(boardId)) {
+      recordDebugStep("blocked", "error", {
+        reasonCode: "invalid_board_id",
+        boardId,
+      });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
+        summary: {
+          reasonCode: "invalid_board_id",
+          message: `Board-ID ist ungültig (${boardId}). Bitte in einer manuellen Lobby ein echtes Board auswählen.`,
+        },
+      });
+      scheduleDebugPersist();
       setNotice("error", `Board-ID ist ung\u00fcltig (${boardId}). Bitte in einer manuellen Lobby ein echtes Board ausw\u00e4hlen.`);
       return;
     }
 
-    const participant1 = participantById(tournament, match.player1Id);
-    const participant2 = participantById(tournament, match.player2Id);
     if (!participant1 || !participant2) {
+      recordDebugStep("blocked", "error", {
+        reasonCode: "participant_mapping_incomplete",
+        participant1Id: normalizeText(match.player1Id || ""),
+        participant2Id: normalizeText(match.player2Id || ""),
+      });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
+        summary: {
+          reasonCode: "participant_mapping_incomplete",
+          message: "Teilnehmerzuordnung im Match ist unvollständig.",
+        },
+      });
+      scheduleDebugPersist();
       setNotice("error", "Teilnehmerzuordnung im Match ist unvollst\u00e4ndig.");
       return;
     }
 
-    let createdLobbyId = "";
+    const initialLobbyPayload = buildLobbyCreatePayload(tournament);
+    if (debugSession) {
+      debugSession.context.initialPayload = cloneSerializable(initialLobbyPayload) || {};
+    }
+    let flowResult = null;
     state.apiAutomation.startingMatchId = match.id;
     renderShell();
 
     try {
-      let lobbyPayload = buildLobbyCreatePayload(tournament);
-      let lobby = null;
-      try {
-        logDebug("api", "Creating lobby with tournament payload.", {
+      flowResult = await executeMatchStartApiFlow(
+        {
           matchId: match.id,
-          legs: lobbyPayload.legs,
-          settings: lobbyPayload.settings,
-        });
-        lobby = await createLobby(lobbyPayload, token);
-      } catch (createError) {
-        const errorStatus = Number(createError?.status || 0);
-        const errorText = normalizeLookup(createError?.message || apiBodyToErrorText(createError?.body) || "");
-        const shouldRetryWithBullFallback = errorStatus === 400 && errorText.includes("bull mode");
-        if (!shouldRetryWithBullFallback) {
-          throw createError;
-        }
+          token,
+          boardId,
+          participant1Name: participant1.name,
+          participant2Name: participant2.name,
+          lobbyPayload: initialLobbyPayload,
+        },
+        {
+          createLobby,
+          addLobbyPlayer,
+          startLobby,
+          deleteLobby,
+          extractErrorText: (error) => normalizeText(error?.message || apiBodyToErrorText(error?.body) || ""),
+          onStep: (entry) => {
+            recordDebugStep(entry.step, entry.status, entry.details);
+          },
+        },
+      );
 
-        // Fallback for backend validation variants that reject selected bullMode values.
-        lobbyPayload = cloneSerializable(lobbyPayload) || buildLobbyCreatePayload(tournament);
-        if (!lobbyPayload.settings || typeof lobbyPayload.settings !== "object") {
-          lobbyPayload.settings = {};
-        }
-        lobbyPayload.settings.bullMode = "25/50";
-        logWarn("api", "Retrying lobby create with bullMode fallback 25/50.", {
-          matchId: match.id,
-          legs: lobbyPayload.legs,
-          settings: lobbyPayload.settings,
-        });
-        lobby = await createLobby(lobbyPayload, token);
-      }
-      createdLobbyId = normalizeText(lobby?.id || lobby?.uuid || "");
-      if (!createdLobbyId) {
-        throw createApiError(0, "Lobby konnte nicht erstellt werden (keine Lobby-ID).", lobby);
+      if (!flowResult.ok) {
+        throw flowResult.error || new Error("Matchstart-Flow fehlgeschlagen.");
       }
 
-      await addLobbyPlayer(createdLobbyId, participant1.name, boardId, token);
-      await addLobbyPlayer(createdLobbyId, participant2.name, boardId, token);
-      await startLobby(createdLobbyId, token);
+      if (flowResult.usedBullModeFallback) {
+        logWarn("api", "Lobby create required bullMode fallback 25/50.", {
+          matchId: match.id,
+          lobbyId: flowResult.lobbyId,
+          payload: flowResult.effectivePayload,
+        });
+      }
 
       const now = nowIso();
       auto.provider = API_PROVIDER;
-      auto.lobbyId = createdLobbyId;
+      auto.lobbyId = flowResult.lobbyId;
       auto.status = "started";
       auto.startedAt = auto.startedAt || now;
       auto.finishedAt = null;
@@ -949,6 +1119,22 @@
       match.updatedAt = now;
       tournament.updatedAt = now;
 
+      recordDebugStep("persist_store", "pending", {
+        reason: "before_redirect",
+        lobbyId: flowResult.lobbyId,
+      });
+      recordDebugStep("redirect", "pending", { lobbyId: flowResult.lobbyId });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "success", {
+        lobbyId: flowResult.lobbyId,
+        payload: flowResult.effectivePayload,
+        cleanup: flowResult.cleanup,
+        summary: {
+          reasonCode: "started",
+          message: "Match gestartet. Weiterleitung ins Match.",
+          usedBullModeFallback: flowResult.usedBullModeFallback,
+          boardId,
+        },
+      });
       try {
         await persistStore();
       } catch (persistError) {
@@ -957,20 +1143,47 @@
       }
       renderShell();
       setNotice("success", "Match gestartet. Weiterleitung ins Match.");
-      openMatchPage(createdLobbyId);
+      openMatchPage(flowResult.lobbyId);
     } catch (error) {
       const message = normalizeText(error?.message || apiBodyToErrorText(error?.body) || "Unbekannter API-Fehler.") || "Unbekannter API-Fehler.";
       const now = nowIso();
       auto.provider = API_PROVIDER;
-      auto.lobbyId = createdLobbyId || auto.lobbyId || null;
+      auto.lobbyId = flowResult?.cleanup?.ok ? null : (normalizeText(flowResult?.lobbyId || "") || auto.lobbyId || null);
       auto.status = "error";
       auto.lastError = message;
       auto.lastSyncAt = now;
       match.updatedAt = now;
       tournament.updatedAt = now;
+      recordDebugStep("match_state_error", "info", {
+        lobbyId: auto.lobbyId,
+        message,
+      });
+      storeMatchStartDebugSessionIfEnabled(debugSession, "error", {
+        lobbyId: auto.lobbyId,
+        payload: flowResult?.effectivePayload || initialLobbyPayload,
+        cleanup: flowResult?.cleanup,
+        summary: {
+          reasonCode: "start_failed",
+          message,
+          usedBullModeFallback: Boolean(flowResult?.usedBullModeFallback),
+          boardId,
+        },
+      });
       schedulePersist();
       renderShell();
       setNotice("error", `Matchstart fehlgeschlagen: ${message}`);
+      if (flowResult?.cleanup?.attempted && flowResult.cleanup.ok) {
+        logWarn("api", "Ungestartete Lobby wurde nach fehlgeschlagenem Matchstart bereinigt.", {
+          matchId: match.id,
+          lobbyId: flowResult.lobbyId,
+        });
+      } else if (flowResult?.cleanup?.attempted && !flowResult.cleanup.ok) {
+        logWarn("api", "Cleanup for failed matchstart lobby did not complete.", {
+          matchId: match.id,
+          lobbyId: flowResult.lobbyId,
+          cleanup: flowResult.cleanup,
+        });
+      }
       logWarn("api", "Match start failed.", error);
     } finally {
       state.apiAutomation.startingMatchId = "";

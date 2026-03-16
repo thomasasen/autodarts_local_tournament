@@ -3,6 +3,7 @@
                   "src/core/constants.js",
                   "src/core/state.js",
                   "src/core/utils.js",
+                  "src/core/match-start-tools.js",
                   "src/core/logging.js",
                   "src/core/events.js",
                   "src/data/storage.js",

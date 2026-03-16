@@ -7,6 +7,7 @@
       openDrawer,
       closeDrawer,
       toggleDrawer,
+      getDebugReport: () => buildMatchStartDebugReport(state.store),
       runSelfTests,
     };
 
