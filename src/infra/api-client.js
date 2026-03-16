@@ -101,13 +101,25 @@
     const boardStateClass = status.hasBoard ? "ata-status-ok" : "ata-status-warn";
     const autoStateClass = status.autoEnabled ? "ata-status-info" : "ata-status-neutral";
     const hint = status.autoEnabled && (!status.hasToken || !status.hasBoard)
-      ? `<span class="ata-runtime-hint">Hinweis: F\u00fcr API-Halbautomatik werden Auth-Token und aktives Board ben\u00f6tigt.</span>`
+      ? renderDocLinkableMessage("Hinweis: F\u00fcr API-Halbautomatik werden Auth-Token und aktives Board ben\u00f6tigt.", {
+        tagName: "span",
+        className: "ata-runtime-hint",
+      })
       : "";
     return `
       <div class="ata-runtime-statusbar">
-        <span class="ata-status-pill ${apiStateClass}">${escapeHtml(status.apiLabel)}</span>
-        <span class="ata-status-pill ${boardStateClass}">${escapeHtml(status.boardLabel)}</span>
-        <span class="ata-status-pill ${autoStateClass}">${escapeHtml(status.autoLabel)}</span>
+        ${renderDocLinkableMessage(status.apiLabel, {
+          tagName: "span",
+          className: `ata-status-pill ${apiStateClass}`,
+        })}
+        ${renderDocLinkableMessage(status.boardLabel, {
+          tagName: "span",
+          className: `ata-status-pill ${boardStateClass}`,
+        })}
+        ${renderDocLinkableMessage(status.autoLabel, {
+          tagName: "span",
+          className: `ata-status-pill ${autoStateClass}`,
+        })}
         ${hint}
       </div>
     `;

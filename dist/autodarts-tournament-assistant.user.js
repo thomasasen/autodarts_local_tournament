@@ -271,6 +271,32 @@
         white-space: nowrap;
       }
 
+      .ata-doc-linkable {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .ata-doc-linkable[data-doc-link="1"] {
+        cursor: help;
+      }
+
+      .ata-doc-linkable[data-doc-link="1"]:hover {
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+
+      .ata-doc-linkable[data-doc-link="1"]:focus-visible {
+        outline: 2px solid rgba(255, 255, 255, 0.72);
+        outline-offset: 2px;
+      }
+
+      .ata-notice.ata-doc-linkable,
+      .ata-match-note.ata-doc-linkable,
+      .ata-history-import-copy.ata-doc-linkable,
+      .ata-history-import-outcome.ata-doc-linkable {
+        display: block;
+      }
+
       .ata-status-pill.ata-status-ok {
         border-color: rgba(90, 210, 153, 0.5);
         background: rgba(90, 210, 153, 0.2);
@@ -7334,13 +7360,25 @@
     const boardStateClass = status.hasBoard ? "ata-status-ok" : "ata-status-warn";
     const autoStateClass = status.autoEnabled ? "ata-status-info" : "ata-status-neutral";
     const hint = status.autoEnabled && (!status.hasToken || !status.hasBoard)
-      ? `<span class="ata-runtime-hint">Hinweis: F\u00fcr API-Halbautomatik werden Auth-Token und aktives Board ben\u00f6tigt.</span>`
+      ? renderDocLinkableMessage("Hinweis: F\u00fcr API-Halbautomatik werden Auth-Token und aktives Board ben\u00f6tigt.", {
+        tagName: "span",
+        className: "ata-runtime-hint",
+      })
       : "";
     return `
       <div class="ata-runtime-statusbar">
-        <span class="ata-status-pill ${apiStateClass}">${escapeHtml(status.apiLabel)}</span>
-        <span class="ata-status-pill ${boardStateClass}">${escapeHtml(status.boardLabel)}</span>
-        <span class="ata-status-pill ${autoStateClass}">${escapeHtml(status.autoLabel)}</span>
+        ${renderDocLinkableMessage(status.apiLabel, {
+          tagName: "span",
+          className: `ata-status-pill ${apiStateClass}`,
+        })}
+        ${renderDocLinkableMessage(status.boardLabel, {
+          tagName: "span",
+          className: `ata-status-pill ${boardStateClass}`,
+        })}
+        ${renderDocLinkableMessage(status.autoLabel, {
+          tagName: "span",
+          className: `ata-status-pill ${autoStateClass}`,
+        })}
         ${hint}
       </div>
     `;
@@ -9736,6 +9774,18 @@
       : outcomeType === "error"
         ? "rgba(245, 123, 143, 0.52)"
         : "rgba(142, 188, 255, 0.48)";
+    const statusTextHtml = renderDocLinkableMessage(statusText, {
+      tagName: "div",
+      className: "ata-history-import-copy",
+      attributes: 'style="font-size:13px;line-height:1.45;color:rgba(240,246,255,0.95);margin-bottom:8px;"',
+    });
+    const outcomeMessageHtml = outcomeMessage
+      ? renderDocLinkableMessage(outcomeMessage, {
+        tagName: "div",
+        className: "ata-history-import-outcome",
+        attributes: `style="font-size:12px;line-height:1.4;color:${outcomeColor};background:${outcomeBg};border:1px solid ${outcomeBorder};padding:7px 9px;border-radius:8px;margin-bottom:10px;"`,
+      })
+      : "";
 
     root.innerHTML = `
       <div style="margin:10px 0 14px 0;padding:14px;border-radius:12px;border:1px solid rgba(120,203,255,0.45);background:linear-gradient(180deg, rgba(54,70,145,0.92), rgba(34,80,136,0.9));color:#f4f7ff;box-shadow:0 10px 24px rgba(7,11,25,0.28);">
@@ -9743,10 +9793,10 @@
           <div style="font-size:15px;line-height:1.2;font-weight:800;letter-spacing:0.25px;">xLokales Turnier</div>
           <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;color:#d5ebff;background:rgba(31,175,198,0.32);border:1px solid rgba(133,219,255,0.42);padding:3px 8px;border-radius:999px;">Match-Import</div>
         </div>
-        <div style="font-size:13px;line-height:1.45;color:rgba(240,246,255,0.95);margin-bottom:8px;">${escapeHtml(statusText)}</div>
+        ${statusTextHtml}
         ${parsedScoreText ? `<div style="font-size:12px;line-height:1.4;color:rgba(220,236,255,0.88);margin-bottom:10px;">Statistik: ${escapeHtml(parsedScoreText)}</div>` : ""}
         ${pendingConfirmation ? `<div style="font-size:12px;line-height:1.4;color:#ffe9c9;background:rgba(255,176,66,0.16);border:1px solid rgba(255,196,112,0.46);padding:7px 9px;border-radius:8px;margin-bottom:10px;">Bestätigung erforderlich bis ${escapeHtml(new Date(pendingConfirmation.expiresAt).toLocaleTimeString("de-DE"))}: ${escapeHtml(formatHistoryLegsText(pendingConfirmation.legsRaw))} -> ${escapeHtml(formatHistoryLegsText(pendingConfirmation.normalizedLegs))}</div>` : ""}
-        ${outcomeMessage ? `<div style="font-size:12px;line-height:1.4;color:${outcomeColor};background:${outcomeBg};border:1px solid ${outcomeBorder};padding:7px 9px;border-radius:8px;margin-bottom:10px;">${escapeHtml(outcomeMessage)}</div>` : ""}
+        ${outcomeMessageHtml}
         <button type="button" data-action="ata-history-sync" style="display:block;width:100%;border:1px solid rgba(99,231,173,0.7);background:linear-gradient(180deg, rgba(83,221,163,0.36), rgba(58,197,141,0.36));color:#ecfff6;border-radius:10px;padding:12px 14px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:0.2px;" ${disabledAttr}>${escapeHtml(primaryLabel)}</button>
         ${pendingConfirmation ? `<button type="button" data-action="ata-history-confirm-sync" style="display:block;width:100%;margin-top:8px;border:1px solid rgba(255,201,112,0.66);background:linear-gradient(180deg, rgba(245,180,88,0.34), rgba(226,138,62,0.35));color:#fff6ea;border-radius:10px;padding:12px 14px;font-size:13px;font-weight:800;cursor:pointer;letter-spacing:0.2px;" ${confirmDisabledAttr}>${escapeHtml(confirmLabel)}</button>` : ""}
       </div>
@@ -10400,6 +10450,92 @@
   }
 
 // Presentation layer: UI rendering and interaction wiring.
+  function getReadmeStatusMessageDoc(message) {
+    const text = normalizeText(message || "");
+    if (!text) {
+      return null;
+    }
+
+    const exact = (value) => text === value;
+    const prefix = (value) => text.startsWith(value);
+    const statusDocs = [
+      { anchor: "statusmeldung-api-auth-fehlt", match: () => exact("API Auth fehlt") || exact("Kein Autodarts-Token gefunden. Bitte einloggen und Seite neu laden.") || exact("Kein Auth-Token gefunden. Bitte neu einloggen.") || exact("Auto-Sync pausiert: kein Auth-Token gefunden. Bitte neu einloggen.") },
+      { anchor: "statusmeldung-api-auth-abgelaufen", match: () => exact("API Auth abgelaufen") || exact("Auth abgelaufen.") || exact("Auth abgelaufen. Bitte neu einloggen.") || exact("Auto-Sync pausiert: Auth abgelaufen. Bitte neu einloggen.") },
+      { anchor: "statusmeldung-api-auth-bereit", match: () => exact("API Auth bereit") },
+      { anchor: "statusmeldung-board-aktiv", match: () => prefix("Board aktiv (") },
+      { anchor: "statusmeldung-board-id-ungueltig", match: () => prefix("Board-ID ungültig (") || prefix("Board-ID ist ungültig (") },
+      { anchor: "statusmeldung-kein-aktives-board", match: () => exact("Kein aktives Board") || exact("Board-ID fehlt. Bitte einmal manuell eine Lobby öffnen und Board auswählen.") },
+      { anchor: "statusmeldung-auto-lobby-on", match: () => exact("Auto-Lobby ON") },
+      { anchor: "statusmeldung-auto-lobby-off", match: () => exact("Auto-Lobby OFF") || exact("Auto-Lobby ist deaktiviert.") || exact("Auto-Lobby ist deaktiviert. Bitte im Tab Einstellungen aktivieren.") || exact("Auto-Lobby ist deaktiviert. Aktivieren Sie die Funktion im Tab Einstellungen.") },
+      { anchor: "statusmeldung-runtime-hinweis-api-voraussetzungen", match: () => exact("Hinweis: Für API-Halbautomatik werden Auth-Token und aktives Board benötigt.") },
+      { anchor: "statusmeldung-freilos-bye-kein-api-sync-erforderlich", match: () => exact("Freilos (Bye): kein API-Sync erforderlich") },
+      { anchor: "statusmeldung-api-sync-abgeschlossen", match: () => exact("API-Sync: abgeschlossen") },
+      { anchor: "statusmeldung-api-sync-aktiv", match: () => prefix("API-Sync: aktiv (Lobby ") },
+      { anchor: "statusmeldung-api-sync-fehler", match: () => prefix("API-Sync: Fehler") || prefix("Auto-Sync Fehler bei ") || prefix("Matchstart fehlgeschlagen: ") || prefix("Letzter Sync-Fehler: ") || exact("Match ist im Fehlerstatus.") || exact("Gewinner konnte nicht eindeutig zugeordnet werden.") || exact("Auto-Sync konnte Ergebnis nicht speichern.") },
+      { anchor: "statusmeldung-api-sync-nicht-gestartet", match: () => exact("API-Sync: nicht gestartet") },
+      { anchor: "statusmeldung-match-nicht-verfuegbar", match: () => exact("Match nicht verfügbar.") },
+      { anchor: "statusmeldung-match-bereits-abgeschlossen", match: () => exact("Match ist bereits abgeschlossen.") },
+      { anchor: "statusmeldung-paarung-steht-noch-nicht-fest", match: () => exact("Paarung steht noch nicht fest.") },
+      { anchor: "statusmeldung-vorgaenger-match-muss-zuerst-abgeschlossen-werden", match: () => prefix("Vorgänger-Match Runde ") },
+      { anchor: "statusmeldung-ergebnis-bereits-im-turnier-gespeichert", match: () => exact("Ergebnis bereits im Turnier gespeichert.") || exact("Ergebnis war bereits übernommen.") },
+      { anchor: "statusmeldung-kein-eindeutiger-statistik-host", match: () => exact("Kein eindeutiger Statistik-Host für diese Lobby auf der History-Seite gefunden.") },
+      { anchor: "statusmeldung-statistik-host-konnte-nicht-zugeordnet-werden", match: () => exact("Statistik-Host konnte nicht auf einen Kartenbereich zugeordnet werden.") },
+      { anchor: "statusmeldung-mehrdeutiger-statistik-host", match: () => exact("Mehrdeutiger Statistik-Host: Mehrere passende Bereiche auf der Seite gefunden.") || exact("Statistik-Bereich ist nicht eindeutig. Import ist gesperrt.") },
+      { anchor: "statusmeldung-keine-eindeutige-statistik-tabelle", match: () => exact("Im erkannten Statistik-Bereich wurde keine eindeutige Tabelle gefunden.") },
+      { anchor: "statusmeldung-mehrere-statistik-tabellen", match: () => exact("Im Statistik-Bereich wurden mehrere Tabellen gefunden. Import wurde aus Sicherheitsgründen gestoppt.") },
+      { anchor: "statusmeldung-leg-abweichung-bestaetigung-erforderlich", match: () => prefix("Leg-Abweichung erkannt: Statistik ") || prefix("Leg-Abweichung erkannt. Bitte Übernahme ") || exact("Explizite Bestätigung erforderlich.") },
+      { anchor: "statusmeldung-bestaetigung-abgelaufen", match: () => exact("Bestätigung ist abgelaufen. Bitte den Import erneut starten.") },
+      { anchor: "statusmeldung-bestaetigung-ungueltig", match: () => exact("Bestätigung ist ungültig. Bitte den Import erneut starten.") || exact("Bestätigung passt nicht mehr zur aktuellen Statistik. Bitte erneut bestätigen.") },
+      { anchor: "statusmeldung-statistik-api-fallback", match: () => exact("Statistik konnte nicht vollständig gelesen werden. Beim Klick wird API-Fallback genutzt.") },
+      { anchor: "statusmeldung-import-bereit-sieger-laut-statistik", match: () => prefix("Import bereit. Sieger laut Statistik: ") },
+      { anchor: "statusmeldung-match-verknuepft-ergebnis-kann-jetzt-gespeichert-werden", match: () => exact("Match verknüpft. Ergebnis kann jetzt übernommen werden.") },
+      { anchor: "statusmeldung-kein-direkt-verknuepftes-match-gefunden", match: () => exact("Kein direkt verknüpftes Match gefunden. Ergebnisübernahme versucht Zuordnung über die Statistik.") },
+      { anchor: "statusmeldung-keine-lobby-id-erkannt", match: () => exact("Keine Lobby-ID erkannt.") || exact("Keine Lobby-ID vorhanden.") },
+      { anchor: "statusmeldung-mehrdeutige-zuordnung-lobby", match: () => exact("Mehrdeutige Zuordnung: mehrere offene Turnier-Matches passen zur Lobby. Bitte in der Ergebnisführung manuell speichern.") },
+      { anchor: "statusmeldung-kein-offenes-turnier-match-fuer-diese-lobby-gefunden", match: () => exact("Kein offenes Turnier-Match für diese Lobby gefunden.") },
+      { anchor: "statusmeldung-kein-offenes-turnier-match-aus-lobby-id-oder-statistik-spielern-gefunden", match: () => exact("Kein offenes Turnier-Match aus Lobby-ID oder Statistik-Spielern gefunden.") },
+      { anchor: "statusmeldung-api-ergebnis-noch-nicht-final-verfuegbar", match: () => exact("API-Ergebnis ist noch nicht final verfügbar.") || exact("Match-Stats noch nicht verfügbar.") || exact("Noch kein finales Ergebnis verfügbar. Match läuft ggf. noch.") },
+      { anchor: "statusmeldung-ergebnis-importiert", match: () => exact("Ergebnis übernommen.") || exact("Ergebnis wurde aus der Match-Statistik übernommen.") || prefix("Ergebnis übernommen. Legs wurden nach bestätigter Abweichung auf First to ") || exact("Ergebnis wurde in xLokales Turnier übernommen.") },
+      { anchor: "statusmeldung-mehrdeutige-zuordnung-statistik-spieler", match: () => exact("Mehrdeutige Zuordnung: mehrere offene Turnier-Matches passen zu diesen Spielern.") },
+      { anchor: "statusmeldung-sieger-konnte-aus-der-statistik-nicht-eindeutig-bestimmt-werden", match: () => exact("Sieger konnte aus der Statistik nicht eindeutig bestimmt werden.") },
+      { anchor: "statusmeldung-ergebnis-konnte-nicht-aus-der-statistik-gespeichert-werden", match: () => exact("Ergebnis konnte nicht aus der Statistik gespeichert werden.") },
+    ];
+
+    const match = statusDocs.find((entry) => entry.match());
+    if (!match) {
+      return null;
+    }
+
+    return {
+      href: `${README_BASE_URL}#${match.anchor}`,
+      title: `README: ${text}`,
+    };
+  }
+
+
+  function renderDocLinkableMessage(message, options = {}) {
+    const text = normalizeText(message || "");
+    if (!text) {
+      return "";
+    }
+
+    const tagName = normalizeToken(options.tagName || "span") || "span";
+    const className = normalizeText(options.className || "");
+    const attributes = normalizeText(options.attributes || "");
+    const fallbackTitle = normalizeText(options.title || "");
+    const doc = getReadmeStatusMessageDoc(text);
+    const attributeHtml = attributes ? ` ${attributes}` : "";
+    const classHtml = className ? ` class="${escapeHtml(className)}"` : "";
+    const titleText = doc ? (doc.title || fallbackTitle) : fallbackTitle;
+    const titleHtml = titleText ? ` title="${escapeHtml(titleText)}"` : "";
+
+    if (!doc) {
+      return `<${tagName}${classHtml}${titleHtml}${attributeHtml}>${escapeHtml(text)}</${tagName}>`;
+    }
+
+    const linkClassName = normalizeText(`${className} ata-doc-linkable`);
+    return `<a class="${escapeHtml(linkClassName)}" href="${escapeHtml(doc.href)}" target="_blank" rel="noopener noreferrer" data-doc-link="1"${titleHtml}${attributeHtml}>${escapeHtml(text)}</a>`;
+  }
 
   function renderInfoLinks(links) {
     if (!Array.isArray(links) || !links.length) {
@@ -10532,7 +10668,10 @@
     `).join("");
 
     const noticeHtml = state.notice.message
-      ? `<div class="ata-notice ata-notice-${escapeHtml(state.notice.type)}">${escapeHtml(state.notice.message)}</div>`
+      ? renderDocLinkableMessage(state.notice.message, {
+        tagName: "div",
+        className: `ata-notice ata-notice-${state.notice.type}`,
+      })
       : "";
     const runtimeStatusHtml = renderRuntimeStatusBar();
 
@@ -10969,7 +11108,10 @@
         ? `<span class="ata-match-final-pill" title="Finale">🏆 Finale</span>`
         : "";
       const statusLineHtml = statusLine
-        ? `<div class="ata-match-note">${escapeHtml(statusLine)}</div>`
+        ? renderDocLinkableMessage(statusLine, {
+          tagName: "div",
+          className: "ata-match-note",
+        })
         : "";
 
       return `

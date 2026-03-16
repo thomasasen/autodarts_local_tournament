@@ -18,8 +18,10 @@
 - Doku synchronisiert:
   - Open Draw überall konsistent als deterministische Reihenfolge beschrieben.
   - Compliance-Matrix und Regeltexte auf neue Guard-/Override-Logik aktualisiert.
+  - README um klickbare Statusmeldungs-Referenz für Runtime-Leiste, API-Sync und History-Import ergänzt.
 - Tests erweitert:
   - Domain-Tests für Tie-Break-Lock und Draw-Lock-Override.
+  - Unit-Test für README-Statuslink-Mapping ergänzt.
   - Runtime-Selftests für Confirmation-Flow, Host-Guards und Route-Guards.
 - Preset-Logik fachlich korrigiert:
   - neues Default-Preset `PDC European Tour (Official)` (`KO`, `Best of 11`, `501`, `Straight In`, `Double Out`, `Bull 25/50`)

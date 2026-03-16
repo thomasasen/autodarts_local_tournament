@@ -155,7 +155,10 @@
         ? `<span class="ata-match-final-pill" title="Finale">🏆 Finale</span>`
         : "";
       const statusLineHtml = statusLine
-        ? `<div class="ata-match-note">${escapeHtml(statusLine)}</div>`
+        ? renderDocLinkableMessage(statusLine, {
+          tagName: "div",
+          className: "ata-match-note",
+        })
         : "";
 
       return `

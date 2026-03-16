@@ -1,4 +1,90 @@
 // Presentation layer: UI rendering and interaction wiring.
+  function getReadmeStatusMessageDoc(message) {
+    const text = normalizeText(message || "");
+    if (!text) {
+      return null;
+    }
+
+    const exact = (value) => text === value;
+    const prefix = (value) => text.startsWith(value);
+    const statusDocs = [
+      { anchor: "statusmeldung-api-auth-fehlt", match: () => exact("API Auth fehlt") || exact("Kein Autodarts-Token gefunden. Bitte einloggen und Seite neu laden.") || exact("Kein Auth-Token gefunden. Bitte neu einloggen.") || exact("Auto-Sync pausiert: kein Auth-Token gefunden. Bitte neu einloggen.") },
+      { anchor: "statusmeldung-api-auth-abgelaufen", match: () => exact("API Auth abgelaufen") || exact("Auth abgelaufen.") || exact("Auth abgelaufen. Bitte neu einloggen.") || exact("Auto-Sync pausiert: Auth abgelaufen. Bitte neu einloggen.") },
+      { anchor: "statusmeldung-api-auth-bereit", match: () => exact("API Auth bereit") },
+      { anchor: "statusmeldung-board-aktiv", match: () => prefix("Board aktiv (") },
+      { anchor: "statusmeldung-board-id-ungueltig", match: () => prefix("Board-ID ungültig (") || prefix("Board-ID ist ungültig (") },
+      { anchor: "statusmeldung-kein-aktives-board", match: () => exact("Kein aktives Board") || exact("Board-ID fehlt. Bitte einmal manuell eine Lobby öffnen und Board auswählen.") },
+      { anchor: "statusmeldung-auto-lobby-on", match: () => exact("Auto-Lobby ON") },
+      { anchor: "statusmeldung-auto-lobby-off", match: () => exact("Auto-Lobby OFF") || exact("Auto-Lobby ist deaktiviert.") || exact("Auto-Lobby ist deaktiviert. Bitte im Tab Einstellungen aktivieren.") || exact("Auto-Lobby ist deaktiviert. Aktivieren Sie die Funktion im Tab Einstellungen.") },
+      { anchor: "statusmeldung-runtime-hinweis-api-voraussetzungen", match: () => exact("Hinweis: Für API-Halbautomatik werden Auth-Token und aktives Board benötigt.") },
+      { anchor: "statusmeldung-freilos-bye-kein-api-sync-erforderlich", match: () => exact("Freilos (Bye): kein API-Sync erforderlich") },
+      { anchor: "statusmeldung-api-sync-abgeschlossen", match: () => exact("API-Sync: abgeschlossen") },
+      { anchor: "statusmeldung-api-sync-aktiv", match: () => prefix("API-Sync: aktiv (Lobby ") },
+      { anchor: "statusmeldung-api-sync-fehler", match: () => prefix("API-Sync: Fehler") || prefix("Auto-Sync Fehler bei ") || prefix("Matchstart fehlgeschlagen: ") || prefix("Letzter Sync-Fehler: ") || exact("Match ist im Fehlerstatus.") || exact("Gewinner konnte nicht eindeutig zugeordnet werden.") || exact("Auto-Sync konnte Ergebnis nicht speichern.") },
+      { anchor: "statusmeldung-api-sync-nicht-gestartet", match: () => exact("API-Sync: nicht gestartet") },
+      { anchor: "statusmeldung-match-nicht-verfuegbar", match: () => exact("Match nicht verfügbar.") },
+      { anchor: "statusmeldung-match-bereits-abgeschlossen", match: () => exact("Match ist bereits abgeschlossen.") },
+      { anchor: "statusmeldung-paarung-steht-noch-nicht-fest", match: () => exact("Paarung steht noch nicht fest.") },
+      { anchor: "statusmeldung-vorgaenger-match-muss-zuerst-abgeschlossen-werden", match: () => prefix("Vorgänger-Match Runde ") },
+      { anchor: "statusmeldung-ergebnis-bereits-im-turnier-gespeichert", match: () => exact("Ergebnis bereits im Turnier gespeichert.") || exact("Ergebnis war bereits übernommen.") },
+      { anchor: "statusmeldung-kein-eindeutiger-statistik-host", match: () => exact("Kein eindeutiger Statistik-Host für diese Lobby auf der History-Seite gefunden.") },
+      { anchor: "statusmeldung-statistik-host-konnte-nicht-zugeordnet-werden", match: () => exact("Statistik-Host konnte nicht auf einen Kartenbereich zugeordnet werden.") },
+      { anchor: "statusmeldung-mehrdeutiger-statistik-host", match: () => exact("Mehrdeutiger Statistik-Host: Mehrere passende Bereiche auf der Seite gefunden.") || exact("Statistik-Bereich ist nicht eindeutig. Import ist gesperrt.") },
+      { anchor: "statusmeldung-keine-eindeutige-statistik-tabelle", match: () => exact("Im erkannten Statistik-Bereich wurde keine eindeutige Tabelle gefunden.") },
+      { anchor: "statusmeldung-mehrere-statistik-tabellen", match: () => exact("Im Statistik-Bereich wurden mehrere Tabellen gefunden. Import wurde aus Sicherheitsgründen gestoppt.") },
+      { anchor: "statusmeldung-leg-abweichung-bestaetigung-erforderlich", match: () => prefix("Leg-Abweichung erkannt: Statistik ") || prefix("Leg-Abweichung erkannt. Bitte Übernahme ") || exact("Explizite Bestätigung erforderlich.") },
+      { anchor: "statusmeldung-bestaetigung-abgelaufen", match: () => exact("Bestätigung ist abgelaufen. Bitte den Import erneut starten.") },
+      { anchor: "statusmeldung-bestaetigung-ungueltig", match: () => exact("Bestätigung ist ungültig. Bitte den Import erneut starten.") || exact("Bestätigung passt nicht mehr zur aktuellen Statistik. Bitte erneut bestätigen.") },
+      { anchor: "statusmeldung-statistik-api-fallback", match: () => exact("Statistik konnte nicht vollständig gelesen werden. Beim Klick wird API-Fallback genutzt.") },
+      { anchor: "statusmeldung-import-bereit-sieger-laut-statistik", match: () => prefix("Import bereit. Sieger laut Statistik: ") },
+      { anchor: "statusmeldung-match-verknuepft-ergebnis-kann-jetzt-gespeichert-werden", match: () => exact("Match verknüpft. Ergebnis kann jetzt übernommen werden.") },
+      { anchor: "statusmeldung-kein-direkt-verknuepftes-match-gefunden", match: () => exact("Kein direkt verknüpftes Match gefunden. Ergebnisübernahme versucht Zuordnung über die Statistik.") },
+      { anchor: "statusmeldung-keine-lobby-id-erkannt", match: () => exact("Keine Lobby-ID erkannt.") || exact("Keine Lobby-ID vorhanden.") },
+      { anchor: "statusmeldung-mehrdeutige-zuordnung-lobby", match: () => exact("Mehrdeutige Zuordnung: mehrere offene Turnier-Matches passen zur Lobby. Bitte in der Ergebnisführung manuell speichern.") },
+      { anchor: "statusmeldung-kein-offenes-turnier-match-fuer-diese-lobby-gefunden", match: () => exact("Kein offenes Turnier-Match für diese Lobby gefunden.") },
+      { anchor: "statusmeldung-kein-offenes-turnier-match-aus-lobby-id-oder-statistik-spielern-gefunden", match: () => exact("Kein offenes Turnier-Match aus Lobby-ID oder Statistik-Spielern gefunden.") },
+      { anchor: "statusmeldung-api-ergebnis-noch-nicht-final-verfuegbar", match: () => exact("API-Ergebnis ist noch nicht final verfügbar.") || exact("Match-Stats noch nicht verfügbar.") || exact("Noch kein finales Ergebnis verfügbar. Match läuft ggf. noch.") },
+      { anchor: "statusmeldung-ergebnis-importiert", match: () => exact("Ergebnis übernommen.") || exact("Ergebnis wurde aus der Match-Statistik übernommen.") || prefix("Ergebnis übernommen. Legs wurden nach bestätigter Abweichung auf First to ") || exact("Ergebnis wurde in xLokales Turnier übernommen.") },
+      { anchor: "statusmeldung-mehrdeutige-zuordnung-statistik-spieler", match: () => exact("Mehrdeutige Zuordnung: mehrere offene Turnier-Matches passen zu diesen Spielern.") },
+      { anchor: "statusmeldung-sieger-konnte-aus-der-statistik-nicht-eindeutig-bestimmt-werden", match: () => exact("Sieger konnte aus der Statistik nicht eindeutig bestimmt werden.") },
+      { anchor: "statusmeldung-ergebnis-konnte-nicht-aus-der-statistik-gespeichert-werden", match: () => exact("Ergebnis konnte nicht aus der Statistik gespeichert werden.") },
+    ];
+
+    const match = statusDocs.find((entry) => entry.match());
+    if (!match) {
+      return null;
+    }
+
+    return {
+      href: `${README_BASE_URL}#${match.anchor}`,
+      title: `README: ${text}`,
+    };
+  }
+
+
+  function renderDocLinkableMessage(message, options = {}) {
+    const text = normalizeText(message || "");
+    if (!text) {
+      return "";
+    }
+
+    const tagName = normalizeToken(options.tagName || "span") || "span";
+    const className = normalizeText(options.className || "");
+    const attributes = normalizeText(options.attributes || "");
+    const fallbackTitle = normalizeText(options.title || "");
+    const doc = getReadmeStatusMessageDoc(text);
+    const attributeHtml = attributes ? ` ${attributes}` : "";
+    const classHtml = className ? ` class="${escapeHtml(className)}"` : "";
+    const titleText = doc ? (doc.title || fallbackTitle) : fallbackTitle;
+    const titleHtml = titleText ? ` title="${escapeHtml(titleText)}"` : "";
+
+    if (!doc) {
+      return `<${tagName}${classHtml}${titleHtml}${attributeHtml}>${escapeHtml(text)}</${tagName}>`;
+    }
+
+    const linkClassName = normalizeText(`${className} ata-doc-linkable`);
+    return `<a class="${escapeHtml(linkClassName)}" href="${escapeHtml(doc.href)}" target="_blank" rel="noopener noreferrer" data-doc-link="1"${titleHtml}${attributeHtml}>${escapeHtml(text)}</a>`;
+  }
 
   function renderInfoLinks(links) {
     if (!Array.isArray(links) || !links.length) {

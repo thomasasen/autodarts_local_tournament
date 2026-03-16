@@ -11,7 +11,10 @@
     `).join("");
 
     const noticeHtml = state.notice.message
-      ? `<div class="ata-notice ata-notice-${escapeHtml(state.notice.type)}">${escapeHtml(state.notice.message)}</div>`
+      ? renderDocLinkableMessage(state.notice.message, {
+        tagName: "div",
+        className: `ata-notice ata-notice-${state.notice.type}`,
+      })
       : "";
     const runtimeStatusHtml = renderRuntimeStatusBar();
 

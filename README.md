@@ -17,14 +17,15 @@ Der Assistent erweitert die Autodarts-Oberfläche um einen eigenen Bereich für:
 5. [Turniermodi](#turniermodi)
 6. [Turnier anlegen](#turnier-anlegen)
 7. [API-Halbautomatik](#api-halbautomatik)
-8. [Turnierbaum](#turnierbaum)
-9. [Import und Export](#import-und-export)
-10. [Einstellungen](#einstellungen)
-11. [Regelbasis und Limits](#regelbasis-und-limits)
-12. [Troubleshooting](#troubleshooting)
-13. [Entwicklung](#entwicklung)
-14. [Limitationen](#limitationen)
-15. [Quellen](#quellen)
+8. [Statusmeldungen](#statusmeldungen)
+9. [Turnierbaum](#turnierbaum)
+10. [Import und Export](#import-und-export)
+11. [Einstellungen](#einstellungen)
+12. [Regelbasis und Limits](#regelbasis-und-limits)
+13. [Troubleshooting](#troubleshooting)
+14. [Entwicklung](#entwicklung)
+15. [Limitationen](#limitationen)
+16. [Quellen](#quellen)
 
 ## Dokumentation
 Zusätzliche Detaildoku zur Zeitberechnung: [docs/tournament-duration.md](docs/tournament-duration.md)
@@ -245,6 +246,8 @@ Sortiersegmente im Tab `Spiele`:
 - `Runde/Spiel`: strikte Reihenfolge nach Turnierstruktur.
 - `Status`: gruppiert nach offen/abgeschlossen/Freilos.
 
+Die bekannten Statusmeldungen in Runtime-Leiste, Matchkarten, History-Import und passenden Notice-Bannern sind direkt klickbar und verweisen auf die jeweilige Stelle in dieser README.
+
 Wichtige Markierungen:
 - `Nächstes Match`: empfohlene nächste Paarung (PDC: Next Match).
 - `Freilos (Bye)`: automatischer Weiterzug ohne Spiel.
@@ -269,6 +272,61 @@ Auf `/history/matches/{id}` kann das Tool ein Ergebnis direkt aus der Statistik 
 - Duplikatnamen werden für API-Sync blockiert.
 - Ungültige Ergebnisse werden abgewiesen.
 - Bei mehrdeutigen Zuordnungen wird absichtlich nicht automatisch übernommen.
+
+## Statusmeldungen
+Diese Referenz deckt die aktuell implementierten klickbaren Statusmeldungen rund um API-Halbautomatik, Matchfreigabe und Statistik-Import ab. Wenn dieselbe Formulierung als kurzes Notice-Banner erscheint, verweist sie auf denselben Abschnitt.
+
+### Runtime-Statusleiste
+| Meldung | Bedeutung | Typische Aktion |
+|---|---|---|
+| <span id="statusmeldung-api-auth-fehlt"></span>`API Auth fehlt` / `Kein Auth-Token gefunden. Bitte neu einloggen.` | Im aktuellen Browser-Kontext wurde kein nutzbares Autodarts-Auth-Token gefunden. Die API-Halbautomatik kann so keine Lobby erstellen oder Ergebnisse lesen. | In `play.autodarts.io` neu einloggen, Seite neu laden und prüfen, ob Tampermonkey auf derselben Seite aktiv ist. |
+| <span id="statusmeldung-api-auth-abgelaufen"></span>`API Auth abgelaufen` / `Auth abgelaufen. Bitte neu einloggen.` | Es gab zwar bereits Auth-Daten, aber die API lehnt sie aktuell ab (`401/403`). | Neu einloggen und die Seite neu laden. Danach sollte der Status wieder auf `API Auth bereit` wechseln. |
+| <span id="statusmeldung-api-auth-bereit"></span>`API Auth bereit` | Ein Auth-Token ist vorhanden und aktuell nicht durch den Backoff blockiert. | Keine Aktion nötig. Die API-Voraussetzung ist erfüllt. |
+| <span id="statusmeldung-board-aktiv"></span>`Board aktiv (<id>)` | Es wurde eine gültige Board-ID im lokalen Autodarts-Kontext erkannt. | Keine Aktion nötig. Das Board kann für automatische Lobby-Erstellung verwendet werden. |
+| <span id="statusmeldung-board-id-ungueltig"></span>`Board-ID ungültig (<id>)` | Es wurde zwar ein Board-Wert gefunden, aber er sieht nicht wie eine echte Board-ID aus, z. B. `manual` oder ein defekter Storage-Wert. | In Autodarts einmal manuell eine Lobby öffnen, ein echtes Board auswählen und danach die Seite neu laden. |
+| <span id="statusmeldung-kein-aktives-board"></span>`Kein aktives Board` / `Board-ID fehlt. Bitte einmal manuell eine Lobby öffnen und Board auswählen.` | Für den aktuellen Browser wurde noch kein verwendbares Board hinterlegt. Ohne Board kann keine API-Lobby gestartet werden. | Manuell eine Lobby öffnen, Board auswählen, dann zurück zum Assistenten. |
+| <span id="statusmeldung-auto-lobby-on"></span>`Auto-Lobby ON` | Das Feature-Flag für automatischen Lobby-Start und API-Sync ist aktiv. | Keine Aktion nötig. |
+| <span id="statusmeldung-auto-lobby-off"></span>`Auto-Lobby OFF` / `Auto-Lobby ist deaktiviert.` | Die Halbautomatik ist global deaktiviert. Manuelle Ergebniseingabe bleibt möglich. | Im Tab `Einstellungen` `Automatischer Lobby-Start + API-Sync` aktivieren, wenn die Halbautomatik gewünscht ist. |
+| <span id="statusmeldung-runtime-hinweis-api-voraussetzungen"></span>`Hinweis: Für API-Halbautomatik werden Auth-Token und aktives Board benötigt.` | Erinnerungs-Hinweis, dass für die Halbautomatik beide Voraussetzungen gleichzeitig erfüllt sein müssen. | Auth-Status und Board-Status in derselben Leiste prüfen. |
+
+### Matchkarten und API-Sync
+| Meldung | Bedeutung | Typische Aktion |
+|---|---|---|
+| <span id="statusmeldung-freilos-bye-kein-api-sync-erforderlich"></span>`Freilos (Bye): kein API-Sync erforderlich` | Das Match ist ein regelkonformes Freilos und braucht keine Lobby und keinen Sync. | Keine Aktion nötig. |
+| <span id="statusmeldung-api-sync-abgeschlossen"></span>`API-Sync: abgeschlossen` | Das Match wurde automatisch mit API-/Import-Daten abgeschlossen. | Keine Aktion nötig. |
+| <span id="statusmeldung-api-sync-aktiv"></span>`API-Sync: aktiv (Lobby <id>)` | Dieses Match ist mit einer laufenden Lobby verknüpft und wird zyklisch synchronisiert. | Match normal in Autodarts zu Ende spielen oder die Lobby über die verlinkte ID öffnen. |
+| <span id="statusmeldung-api-sync-fehler"></span>`API-Sync: Fehler (<text>)` / `Auto-Sync Fehler bei <matchId>: <text>` / `Matchstart fehlgeschlagen: <text>` | Die API-Halbautomatik konnte einen Start- oder Sync-Schritt nicht sauber abschließen. Der Detailtext nennt den letzten bekannten Fehler. | Detailtext lesen, häufige Ursachen sind Auth, Board, mehrdeutige Zuordnung oder ungültige Ergebnisdaten. Manuelle Eingabe bleibt als Fallback möglich. |
+| <span id="statusmeldung-api-sync-nicht-gestartet"></span>`API-Sync: nicht gestartet` | Für dieses Match wurde noch keine Lobby gestartet oder verknüpft. | Entweder `Match starten` nutzen oder das Ergebnis manuell speichern. |
+| <span id="statusmeldung-match-nicht-verfuegbar"></span>`Match nicht verfügbar.` | Das Matchobjekt fehlt oder ist im aktuellen Zustand nicht bearbeitbar. | Turnierzustand neu laden; bei persistenter Abweichung Export prüfen oder Turnier neu erzeugen. |
+| <span id="statusmeldung-match-bereits-abgeschlossen"></span>`Match ist bereits abgeschlossen.` | Das Ergebnis wurde schon gespeichert. | Keine erneute Eingabe nötig; ggf. im Turnierbaum oder in der Ergebnisliste prüfen. |
+| <span id="statusmeldung-paarung-steht-noch-nicht-fest"></span>`Paarung steht noch nicht fest.` | Mindestens ein Teilnehmer des Matches ist noch offen, z. B. in späteren KO-Runden. | Zuerst die vorgelagerten Matches abschließen. |
+| <span id="statusmeldung-vorgaenger-match-muss-zuerst-abgeschlossen-werden"></span>`Vorgänger-Match Runde <r> / Spiel <n> muss zuerst abgeschlossen werden.` | Das Match ist fachlich gesperrt, weil die direkte Vorpaarung noch offen ist. | Zuerst das genannte Vorgänger-Match abschließen. |
+| <span id="statusmeldung-api-ergebnis-noch-nicht-final-verfuegbar"></span>`API-Ergebnis ist noch nicht final verfügbar.` / `Match-Stats noch nicht verfügbar.` | Die Lobby existiert, aber die API liefert noch kein belastbares Endergebnis. Das ist während eines laufenden Matches normal. | Kurz warten und erneut synchronisieren; kein Fehlerzustand. |
+| <span id="statusmeldung-keine-lobby-id-erkannt"></span>`Keine Lobby-ID erkannt.` / `Keine Lobby-ID vorhanden.` | Für die angeforderte Aktion gibt es noch keine verknüpfte Lobby-ID. | Match zuerst starten oder auf der passenden Match-/History-Seite aufrufen. |
+| <span id="statusmeldung-mehrdeutige-zuordnung-lobby"></span>`Mehrdeutige Zuordnung: mehrere offene Turnier-Matches passen zur Lobby. Bitte in der Ergebnisführung manuell speichern.` | Die API-Daten reichen nicht aus, um genau ein offenes Turniermatch sicher zu treffen. Automatik stoppt absichtlich. | Ergebnis manuell im korrekten Match speichern oder die Zuordnung über History/Teilnehmer klären. |
+| <span id="statusmeldung-kein-offenes-turnier-match-fuer-diese-lobby-gefunden"></span>`Kein offenes Turnier-Match für diese Lobby gefunden.` | Es gibt keine noch offene Paarung, die zu dieser Lobby passt. | Prüfen, ob das Ergebnis bereits gespeichert wurde oder ob die Lobby zu einem anderen Match gehört. |
+| <span id="statusmeldung-ergebnis-bereits-im-turnier-gespeichert"></span>`Ergebnis bereits im Turnier gespeichert.` / `Ergebnis war bereits übernommen.` | Das Ergebnis wurde schon einmal erfolgreich ins lokale Turnier übernommen. | Keine erneute Aktion nötig. |
+| <span id="statusmeldung-ergebnis-importiert"></span>`Ergebnis übernommen.` / `Ergebnis wurde aus der Match-Statistik übernommen.` | Das Ergebnis wurde erfolgreich in das lokale Turnier geschrieben. Bei Leg-Abweichungen kann zusätzlich eine Meldung erscheinen, dass auf `First to <n>` normalisiert wurde. | Keine Aktion nötig; Turnierstand ist aktualisiert. |
+
+### History-Import und Statistik
+| Meldung | Bedeutung | Typische Aktion |
+|---|---|---|
+| <span id="statusmeldung-kein-eindeutiger-statistik-host"></span>`Kein eindeutiger Statistik-Host für diese Lobby auf der History-Seite gefunden.` | Auf der geöffneten `/history/matches/{id}`-Seite konnte kein passender Kartenbereich für die Statistik erkannt werden. | Seite vollständig laden und prüfen, ob die URL wirklich zur erwarteten Lobby gehört. |
+| <span id="statusmeldung-statistik-host-konnte-nicht-zugeordnet-werden"></span>`Statistik-Host konnte nicht auf einen Kartenbereich zugeordnet werden.` | Ein History-Link wurde erkannt, aber kein sauberer Host-Container darum herum. | Seite neu laden; wenn das Layout geändert wurde, ist ggf. ein Skript-Update nötig. |
+| <span id="statusmeldung-mehrdeutiger-statistik-host"></span>`Mehrdeutiger Statistik-Host: Mehrere passende Bereiche auf der Seite gefunden.` / `Statistik-Bereich ist nicht eindeutig. Import ist gesperrt.` | Das DOM liefert mehrere plausible Statistik-Bereiche. Der Import stoppt absichtlich, damit kein falsches Match gelesen wird. | Keine Übernahme erzwingen; entweder Layout prüfen oder manuell speichern. |
+| <span id="statusmeldung-keine-eindeutige-statistik-tabelle"></span>`Im erkannten Statistik-Bereich wurde keine eindeutige Tabelle gefunden.` | Der Host-Bereich existiert, aber keine lesbare Statistik-Tabelle wurde erkannt. | Seite neu laden und warten, bis die Statistik vollständig sichtbar ist. |
+| <span id="statusmeldung-mehrere-statistik-tabellen"></span>`Im Statistik-Bereich wurden mehrere Tabellen gefunden. Import wurde aus Sicherheitsgründen gestoppt.` | Mehrere Tabellen im gleichen Bereich machen die Auswertung unsicher. | Manuell speichern oder auf ein Update warten, falls sich das History-Layout geändert hat. |
+| <span id="statusmeldung-leg-abweichung-bestaetigung-erforderlich"></span>`Leg-Abweichung erkannt: Statistik ...` / `Explizite Bestätigung erforderlich.` | Die gelesenen Statistik-Legs passen nicht exakt zum Turnierformat. Das Tool normalisiert nicht still, sondern verlangt eine bewusste Bestätigung. | Meldung prüfen und nur bestätigen, wenn die Abweichung fachlich korrekt ist. |
+| <span id="statusmeldung-bestaetigung-abgelaufen"></span>`Bestätigung ist abgelaufen. Bitte den Import erneut starten.` | Die signaturgebundene Freigabe für eine Leg-Abweichung war zu alt. | Import erneut anstoßen und bei Bedarf direkt bestätigen. |
+| <span id="statusmeldung-bestaetigung-ungueltig"></span>`Bestätigung ist ungültig. Bitte den Import erneut starten.` / `Bestätigung passt nicht mehr zur aktuellen Statistik. Bitte erneut bestätigen.` | Die Bestätigung gehört nicht mehr exakt zu den aktuellen Daten. | Import neu starten, damit die Bestätigung auf dem aktuellen Statistikstand basiert. |
+| <span id="statusmeldung-statistik-api-fallback"></span>`Statistik konnte nicht vollständig gelesen werden. Beim Klick wird API-Fallback genutzt.` | Die History-Tabelle ist unvollständig oder nicht parsebar; beim Klick wird stattdessen der API-Sync versucht. | Klick ist weiterhin möglich; falls auch das fehlschlägt, manuell speichern. |
+| <span id="statusmeldung-import-bereit-sieger-laut-statistik"></span>`Import bereit. Sieger laut Statistik: <Name>.` | Die Tabelle konnte gelesen und ein Sieger plausibel erkannt werden. | Bei passendem Kontext den Import auslösen. |
+| <span id="statusmeldung-match-verknuepft-ergebnis-kann-jetzt-gespeichert-werden"></span>`Match verknüpft. Ergebnis kann jetzt übernommen werden.` | Die Lobby wurde bereits mit einem offenen Turniermatch verknüpft. | Import auslösen; Zuordnung ist vorhanden. |
+| <span id="statusmeldung-kein-direkt-verknuepftes-match-gefunden"></span>`Kein direkt verknüpftes Match gefunden. Ergebnisübernahme versucht Zuordnung über die Statistik.` | Es gibt keine direkte Lobby-Verknüpfung; das Tool versucht deshalb, über Spielernamen und Statistikdaten zuzuordnen. | Nur übernehmen, wenn die Zuordnung fachlich eindeutig wirkt. |
+| <span id="statusmeldung-kein-offenes-turnier-match-aus-lobby-id-oder-statistik-spielern-gefunden"></span>`Kein offenes Turnier-Match aus Lobby-ID oder Statistik-Spielern gefunden.` | Weder über Lobby-ID noch über erkannte Spielernamen wurde ein offenes Match gefunden. | Prüfen, ob das Match schon abgeschlossen ist oder ob Namen im Turnier nicht eindeutig genug sind. |
+| <span id="statusmeldung-mehrdeutige-zuordnung-statistik-spieler"></span>`Mehrdeutige Zuordnung: mehrere offene Turnier-Matches passen zu diesen Spielern.` | Die Spielernamen reichen nicht aus, um genau ein Match eindeutig zu identifizieren. | Ergebnis manuell im korrekten Match speichern. |
+| <span id="statusmeldung-sieger-konnte-aus-der-statistik-nicht-eindeutig-bestimmt-werden"></span>`Sieger konnte aus der Statistik nicht eindeutig bestimmt werden.` | Aus der Tabelle ergibt sich kein belastbarer Sieger, z. B. wegen Gleichstand oder unklarer Markierung. | Ergebnis manuell prüfen und gegebenenfalls manuell speichern. |
+| <span id="statusmeldung-ergebnis-konnte-nicht-aus-der-statistik-gespeichert-werden"></span>`Ergebnis konnte nicht aus der Statistik gespeichert werden.` | Die Zuordnung war grundsätzlich möglich, aber das Ergebnis ließ sich nicht fachlich sauber in das Turnier übernehmen. | Detailfehler prüfen; bei Bedarf Ergebnis manuell eintragen. |
 
 ## Turnierbaum
 Tab: `Turnierbaum`

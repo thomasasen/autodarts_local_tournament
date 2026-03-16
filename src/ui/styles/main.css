@@ -206,6 +206,32 @@
         white-space: nowrap;
       }
 
+      .ata-doc-linkable {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .ata-doc-linkable[data-doc-link="1"] {
+        cursor: help;
+      }
+
+      .ata-doc-linkable[data-doc-link="1"]:hover {
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+
+      .ata-doc-linkable[data-doc-link="1"]:focus-visible {
+        outline: 2px solid rgba(255, 255, 255, 0.72);
+        outline-offset: 2px;
+      }
+
+      .ata-notice.ata-doc-linkable,
+      .ata-match-note.ata-doc-linkable,
+      .ata-history-import-copy.ata-doc-linkable,
+      .ata-history-import-outcome.ata-doc-linkable {
+        display: block;
+      }
+
       .ata-status-pill.ata-status-ok {
         border-color: rgba(90, 210, 153, 0.5);
         background: rgba(90, 210, 153, 0.2);

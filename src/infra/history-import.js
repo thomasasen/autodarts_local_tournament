@@ -872,6 +872,18 @@
       : outcomeType === "error"
         ? "rgba(245, 123, 143, 0.52)"
         : "rgba(142, 188, 255, 0.48)";
+    const statusTextHtml = renderDocLinkableMessage(statusText, {
+      tagName: "div",
+      className: "ata-history-import-copy",
+      attributes: 'style="font-size:13px;line-height:1.45;color:rgba(240,246,255,0.95);margin-bottom:8px;"',
+    });
+    const outcomeMessageHtml = outcomeMessage
+      ? renderDocLinkableMessage(outcomeMessage, {
+        tagName: "div",
+        className: "ata-history-import-outcome",
+        attributes: `style="font-size:12px;line-height:1.4;color:${outcomeColor};background:${outcomeBg};border:1px solid ${outcomeBorder};padding:7px 9px;border-radius:8px;margin-bottom:10px;"`,
+      })
+      : "";
 
     root.innerHTML = `
       <div style="margin:10px 0 14px 0;padding:14px;border-radius:12px;border:1px solid rgba(120,203,255,0.45);background:linear-gradient(180deg, rgba(54,70,145,0.92), rgba(34,80,136,0.9));color:#f4f7ff;box-shadow:0 10px 24px rgba(7,11,25,0.28);">
@@ -879,10 +891,10 @@
           <div style="font-size:15px;line-height:1.2;font-weight:800;letter-spacing:0.25px;">xLokales Turnier</div>
           <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;color:#d5ebff;background:rgba(31,175,198,0.32);border:1px solid rgba(133,219,255,0.42);padding:3px 8px;border-radius:999px;">Match-Import</div>
         </div>
-        <div style="font-size:13px;line-height:1.45;color:rgba(240,246,255,0.95);margin-bottom:8px;">${escapeHtml(statusText)}</div>
+        ${statusTextHtml}
         ${parsedScoreText ? `<div style="font-size:12px;line-height:1.4;color:rgba(220,236,255,0.88);margin-bottom:10px;">Statistik: ${escapeHtml(parsedScoreText)}</div>` : ""}
         ${pendingConfirmation ? `<div style="font-size:12px;line-height:1.4;color:#ffe9c9;background:rgba(255,176,66,0.16);border:1px solid rgba(255,196,112,0.46);padding:7px 9px;border-radius:8px;margin-bottom:10px;">Bestätigung erforderlich bis ${escapeHtml(new Date(pendingConfirmation.expiresAt).toLocaleTimeString("de-DE"))}: ${escapeHtml(formatHistoryLegsText(pendingConfirmation.legsRaw))} -> ${escapeHtml(formatHistoryLegsText(pendingConfirmation.normalizedLegs))}</div>` : ""}
-        ${outcomeMessage ? `<div style="font-size:12px;line-height:1.4;color:${outcomeColor};background:${outcomeBg};border:1px solid ${outcomeBorder};padding:7px 9px;border-radius:8px;margin-bottom:10px;">${escapeHtml(outcomeMessage)}</div>` : ""}
+        ${outcomeMessageHtml}
         <button type="button" data-action="ata-history-sync" style="display:block;width:100%;border:1px solid rgba(99,231,173,0.7);background:linear-gradient(180deg, rgba(83,221,163,0.36), rgba(58,197,141,0.36));color:#ecfff6;border-radius:10px;padding:12px 14px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:0.2px;" ${disabledAttr}>${escapeHtml(primaryLabel)}</button>
         ${pendingConfirmation ? `<button type="button" data-action="ata-history-confirm-sync" style="display:block;width:100%;margin-top:8px;border:1px solid rgba(255,201,112,0.66);background:linear-gradient(180deg, rgba(245,180,88,0.34), rgba(226,138,62,0.35));color:#fff6ea;border-radius:10px;padding:12px 14px;font-size:13px;font-weight:800;cursor:pointer;letter-spacing:0.2px;" ${confirmDisabledAttr}>${escapeHtml(confirmLabel)}</button>` : ""}
       </div>
