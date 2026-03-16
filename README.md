@@ -155,7 +155,7 @@ Tab: `Turnier`
 | `Spielmodus` | fix `Legs (First to N aus Best of)` | Nicht umstellbar in der UI | Verhindert inkonsistente Kombinationen im lokalen Flow |
 | `Lobby` | fix `Privat` | Sichtbarkeit der API-Lobby | Lokales Turnier bleibt bewusst privat/sicher |
 | `Preset` | Auswahlfeld + Button `Preset anwenden` | Setzt alle Preset-relevanten Turnierfelder konsistent | Offizielle und kompatible Profile bleiben klar getrennt |
-| `KO-Erstrunde zufällig mischen` | Checkbox `ON/OFF` | `open_draw` oder `seeded` in Runde 1 | Transparente Entscheidung zwischen Zufall und Setzlogik |
+| `KO-Erstrunde zufällig mischen` | Checkbox `ON/OFF` | `open_draw` oder `seeded` in Runde 1 | Transparente Entscheidung zwischen deterministischer Open-Draw-Reihenfolge und Setzlogik |
 | `Teilnehmer` | Je Spieler eine Zeile | Teilnehmerliste inkl. Reihenfolge | Reihenfolge ist bei `seeded` zugleich Seed-Reihenfolge |
 | `Teilnehmer mischen` | Button | Mischt Teilnehmertextliste | Praktisch für spontane Auslosung vor Start |
 
@@ -254,7 +254,8 @@ Wichtige Markierungen:
 ### Statistik-Import auf der Match-Historie
 Auf `/history/matches/{id}` kann das Tool ein Ergebnis direkt aus der Statistik übernehmen:
 - Button: `Ergebnis aus Statistik übernehmen & Turnier öffnen`
-- Mit Statushinweis (`Import bereit`, letzter Sync-Status, Fehlerhinweis)
+- Bei Legs-Abweichung vom Turniermodus ist eine explizite Bestätigung erforderlich (`requires_confirmation`).
+- Mit Statushinweis (`Import bereit`, `Bestätigung erforderlich`, letzter Sync-Status, Fehlerhinweis)
 - Öffnet danach direkt den Assistant-Tab `Spiele`
 
 ![Inline-Matchimport auf der Statistikseite](assets/ss_uebernahme-der-matchdaten_matchimport.png)
@@ -340,7 +341,7 @@ Legende für die eingeblendeten Hilfelinks:
 ### KO-Erstrunde zufällig mischen (Standard)
 - Standard: `EIN`.
 - Gilt für neu erstellte KO-Turniere.
-- `EIN` -> `open_draw` (zufällige Reihenfolge in Runde 1).
+- `EIN` -> `open_draw` (deterministische Auslosungsreihenfolge in Runde 1).
 - `AUS` -> `seeded` (Eingabereihenfolge als Seed-Rang).
 - Warum: Turnierleitung kann zwischen offener Auslosung und Setzlogik wählen.
 
@@ -348,7 +349,7 @@ Legende für die eingeblendeten Hilfelinks:
 - Standard: `EIN`.
 - Neue KO-Turniere übernehmen den Initial-Draw unverändert (`drawLocked = true`).
 - Bezug: DRA `6.12.1` (veröffentlichter Draw bleibt bestehen).
-- Im Tab `Einstellungen` kann das aktive KO-Turnier bei Bedarf explizit entsperrt werden.
+- Im Tab `Einstellungen` ist Entsperren nur als expliziter Promoter-Override mit Bestätigung innerhalb kurzer Frist möglich.
 - Warum: Verhindert unfaire oder versehentliche Nachauslosung während laufendem Turnier.
 
 ### Turnierzeit-Prognose
@@ -382,6 +383,7 @@ Legende für die eingeblendeten Hilfelinks:
 Warum dieses Feld wichtig ist:
 - DRA `6.16.1` erlaubt Tie-Breaks nach Ermessen des Veranstalters.
 - Das Profil erzwingt eine klare, reproduzierbare Reihenfolge statt Ad-hoc-Entscheidung.
+- Nach dem ersten abgeschlossenen Gruppen-/Liga-Ergebnis ist das Profil gesperrt.
 
 ## Regelbasis und Limits
 Priorisierung für Limits in diesem Projekt:

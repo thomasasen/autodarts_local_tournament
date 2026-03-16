@@ -219,13 +219,44 @@
     const koDrawLockedToggle = shadow.getElementById("ata-setting-ko-draw-locked");
     if (koDrawLockedToggle instanceof HTMLInputElement) {
       koDrawLockedToggle.addEventListener("change", () => {
-        const result = setTournamentKoDrawLocked(koDrawLockedToggle.checked);
+        const targetDrawLocked = koDrawLockedToggle.checked;
+        let result = null;
+        if (!targetDrawLocked) {
+          const pendingOverride = getPendingDrawUnlockOverrideForTournament(state.store?.tournament?.id);
+          if (pendingOverride?.token) {
+            const confirmed = window.confirm(
+              "DRA 6.12.1 Hinweis: Das Entsperren des Draw-Lock darf nur als bewusster Promoter-Override erfolgen. Möchten Sie jetzt ausdrücklich entsperren?",
+            );
+            if (!confirmed) {
+              setNotice("info", "KO Draw-Lock bleibt aktiv. Entsperren wurde nicht bestätigt.", 2600);
+              renderShell();
+              return;
+            }
+            result = setTournamentKoDrawLocked(false, {
+              confirmOverrideToken: pendingOverride.token,
+            });
+          } else {
+            result = setTournamentKoDrawLocked(false);
+          }
+        } else {
+          result = setTournamentKoDrawLocked(true);
+        }
+
         if (!result.ok) {
-          setNotice("error", result.message || "KO Draw-Lock konnte nicht gesetzt werden.");
+          const reasonCode = normalizeText(result.reasonCode || "");
+          if (reasonCode === "draw_unlock_requires_override") {
+            setNotice(
+              "info",
+              "Entsperren blockiert. Bitte den Schalter erneut auf AUS stellen und den Promoter-Override explizit bestätigen (DRA 6.12.1).",
+              5200,
+            );
+          } else {
+            setNotice("error", result.message || "KO Draw-Lock konnte nicht gesetzt werden.");
+          }
           return;
         }
         if (result.changed) {
-          setNotice("success", `KO Draw-Lock ${koDrawLockedToggle.checked ? "aktiviert" : "deaktiviert"}.`, 1800);
+          setNotice("success", `KO Draw-Lock ${targetDrawLocked ? "aktiviert" : "deaktiviert"}.`, 1800);
         }
       });
     }
@@ -235,7 +266,12 @@
       tieBreakSelect.addEventListener("change", () => {
         const result = setTournamentTieBreakProfile(tieBreakSelect.value);
         if (!result.ok) {
-          setNotice("error", result.message || "Tie-Break-Profil konnte nicht gesetzt werden.");
+          const reasonCode = normalizeText(result.reasonCode || "");
+          if (reasonCode === "tie_break_locked") {
+            setNotice("info", result.message || "Tie-Break-Profil ist nach dem ersten relevanten Ergebnis gesperrt.", 5200);
+          } else {
+            setNotice("error", result.message || "Tie-Break-Profil konnte nicht gesetzt werden.");
+          }
           return;
         }
         if (result.changed) {

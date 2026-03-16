@@ -1,6 +1,21 @@
 ﻿# Changelog
 
 ## Unreleased
+- Regelhärtung für DRA-konforme Entscheidungszeitpunkte:
+  - Tie-Break-Profil ist nach dem ersten abgeschlossenen Gruppen-/Liga-Ergebnis gesperrt (`DRA 6.16.1`).
+  - Draw-Lock-Entsperren wurde auf expliziten Promoter-Override mit Bestätigung und Zeitfenster umgestellt (`DRA 6.12.1`).
+- History-Import robuster gemacht:
+  - Legs-Abweichungen werden nicht mehr still normalisiert, sondern liefern zuerst `requires_confirmation`.
+  - Bestätigung ist signaturgebunden und zeitlich begrenzt; ungültige/abgelaufene Bestätigungen werden abgelehnt.
+  - Host-Erkennung auf `/history/matches/{id}` verschärft (kein Fallback auf beliebige erste Tabelle).
+- Autodetect-Routen eingeschränkt:
+  - DOM-Autodetect arbeitet nur noch auf `/matches/{id}` und `/lobbies/{id}`.
+- Doku synchronisiert:
+  - Open Draw überall konsistent als deterministische Reihenfolge beschrieben.
+  - Compliance-Matrix und Regeltexte auf neue Guard-/Override-Logik aktualisiert.
+- Tests erweitert:
+  - Domain-Tests für Tie-Break-Lock und Draw-Lock-Override.
+  - Runtime-Selftests für Confirmation-Flow, Host-Guards und Route-Guards.
 - Preset-Logik fachlich korrigiert:
   - neues Default-Preset `PDC European Tour (Official)` (`KO`, `Best of 11`, `501`, `Straight In`, `Double Out`, `Bull 25/50`)
   - bisheriges irreführendes `PDC Standard` wird nicht mehr als offizielles Preset geführt

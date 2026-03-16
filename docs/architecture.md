@@ -90,7 +90,7 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
   - Freilose werden als explizite Bye-Matches gespeichert
 - Draw-Lock:
   - Standardmäßig bleibt der initiale KO-Draw stabil (`drawLocked = true`)
-  - kann pro aktivem KO-Turnier bewusst umgeschaltet werden
+  - Entsperren ist nur als expliziter Promoter-Override mit Bestätigung möglich
 
 ## Qualitätssicherung
 - `scripts/qa.ps1`: Orchestrierung

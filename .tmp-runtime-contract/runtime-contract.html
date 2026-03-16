@@ -1691,6 +1691,8 @@ const GLOBALS_CONTRACT = Object.freeze({
       syncing: false,
       inlineSyncingByLobby: {},
       inlineOutcomeByLobby: {},
+      pendingConfirmationByLobby: {},
+      pendingDrawUnlockOverride: null,
     },
     runtimeStatusSignature: "",
     cleanupStack: [],
@@ -2945,6 +2947,15 @@ const GLOBALS_CONTRACT = Object.freeze({
     return true;
   }
 
+  function hasRelevantCompletedTieBreakMatch(tournament) {
+    const matches = Array.isArray(tournament?.matches) ? tournament.matches : [];
+    return matches.some((match) => (
+      match?.status === STATUS_COMPLETED
+      && (match.stage === MATCH_STAGE_GROUP || match.stage === MATCH_STAGE_LEAGUE)
+    ));
+  }
+
+
   function applyTournamentTieBreakProfile(tournament, profile) {
     if (!tournament) {
       return { ok: false, message: "Kein aktives Turnier vorhanden." };
@@ -2957,6 +2968,14 @@ const GLOBALS_CONTRACT = Object.freeze({
     if (nextProfile === currentProfile) {
       return { ok: true, changed: false };
     }
+    if (hasRelevantCompletedTieBreakMatch(tournament)) {
+      return {
+        ok: false,
+        changed: false,
+        reasonCode: "tie_break_locked",
+        message: `Tie-Break-Profil ist gesperrt, sobald ein Gruppen- oder Liga-Ergebnis abgeschlossen wurde (DRA 6.16.1). Siehe: ${DRA_GUI_RULE_TIE_BREAK_URL}`,
+      };
+    }
     tournament.rules = normalizeTournamentRules({
       ...(tournament.rules || {}),
       tieBreakProfile: nextProfile,
@@ -2965,7 +2984,7 @@ const GLOBALS_CONTRACT = Object.freeze({
   }
 
 
-  function applyTournamentKoDrawLocked(tournament, drawLocked) {
+  function applyTournamentKoDrawLocked(tournament, drawLocked, options = {}) {
     if (!tournament) {
       return { ok: false, message: "Kein aktives Turnier vorhanden." };
     }
@@ -2976,6 +2995,15 @@ const GLOBALS_CONTRACT = Object.freeze({
     const currentDrawLocked = tournament?.ko?.drawLocked !== false;
     if (nextDrawLocked === currentDrawLocked) {
       return { ok: true, changed: false };
+    }
+    const allowUnlockOverride = Boolean(options?.allowUnlockOverride);
+    if (!nextDrawLocked && currentDrawLocked && !allowUnlockOverride) {
+      return {
+        ok: false,
+        changed: false,
+        reasonCode: "draw_unlock_requires_override",
+        message: `Draw-Lock bleibt aktiv. Zum Entsperren ist ein expliziter Promoter-Override erforderlich (DRA 6.12.1). Siehe: ${DRA_GUI_RULE_DRAW_LOCK_URL}`,
+      };
     }
     tournament.ko = normalizeTournamentKoMeta({
       ...(tournament.ko || {}),
@@ -5576,6 +5604,69 @@ const GLOBALS_CONTRACT = Object.freeze({
   }
 
 // App layer: runtime orchestration, persistence scheduling and user feedback.
+  const DRAW_UNLOCK_OVERRIDE_WINDOW_MS = 30000;
+
+
+  function clearTransientMatchShortcutState() {
+    state.matchReturnShortcut.pendingDrawUnlockOverride = null;
+    state.matchReturnShortcut.pendingConfirmationByLobby = {};
+  }
+
+
+  function getPendingDrawUnlockOverrideForTournament(tournamentId) {
+    const targetTournamentId = normalizeText(tournamentId || "");
+    const pending = state.matchReturnShortcut?.pendingDrawUnlockOverride;
+    if (!targetTournamentId || !pending || typeof pending !== "object") {
+      return null;
+    }
+    const pendingTournamentId = normalizeText(pending.tournamentId || "");
+    const pendingToken = normalizeText(pending.token || "");
+    const expiresAt = Number(pending.expiresAt || 0);
+    if (!pendingToken || pendingTournamentId !== targetTournamentId) {
+      return null;
+    }
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      state.matchReturnShortcut.pendingDrawUnlockOverride = null;
+      return null;
+    }
+    return {
+      token: pendingToken,
+      expiresAt,
+      ttlMs: Math.max(0, expiresAt - Date.now()),
+    };
+  }
+
+
+  function issuePendingDrawUnlockOverride(tournamentId) {
+    const targetTournamentId = normalizeText(tournamentId || "");
+    if (!targetTournamentId) {
+      return null;
+    }
+    const pending = {
+      tournamentId: targetTournamentId,
+      token: `${targetTournamentId}:${uuid("draw_unlock_override")}`,
+      expiresAt: Date.now() + DRAW_UNLOCK_OVERRIDE_WINDOW_MS,
+    };
+    state.matchReturnShortcut.pendingDrawUnlockOverride = pending;
+    return {
+      token: pending.token,
+      expiresAt: pending.expiresAt,
+      ttlMs: DRAW_UNLOCK_OVERRIDE_WINDOW_MS,
+    };
+  }
+
+
+  function clearPendingDrawUnlockOverride(tournamentId = "") {
+    const pending = state.matchReturnShortcut?.pendingDrawUnlockOverride;
+    if (!pending || typeof pending !== "object") {
+      return;
+    }
+    const targetTournamentId = normalizeText(tournamentId || "");
+    if (!targetTournamentId || normalizeText(pending.tournamentId || "") === targetTournamentId) {
+      state.matchReturnShortcut.pendingDrawUnlockOverride = null;
+    }
+  }
+
 
   function finalizeTournamentMutation(tournament, activeTab = state.activeTab) {
     if (!tournament) {
@@ -5600,6 +5691,7 @@ const GLOBALS_CONTRACT = Object.freeze({
     refreshDerivedMatches(tournament);
     tournament.updatedAt = nowIso();
     state.store.tournament = tournament;
+    clearTransientMatchShortcutState();
     state.activeTab = "matches";
     state.store.ui.activeTab = "matches";
     schedulePersist();
@@ -5610,6 +5702,7 @@ const GLOBALS_CONTRACT = Object.freeze({
 
   function resetTournamentSession() {
     state.store.tournament = null;
+    clearTransientMatchShortcutState();
     state.apiAutomation.startingMatchId = "";
     state.apiAutomation.authBackoffUntil = 0;
     state.activeTab = "tournament";
@@ -5646,6 +5739,7 @@ const GLOBALS_CONTRACT = Object.freeze({
     refreshDerivedMatches(normalizedTournament);
     normalizedTournament.updatedAt = nowIso();
     state.store.tournament = normalizedTournament;
+    clearTransientMatchShortcutState();
     state.activeTab = "matches";
     state.store.ui.activeTab = "matches";
     schedulePersist();
@@ -5670,17 +5764,44 @@ const GLOBALS_CONTRACT = Object.freeze({
   }
 
 
-  function setTournamentKoDrawLocked(drawLocked) {
+  function setTournamentKoDrawLocked(drawLocked, options = {}) {
     const tournament = state.store.tournament;
     if (!tournament) {
       return { ok: false, message: "Kein aktives Turnier vorhanden." };
     }
 
-    const result = applyTournamentKoDrawLocked(tournament, drawLocked);
+    const currentDrawLocked = tournament?.ko?.drawLocked !== false;
+    const nextDrawLocked = Boolean(drawLocked);
+    const pendingOverride = getPendingDrawUnlockOverrideForTournament(tournament.id);
+    const requestedToken = normalizeText(options?.confirmOverrideToken || "");
+    let allowUnlockOverride = false;
+    if (currentDrawLocked && !nextDrawLocked && requestedToken) {
+      if (!pendingOverride || pendingOverride.token !== requestedToken) {
+        return {
+          ok: false,
+          changed: false,
+          reasonCode: "draw_unlock_override_invalid",
+          message: "Promoter-Override ist ungültig oder abgelaufen. Bitte Entsperren erneut starten.",
+        };
+      }
+      allowUnlockOverride = true;
+    }
+
+    const result = applyTournamentKoDrawLocked(tournament, nextDrawLocked, {
+      allowUnlockOverride,
+    });
+    if (!result.ok && result.reasonCode === "draw_unlock_requires_override") {
+      const override = issuePendingDrawUnlockOverride(tournament.id);
+      return {
+        ...result,
+        override,
+      };
+    }
     if (!result.ok || !result.changed) {
       return result;
     }
 
+    clearPendingDrawUnlockOverride(tournament.id);
     finalizeTournamentMutation(tournament);
     return result;
   }
@@ -6174,6 +6295,37 @@ const GLOBALS_CONTRACT = Object.freeze({
 
     try {
       const tournament = createTournament({
+        name: "DrawLockOverride",
+        mode: "ko",
+        bestOfLegs: 3,
+        startScore: 501,
+        x01Preset: X01_PRESET_CUSTOM,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        koDrawLocked: true,
+        participants: participantList(8, "DO"),
+      });
+      const blocked = applyTournamentKoDrawLocked(tournament, false);
+      const confirmed = applyTournamentKoDrawLocked(tournament, false, { allowUnlockOverride: true });
+      record(
+        "Draw-Lock: Entsperren erfordert Override, mit Override erlaubt",
+        blocked?.ok === false
+          && blocked?.reasonCode === "draw_unlock_requires_override"
+          && Boolean(confirmed?.ok && confirmed?.changed)
+          && tournament?.ko?.drawLocked === false,
+        `blocked=${blocked?.reasonCode || "-"}, confirmed=${Boolean(confirmed?.ok)}`,
+      );
+    } catch (error) {
+      record("Draw-Lock: Entsperren erfordert Override, mit Override erlaubt", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
         name: "DrawLockOff",
         mode: "ko",
         bestOfLegs: 3,
@@ -6251,6 +6403,38 @@ const GLOBALS_CONTRACT = Object.freeze({
 
     try {
       const tournament = createTournament({
+        name: "TieBreakLocked",
+        mode: "league",
+        bestOfLegs: 3,
+        startScore: 501,
+        x01Preset: X01_PRESET_CUSTOM,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        participants: participantList(4, "TL"),
+      });
+      const firstLeagueMatch = tournament.matches.find((match) => match.stage === MATCH_STAGE_LEAGUE);
+      firstLeagueMatch.status = STATUS_COMPLETED;
+      firstLeagueMatch.winnerId = firstLeagueMatch.player1Id;
+      firstLeagueMatch.legs = { p1: 2, p2: 0 };
+      const result = applyTournamentTieBreakProfile(tournament, TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF);
+      record(
+        "Tie-Break-Profil: nach erstem Ergebnis gesperrt",
+        result?.ok === false
+          && result?.reasonCode === "tie_break_locked"
+          && tournament.rules.tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE,
+        `ok=${Boolean(result?.ok)}, reason=${result?.reasonCode || "-"}`,
+      );
+    } catch (error) {
+      record("Tie-Break-Profil: nach erstem Ergebnis gesperrt", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
         name: "GroupsKo",
         mode: "groups_ko",
         bestOfLegs: 3,
@@ -6293,6 +6477,52 @@ const GLOBALS_CONTRACT = Object.freeze({
       );
     } catch (error) {
       record("Groups+KO Regression: Finale wird korrekt aus Semis belegt", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
+        name: "GroupsKoTieBreakLock",
+        mode: "groups_ko",
+        bestOfLegs: 3,
+        startScore: 501,
+        x01Preset: X01_PRESET_CUSTOM,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        participants: participantList(4, "GL"),
+      });
+      const firstGroupMatch = tournament.matches.find((match) => match.stage === MATCH_STAGE_GROUP);
+      firstGroupMatch.status = STATUS_COMPLETED;
+      firstGroupMatch.winnerId = firstGroupMatch.player1Id;
+      firstGroupMatch.legs = { p1: 2, p2: 0 };
+      refreshDerivedMatches(tournament);
+      const beforeSemiState = JSON.stringify([
+        findMatch(tournament, "ko-r1-m1")?.player1Id || null,
+        findMatch(tournament, "ko-r1-m1")?.player2Id || null,
+        findMatch(tournament, "ko-r1-m2")?.player1Id || null,
+        findMatch(tournament, "ko-r1-m2")?.player2Id || null,
+      ]);
+      const blocked = applyTournamentTieBreakProfile(tournament, TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF);
+      refreshDerivedMatches(tournament);
+      const afterSemiState = JSON.stringify([
+        findMatch(tournament, "ko-r1-m1")?.player1Id || null,
+        findMatch(tournament, "ko-r1-m1")?.player2Id || null,
+        findMatch(tournament, "ko-r1-m2")?.player1Id || null,
+        findMatch(tournament, "ko-r1-m2")?.player2Id || null,
+      ]);
+      record(
+        "Groups+KO: Tie-Break-Lock verhindert nachtraegliche KO-Neuzuordnung",
+        blocked?.ok === false
+          && blocked?.reasonCode === "tie_break_locked"
+          && beforeSemiState === afterSemiState,
+        `reason=${blocked?.reasonCode || "-"}, stable=${beforeSemiState === afterSemiState}`,
+      );
+    } catch (error) {
+      record("Groups+KO: Tie-Break-Lock verhindert nachtraegliche KO-Neuzuordnung", false, String(error?.message || error));
     }
 
     try {
@@ -6427,6 +6657,19 @@ const GLOBALS_CONTRACT = Object.freeze({
     }
 
     try {
+      record(
+        "Auto-Detect: Route-Guard nur fuer /matches/{id} und /lobbies/{id}",
+        isAutoDetectMatchRoute("/matches/abc123")
+          && isAutoDetectMatchRoute("/lobbies/abc123")
+          && !isAutoDetectMatchRoute("/history/matches/abc123")
+          && !isAutoDetectMatchRoute("/settings"),
+        `match=${isAutoDetectMatchRoute("/matches/abc123")}, lobby=${isAutoDetectMatchRoute("/lobbies/abc123")}, history=${isAutoDetectMatchRoute("/history/matches/abc123")}`,
+      );
+    } catch (error) {
+      record("Auto-Detect: Route-Guard nur fuer /matches/{id} und /lobbies/{id}", false, String(error?.message || error));
+    }
+
+    try {
       const tournament = {
         participants: [
           { id: "P1", name: "Tanja Mueller" },
@@ -6493,20 +6736,110 @@ const GLOBALS_CONTRACT = Object.freeze({
             <tr><td>Gewonnene Legs</td><td>1</td><td>0</td></tr>
           </tbody>
         `;
-        const outcome = importHistoryStatsTableResult("lobby-history-1", { table });
+        const outcome = importHistoryStatsTableResult("lobby-history-1", { table, reasonCode: "ok" });
+        const confirmationSignature = normalizeText(outcome?.confirm?.signature || "");
+        const confirmed = importHistoryStatsTableResult("lobby-history-1", {
+          table,
+          reasonCode: "ok",
+        }, {
+          confirmationSignature,
+        });
         const updated = findMatch(tournament, "m-history-lobby");
         record(
-          "History Import: Lobby-Mapping priorisiert + Legs normalisiert",
-          Boolean(outcome?.ok)
-            && outcome.reasonCode === "completed"
+          "History Import: Legs-Abweichung fordert Bestätigung und speichert danach",
+          outcome?.reasonCode === "requires_confirmation"
+            && Boolean(confirmationSignature)
+            && confirmed?.reasonCode === "completed"
             && updated?.status === STATUS_COMPLETED
             && updated?.winnerId === "P1"
             && updated?.legs?.p1 === 2
             && updated?.legs?.p2 === 0,
-          `reason=${outcome?.reasonCode || "-"}, winner=${updated?.winnerId || "-"}, legs=${updated?.legs?.p1}:${updated?.legs?.p2}`,
+          `first=${outcome?.reasonCode || "-"}, second=${confirmed?.reasonCode || "-"}, winner=${updated?.winnerId || "-"}, legs=${updated?.legs?.p1}:${updated?.legs?.p2}`,
         );
       } catch (error) {
-        record("History Import: Lobby-Mapping priorisiert + Legs normalisiert", false, String(error?.message || error));
+        record("History Import: Legs-Abweichung fordert Bestätigung und speichert danach", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+      }
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      try {
+        const tournament = {
+          id: "history-test-confirm-invalid",
+          name: "History",
+          mode: "league",
+          ko: null,
+          bestOfLegs: 3,
+          startScore: 501,
+          x01: buildPresetX01Settings(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC),
+          rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
+          participants: [
+            { id: "P1", name: "Alex" },
+            { id: "P2", name: "Ben" },
+          ],
+          groups: [],
+          matches: [
+            createMatch({
+              id: "m-history-confirm-invalid",
+              stage: MATCH_STAGE_LEAGUE,
+              round: 1,
+              number: 1,
+              player1Id: "P1",
+              player2Id: "P2",
+              meta: {
+                auto: {
+                  lobbyId: "lobby-history-confirm-invalid",
+                  status: "started",
+                },
+              },
+            }),
+          ],
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        };
+        state.store.tournament = tournament;
+        const table = document.createElement("table");
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th>Stats</th>
+              <td><span class="ad-ext-player-name"><p>ALEX</p></span></td>
+              <td><span class="ad-ext-player-name"><p>BEN</p></span><svg data-icon="trophy"></svg></td>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Gewonnene Legs</td><td>1</td><td>0</td></tr>
+          </tbody>
+        `;
+        const needsConfirm = importHistoryStatsTableResult("lobby-history-confirm-invalid", { table, reasonCode: "ok" });
+        const invalidConfirm = importHistoryStatsTableResult("lobby-history-confirm-invalid", {
+          table,
+          reasonCode: "ok",
+        }, {
+          confirmationSignature: "invalid-signature",
+        });
+        const pendingMap = state.matchReturnShortcut.pendingConfirmationByLobby || {};
+        const pending = pendingMap["lobby-history-confirm-invalid"];
+        if (pending) {
+          pending.expiresAt = Date.now() - 1000;
+        }
+        const expiredConfirm = importHistoryStatsTableResult("lobby-history-confirm-invalid", {
+          table,
+          reasonCode: "ok",
+        }, {
+          confirmationSignature: normalizeText(needsConfirm?.confirm?.signature || ""),
+        });
+        record(
+          "History Import: falsche oder abgelaufene Bestätigung wird abgelehnt",
+          needsConfirm?.reasonCode === "requires_confirmation"
+            && invalidConfirm?.reasonCode === "confirmation_invalid"
+            && expiredConfirm?.reasonCode === "confirmation_expired",
+          `first=${needsConfirm?.reasonCode || "-"}, invalid=${invalidConfirm?.reasonCode || "-"}, expired=${expiredConfirm?.reasonCode || "-"}`,
+        );
+      } catch (error) {
+        record("History Import: falsche oder abgelaufene Bestätigung wird abgelehnt", false, String(error?.message || error));
       } finally {
         state.store.tournament = previousTournament;
       }
@@ -6586,6 +6919,36 @@ const GLOBALS_CONTRACT = Object.freeze({
       } finally {
         state.store.tournament = previousTournament;
       }
+    }
+
+    try {
+      const hostSandbox = document.createElement("div");
+      hostSandbox.setAttribute("data-ata-selftest-host-sandbox", "1");
+      hostSandbox.innerHTML = `
+        <section class="chakra-card">
+          <a href="/history/matches/lobby-host-check">Lobby</a>
+          <table><tbody><tr><td>a</td></tr></tbody></table>
+        </section>
+        <section class="chakra-card">
+          <a href="/history/matches/lobby-host-check">Lobby</a>
+          <table><tbody><tr><td>b</td></tr></tbody></table>
+        </section>
+        <section>
+          <table id="unlinked-fallback-table"><tbody><tr><td>fallback</td></tr></tbody></table>
+        </section>
+      `;
+      document.body.appendChild(hostSandbox);
+      const ambiguousHost = findHistoryImportHost("lobby-host-check");
+      const missingHost = findHistoryImportHost("lobby-no-link");
+      hostSandbox.remove();
+      record(
+        "History Import: Host-Erkennung lehnt mehrdeutige oder routenfremde Tabellen ab",
+        ambiguousHost?.reasonCode === "history_host_ambiguous"
+          && missingHost?.reasonCode === "history_host_not_found",
+        `ambiguous=${ambiguousHost?.reasonCode || "-"}, missing=${missingHost?.reasonCode || "-"}`,
+      );
+    } catch (error) {
+      record("History Import: Host-Erkennung lehnt mehrdeutige oder routenfremde Tabellen ab", false, String(error?.message || error));
     }
 
     try {
@@ -8059,6 +8422,10 @@ const GLOBALS_CONTRACT = Object.freeze({
   // Presentation layer: UI rendering and interaction wiring.
 
 // Infrastructure layer: browser integration and Autodarts page coupling.
+  function isAutoDetectMatchRoute(pathname = location.pathname) {
+    return /^\/(?:matches|lobbies)\/[^/?#]+/i.test(normalizeText(pathname || ""));
+  }
+
 
   function playerLookupMap(tournament) {
     const map = new Map();
@@ -8169,6 +8536,9 @@ const GLOBALS_CONTRACT = Object.freeze({
 
 
   function scanForAutoResult() {
+    if (!isAutoDetectMatchRoute()) {
+      return;
+    }
     const tournament = state.store.tournament;
     if (!tournament) {
       return;
@@ -8278,6 +8648,9 @@ const GLOBALS_CONTRACT = Object.freeze({
   // History import and lobby-route helpers.
 
 
+  const HISTORY_IMPORT_CONFIRMATION_TTL_MS = 45000;
+
+
   function removeHistoryImportButton() {
     const nodes = Array.from(document.querySelectorAll("[data-ata-history-import-root='1']"));
     nodes.forEach((node) => {
@@ -8285,6 +8658,7 @@ const GLOBALS_CONTRACT = Object.freeze({
         node.remove();
       }
     });
+    state.matchReturnShortcut.pendingConfirmationByLobby = {};
   }
 
 
@@ -8364,6 +8738,87 @@ const GLOBALS_CONTRACT = Object.freeze({
   }
 
 
+  function ensurePendingHistoryConfirmationMap() {
+    if (!state.matchReturnShortcut.pendingConfirmationByLobby || typeof state.matchReturnShortcut.pendingConfirmationByLobby !== "object") {
+      state.matchReturnShortcut.pendingConfirmationByLobby = {};
+    }
+    return state.matchReturnShortcut.pendingConfirmationByLobby;
+  }
+
+
+  function clearPendingHistoryConfirmation(lobbyId) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    if (!targetLobbyId) {
+      return;
+    }
+    const map = ensurePendingHistoryConfirmationMap();
+    if (map[targetLobbyId]) {
+      delete map[targetLobbyId];
+    }
+  }
+
+
+  function setPendingHistoryConfirmation(lobbyId, pending) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    if (!targetLobbyId) {
+      return;
+    }
+    const map = ensurePendingHistoryConfirmationMap();
+    if (!pending || typeof pending !== "object") {
+      delete map[targetLobbyId];
+      return;
+    }
+    map[targetLobbyId] = pending;
+  }
+
+
+  function getPendingHistoryConfirmation(lobbyId) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    if (!targetLobbyId) {
+      return null;
+    }
+    const map = ensurePendingHistoryConfirmationMap();
+    const pending = map[targetLobbyId];
+    if (!pending || typeof pending !== "object") {
+      return null;
+    }
+    const expiresAt = Number(pending.expiresAt || 0);
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      delete map[targetLobbyId];
+      return null;
+    }
+    return pending;
+  }
+
+
+  function buildHistoryImportConfirmationSignature(payload) {
+    const parts = [
+      normalizeText(payload?.tournamentId || ""),
+      normalizeText(payload?.lobbyId || ""),
+      normalizeText(payload?.matchId || ""),
+      normalizeText(payload?.winnerId || ""),
+      clampInt(payload?.rawP1, 0, 0, 99),
+      clampInt(payload?.rawP2, 0, 0, 99),
+      clampInt(payload?.normalizedP1, 0, 0, 99),
+      clampInt(payload?.normalizedP2, 0, 0, 99),
+      clampInt(payload?.bestOfLegs, 0, 1, 99),
+    ];
+    const source = parts.join("|");
+    let hash = 2166136261;
+    for (let i = 0; i < source.length; i += 1) {
+      hash ^= source.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+      hash >>>= 0;
+    }
+    return `history-confirm-${hash.toString(16)}`;
+  }
+
+
+  function formatHistoryLegsText(legs) {
+    return `${clampInt(legs?.p1, 0, 0, 99)}:${clampInt(legs?.p2, 0, 0, 99)}`;
+  }
+
+
   function cleanupStaleHistoryImportButtons(activeLobbyId = "") {
     const nodes = Array.from(document.querySelectorAll("[data-ata-history-import-root='1']"));
     nodes.forEach((node) => {
@@ -8376,6 +8831,7 @@ const GLOBALS_CONTRACT = Object.freeze({
         if (nodeLobbyId && state.matchReturnShortcut.inlineOutcomeByLobby?.[nodeLobbyId]) {
           delete state.matchReturnShortcut.inlineOutcomeByLobby[nodeLobbyId];
         }
+        clearPendingHistoryConfirmation(nodeLobbyId);
       }
     });
   }
@@ -8386,32 +8842,73 @@ const GLOBALS_CONTRACT = Object.freeze({
     if (!targetLobbyId) {
       return null;
     }
-    const routeLinks = Array.from(document.querySelectorAll(`a[href^="/history/matches/${targetLobbyId}"]`));
-    const links = routeLinks.filter((link) => link instanceof HTMLAnchorElement);
-    for (const link of links) {
+    const routeLinks = Array.from(document.querySelectorAll(`a[href^="/history/matches/${targetLobbyId}"]`))
+      .filter((link) => link instanceof HTMLAnchorElement);
+    if (!routeLinks.length) {
+      return {
+        card: null,
+        table: null,
+        reasonCode: "history_host_not_found",
+        message: "Kein eindeutiger Statistik-Host für diese Lobby auf der History-Seite gefunden.",
+      };
+    }
+
+    const cards = [];
+    const seenCards = new Set();
+    routeLinks.forEach((link) => {
       const card = link.closest(".chakra-card, [class*='chakra-card'], article, section, [class*='card']");
       if (!(card instanceof HTMLElement)) {
-        continue;
+        return;
       }
-      const table = card.querySelector("table");
-      if (table instanceof HTMLElement) {
-        return { card, table };
+      if (seenCards.has(card)) {
+        return;
       }
-      return { card, table: null };
+      seenCards.add(card);
+      cards.push(card);
+    });
+
+    if (!cards.length) {
+      return {
+        card: null,
+        table: null,
+        reasonCode: "history_host_not_found",
+        message: "Statistik-Host konnte nicht auf einen Kartenbereich zugeordnet werden.",
+      };
+    }
+    if (cards.length > 1) {
+      return {
+        card: cards[0],
+        table: null,
+        reasonCode: "history_host_ambiguous",
+        message: "Mehrdeutiger Statistik-Host: Mehrere passende Bereiche auf der Seite gefunden.",
+      };
     }
 
-    const firstTable = document.querySelector("table");
-    if (firstTable instanceof HTMLElement) {
-      const card = firstTable.closest(".chakra-card, [class*='chakra-card'], article, section, [class*='card']");
-      if (card instanceof HTMLElement) {
-        return { card, table: firstTable };
-      }
-      if (firstTable.parentElement instanceof HTMLElement) {
-        return { card: firstTable.parentElement, table: firstTable };
-      }
+    const card = cards[0];
+    const tables = Array.from(card.querySelectorAll("table")).filter((entry) => entry instanceof HTMLTableElement);
+    if (!tables.length) {
+      return {
+        card,
+        table: null,
+        reasonCode: "history_table_missing",
+        message: "Im erkannten Statistik-Bereich wurde keine eindeutige Tabelle gefunden.",
+      };
+    }
+    if (tables.length > 1) {
+      return {
+        card,
+        table: null,
+        reasonCode: "history_table_ambiguous",
+        message: "Im Statistik-Bereich wurden mehrere Tabellen gefunden. Import wurde aus Sicherheitsgründen gestoppt.",
+      };
     }
 
-    return null;
+    return {
+      card,
+      table: tables[0],
+      reasonCode: "ok",
+      message: "",
+    };
   }
 
 
@@ -8728,14 +9225,25 @@ const GLOBALS_CONTRACT = Object.freeze({
   }
 
 
-  function importHistoryStatsTableResult(lobbyId, hostInfo) {
+  function importHistoryStatsTableResult(lobbyId, hostInfo, options = {}) {
     const targetLobbyId = normalizeText(lobbyId || "");
     const tournament = state.store.tournament;
     if (!tournament || !targetLobbyId) {
       return null;
     }
+    const hostReasonCode = normalizeText(hostInfo?.reasonCode || "");
+    if (hostReasonCode && hostReasonCode !== "ok") {
+      clearPendingHistoryConfirmation(targetLobbyId);
+      return {
+        ok: false,
+        completed: false,
+        reasonCode: hostReasonCode,
+        message: normalizeText(hostInfo?.message || "Statistik-Host ist nicht eindeutig zuordenbar."),
+      };
+    }
     const parsed = parseHistoryStatsTable(hostInfo?.table);
     if (!parsed) {
+      clearPendingHistoryConfirmation(targetLobbyId);
       logDebug("api", "History table import skipped: stats table not parsable.", {
         lobbyId: targetLobbyId,
       });
@@ -8749,6 +9257,7 @@ const GLOBALS_CONTRACT = Object.freeze({
     if (linkedByLobby?.player1Id && linkedByLobby?.player2Id) {
       match = linkedByLobby;
     } else if (!matchCandidates.length) {
+      clearPendingHistoryConfirmation(targetLobbyId);
       return {
         ok: false,
         completed: false,
@@ -8756,6 +9265,7 @@ const GLOBALS_CONTRACT = Object.freeze({
         message: "Kein offenes Turnier-Match aus Lobby-ID oder Statistik-Spielern gefunden.",
       };
     } else if (matchCandidates.length > 1) {
+      clearPendingHistoryConfirmation(targetLobbyId);
       return {
         ok: false,
         completed: false,
@@ -8782,6 +9292,7 @@ const GLOBALS_CONTRACT = Object.freeze({
     }
 
     if (!winnerId) {
+      clearPendingHistoryConfirmation(targetLobbyId);
       return {
         ok: false,
         completed: false,
@@ -8791,8 +9302,85 @@ const GLOBALS_CONTRACT = Object.freeze({
     }
 
     const normalizedLegs = normalizeHistoryLegsForTournament(tournament, match, winnerId, legsRaw);
+    const confirmationSignature = buildHistoryImportConfirmationSignature({
+      tournamentId: tournament.id,
+      lobbyId: targetLobbyId,
+      matchId: match.id,
+      winnerId,
+      rawP1: legsRaw.p1,
+      rawP2: legsRaw.p2,
+      normalizedP1: normalizedLegs.legs.p1,
+      normalizedP2: normalizedLegs.legs.p2,
+      bestOfLegs: tournament.bestOfLegs,
+    });
+    const requestedSignature = normalizeText(options?.confirmationSignature || "");
+    if (normalizedLegs.adjusted) {
+      if (!requestedSignature) {
+        const pending = {
+          signature: confirmationSignature,
+          expiresAt: Date.now() + HISTORY_IMPORT_CONFIRMATION_TTL_MS,
+          matchId: match.id,
+          winnerId,
+          legsRaw: { p1: legsRaw.p1, p2: legsRaw.p2 },
+          normalizedLegs: { p1: normalizedLegs.legs.p1, p2: normalizedLegs.legs.p2 },
+          legsToWin: normalizedLegs.legsToWin,
+        };
+        setPendingHistoryConfirmation(targetLobbyId, pending);
+        return {
+          ok: true,
+          completed: false,
+          reasonCode: "requires_confirmation",
+          requiresConfirmation: true,
+          message: `Leg-Abweichung erkannt: Statistik ${formatHistoryLegsText(pending.legsRaw)} -> Turnier First to ${normalizedLegs.legsToWin} erwartet ${formatHistoryLegsText(pending.normalizedLegs)}. Bitte explizit bestätigen.`,
+          confirm: {
+            signature: pending.signature,
+            expiresAt: pending.expiresAt,
+            ttlMs: HISTORY_IMPORT_CONFIRMATION_TTL_MS,
+            matchId: pending.matchId,
+            winnerId: pending.winnerId,
+            legsRaw: pending.legsRaw,
+            normalizedLegs: pending.normalizedLegs,
+            legsToWin: pending.legsToWin,
+          },
+        };
+      }
+
+      const pendingMap = ensurePendingHistoryConfirmationMap();
+      const stalePending = pendingMap[targetLobbyId];
+      const staleExpiresAt = Number(stalePending?.expiresAt || 0);
+      const staleExpired = Boolean(stalePending && Number.isFinite(staleExpiresAt) && staleExpiresAt <= Date.now());
+      const pending = getPendingHistoryConfirmation(targetLobbyId);
+      if (!pending || pending.signature !== requestedSignature) {
+        if (staleExpired) {
+          delete pendingMap[targetLobbyId];
+          return {
+            ok: false,
+            completed: false,
+            reasonCode: "confirmation_expired",
+            message: "Bestätigung ist abgelaufen. Bitte den Import erneut starten.",
+          };
+        }
+        return {
+          ok: false,
+          completed: false,
+          reasonCode: "confirmation_invalid",
+          message: "Bestätigung ist ungültig. Bitte den Import erneut starten.",
+        };
+      }
+      if (requestedSignature !== confirmationSignature) {
+        setPendingHistoryConfirmation(targetLobbyId, null);
+        return {
+          ok: false,
+          completed: false,
+          reasonCode: "confirmation_invalid",
+          message: "Bestätigung passt nicht mehr zur aktuellen Statistik. Bitte erneut bestätigen.",
+        };
+      }
+    }
+
     const result = updateMatchResult(match.id, winnerId, normalizedLegs.legs, "auto");
     if (!result.ok) {
+      clearPendingHistoryConfirmation(targetLobbyId);
       return {
         ok: false,
         completed: false,
@@ -8800,6 +9388,7 @@ const GLOBALS_CONTRACT = Object.freeze({
         message: result.message || "Ergebnis konnte nicht aus der Statistik gespeichert werden.",
       };
     }
+    clearPendingHistoryConfirmation(targetLobbyId);
 
     const updatedMatch = findMatch(tournament, match.id);
     if (updatedMatch) {
@@ -8825,7 +9414,7 @@ const GLOBALS_CONTRACT = Object.freeze({
       linkedByLobby: Boolean(linkedByLobby?.id),
     });
     const successMessage = normalizedLegs.adjusted
-      ? `Ergebnis übernommen. Legs wurden auf Turniermodus (First to ${normalizedLegs.legsToWin}) normalisiert.`
+      ? `Ergebnis übernommen. Legs wurden nach bestätigter Abweichung auf First to ${normalizedLegs.legsToWin} gesetzt.`
       : "Ergebnis wurde aus der Match-Statistik übernommen.";
     return {
       ok: true,
@@ -8850,7 +9439,11 @@ const GLOBALS_CONTRACT = Object.freeze({
     }
 
     const hostInfo = findHistoryImportHost(lobbyId);
-    if (!hostInfo?.card) {
+    if (!hostInfo) {
+      removeHistoryImportButton();
+      return;
+    }
+    if (!hostInfo.card) {
       removeHistoryImportButton();
       return;
     }
@@ -8871,6 +9464,10 @@ const GLOBALS_CONTRACT = Object.freeze({
     const isSyncing = isLobbySyncing(lobbyId);
     const isAlreadyCompleted = linkedMatchAny?.status === STATUS_COMPLETED;
     const parsedStats = parseHistoryStatsTable(hostInfo.table);
+    const hostReasonCode = normalizeText(hostInfo.reasonCode || "");
+    const hostBlocked = Boolean(hostReasonCode && hostReasonCode !== "ok");
+    const hostMessage = normalizeText(hostInfo.message || "");
+    const pendingConfirmation = getPendingHistoryConfirmation(lobbyId);
     const parsedWinnerName = getParsedHistoryWinnerName(parsedStats);
     const parsedScoreText = parsedStats
       ? `${parsedStats.p1Name} ${parsedStats.p1Legs}:${parsedStats.p2Legs} ${parsedStats.p2Name}`
@@ -8880,6 +9477,10 @@ const GLOBALS_CONTRACT = Object.freeze({
     let statusText = "";
     if (isAlreadyCompleted) {
       statusText = "Ergebnis bereits im Turnier gespeichert.";
+    } else if (hostBlocked) {
+      statusText = hostMessage || "Statistik-Bereich ist nicht eindeutig. Import ist gesperrt.";
+    } else if (pendingConfirmation) {
+      statusText = `Leg-Abweichung erkannt. Bitte Übernahme ${formatHistoryLegsText(pendingConfirmation.normalizedLegs)} explizit bestätigen.`;
     } else if (!autoEnabled) {
       statusText = "Auto-Lobby ist deaktiviert. Aktivieren Sie die Funktion im Tab Einstellungen.";
     } else if (!parsedStats) {
@@ -8896,8 +9497,10 @@ const GLOBALS_CONTRACT = Object.freeze({
 
     const primaryLabel = isAlreadyCompleted
       ? "Turnierassistent öffnen"
-      : (isSyncing ? "\u00dcbernehme..." : "Ergebnis aus Statistik \u00fcbernehmen & Turnier \u00f6ffnen");
-    const disabledAttr = isSyncing || (!autoEnabled && !isAlreadyCompleted) ? "disabled" : "";
+      : (isSyncing ? "\u00dcbernehme..." : (pendingConfirmation ? "Statistik erneut prüfen" : "Ergebnis aus Statistik \u00fcbernehmen & Turnier \u00f6ffnen"));
+    const disabledAttr = isSyncing || hostBlocked || (!autoEnabled && !isAlreadyCompleted) ? "disabled" : "";
+    const confirmDisabledAttr = isSyncing || hostBlocked || !autoEnabled || isAlreadyCompleted || !pendingConfirmation ? "disabled" : "";
+    const confirmLabel = isSyncing ? "Bestätigung läuft..." : "Leg-Abweichung bestätigen & speichern";
     const outcomeType = normalizeText(inlineOutcome?.type || "info");
     const outcomeMessage = normalizeText(inlineOutcome?.message || "");
     const outcomeColor = outcomeType === "success"
@@ -8924,14 +9527,16 @@ const GLOBALS_CONTRACT = Object.freeze({
         </div>
         <div style="font-size:13px;line-height:1.45;color:rgba(240,246,255,0.95);margin-bottom:8px;">${escapeHtml(statusText)}</div>
         ${parsedScoreText ? `<div style="font-size:12px;line-height:1.4;color:rgba(220,236,255,0.88);margin-bottom:10px;">Statistik: ${escapeHtml(parsedScoreText)}</div>` : ""}
+        ${pendingConfirmation ? `<div style="font-size:12px;line-height:1.4;color:#ffe9c9;background:rgba(255,176,66,0.16);border:1px solid rgba(255,196,112,0.46);padding:7px 9px;border-radius:8px;margin-bottom:10px;">Bestätigung erforderlich bis ${escapeHtml(new Date(pendingConfirmation.expiresAt).toLocaleTimeString("de-DE"))}: ${escapeHtml(formatHistoryLegsText(pendingConfirmation.legsRaw))} -> ${escapeHtml(formatHistoryLegsText(pendingConfirmation.normalizedLegs))}</div>` : ""}
         ${outcomeMessage ? `<div style="font-size:12px;line-height:1.4;color:${outcomeColor};background:${outcomeBg};border:1px solid ${outcomeBorder};padding:7px 9px;border-radius:8px;margin-bottom:10px;">${escapeHtml(outcomeMessage)}</div>` : ""}
         <button type="button" data-action="ata-history-sync" style="display:block;width:100%;border:1px solid rgba(99,231,173,0.7);background:linear-gradient(180deg, rgba(83,221,163,0.36), rgba(58,197,141,0.36));color:#ecfff6;border-radius:10px;padding:12px 14px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:0.2px;" ${disabledAttr}>${escapeHtml(primaryLabel)}</button>
+        ${pendingConfirmation ? `<button type="button" data-action="ata-history-confirm-sync" style="display:block;width:100%;margin-top:8px;border:1px solid rgba(255,201,112,0.66);background:linear-gradient(180deg, rgba(245,180,88,0.34), rgba(226,138,62,0.35));color:#fff6ea;border-radius:10px;padding:12px 14px;font-size:13px;font-weight:800;cursor:pointer;letter-spacing:0.2px;" ${confirmDisabledAttr}>${escapeHtml(confirmLabel)}</button>` : ""}
       </div>
     `;
 
     const syncButton = root.querySelector("[data-action='ata-history-sync']");
     if (syncButton instanceof HTMLButtonElement) {
-      if (isSyncing || (!autoEnabled && !isAlreadyCompleted)) {
+      if (isSyncing || hostBlocked || (!autoEnabled && !isAlreadyCompleted)) {
         syncButton.onclick = null;
       } else if (isAlreadyCompleted) {
         syncButton.onclick = () => {
@@ -8941,6 +9546,19 @@ const GLOBALS_CONTRACT = Object.freeze({
         syncButton.onclick = () => {
           handleHistoryImportClick(lobbyId).catch((error) => {
             logWarn("api", "Inline history import action failed.", error);
+          });
+        };
+      }
+    }
+
+    const confirmButton = root.querySelector("[data-action='ata-history-confirm-sync']");
+    if (confirmButton instanceof HTMLButtonElement) {
+      if (confirmDisabledAttr) {
+        confirmButton.onclick = null;
+      } else {
+        confirmButton.onclick = () => {
+          handleHistoryImportConfirmClick(lobbyId, pendingConfirmation?.signature || "").catch((error) => {
+            logWarn("api", "Inline history confirmation action failed.", error);
           });
         };
       }
@@ -8960,7 +9578,7 @@ const GLOBALS_CONTRACT = Object.freeze({
   }
 
 
-  async function handleLobbySyncAndOpen(lobbyId, trigger = "manual") {
+  async function handleLobbySyncAndOpen(lobbyId, trigger = "manual", options = {}) {
     const targetLobbyId = normalizeText(lobbyId || "");
     if (!targetLobbyId || isLobbySyncing(targetLobbyId)) {
       return;
@@ -8970,9 +9588,11 @@ const GLOBALS_CONTRACT = Object.freeze({
     renderHistoryImportButton();
     try {
       let syncOutcome = null;
-      if (trigger === "inline-history") {
+      if (trigger === "inline-history" || trigger === "inline-history-confirm") {
         const hostInfo = findHistoryImportHost(targetLobbyId);
-        syncOutcome = importHistoryStatsTableResult(targetLobbyId, hostInfo);
+        syncOutcome = importHistoryStatsTableResult(targetLobbyId, hostInfo, {
+          confirmationSignature: normalizeText(options?.confirmationSignature || ""),
+        });
       }
 
       if (!syncOutcome) {
@@ -8992,9 +9612,16 @@ const GLOBALS_CONTRACT = Object.freeze({
         } else {
           setNotice("success", syncOutcome.message || "Ergebnis wurde in xLokales Turnier \u00fcbernommen.", 2600);
         }
+      } else if (syncOutcome.reasonCode === "requires_confirmation") {
+        setHistoryInlineOutcome(targetLobbyId, "info", syncOutcome.message || "Explizite Bestätigung erforderlich.");
+        setNotice("info", syncOutcome.message || "Explizite Bestätigung erforderlich.", 4200);
       } else if (!syncOutcome.ok && syncOutcome.message) {
-        setHistoryInlineOutcome(targetLobbyId, syncOutcome.reasonCode === "ambiguous" ? "error" : "info", syncOutcome.message);
-        const noticeType = syncOutcome.reasonCode === "ambiguous" ? "error" : "info";
+        const reasonCode = normalizeText(syncOutcome.reasonCode || "");
+        const isError = reasonCode === "ambiguous"
+          || reasonCode === "confirmation_invalid"
+          || reasonCode === "confirmation_expired";
+        setHistoryInlineOutcome(targetLobbyId, isError ? "error" : "info", syncOutcome.message);
+        const noticeType = isError ? "error" : "info";
         setNotice(noticeType, syncOutcome.message, 3200);
       } else if (syncOutcome.ok && !syncOutcome.completed) {
         setHistoryInlineOutcome(targetLobbyId, "info", "Noch kein finales Ergebnis verfügbar.");
@@ -9013,6 +9640,13 @@ const GLOBALS_CONTRACT = Object.freeze({
 
   async function handleHistoryImportClick(lobbyId) {
     return handleLobbySyncAndOpen(lobbyId, "inline-history");
+  }
+
+
+  async function handleHistoryImportConfirmClick(lobbyId, confirmationSignature) {
+    return handleLobbySyncAndOpen(lobbyId, "inline-history-confirm", {
+      confirmationSignature,
+    });
   }
 
   function onRouteChange() {
@@ -9971,7 +10605,8 @@ const GLOBALS_CONTRACT = Object.freeze({
       state.store?.tournament?.rules?.tieBreakProfile,
       TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE,
     );
-    const tieBreakDisabledAttr = state.store?.tournament ? "" : "disabled";
+    const tieBreakLocked = hasRelevantCompletedTieBreakMatch(state.store?.tournament);
+    const tieBreakDisabledAttr = state.store?.tournament && !tieBreakLocked ? "" : "disabled";
     const apiSyncHelpLinks = renderInfoLinks([
       { href: README_API_AUTOMATION_URL, kind: "tech", label: "Erkl\u00e4rung zur API-Halbautomatik \u00f6ffnen", title: "README: API-Halbautomatik" },
       { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole \u00f6ffnen", title: "README: Info-Symbole" },
@@ -10007,7 +10642,7 @@ const GLOBALS_CONTRACT = Object.freeze({
         <div class="ata-toggle">
           <div>
             <strong>KO-Erstrunde zuf\u00e4llig mischen (Standard) ${koDrawHelpLinks}</strong>
-            <div class="ata-small">Standard: EIN. Neue KO-Turniere nutzen damit Open Draw (zuf\u00e4llige Reihenfolge, PDC-konforme Freilose).</div>
+            <div class="ata-small">Standard: EIN. Neue KO-Turniere nutzen damit Open Draw (deterministische Auslosungsreihenfolge, PDC-konforme Freilose).</div>
           </div>
           <input type="checkbox" id="ata-setting-randomize-ko" data-action="toggle-randomize-ko" ${randomizeKoEnabled}>
         </div>
@@ -10044,7 +10679,7 @@ const GLOBALS_CONTRACT = Object.freeze({
           </div>
           <input type="checkbox" id="ata-setting-ko-draw-locked" data-action="set-ko-draw-locked" ${activeKoDrawLocked} ${activeKoDrawLockDisabledAttr}>
         </div>
-        <p class="ata-small">Nur f\u00fcr den Modus KO (Straight Knockout) verf\u00fcgbar.</p>
+        <p class="ata-small">Nur f\u00fcr den Modus KO (Straight Knockout) verf\u00fcgbar. Entsperren erfordert einen expliziten Promoter-Override mit Best\u00e4tigung (DRA 6.12.1).</p>
       </section>
       <section class="ata-card tournamentCard">
         ${renderSectionHeading("Promoter Tie-Break-Profil", [
@@ -10059,6 +10694,7 @@ const GLOBALS_CONTRACT = Object.freeze({
         </div>
         <p class="ata-small"><strong>Promoter H2H + Mini-Tabelle:</strong> Punkte (2/1/0), danach Direktvergleich (2er-Gleichstand), Teilgruppen-Leg-Differenz (3+), Gesamt-Leg-Differenz, Legs gewonnen; verbleibender Gleichstand = &bdquo;Playoff erforderlich&ldquo;.</p>
         <p class="ata-small"><strong>Promoter Punkte + LegDiff:</strong> vereinfachte Sortierung \u00fcber Punkte, Gesamt-Leg-Differenz und Legs gewonnen (legacy-kompatibel).</p>
+        ${tieBreakLocked ? `<p class="ata-small">Profil gesperrt: Nach dem ersten abgeschlossenen Gruppen-/Liga-Ergebnis ist keine Profil\u00e4nderung mehr zul\u00e4ssig (DRA 6.16.1).</p>` : ""}
       </section>
       <section class="ata-card tournamentCard">
         ${renderSectionHeading("DRA Checkliste (nicht automatisierbar)", [
@@ -10307,13 +10943,44 @@ const GLOBALS_CONTRACT = Object.freeze({
     const koDrawLockedToggle = shadow.getElementById("ata-setting-ko-draw-locked");
     if (koDrawLockedToggle instanceof HTMLInputElement) {
       koDrawLockedToggle.addEventListener("change", () => {
-        const result = setTournamentKoDrawLocked(koDrawLockedToggle.checked);
+        const targetDrawLocked = koDrawLockedToggle.checked;
+        let result = null;
+        if (!targetDrawLocked) {
+          const pendingOverride = getPendingDrawUnlockOverrideForTournament(state.store?.tournament?.id);
+          if (pendingOverride?.token) {
+            const confirmed = window.confirm(
+              "DRA 6.12.1 Hinweis: Das Entsperren des Draw-Lock darf nur als bewusster Promoter-Override erfolgen. Möchten Sie jetzt ausdrücklich entsperren?",
+            );
+            if (!confirmed) {
+              setNotice("info", "KO Draw-Lock bleibt aktiv. Entsperren wurde nicht bestätigt.", 2600);
+              renderShell();
+              return;
+            }
+            result = setTournamentKoDrawLocked(false, {
+              confirmOverrideToken: pendingOverride.token,
+            });
+          } else {
+            result = setTournamentKoDrawLocked(false);
+          }
+        } else {
+          result = setTournamentKoDrawLocked(true);
+        }
+
         if (!result.ok) {
-          setNotice("error", result.message || "KO Draw-Lock konnte nicht gesetzt werden.");
+          const reasonCode = normalizeText(result.reasonCode || "");
+          if (reasonCode === "draw_unlock_requires_override") {
+            setNotice(
+              "info",
+              "Entsperren blockiert. Bitte den Schalter erneut auf AUS stellen und den Promoter-Override explizit bestätigen (DRA 6.12.1).",
+              5200,
+            );
+          } else {
+            setNotice("error", result.message || "KO Draw-Lock konnte nicht gesetzt werden.");
+          }
           return;
         }
         if (result.changed) {
-          setNotice("success", `KO Draw-Lock ${koDrawLockedToggle.checked ? "aktiviert" : "deaktiviert"}.`, 1800);
+          setNotice("success", `KO Draw-Lock ${targetDrawLocked ? "aktiviert" : "deaktiviert"}.`, 1800);
         }
       });
     }
@@ -10323,7 +10990,12 @@ const GLOBALS_CONTRACT = Object.freeze({
       tieBreakSelect.addEventListener("change", () => {
         const result = setTournamentTieBreakProfile(tieBreakSelect.value);
         if (!result.ok) {
-          setNotice("error", result.message || "Tie-Break-Profil konnte nicht gesetzt werden.");
+          const reasonCode = normalizeText(result.reasonCode || "");
+          if (reasonCode === "tie_break_locked") {
+            setNotice("info", result.message || "Tie-Break-Profil ist nach dem ersten relevanten Ergebnis gesperrt.", 5200);
+          } else {
+            setNotice("error", result.message || "Tie-Break-Profil konnte nicht gesetzt werden.");
+          }
           return;
         }
         if (result.changed) {

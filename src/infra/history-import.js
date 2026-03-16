@@ -2,6 +2,9 @@
   // History import and lobby-route helpers.
 
 
+  const HISTORY_IMPORT_CONFIRMATION_TTL_MS = 45000;
+
+
   function removeHistoryImportButton() {
     const nodes = Array.from(document.querySelectorAll("[data-ata-history-import-root='1']"));
     nodes.forEach((node) => {
@@ -9,6 +12,7 @@
         node.remove();
       }
     });
+    state.matchReturnShortcut.pendingConfirmationByLobby = {};
   }
 
 
@@ -88,6 +92,87 @@
   }
 
 
+  function ensurePendingHistoryConfirmationMap() {
+    if (!state.matchReturnShortcut.pendingConfirmationByLobby || typeof state.matchReturnShortcut.pendingConfirmationByLobby !== "object") {
+      state.matchReturnShortcut.pendingConfirmationByLobby = {};
+    }
+    return state.matchReturnShortcut.pendingConfirmationByLobby;
+  }
+
+
+  function clearPendingHistoryConfirmation(lobbyId) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    if (!targetLobbyId) {
+      return;
+    }
+    const map = ensurePendingHistoryConfirmationMap();
+    if (map[targetLobbyId]) {
+      delete map[targetLobbyId];
+    }
+  }
+
+
+  function setPendingHistoryConfirmation(lobbyId, pending) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    if (!targetLobbyId) {
+      return;
+    }
+    const map = ensurePendingHistoryConfirmationMap();
+    if (!pending || typeof pending !== "object") {
+      delete map[targetLobbyId];
+      return;
+    }
+    map[targetLobbyId] = pending;
+  }
+
+
+  function getPendingHistoryConfirmation(lobbyId) {
+    const targetLobbyId = normalizeText(lobbyId || "");
+    if (!targetLobbyId) {
+      return null;
+    }
+    const map = ensurePendingHistoryConfirmationMap();
+    const pending = map[targetLobbyId];
+    if (!pending || typeof pending !== "object") {
+      return null;
+    }
+    const expiresAt = Number(pending.expiresAt || 0);
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      delete map[targetLobbyId];
+      return null;
+    }
+    return pending;
+  }
+
+
+  function buildHistoryImportConfirmationSignature(payload) {
+    const parts = [
+      normalizeText(payload?.tournamentId || ""),
+      normalizeText(payload?.lobbyId || ""),
+      normalizeText(payload?.matchId || ""),
+      normalizeText(payload?.winnerId || ""),
+      clampInt(payload?.rawP1, 0, 0, 99),
+      clampInt(payload?.rawP2, 0, 0, 99),
+      clampInt(payload?.normalizedP1, 0, 0, 99),
+      clampInt(payload?.normalizedP2, 0, 0, 99),
+      clampInt(payload?.bestOfLegs, 0, 1, 99),
+    ];
+    const source = parts.join("|");
+    let hash = 2166136261;
+    for (let i = 0; i < source.length; i += 1) {
+      hash ^= source.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+      hash >>>= 0;
+    }
+    return `history-confirm-${hash.toString(16)}`;
+  }
+
+
+  function formatHistoryLegsText(legs) {
+    return `${clampInt(legs?.p1, 0, 0, 99)}:${clampInt(legs?.p2, 0, 0, 99)}`;
+  }
+
+
   function cleanupStaleHistoryImportButtons(activeLobbyId = "") {
     const nodes = Array.from(document.querySelectorAll("[data-ata-history-import-root='1']"));
     nodes.forEach((node) => {
@@ -100,6 +185,7 @@
         if (nodeLobbyId && state.matchReturnShortcut.inlineOutcomeByLobby?.[nodeLobbyId]) {
           delete state.matchReturnShortcut.inlineOutcomeByLobby[nodeLobbyId];
         }
+        clearPendingHistoryConfirmation(nodeLobbyId);
       }
     });
   }
@@ -110,32 +196,73 @@
     if (!targetLobbyId) {
       return null;
     }
-    const routeLinks = Array.from(document.querySelectorAll(`a[href^="/history/matches/${targetLobbyId}"]`));
-    const links = routeLinks.filter((link) => link instanceof HTMLAnchorElement);
-    for (const link of links) {
+    const routeLinks = Array.from(document.querySelectorAll(`a[href^="/history/matches/${targetLobbyId}"]`))
+      .filter((link) => link instanceof HTMLAnchorElement);
+    if (!routeLinks.length) {
+      return {
+        card: null,
+        table: null,
+        reasonCode: "history_host_not_found",
+        message: "Kein eindeutiger Statistik-Host für diese Lobby auf der History-Seite gefunden.",
+      };
+    }
+
+    const cards = [];
+    const seenCards = new Set();
+    routeLinks.forEach((link) => {
       const card = link.closest(".chakra-card, [class*='chakra-card'], article, section, [class*='card']");
       if (!(card instanceof HTMLElement)) {
-        continue;
+        return;
       }
-      const table = card.querySelector("table");
-      if (table instanceof HTMLElement) {
-        return { card, table };
+      if (seenCards.has(card)) {
+        return;
       }
-      return { card, table: null };
+      seenCards.add(card);
+      cards.push(card);
+    });
+
+    if (!cards.length) {
+      return {
+        card: null,
+        table: null,
+        reasonCode: "history_host_not_found",
+        message: "Statistik-Host konnte nicht auf einen Kartenbereich zugeordnet werden.",
+      };
+    }
+    if (cards.length > 1) {
+      return {
+        card: cards[0],
+        table: null,
+        reasonCode: "history_host_ambiguous",
+        message: "Mehrdeutiger Statistik-Host: Mehrere passende Bereiche auf der Seite gefunden.",
+      };
     }
 
-    const firstTable = document.querySelector("table");
-    if (firstTable instanceof HTMLElement) {
-      const card = firstTable.closest(".chakra-card, [class*='chakra-card'], article, section, [class*='card']");
-      if (card instanceof HTMLElement) {
-        return { card, table: firstTable };
-      }
-      if (firstTable.parentElement instanceof HTMLElement) {
-        return { card: firstTable.parentElement, table: firstTable };
-      }
+    const card = cards[0];
+    const tables = Array.from(card.querySelectorAll("table")).filter((entry) => entry instanceof HTMLTableElement);
+    if (!tables.length) {
+      return {
+        card,
+        table: null,
+        reasonCode: "history_table_missing",
+        message: "Im erkannten Statistik-Bereich wurde keine eindeutige Tabelle gefunden.",
+      };
+    }
+    if (tables.length > 1) {
+      return {
+        card,
+        table: null,
+        reasonCode: "history_table_ambiguous",
+        message: "Im Statistik-Bereich wurden mehrere Tabellen gefunden. Import wurde aus Sicherheitsgründen gestoppt.",
+      };
     }
 
-    return null;
+    return {
+      card,
+      table: tables[0],
+      reasonCode: "ok",
+      message: "",
+    };
   }
 
 
@@ -452,14 +579,25 @@
   }
 
 
-  function importHistoryStatsTableResult(lobbyId, hostInfo) {
+  function importHistoryStatsTableResult(lobbyId, hostInfo, options = {}) {
     const targetLobbyId = normalizeText(lobbyId || "");
     const tournament = state.store.tournament;
     if (!tournament || !targetLobbyId) {
       return null;
     }
+    const hostReasonCode = normalizeText(hostInfo?.reasonCode || "");
+    if (hostReasonCode && hostReasonCode !== "ok") {
+      clearPendingHistoryConfirmation(targetLobbyId);
+      return {
+        ok: false,
+        completed: false,
+        reasonCode: hostReasonCode,
+        message: normalizeText(hostInfo?.message || "Statistik-Host ist nicht eindeutig zuordenbar."),
+      };
+    }
     const parsed = parseHistoryStatsTable(hostInfo?.table);
     if (!parsed) {
+      clearPendingHistoryConfirmation(targetLobbyId);
       logDebug("api", "History table import skipped: stats table not parsable.", {
         lobbyId: targetLobbyId,
       });
@@ -473,6 +611,7 @@
     if (linkedByLobby?.player1Id && linkedByLobby?.player2Id) {
       match = linkedByLobby;
     } else if (!matchCandidates.length) {
+      clearPendingHistoryConfirmation(targetLobbyId);
       return {
         ok: false,
         completed: false,
@@ -480,6 +619,7 @@
         message: "Kein offenes Turnier-Match aus Lobby-ID oder Statistik-Spielern gefunden.",
       };
     } else if (matchCandidates.length > 1) {
+      clearPendingHistoryConfirmation(targetLobbyId);
       return {
         ok: false,
         completed: false,
@@ -506,6 +646,7 @@
     }
 
     if (!winnerId) {
+      clearPendingHistoryConfirmation(targetLobbyId);
       return {
         ok: false,
         completed: false,
@@ -515,8 +656,85 @@
     }
 
     const normalizedLegs = normalizeHistoryLegsForTournament(tournament, match, winnerId, legsRaw);
+    const confirmationSignature = buildHistoryImportConfirmationSignature({
+      tournamentId: tournament.id,
+      lobbyId: targetLobbyId,
+      matchId: match.id,
+      winnerId,
+      rawP1: legsRaw.p1,
+      rawP2: legsRaw.p2,
+      normalizedP1: normalizedLegs.legs.p1,
+      normalizedP2: normalizedLegs.legs.p2,
+      bestOfLegs: tournament.bestOfLegs,
+    });
+    const requestedSignature = normalizeText(options?.confirmationSignature || "");
+    if (normalizedLegs.adjusted) {
+      if (!requestedSignature) {
+        const pending = {
+          signature: confirmationSignature,
+          expiresAt: Date.now() + HISTORY_IMPORT_CONFIRMATION_TTL_MS,
+          matchId: match.id,
+          winnerId,
+          legsRaw: { p1: legsRaw.p1, p2: legsRaw.p2 },
+          normalizedLegs: { p1: normalizedLegs.legs.p1, p2: normalizedLegs.legs.p2 },
+          legsToWin: normalizedLegs.legsToWin,
+        };
+        setPendingHistoryConfirmation(targetLobbyId, pending);
+        return {
+          ok: true,
+          completed: false,
+          reasonCode: "requires_confirmation",
+          requiresConfirmation: true,
+          message: `Leg-Abweichung erkannt: Statistik ${formatHistoryLegsText(pending.legsRaw)} -> Turnier First to ${normalizedLegs.legsToWin} erwartet ${formatHistoryLegsText(pending.normalizedLegs)}. Bitte explizit bestätigen.`,
+          confirm: {
+            signature: pending.signature,
+            expiresAt: pending.expiresAt,
+            ttlMs: HISTORY_IMPORT_CONFIRMATION_TTL_MS,
+            matchId: pending.matchId,
+            winnerId: pending.winnerId,
+            legsRaw: pending.legsRaw,
+            normalizedLegs: pending.normalizedLegs,
+            legsToWin: pending.legsToWin,
+          },
+        };
+      }
+
+      const pendingMap = ensurePendingHistoryConfirmationMap();
+      const stalePending = pendingMap[targetLobbyId];
+      const staleExpiresAt = Number(stalePending?.expiresAt || 0);
+      const staleExpired = Boolean(stalePending && Number.isFinite(staleExpiresAt) && staleExpiresAt <= Date.now());
+      const pending = getPendingHistoryConfirmation(targetLobbyId);
+      if (!pending || pending.signature !== requestedSignature) {
+        if (staleExpired) {
+          delete pendingMap[targetLobbyId];
+          return {
+            ok: false,
+            completed: false,
+            reasonCode: "confirmation_expired",
+            message: "Bestätigung ist abgelaufen. Bitte den Import erneut starten.",
+          };
+        }
+        return {
+          ok: false,
+          completed: false,
+          reasonCode: "confirmation_invalid",
+          message: "Bestätigung ist ungültig. Bitte den Import erneut starten.",
+        };
+      }
+      if (requestedSignature !== confirmationSignature) {
+        setPendingHistoryConfirmation(targetLobbyId, null);
+        return {
+          ok: false,
+          completed: false,
+          reasonCode: "confirmation_invalid",
+          message: "Bestätigung passt nicht mehr zur aktuellen Statistik. Bitte erneut bestätigen.",
+        };
+      }
+    }
+
     const result = updateMatchResult(match.id, winnerId, normalizedLegs.legs, "auto");
     if (!result.ok) {
+      clearPendingHistoryConfirmation(targetLobbyId);
       return {
         ok: false,
         completed: false,
@@ -524,6 +742,7 @@
         message: result.message || "Ergebnis konnte nicht aus der Statistik gespeichert werden.",
       };
     }
+    clearPendingHistoryConfirmation(targetLobbyId);
 
     const updatedMatch = findMatch(tournament, match.id);
     if (updatedMatch) {
@@ -549,7 +768,7 @@
       linkedByLobby: Boolean(linkedByLobby?.id),
     });
     const successMessage = normalizedLegs.adjusted
-      ? `Ergebnis übernommen. Legs wurden auf Turniermodus (First to ${normalizedLegs.legsToWin}) normalisiert.`
+      ? `Ergebnis übernommen. Legs wurden nach bestätigter Abweichung auf First to ${normalizedLegs.legsToWin} gesetzt.`
       : "Ergebnis wurde aus der Match-Statistik übernommen.";
     return {
       ok: true,
@@ -574,7 +793,11 @@
     }
 
     const hostInfo = findHistoryImportHost(lobbyId);
-    if (!hostInfo?.card) {
+    if (!hostInfo) {
+      removeHistoryImportButton();
+      return;
+    }
+    if (!hostInfo.card) {
       removeHistoryImportButton();
       return;
     }
@@ -595,6 +818,10 @@
     const isSyncing = isLobbySyncing(lobbyId);
     const isAlreadyCompleted = linkedMatchAny?.status === STATUS_COMPLETED;
     const parsedStats = parseHistoryStatsTable(hostInfo.table);
+    const hostReasonCode = normalizeText(hostInfo.reasonCode || "");
+    const hostBlocked = Boolean(hostReasonCode && hostReasonCode !== "ok");
+    const hostMessage = normalizeText(hostInfo.message || "");
+    const pendingConfirmation = getPendingHistoryConfirmation(lobbyId);
     const parsedWinnerName = getParsedHistoryWinnerName(parsedStats);
     const parsedScoreText = parsedStats
       ? `${parsedStats.p1Name} ${parsedStats.p1Legs}:${parsedStats.p2Legs} ${parsedStats.p2Name}`
@@ -604,6 +831,10 @@
     let statusText = "";
     if (isAlreadyCompleted) {
       statusText = "Ergebnis bereits im Turnier gespeichert.";
+    } else if (hostBlocked) {
+      statusText = hostMessage || "Statistik-Bereich ist nicht eindeutig. Import ist gesperrt.";
+    } else if (pendingConfirmation) {
+      statusText = `Leg-Abweichung erkannt. Bitte Übernahme ${formatHistoryLegsText(pendingConfirmation.normalizedLegs)} explizit bestätigen.`;
     } else if (!autoEnabled) {
       statusText = "Auto-Lobby ist deaktiviert. Aktivieren Sie die Funktion im Tab Einstellungen.";
     } else if (!parsedStats) {
@@ -620,8 +851,10 @@
 
     const primaryLabel = isAlreadyCompleted
       ? "Turnierassistent öffnen"
-      : (isSyncing ? "\u00dcbernehme..." : "Ergebnis aus Statistik \u00fcbernehmen & Turnier \u00f6ffnen");
-    const disabledAttr = isSyncing || (!autoEnabled && !isAlreadyCompleted) ? "disabled" : "";
+      : (isSyncing ? "\u00dcbernehme..." : (pendingConfirmation ? "Statistik erneut prüfen" : "Ergebnis aus Statistik \u00fcbernehmen & Turnier \u00f6ffnen"));
+    const disabledAttr = isSyncing || hostBlocked || (!autoEnabled && !isAlreadyCompleted) ? "disabled" : "";
+    const confirmDisabledAttr = isSyncing || hostBlocked || !autoEnabled || isAlreadyCompleted || !pendingConfirmation ? "disabled" : "";
+    const confirmLabel = isSyncing ? "Bestätigung läuft..." : "Leg-Abweichung bestätigen & speichern";
     const outcomeType = normalizeText(inlineOutcome?.type || "info");
     const outcomeMessage = normalizeText(inlineOutcome?.message || "");
     const outcomeColor = outcomeType === "success"
@@ -648,14 +881,16 @@
         </div>
         <div style="font-size:13px;line-height:1.45;color:rgba(240,246,255,0.95);margin-bottom:8px;">${escapeHtml(statusText)}</div>
         ${parsedScoreText ? `<div style="font-size:12px;line-height:1.4;color:rgba(220,236,255,0.88);margin-bottom:10px;">Statistik: ${escapeHtml(parsedScoreText)}</div>` : ""}
+        ${pendingConfirmation ? `<div style="font-size:12px;line-height:1.4;color:#ffe9c9;background:rgba(255,176,66,0.16);border:1px solid rgba(255,196,112,0.46);padding:7px 9px;border-radius:8px;margin-bottom:10px;">Bestätigung erforderlich bis ${escapeHtml(new Date(pendingConfirmation.expiresAt).toLocaleTimeString("de-DE"))}: ${escapeHtml(formatHistoryLegsText(pendingConfirmation.legsRaw))} -> ${escapeHtml(formatHistoryLegsText(pendingConfirmation.normalizedLegs))}</div>` : ""}
         ${outcomeMessage ? `<div style="font-size:12px;line-height:1.4;color:${outcomeColor};background:${outcomeBg};border:1px solid ${outcomeBorder};padding:7px 9px;border-radius:8px;margin-bottom:10px;">${escapeHtml(outcomeMessage)}</div>` : ""}
         <button type="button" data-action="ata-history-sync" style="display:block;width:100%;border:1px solid rgba(99,231,173,0.7);background:linear-gradient(180deg, rgba(83,221,163,0.36), rgba(58,197,141,0.36));color:#ecfff6;border-radius:10px;padding:12px 14px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:0.2px;" ${disabledAttr}>${escapeHtml(primaryLabel)}</button>
+        ${pendingConfirmation ? `<button type="button" data-action="ata-history-confirm-sync" style="display:block;width:100%;margin-top:8px;border:1px solid rgba(255,201,112,0.66);background:linear-gradient(180deg, rgba(245,180,88,0.34), rgba(226,138,62,0.35));color:#fff6ea;border-radius:10px;padding:12px 14px;font-size:13px;font-weight:800;cursor:pointer;letter-spacing:0.2px;" ${confirmDisabledAttr}>${escapeHtml(confirmLabel)}</button>` : ""}
       </div>
     `;
 
     const syncButton = root.querySelector("[data-action='ata-history-sync']");
     if (syncButton instanceof HTMLButtonElement) {
-      if (isSyncing || (!autoEnabled && !isAlreadyCompleted)) {
+      if (isSyncing || hostBlocked || (!autoEnabled && !isAlreadyCompleted)) {
         syncButton.onclick = null;
       } else if (isAlreadyCompleted) {
         syncButton.onclick = () => {
@@ -665,6 +900,19 @@
         syncButton.onclick = () => {
           handleHistoryImportClick(lobbyId).catch((error) => {
             logWarn("api", "Inline history import action failed.", error);
+          });
+        };
+      }
+    }
+
+    const confirmButton = root.querySelector("[data-action='ata-history-confirm-sync']");
+    if (confirmButton instanceof HTMLButtonElement) {
+      if (confirmDisabledAttr) {
+        confirmButton.onclick = null;
+      } else {
+        confirmButton.onclick = () => {
+          handleHistoryImportConfirmClick(lobbyId, pendingConfirmation?.signature || "").catch((error) => {
+            logWarn("api", "Inline history confirmation action failed.", error);
           });
         };
       }
@@ -684,7 +932,7 @@
   }
 
 
-  async function handleLobbySyncAndOpen(lobbyId, trigger = "manual") {
+  async function handleLobbySyncAndOpen(lobbyId, trigger = "manual", options = {}) {
     const targetLobbyId = normalizeText(lobbyId || "");
     if (!targetLobbyId || isLobbySyncing(targetLobbyId)) {
       return;
@@ -694,9 +942,11 @@
     renderHistoryImportButton();
     try {
       let syncOutcome = null;
-      if (trigger === "inline-history") {
+      if (trigger === "inline-history" || trigger === "inline-history-confirm") {
         const hostInfo = findHistoryImportHost(targetLobbyId);
-        syncOutcome = importHistoryStatsTableResult(targetLobbyId, hostInfo);
+        syncOutcome = importHistoryStatsTableResult(targetLobbyId, hostInfo, {
+          confirmationSignature: normalizeText(options?.confirmationSignature || ""),
+        });
       }
 
       if (!syncOutcome) {
@@ -716,9 +966,16 @@
         } else {
           setNotice("success", syncOutcome.message || "Ergebnis wurde in xLokales Turnier \u00fcbernommen.", 2600);
         }
+      } else if (syncOutcome.reasonCode === "requires_confirmation") {
+        setHistoryInlineOutcome(targetLobbyId, "info", syncOutcome.message || "Explizite Bestätigung erforderlich.");
+        setNotice("info", syncOutcome.message || "Explizite Bestätigung erforderlich.", 4200);
       } else if (!syncOutcome.ok && syncOutcome.message) {
-        setHistoryInlineOutcome(targetLobbyId, syncOutcome.reasonCode === "ambiguous" ? "error" : "info", syncOutcome.message);
-        const noticeType = syncOutcome.reasonCode === "ambiguous" ? "error" : "info";
+        const reasonCode = normalizeText(syncOutcome.reasonCode || "");
+        const isError = reasonCode === "ambiguous"
+          || reasonCode === "confirmation_invalid"
+          || reasonCode === "confirmation_expired";
+        setHistoryInlineOutcome(targetLobbyId, isError ? "error" : "info", syncOutcome.message);
+        const noticeType = isError ? "error" : "info";
         setNotice(noticeType, syncOutcome.message, 3200);
       } else if (syncOutcome.ok && !syncOutcome.completed) {
         setHistoryInlineOutcome(targetLobbyId, "info", "Noch kein finales Ergebnis verfügbar.");
@@ -737,4 +994,11 @@
 
   async function handleHistoryImportClick(lobbyId) {
     return handleLobbySyncAndOpen(lobbyId, "inline-history");
+  }
+
+
+  async function handleHistoryImportConfirmClick(lobbyId, confirmationSignature) {
+    return handleLobbySyncAndOpen(lobbyId, "inline-history-confirm", {
+      confirmationSignature,
+    });
   }

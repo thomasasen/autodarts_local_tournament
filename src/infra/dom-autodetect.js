@@ -1,4 +1,8 @@
 // Infrastructure layer: browser integration and Autodarts page coupling.
+  function isAutoDetectMatchRoute(pathname = location.pathname) {
+    return /^\/(?:matches|lobbies)\/[^/?#]+/i.test(normalizeText(pathname || ""));
+  }
+
 
   function playerLookupMap(tournament) {
     const map = new Map();
@@ -109,6 +113,9 @@
 
 
   function scanForAutoResult() {
+    if (!isAutoDetectMatchRoute()) {
+      return;
+    }
     const tournament = state.store.tournament;
     if (!tournament) {
       return;

@@ -25,7 +25,8 @@
       state.store?.tournament?.rules?.tieBreakProfile,
       TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE,
     );
-    const tieBreakDisabledAttr = state.store?.tournament ? "" : "disabled";
+    const tieBreakLocked = hasRelevantCompletedTieBreakMatch(state.store?.tournament);
+    const tieBreakDisabledAttr = state.store?.tournament && !tieBreakLocked ? "" : "disabled";
     const apiSyncHelpLinks = renderInfoLinks([
       { href: README_API_AUTOMATION_URL, kind: "tech", label: "Erkl\u00e4rung zur API-Halbautomatik \u00f6ffnen", title: "README: API-Halbautomatik" },
       { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole \u00f6ffnen", title: "README: Info-Symbole" },
@@ -61,7 +62,7 @@
         <div class="ata-toggle">
           <div>
             <strong>KO-Erstrunde zuf\u00e4llig mischen (Standard) ${koDrawHelpLinks}</strong>
-            <div class="ata-small">Standard: EIN. Neue KO-Turniere nutzen damit Open Draw (zuf\u00e4llige Reihenfolge, PDC-konforme Freilose).</div>
+            <div class="ata-small">Standard: EIN. Neue KO-Turniere nutzen damit Open Draw (deterministische Auslosungsreihenfolge, PDC-konforme Freilose).</div>
           </div>
           <input type="checkbox" id="ata-setting-randomize-ko" data-action="toggle-randomize-ko" ${randomizeKoEnabled}>
         </div>
@@ -98,7 +99,7 @@
           </div>
           <input type="checkbox" id="ata-setting-ko-draw-locked" data-action="set-ko-draw-locked" ${activeKoDrawLocked} ${activeKoDrawLockDisabledAttr}>
         </div>
-        <p class="ata-small">Nur f\u00fcr den Modus KO (Straight Knockout) verf\u00fcgbar.</p>
+        <p class="ata-small">Nur f\u00fcr den Modus KO (Straight Knockout) verf\u00fcgbar. Entsperren erfordert einen expliziten Promoter-Override mit Best\u00e4tigung (DRA 6.12.1).</p>
       </section>
       <section class="ata-card tournamentCard">
         ${renderSectionHeading("Promoter Tie-Break-Profil", [
@@ -113,6 +114,7 @@
         </div>
         <p class="ata-small"><strong>Promoter H2H + Mini-Tabelle:</strong> Punkte (2/1/0), danach Direktvergleich (2er-Gleichstand), Teilgruppen-Leg-Differenz (3+), Gesamt-Leg-Differenz, Legs gewonnen; verbleibender Gleichstand = &bdquo;Playoff erforderlich&ldquo;.</p>
         <p class="ata-small"><strong>Promoter Punkte + LegDiff:</strong> vereinfachte Sortierung \u00fcber Punkte, Gesamt-Leg-Differenz und Legs gewonnen (legacy-kompatibel).</p>
+        ${tieBreakLocked ? `<p class="ata-small">Profil gesperrt: Nach dem ersten abgeschlossenen Gruppen-/Liga-Ergebnis ist keine Profil\u00e4nderung mehr zul\u00e4ssig (DRA 6.16.1).</p>` : ""}
       </section>
       <section class="ata-card tournamentCard">
         ${renderSectionHeading("DRA Checkliste (nicht automatisierbar)", [

@@ -37,6 +37,8 @@
       syncing: false,
       inlineSyncingByLobby: {},
       inlineOutcomeByLobby: {},
+      pendingConfirmationByLobby: {},
+      pendingDrawUnlockOverride: null,
     },
     runtimeStatusSignature: "",
     cleanupStack: [],

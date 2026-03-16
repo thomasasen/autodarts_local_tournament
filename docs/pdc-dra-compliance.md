@@ -17,6 +17,7 @@
   - Gesamt-Legs gewonnen
   - danach `playoff_required`
 - Referenz: DRA Rulebook `6.16.1` (Seite 20), PDF-Link: [DRA-RULE_BOOK.pdf#page=20](DRA-RULE_BOOK.pdf#page=20)
+- Profilwechsel ist nach dem ersten abgeschlossenen Gruppen-/Liga-Ergebnis technisch gesperrt.
 
 2. **Gruppenauflösung**
 - `groupResolution.status` wird auf `playoff_required` gesetzt, wenn Gleichstände nicht auflösbar sind.
@@ -28,6 +29,7 @@
 - Alle KO-Runden werden als Match-Knoten materialisiert (inklusive zukünftiger offener Paarungen).
 - Freilose (Bye) werden explizit als abgeschlossene Bye-Matches geführt.
 - Draw-Lock ist standardmäßig aktiv und hält den initialen KO-Draw stabil.
+- Entsperren ist nur als expliziter Promoter-Override mit Bestätigung zulässig.
 - Referenz: DRA Rulebook `6.8.1` (Seite 17), `6.12.1` (Seite 18), PDF-Link: [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
 
 4. **Terminologie (PDC-konform)**

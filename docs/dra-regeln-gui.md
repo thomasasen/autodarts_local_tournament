@@ -57,7 +57,7 @@ Screenshot-Kontext:
 
 ### Deutsche Erklärung
 - Der Schalter bestimmt nur, **wie Runde 1 erzeugt wird**:
-  - `open_draw`: zufällige Reihenfolge für Runde 1.
+  - `open_draw`: deterministische Auslosungsreihenfolge für Runde 1.
   - `seeded`: feste Reihenfolge nach Eingabe.
 - Nach Veröffentlichung des Draws bleibt die Struktur bestehen (`6.12.1`).
 
@@ -81,7 +81,7 @@ Screenshot-Kontext:
 ### Deutsche Erklärung
 - Draw-Lock ist die technische Absicherung der Regel:
   - Aktiv: KO-Struktur bleibt unverändert.
-  - Inaktiv: Turnierleitung kann bewusst entsperren.
+  - Inaktiv: Turnierleitung kann bewusst entsperren, aber nur per explizitem Promoter-Override mit Bestätigung.
 
 ### Warum wichtig
 - Verhindert unfaire Nachauslosungen im laufenden Turnier.
@@ -159,6 +159,7 @@ Screenshot-Kontext:
 - Die App bildet dieses Ermessen als wählbares Profil ab:
   - `Promoter H2H + Mini-Tabelle` (empfohlen)
   - `Promoter Punkte + LegDiff`
+- Nach dem ersten abgeschlossenen Gruppen-/Liga-Ergebnis ist das Profil gesperrt (keine nachträgliche Umstellung).
 - Falls ein Gleichstand damit nicht auflösbar ist:
   - Status `Playoff erforderlich`
   - KO-Qualifikation bleibt bis zur Entscheidung blockiert

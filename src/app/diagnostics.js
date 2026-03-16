@@ -255,6 +255,37 @@
 
     try {
       const tournament = createTournament({
+        name: "DrawLockOverride",
+        mode: "ko",
+        bestOfLegs: 3,
+        startScore: 501,
+        x01Preset: X01_PRESET_CUSTOM,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        koDrawLocked: true,
+        participants: participantList(8, "DO"),
+      });
+      const blocked = applyTournamentKoDrawLocked(tournament, false);
+      const confirmed = applyTournamentKoDrawLocked(tournament, false, { allowUnlockOverride: true });
+      record(
+        "Draw-Lock: Entsperren erfordert Override, mit Override erlaubt",
+        blocked?.ok === false
+          && blocked?.reasonCode === "draw_unlock_requires_override"
+          && Boolean(confirmed?.ok && confirmed?.changed)
+          && tournament?.ko?.drawLocked === false,
+        `blocked=${blocked?.reasonCode || "-"}, confirmed=${Boolean(confirmed?.ok)}`,
+      );
+    } catch (error) {
+      record("Draw-Lock: Entsperren erfordert Override, mit Override erlaubt", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
         name: "DrawLockOff",
         mode: "ko",
         bestOfLegs: 3,
@@ -332,6 +363,38 @@
 
     try {
       const tournament = createTournament({
+        name: "TieBreakLocked",
+        mode: "league",
+        bestOfLegs: 3,
+        startScore: 501,
+        x01Preset: X01_PRESET_CUSTOM,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        participants: participantList(4, "TL"),
+      });
+      const firstLeagueMatch = tournament.matches.find((match) => match.stage === MATCH_STAGE_LEAGUE);
+      firstLeagueMatch.status = STATUS_COMPLETED;
+      firstLeagueMatch.winnerId = firstLeagueMatch.player1Id;
+      firstLeagueMatch.legs = { p1: 2, p2: 0 };
+      const result = applyTournamentTieBreakProfile(tournament, TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF);
+      record(
+        "Tie-Break-Profil: nach erstem Ergebnis gesperrt",
+        result?.ok === false
+          && result?.reasonCode === "tie_break_locked"
+          && tournament.rules.tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE,
+        `ok=${Boolean(result?.ok)}, reason=${result?.reasonCode || "-"}`,
+      );
+    } catch (error) {
+      record("Tie-Break-Profil: nach erstem Ergebnis gesperrt", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
         name: "GroupsKo",
         mode: "groups_ko",
         bestOfLegs: 3,
@@ -374,6 +437,52 @@
       );
     } catch (error) {
       record("Groups+KO Regression: Finale wird korrekt aus Semis belegt", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
+        name: "GroupsKoTieBreakLock",
+        mode: "groups_ko",
+        bestOfLegs: 3,
+        startScore: 501,
+        x01Preset: X01_PRESET_CUSTOM,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        participants: participantList(4, "GL"),
+      });
+      const firstGroupMatch = tournament.matches.find((match) => match.stage === MATCH_STAGE_GROUP);
+      firstGroupMatch.status = STATUS_COMPLETED;
+      firstGroupMatch.winnerId = firstGroupMatch.player1Id;
+      firstGroupMatch.legs = { p1: 2, p2: 0 };
+      refreshDerivedMatches(tournament);
+      const beforeSemiState = JSON.stringify([
+        findMatch(tournament, "ko-r1-m1")?.player1Id || null,
+        findMatch(tournament, "ko-r1-m1")?.player2Id || null,
+        findMatch(tournament, "ko-r1-m2")?.player1Id || null,
+        findMatch(tournament, "ko-r1-m2")?.player2Id || null,
+      ]);
+      const blocked = applyTournamentTieBreakProfile(tournament, TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF);
+      refreshDerivedMatches(tournament);
+      const afterSemiState = JSON.stringify([
+        findMatch(tournament, "ko-r1-m1")?.player1Id || null,
+        findMatch(tournament, "ko-r1-m1")?.player2Id || null,
+        findMatch(tournament, "ko-r1-m2")?.player1Id || null,
+        findMatch(tournament, "ko-r1-m2")?.player2Id || null,
+      ]);
+      record(
+        "Groups+KO: Tie-Break-Lock verhindert nachtraegliche KO-Neuzuordnung",
+        blocked?.ok === false
+          && blocked?.reasonCode === "tie_break_locked"
+          && beforeSemiState === afterSemiState,
+        `reason=${blocked?.reasonCode || "-"}, stable=${beforeSemiState === afterSemiState}`,
+      );
+    } catch (error) {
+      record("Groups+KO: Tie-Break-Lock verhindert nachtraegliche KO-Neuzuordnung", false, String(error?.message || error));
     }
 
     try {
@@ -508,6 +617,19 @@
     }
 
     try {
+      record(
+        "Auto-Detect: Route-Guard nur fuer /matches/{id} und /lobbies/{id}",
+        isAutoDetectMatchRoute("/matches/abc123")
+          && isAutoDetectMatchRoute("/lobbies/abc123")
+          && !isAutoDetectMatchRoute("/history/matches/abc123")
+          && !isAutoDetectMatchRoute("/settings"),
+        `match=${isAutoDetectMatchRoute("/matches/abc123")}, lobby=${isAutoDetectMatchRoute("/lobbies/abc123")}, history=${isAutoDetectMatchRoute("/history/matches/abc123")}`,
+      );
+    } catch (error) {
+      record("Auto-Detect: Route-Guard nur fuer /matches/{id} und /lobbies/{id}", false, String(error?.message || error));
+    }
+
+    try {
       const tournament = {
         participants: [
           { id: "P1", name: "Tanja Mueller" },
@@ -574,20 +696,110 @@
             <tr><td>Gewonnene Legs</td><td>1</td><td>0</td></tr>
           </tbody>
         `;
-        const outcome = importHistoryStatsTableResult("lobby-history-1", { table });
+        const outcome = importHistoryStatsTableResult("lobby-history-1", { table, reasonCode: "ok" });
+        const confirmationSignature = normalizeText(outcome?.confirm?.signature || "");
+        const confirmed = importHistoryStatsTableResult("lobby-history-1", {
+          table,
+          reasonCode: "ok",
+        }, {
+          confirmationSignature,
+        });
         const updated = findMatch(tournament, "m-history-lobby");
         record(
-          "History Import: Lobby-Mapping priorisiert + Legs normalisiert",
-          Boolean(outcome?.ok)
-            && outcome.reasonCode === "completed"
+          "History Import: Legs-Abweichung fordert Bestätigung und speichert danach",
+          outcome?.reasonCode === "requires_confirmation"
+            && Boolean(confirmationSignature)
+            && confirmed?.reasonCode === "completed"
             && updated?.status === STATUS_COMPLETED
             && updated?.winnerId === "P1"
             && updated?.legs?.p1 === 2
             && updated?.legs?.p2 === 0,
-          `reason=${outcome?.reasonCode || "-"}, winner=${updated?.winnerId || "-"}, legs=${updated?.legs?.p1}:${updated?.legs?.p2}`,
+          `first=${outcome?.reasonCode || "-"}, second=${confirmed?.reasonCode || "-"}, winner=${updated?.winnerId || "-"}, legs=${updated?.legs?.p1}:${updated?.legs?.p2}`,
         );
       } catch (error) {
-        record("History Import: Lobby-Mapping priorisiert + Legs normalisiert", false, String(error?.message || error));
+        record("History Import: Legs-Abweichung fordert Bestätigung und speichert danach", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+      }
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      try {
+        const tournament = {
+          id: "history-test-confirm-invalid",
+          name: "History",
+          mode: "league",
+          ko: null,
+          bestOfLegs: 3,
+          startScore: 501,
+          x01: buildPresetX01Settings(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC),
+          rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
+          participants: [
+            { id: "P1", name: "Alex" },
+            { id: "P2", name: "Ben" },
+          ],
+          groups: [],
+          matches: [
+            createMatch({
+              id: "m-history-confirm-invalid",
+              stage: MATCH_STAGE_LEAGUE,
+              round: 1,
+              number: 1,
+              player1Id: "P1",
+              player2Id: "P2",
+              meta: {
+                auto: {
+                  lobbyId: "lobby-history-confirm-invalid",
+                  status: "started",
+                },
+              },
+            }),
+          ],
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        };
+        state.store.tournament = tournament;
+        const table = document.createElement("table");
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th>Stats</th>
+              <td><span class="ad-ext-player-name"><p>ALEX</p></span></td>
+              <td><span class="ad-ext-player-name"><p>BEN</p></span><svg data-icon="trophy"></svg></td>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Gewonnene Legs</td><td>1</td><td>0</td></tr>
+          </tbody>
+        `;
+        const needsConfirm = importHistoryStatsTableResult("lobby-history-confirm-invalid", { table, reasonCode: "ok" });
+        const invalidConfirm = importHistoryStatsTableResult("lobby-history-confirm-invalid", {
+          table,
+          reasonCode: "ok",
+        }, {
+          confirmationSignature: "invalid-signature",
+        });
+        const pendingMap = state.matchReturnShortcut.pendingConfirmationByLobby || {};
+        const pending = pendingMap["lobby-history-confirm-invalid"];
+        if (pending) {
+          pending.expiresAt = Date.now() - 1000;
+        }
+        const expiredConfirm = importHistoryStatsTableResult("lobby-history-confirm-invalid", {
+          table,
+          reasonCode: "ok",
+        }, {
+          confirmationSignature: normalizeText(needsConfirm?.confirm?.signature || ""),
+        });
+        record(
+          "History Import: falsche oder abgelaufene Bestätigung wird abgelehnt",
+          needsConfirm?.reasonCode === "requires_confirmation"
+            && invalidConfirm?.reasonCode === "confirmation_invalid"
+            && expiredConfirm?.reasonCode === "confirmation_expired",
+          `first=${needsConfirm?.reasonCode || "-"}, invalid=${invalidConfirm?.reasonCode || "-"}, expired=${expiredConfirm?.reasonCode || "-"}`,
+        );
+      } catch (error) {
+        record("History Import: falsche oder abgelaufene Bestätigung wird abgelehnt", false, String(error?.message || error));
       } finally {
         state.store.tournament = previousTournament;
       }
@@ -667,6 +879,36 @@
       } finally {
         state.store.tournament = previousTournament;
       }
+    }
+
+    try {
+      const hostSandbox = document.createElement("div");
+      hostSandbox.setAttribute("data-ata-selftest-host-sandbox", "1");
+      hostSandbox.innerHTML = `
+        <section class="chakra-card">
+          <a href="/history/matches/lobby-host-check">Lobby</a>
+          <table><tbody><tr><td>a</td></tr></tbody></table>
+        </section>
+        <section class="chakra-card">
+          <a href="/history/matches/lobby-host-check">Lobby</a>
+          <table><tbody><tr><td>b</td></tr></tbody></table>
+        </section>
+        <section>
+          <table id="unlinked-fallback-table"><tbody><tr><td>fallback</td></tr></tbody></table>
+        </section>
+      `;
+      document.body.appendChild(hostSandbox);
+      const ambiguousHost = findHistoryImportHost("lobby-host-check");
+      const missingHost = findHistoryImportHost("lobby-no-link");
+      hostSandbox.remove();
+      record(
+        "History Import: Host-Erkennung lehnt mehrdeutige oder routenfremde Tabellen ab",
+        ambiguousHost?.reasonCode === "history_host_ambiguous"
+          && missingHost?.reasonCode === "history_host_not_found",
+        `ambiguous=${ambiguousHost?.reasonCode || "-"}, missing=${missingHost?.reasonCode || "-"}`,
+      );
+    } catch (error) {
+      record("History Import: Host-Erkennung lehnt mehrdeutige oder routenfremde Tabellen ab", false, String(error?.message || error));
     }
 
     try {

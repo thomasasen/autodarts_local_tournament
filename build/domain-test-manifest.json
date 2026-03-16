@@ -16,6 +16,7 @@
   "tests": [
     "tests/test-harness.js",
     "tests/domain-isolation.js",
+    "tests/unit-tournament-scenarios.js",
     "tests/unit-ko-engine.js",
     "tests/unit-presets.js",
     "tests/unit-tournament-duration.js",
