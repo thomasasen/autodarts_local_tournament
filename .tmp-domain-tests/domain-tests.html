@@ -19,9 +19,10 @@
 // @grant        GM_setValue
 // @grant        GM_xmlhttpRequest
 // @connect      cdn.jsdelivr.net
+// @connect      raw.githubusercontent.com
 // @connect      api.autodarts.io
-// @downloadURL  https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/dist/autodarts-tournament-assistant.user.js
-// @updateURL    https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/dist/autodarts-tournament-assistant.user.js
+// @downloadURL  https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.user.js
+// @updateURL    https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.meta.js
 // ==/UserScript==
 
 (function () {
@@ -37,6 +38,8 @@
   const UI_HOST_ID = "ata-ui-host";
   const TOGGLE_EVENT = "ata:toggle-request";
   const READY_EVENT = "ata:ready";
+  const LOADER_GUARD_KEY = "__ATA_LOADER_BOOTSTRAPPED";
+  const LOADER_MENU_ITEM_ID = "ata-loader-menu-item";
   const API_PROVIDER = "api.autodarts.io";
   const API_GS_BASE = `https://${API_PROVIDER}/gs/v0`;
   const API_AS_BASE = `https://${API_PROVIDER}/as/v0`;
@@ -58,6 +61,13 @@
   const DRA_GUI_RULE_BYE_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-bye`;
   const DRA_GUI_RULE_TIE_BREAK_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-tie-break`;
   const DRA_GUI_RULE_CHECKLIST_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-checklist`;
+  const USERSCRIPT_DOWNLOAD_URL = "https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.user.js";
+  const USERSCRIPT_UPDATE_URL = "https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.meta.js";
+  const USERSCRIPT_LOADER_URL = "https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js";
+  const UPDATE_STATUS_STORAGE_KEY = "ata:update-status:v1";
+  const UPDATE_CHECK_TTL_MS = 60 * 60 * 1000;
+  const UPDATE_AUTO_CHECK_INTERVAL_MS = 15 * 60 * 1000;
+  const UPDATE_CACHE_BUST_PARAM = "_ata_ts";
 
   const BRACKETS_VIEWER_CSS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.css";
   const BRACKETS_VIEWER_JS = "https://cdn.jsdelivr.net/npm/brackets-viewer@1.9.0/dist/brackets-viewer.min.js";
@@ -271,6 +281,482 @@
       shuffled[swapIndex] = current;
     }
     return shuffled;
+  }
+
+// Best-effort GitHub version check for direct userscript installs.
+
+  function normalizeVersion(value) {
+    return String(value || "").trim();
+  }
+
+
+  function normalizeHeaderValue(value) {
+    return String(value || "").trim();
+  }
+
+
+  function normalizeValidatorEntry(entry = {}) {
+    if (!entry || typeof entry !== "object") {
+      return null;
+    }
+
+    const remoteVersion = normalizeVersion(entry.remoteVersion);
+    const etag = normalizeHeaderValue(entry.etag);
+    const lastModified = normalizeHeaderValue(entry.lastModified);
+
+    if (!remoteVersion && !etag && !lastModified) {
+      return null;
+    }
+
+    return {
+      remoteVersion,
+      etag,
+      lastModified,
+    };
+  }
+
+
+  function normalizeValidatorsMap(values) {
+    if (!values || typeof values !== "object") {
+      return {};
+    }
+
+    return Object.keys(values).reduce((result, sourceUrl) => {
+      const normalizedSourceUrl = String(sourceUrl || "").trim();
+      if (!normalizedSourceUrl) {
+        return result;
+      }
+
+      const normalizedEntry = normalizeValidatorEntry(values[sourceUrl]);
+      if (!normalizedEntry) {
+        return result;
+      }
+
+      result[normalizedSourceUrl] = normalizedEntry;
+      return result;
+    }, {});
+  }
+
+
+  function mergeValidatorEntry(validators, sourceUrl, nextEntry) {
+    const normalizedSourceUrl = String(sourceUrl || "").trim();
+    const nextValidators = {
+      ...normalizeValidatorsMap(validators),
+    };
+
+    if (!normalizedSourceUrl) {
+      return nextValidators;
+    }
+
+    const normalizedEntry = normalizeValidatorEntry(nextEntry);
+    if (!normalizedEntry) {
+      delete nextValidators[normalizedSourceUrl];
+      return nextValidators;
+    }
+
+    nextValidators[normalizedSourceUrl] = normalizedEntry;
+    return nextValidators;
+  }
+
+
+  function getResponseHeader(response, headerName) {
+    const normalizedHeaderName = String(headerName || "").trim().toLowerCase();
+    if (!normalizedHeaderName) {
+      return "";
+    }
+
+    if (typeof response?.headers?.get === "function") {
+      return normalizeHeaderValue(response.headers.get(headerName));
+    }
+
+    if (response?.headers && typeof response.headers === "object") {
+      const matchingKey = Object.keys(response.headers).find((key) => {
+        return String(key || "").trim().toLowerCase() === normalizedHeaderName;
+      });
+      if (matchingKey) {
+        return normalizeHeaderValue(response.headers[matchingKey]);
+      }
+    }
+
+    return "";
+  }
+
+
+  function createBaseUpdateStatus(installedVersion, capable) {
+    return {
+      capable: Boolean(capable),
+      status: "idle",
+      installedVersion: normalizeVersion(installedVersion),
+      remoteVersion: "",
+      available: false,
+      checkedAt: 0,
+      sourceUrl: "",
+      downloadUrl: USERSCRIPT_DOWNLOAD_URL,
+      error: "",
+      stale: false,
+      validators: {},
+    };
+  }
+
+
+  function safeParseJson(value) {
+    if (typeof value !== "string" || !value.trim()) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(value);
+    } catch (_) {
+      return null;
+    }
+  }
+
+
+  function getUpdateStorageRef(windowRef) {
+    const storageRef = windowRef?.localStorage || null;
+    if (!storageRef || typeof storageRef.getItem !== "function" || typeof storageRef.setItem !== "function") {
+      return null;
+    }
+    return storageRef;
+  }
+
+
+  function getUpdateFetchFn(windowRef) {
+    return typeof windowRef?.fetch === "function" ? windowRef.fetch.bind(windowRef) : null;
+  }
+
+
+  function parseVersionToken(token) {
+    const rawToken = String(token || "").trim();
+    if (!rawToken) {
+      return { type: "number", value: 0 };
+    }
+    if (/^\d+$/.test(rawToken)) {
+      return { type: "number", value: Number.parseInt(rawToken, 10) };
+    }
+    return { type: "string", value: rawToken.toLowerCase() };
+  }
+
+
+  function compareVersions(leftVersion, rightVersion) {
+    const leftParts = normalizeVersion(leftVersion).split(/[.-]/);
+    const rightParts = normalizeVersion(rightVersion).split(/[.-]/);
+    const length = Math.max(leftParts.length, rightParts.length);
+
+    for (let index = 0; index < length; index += 1) {
+      const leftToken = parseVersionToken(leftParts[index]);
+      const rightToken = parseVersionToken(rightParts[index]);
+
+      if (leftToken.type === rightToken.type) {
+        if (leftToken.value > rightToken.value) {
+          return 1;
+        }
+        if (leftToken.value < rightToken.value) {
+          return -1;
+        }
+        continue;
+      }
+
+      if (leftToken.type === "number") {
+        return 1;
+      }
+      return -1;
+    }
+
+    return 0;
+  }
+
+
+  function parseUserscriptVersion(text) {
+    const match = String(text || "").match(/@version\s+([^\s]+)/i);
+    return normalizeVersion(match?.[1] || "");
+  }
+
+
+  function buildCacheBustedUrl(sourceUrl, now = Date.now()) {
+    const normalizedSourceUrl = String(sourceUrl || "").trim();
+    if (!normalizedSourceUrl) {
+      return "";
+    }
+
+    const cacheBustValue = String(Math.max(0, Number(now) || 0));
+    try {
+      const parsed = new URL(normalizedSourceUrl);
+      parsed.searchParams.set(UPDATE_CACHE_BUST_PARAM, cacheBustValue);
+      return parsed.toString();
+    } catch (_) {
+      const separator = normalizedSourceUrl.includes("?") ? "&" : "?";
+      return `${normalizedSourceUrl}${separator}${UPDATE_CACHE_BUST_PARAM}=${encodeURIComponent(cacheBustValue)}`;
+    }
+  }
+
+
+  function createResolvedUpdateStatus({
+    capable,
+    installedVersion,
+    remoteVersion,
+    checkedAt,
+    sourceUrl,
+    error = "",
+    stale = false,
+    validators = {},
+  }) {
+    const baseStatus = createBaseUpdateStatus(installedVersion, capable);
+    const normalizedRemoteVersion = normalizeVersion(remoteVersion);
+    const comparison = normalizedRemoteVersion
+      ? compareVersions(normalizedRemoteVersion, baseStatus.installedVersion)
+      : 0;
+
+    return {
+      ...baseStatus,
+      status: normalizedRemoteVersion
+        ? (comparison > 0 ? "available" : "current")
+        : (error ? "error" : "idle"),
+      remoteVersion: normalizedRemoteVersion,
+      available: normalizedRemoteVersion ? comparison > 0 : false,
+      checkedAt: Number(checkedAt) > 0 ? Number(checkedAt) : 0,
+      sourceUrl: String(sourceUrl || "").trim(),
+      error: String(error || "").trim(),
+      stale: Boolean(stale),
+      validators: normalizeValidatorsMap(validators),
+    };
+  }
+
+
+  function readStoredUpdatePayload(storageRef) {
+    if (!storageRef) {
+      return null;
+    }
+
+    try {
+      return safeParseJson(storageRef.getItem(UPDATE_STATUS_STORAGE_KEY));
+    } catch (_) {
+      return null;
+    }
+  }
+
+
+  function writeStoredUpdatePayload(storageRef, payload) {
+    if (!storageRef) {
+      return;
+    }
+
+    try {
+      storageRef.setItem(UPDATE_STATUS_STORAGE_KEY, JSON.stringify({
+        remoteVersion: normalizeVersion(payload?.remoteVersion),
+        checkedAt: Number(payload?.checkedAt) > 0 ? Number(payload.checkedAt) : 0,
+        sourceUrl: String(payload?.sourceUrl || "").trim(),
+        validators: normalizeValidatorsMap(payload?.validators),
+      }));
+    } catch (_) {
+      // Ignore storage write failures.
+    }
+  }
+
+
+  async function fetchRemoteVersion(fetchFn, options = {}) {
+    const now = Number(options.now || Date.now());
+    const validators = normalizeValidatorsMap(options.validators);
+    const candidateUrls = [USERSCRIPT_UPDATE_URL, USERSCRIPT_DOWNLOAD_URL];
+    let lastError = null;
+    let nextValidators = validators;
+
+    for (const sourceUrl of candidateUrls) {
+      const requestUrl = buildCacheBustedUrl(sourceUrl, now);
+      const cachedValidator = validators[sourceUrl] || null;
+      const headers = {};
+
+      if (cachedValidator?.etag) {
+        headers["If-None-Match"] = cachedValidator.etag;
+      }
+      if (cachedValidator?.lastModified) {
+        headers["If-Modified-Since"] = cachedValidator.lastModified;
+      }
+
+      try {
+        const response = await fetchFn(requestUrl, {
+          method: "GET",
+          cache: "no-store",
+          ...(Object.keys(headers).length ? { headers } : {}),
+        });
+        const statusCode = Number(response?.status) || 0;
+        const responseEtag = getResponseHeader(response, "etag");
+        const responseLastModified = getResponseHeader(response, "last-modified");
+
+        if (statusCode === 304) {
+          const remoteVersion = normalizeVersion(cachedValidator?.remoteVersion);
+          if (!remoteVersion) {
+            throw new Error("Version nicht gefunden.");
+          }
+
+          nextValidators = mergeValidatorEntry(nextValidators, sourceUrl, {
+            remoteVersion,
+            etag: responseEtag || cachedValidator?.etag || "",
+            lastModified: responseLastModified || cachedValidator?.lastModified || "",
+          });
+
+          return {
+            remoteVersion,
+            sourceUrl,
+            validators: nextValidators,
+          };
+        }
+
+        if (!response || !response.ok) {
+          throw new Error(`HTTP ${statusCode}`);
+        }
+
+        const version = parseUserscriptVersion(await response.text());
+        if (version) {
+          nextValidators = mergeValidatorEntry(nextValidators, sourceUrl, {
+            remoteVersion: version,
+            etag: responseEtag,
+            lastModified: responseLastModified,
+          });
+
+          return {
+            remoteVersion: version,
+            sourceUrl,
+            validators: nextValidators,
+          };
+        }
+
+        throw new Error("Version nicht gefunden.");
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError || new Error("Versionsabgleich fehlgeschlagen.");
+  }
+
+
+  function readStoredUpdateStatus(options = {}) {
+    const windowRef = options.windowRef || window;
+    const installedVersion = normalizeVersion(options.installedVersion || APP_VERSION);
+    const storageRef = options.storageRef || getUpdateStorageRef(windowRef);
+    const capable = Boolean(options.fetchFn || getUpdateFetchFn(windowRef));
+    const storedPayload = readStoredUpdatePayload(storageRef);
+
+    if (!storedPayload || typeof storedPayload !== "object") {
+      return createBaseUpdateStatus(installedVersion, capable);
+    }
+
+    return createResolvedUpdateStatus({
+      capable,
+      installedVersion,
+      remoteVersion: storedPayload.remoteVersion,
+      checkedAt: storedPayload.checkedAt,
+      sourceUrl: storedPayload.sourceUrl,
+      validators: storedPayload.validators,
+    });
+  }
+
+
+  function shouldRefreshUpdateStatus(updateStatus, now = Date.now()) {
+    const checkedAt = Number(updateStatus?.checkedAt || 0);
+    if (checkedAt <= 0) {
+      return true;
+    }
+    return Number(now) - checkedAt >= UPDATE_CHECK_TTL_MS;
+  }
+
+
+  async function resolveLatestUpdateStatus(options = {}) {
+    const windowRef = options.windowRef || window;
+    const installedVersion = normalizeVersion(options.installedVersion || APP_VERSION);
+    const force = Boolean(options.force);
+    const now = Number(options.now || Date.now());
+    const fetchFn = options.fetchFn || getUpdateFetchFn(windowRef);
+    const storageRef = options.storageRef || getUpdateStorageRef(windowRef);
+    const cachedStatus = readStoredUpdateStatus({
+      windowRef,
+      installedVersion,
+      fetchFn,
+      storageRef,
+    });
+
+    if (!fetchFn) {
+      return cachedStatus;
+    }
+
+    if (!force && !shouldRefreshUpdateStatus(cachedStatus, now)) {
+      return cachedStatus;
+    }
+
+    try {
+      const remoteInfo = await fetchRemoteVersion(fetchFn, {
+        now,
+        validators: cachedStatus.validators,
+      });
+      const nextStatus = createResolvedUpdateStatus({
+        capable: true,
+        installedVersion,
+        remoteVersion: remoteInfo.remoteVersion,
+        checkedAt: now,
+        sourceUrl: remoteInfo.sourceUrl,
+        validators: remoteInfo.validators,
+      });
+      writeStoredUpdatePayload(storageRef, nextStatus);
+      return nextStatus;
+    } catch (error) {
+      const message = String(error?.message || "Update-Prüfung fehlgeschlagen.").trim();
+      if (cachedStatus.checkedAt > 0 && cachedStatus.remoteVersion) {
+        const staleStatus = {
+          ...cachedStatus,
+          error: message,
+          stale: true,
+          checkedAt: now,
+        };
+        writeStoredUpdatePayload(storageRef, staleStatus);
+        return staleStatus;
+      }
+
+      const errorStatus = createResolvedUpdateStatus({
+        capable: true,
+        installedVersion,
+        remoteVersion: "",
+        checkedAt: now,
+        sourceUrl: "",
+        error: message,
+        validators: cachedStatus.validators,
+      });
+      writeStoredUpdatePayload(storageRef, errorStatus);
+      return errorStatus;
+    }
+  }
+
+
+  function isLoaderRuntimeActive(windowRef = window) {
+    return Boolean(windowRef?.[LOADER_GUARD_KEY]);
+  }
+
+
+  function openUserscriptInstall(windowRef = window) {
+    const installUrl = buildCacheBustedUrl(USERSCRIPT_DOWNLOAD_URL, Date.now()) || USERSCRIPT_DOWNLOAD_URL;
+    if (typeof windowRef?.open === "function") {
+      const openedWindow = windowRef.open(installUrl, "_blank", "noopener,noreferrer");
+      if (openedWindow && typeof openedWindow.focus === "function") {
+        openedWindow.focus();
+      }
+      return Boolean(openedWindow);
+    }
+
+    if (windowRef?.location) {
+      windowRef.location.href = installUrl;
+      return true;
+    }
+
+    return false;
+  }
+
+
+  function reloadForLoaderUpdate(windowRef = window) {
+    if (typeof windowRef?.location?.reload === "function") {
+      windowRef.location.reload();
+      return true;
+    }
+    return false;
   }
 
   // Source of truth for shipped presets:
@@ -3143,6 +3629,213 @@
     return { ok: true, changed: true };
   }
 
+// Presentation layer: UI rendering and interaction wiring.
+  function getReadmeStatusMessageDoc(message) {
+    const text = normalizeText(message || "");
+    if (!text) {
+      return null;
+    }
+
+    const exact = (value) => text === value;
+    const prefix = (value) => text.startsWith(value);
+    const statusDocs = [
+      { anchor: "statusmeldung-api-auth-fehlt", match: () => exact("API Auth fehlt") || exact("Kein Autodarts-Token gefunden. Bitte einloggen und Seite neu laden.") || exact("Kein Auth-Token gefunden. Bitte neu einloggen.") || exact("Auto-Sync pausiert: kein Auth-Token gefunden. Bitte neu einloggen.") },
+      { anchor: "statusmeldung-api-auth-abgelaufen", match: () => exact("API Auth abgelaufen") || exact("Auth abgelaufen.") || exact("Auth abgelaufen. Bitte neu einloggen.") || exact("Auto-Sync pausiert: Auth abgelaufen. Bitte neu einloggen.") },
+      { anchor: "statusmeldung-api-auth-bereit", match: () => exact("API Auth bereit") },
+      { anchor: "statusmeldung-board-aktiv", match: () => prefix("Board aktiv (") },
+      { anchor: "statusmeldung-board-id-ungueltig", match: () => prefix("Board-ID ungültig (") || prefix("Board-ID ist ungültig (") },
+      { anchor: "statusmeldung-kein-aktives-board", match: () => exact("Kein aktives Board") || exact("Board-ID fehlt. Bitte einmal manuell eine Lobby öffnen und Board auswählen.") },
+      { anchor: "statusmeldung-auto-lobby-on", match: () => exact("Auto-Lobby ON") },
+      { anchor: "statusmeldung-auto-lobby-off", match: () => exact("Auto-Lobby OFF") || exact("Auto-Lobby ist deaktiviert.") || exact("Auto-Lobby ist deaktiviert. Bitte im Tab Einstellungen aktivieren.") || exact("Auto-Lobby ist deaktiviert. Aktivieren Sie die Funktion im Tab Einstellungen.") },
+      { anchor: "statusmeldung-runtime-hinweis-api-voraussetzungen", match: () => exact("Hinweis: Für API-Halbautomatik werden Auth-Token und aktives Board benötigt.") },
+      { anchor: "statusmeldung-freilos-bye-kein-api-sync-erforderlich", match: () => exact("Freilos (Bye): kein API-Sync erforderlich") },
+      { anchor: "statusmeldung-api-sync-abgeschlossen", match: () => exact("API-Sync: abgeschlossen") },
+      { anchor: "statusmeldung-api-sync-aktiv", match: () => prefix("API-Sync: aktiv (Lobby ") },
+      { anchor: "statusmeldung-api-sync-fehler", match: () => prefix("API-Sync: Fehler") || prefix("Auto-Sync Fehler bei ") || prefix("Matchstart fehlgeschlagen: ") || prefix("Letzter Sync-Fehler: ") || exact("Match ist im Fehlerstatus.") || exact("Gewinner konnte nicht eindeutig zugeordnet werden.") || exact("Auto-Sync konnte Ergebnis nicht speichern.") },
+      { anchor: "statusmeldung-api-sync-nicht-gestartet", match: () => exact("API-Sync: nicht gestartet") },
+      { anchor: "statusmeldung-match-nicht-verfuegbar", match: () => exact("Match nicht verfügbar.") },
+      { anchor: "statusmeldung-match-bereits-abgeschlossen", match: () => exact("Match ist bereits abgeschlossen.") },
+      { anchor: "statusmeldung-paarung-steht-noch-nicht-fest", match: () => exact("Paarung steht noch nicht fest.") },
+      { anchor: "statusmeldung-vorgaenger-match-muss-zuerst-abgeschlossen-werden", match: () => prefix("Vorgänger-Match Runde ") },
+      { anchor: "statusmeldung-ergebnis-bereits-im-turnier-gespeichert", match: () => exact("Ergebnis bereits im Turnier gespeichert.") || exact("Ergebnis war bereits übernommen.") },
+      { anchor: "statusmeldung-kein-eindeutiger-statistik-host", match: () => exact("Kein eindeutiger Statistik-Host für diese Lobby auf der History-Seite gefunden.") },
+      { anchor: "statusmeldung-statistik-host-konnte-nicht-zugeordnet-werden", match: () => exact("Statistik-Host konnte nicht auf einen Kartenbereich zugeordnet werden.") },
+      { anchor: "statusmeldung-mehrdeutiger-statistik-host", match: () => exact("Mehrdeutiger Statistik-Host: Mehrere passende Bereiche auf der Seite gefunden.") || exact("Statistik-Bereich ist nicht eindeutig. Import ist gesperrt.") },
+      { anchor: "statusmeldung-keine-eindeutige-statistik-tabelle", match: () => exact("Im erkannten Statistik-Bereich wurde keine eindeutige Tabelle gefunden.") },
+      { anchor: "statusmeldung-mehrere-statistik-tabellen", match: () => exact("Im Statistik-Bereich wurden mehrere Tabellen gefunden. Import wurde aus Sicherheitsgründen gestoppt.") },
+      { anchor: "statusmeldung-leg-abweichung-bestaetigung-erforderlich", match: () => prefix("Leg-Abweichung erkannt: Statistik ") || prefix("Leg-Abweichung erkannt. Bitte Übernahme ") || exact("Explizite Bestätigung erforderlich.") },
+      { anchor: "statusmeldung-bestaetigung-abgelaufen", match: () => exact("Bestätigung ist abgelaufen. Bitte den Import erneut starten.") },
+      { anchor: "statusmeldung-bestaetigung-ungueltig", match: () => exact("Bestätigung ist ungültig. Bitte den Import erneut starten.") || exact("Bestätigung passt nicht mehr zur aktuellen Statistik. Bitte erneut bestätigen.") },
+      { anchor: "statusmeldung-statistik-api-fallback", match: () => exact("Statistik konnte nicht vollständig gelesen werden. Beim Klick wird API-Fallback genutzt.") },
+      { anchor: "statusmeldung-import-bereit-sieger-laut-statistik", match: () => prefix("Import bereit. Sieger laut Statistik: ") },
+      { anchor: "statusmeldung-match-verknuepft-ergebnis-kann-jetzt-gespeichert-werden", match: () => exact("Match verknüpft. Ergebnis kann jetzt übernommen werden.") },
+      { anchor: "statusmeldung-kein-direkt-verknuepftes-match-gefunden", match: () => exact("Kein direkt verknüpftes Match gefunden. Ergebnisübernahme versucht Zuordnung über die Statistik.") },
+      { anchor: "statusmeldung-keine-lobby-id-erkannt", match: () => exact("Keine Lobby-ID erkannt.") || exact("Keine Lobby-ID vorhanden.") },
+      { anchor: "statusmeldung-mehrdeutige-zuordnung-lobby", match: () => exact("Mehrdeutige Zuordnung: mehrere offene Turnier-Matches passen zur Lobby. Bitte in der Ergebnisführung manuell speichern.") },
+      { anchor: "statusmeldung-kein-offenes-turnier-match-fuer-diese-lobby-gefunden", match: () => exact("Kein offenes Turnier-Match für diese Lobby gefunden.") },
+      { anchor: "statusmeldung-kein-offenes-turnier-match-aus-lobby-id-oder-statistik-spielern-gefunden", match: () => exact("Kein offenes Turnier-Match aus Lobby-ID oder Statistik-Spielern gefunden.") },
+      { anchor: "statusmeldung-api-ergebnis-noch-nicht-final-verfuegbar", match: () => exact("API-Ergebnis ist noch nicht final verfügbar.") || exact("Match-Stats noch nicht verfügbar.") || exact("Noch kein finales Ergebnis verfügbar. Match läuft ggf. noch.") },
+      { anchor: "statusmeldung-ergebnis-importiert", match: () => exact("Ergebnis übernommen.") || exact("Ergebnis wurde aus der Match-Statistik übernommen.") || prefix("Ergebnis übernommen. Legs wurden nach bestätigter Abweichung auf First to ") || exact("Ergebnis wurde in xLokales Turnier übernommen.") },
+      { anchor: "statusmeldung-mehrdeutige-zuordnung-statistik-spieler", match: () => exact("Mehrdeutige Zuordnung: mehrere offene Turnier-Matches passen zu diesen Spielern.") },
+      { anchor: "statusmeldung-sieger-konnte-aus-der-statistik-nicht-eindeutig-bestimmt-werden", match: () => exact("Sieger konnte aus der Statistik nicht eindeutig bestimmt werden.") },
+      { anchor: "statusmeldung-ergebnis-konnte-nicht-aus-der-statistik-gespeichert-werden", match: () => exact("Ergebnis konnte nicht aus der Statistik gespeichert werden.") },
+    ];
+
+    const match = statusDocs.find((entry) => entry.match());
+    if (!match) {
+      return null;
+    }
+
+    return {
+      href: `${README_BASE_URL}#${match.anchor}`,
+      title: `README: ${text}`,
+    };
+  }
+
+
+  function renderDocLinkableMessage(message, options = {}) {
+    const text = normalizeText(message || "");
+    if (!text) {
+      return "";
+    }
+
+    const tagName = normalizeToken(options.tagName || "span") || "span";
+    const className = normalizeText(options.className || "");
+    const attributes = normalizeText(options.attributes || "");
+    const fallbackTitle = normalizeText(options.title || "");
+    const doc = getReadmeStatusMessageDoc(text);
+    const attributeHtml = attributes ? ` ${attributes}` : "";
+    const classHtml = className ? ` class="${escapeHtml(className)}"` : "";
+    const titleText = doc ? (doc.title || fallbackTitle) : fallbackTitle;
+    const titleHtml = titleText ? ` title="${escapeHtml(titleText)}"` : "";
+
+    if (!doc) {
+      return `<${tagName}${classHtml}${titleHtml}${attributeHtml}>${escapeHtml(text)}</${tagName}>`;
+    }
+
+    const linkClassName = normalizeText(`${className} ata-doc-linkable`);
+    return `<a class="${escapeHtml(linkClassName)}" href="${escapeHtml(doc.href)}" target="_blank" rel="noopener noreferrer" data-doc-link="1"${titleHtml}${attributeHtml}>${escapeHtml(text)}</a>`;
+  }
+
+  function renderInfoLinks(links) {
+    if (!Array.isArray(links) || !links.length) {
+      return "";
+    }
+
+    const linksHtml = links
+      .map((entry) => {
+        const href = String(entry?.href || "").trim();
+        if (!href) {
+          return "";
+        }
+        const kind = normalizeToken(entry?.kind || "tech");
+        const isRuleLink = kind === "rule" || kind === "rules" || kind === "regel";
+        const symbol = isRuleLink ? "§" : "ⓘ";
+        const className = isRuleLink
+          ? "ata-help-link ata-help-link-rule"
+          : "ata-help-link ata-help-link-tech";
+        const label = normalizeText(entry?.label) || "Mehr Informationen";
+        const title = normalizeText(entry?.title) || label;
+        return `
+          <a
+            class="${className}"
+            href="${escapeHtml(href)}"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="${escapeHtml(label)}"
+            title="${escapeHtml(title)}"
+          >${symbol}</a>
+        `;
+      })
+      .filter(Boolean)
+      .join("");
+
+    if (!linksHtml) {
+      return "";
+    }
+
+    return `<span class="ata-help-links">${linksHtml}</span>`;
+  }
+
+
+  function renderSectionHeading(title, links = []) {
+    return `
+      <div class="ata-heading-row">
+        <h3>${escapeHtml(title)}</h3>
+        ${renderInfoLinks(links)}
+      </div>
+    `;
+  }
+
+
+  function formatDurationMinutes(value) {
+    const totalMinutes = Math.max(0, Math.round(Number(value) || 0));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours <= 0) {
+      return `${minutes}m`;
+    }
+    if (minutes === 0) {
+      return `${hours}h`;
+    }
+    return `${hours}h ${minutes}m`;
+  }
+
+
+  function formatDurationDecimal(value, digits = 1) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return `0,${"0".repeat(Math.max(0, digits))}`;
+    }
+    return numeric.toFixed(digits).replace(".", ",");
+  }
+
+
+  function renderTournamentDurationEstimate(estimate) {
+    const helpLinks = renderInfoLinks([
+      { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erkl\u00e4rung zur Turnierzeit-Prognose \u00f6ffnen", title: "README: Turnier anlegen" },
+      { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen f\u00fcr das Zeitprofil \u00f6ffnen", title: "README: Einstellungen" },
+    ]);
+    const estimateReason = normalizeText(estimate?.reason || "");
+
+    if (!estimate?.ready) {
+      return `
+        <section class="ata-estimate-card ata-estimate-card-pending">
+          <div class="ata-estimate-head">
+            <strong>Voraussichtliche Turnierzeit</strong>
+            ${helpLinks}
+          </div>
+          <div class="ata-estimate-value ata-estimate-value-pending">Noch nicht berechenbar</div>
+          <p class="ata-small">${escapeHtml(estimateReason || "Die Sch\u00e4tzung startet, sobald die Konfiguration f\u00fcr den gew\u00e4hlten Modus g\u00fcltig ist.")}</p>
+          <p class="ata-small">Annahme: Single-Board-Flow auf einem Board.</p>
+        </section>
+      `;
+    }
+
+    const setupSummary = `${estimate.x01.baseScore}, ${estimate.x01.inMode} In, ${estimate.x01.outMode} Out, Bull-off ${estimate.x01.bullOffMode}, Best of ${estimate.bestOfLegs}`;
+
+    return `
+      <section class="ata-estimate-card">
+        <div class="ata-estimate-head">
+          <strong>Voraussichtliche Turnierzeit</strong>
+          ${helpLinks}
+        </div>
+        <div class="ata-estimate-value">ca. ${escapeHtml(formatDurationMinutes(estimate.likelyMinutes))}</div>
+        <div class="ata-estimate-meta">
+          <span>${escapeHtml(String(estimate.participantCount))} Teilnehmer</span>
+          <span>${escapeHtml(String(estimate.matchCount))} Spiele</span>
+          <span>Durchschnitt ${escapeHtml(formatDurationDecimal(estimate.matchMinutes))} min/Spiel</span>
+          <span>Profil ${escapeHtml(estimate.profile.label)}</span>
+        </div>
+        <div class="ata-estimate-range">
+          Realistisch: ${escapeHtml(formatDurationMinutes(estimate.lowMinutes))} - ${escapeHtml(formatDurationMinutes(estimate.highMinutes))}
+        </div>
+        <p class="ata-small">${escapeHtml(estimate.profile.description)}</p>
+        <p class="ata-small">Basis: ${escapeHtml(setupSummary)}.</p>
+      </section>
+    `;
+  }
+
   const __ATA_TEST_REGISTRY = [];
 
 
@@ -3727,6 +4420,248 @@ test("Preset migration: stored legacy tournament preset ids stay backward compat
   assertEqual(tournament.bestOfLegs, 5);
 });
 
+  function createFakeStorage(initialValues = {}) {
+    const values = { ...initialValues };
+    return {
+      getItem(key) {
+        return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : null;
+      },
+      setItem(key, value) {
+        values[key] = String(value);
+      },
+      dump() {
+        return cloneSerializable(values);
+      },
+    };
+  }
+
+
+  function createFakeWindow(options = {}) {
+    const openedUrls = [];
+    const windowRef = {
+      localStorage: options.localStorage || createFakeStorage(),
+      location: {
+        href: "",
+        reloadCalled: false,
+        reload() {
+          this.reloadCalled = true;
+        },
+      },
+      open(url) {
+        openedUrls.push(String(url || ""));
+        return {
+          focus() {},
+        };
+      },
+      __openedUrls: openedUrls,
+    };
+    if (typeof options.fetch === "function") {
+      windowRef.fetch = options.fetch;
+    }
+    if (options.loaderActive) {
+      windowRef[LOADER_GUARD_KEY] = true;
+    }
+    return windowRef;
+  }
+
+
+  function buildUserscriptMeta(version) {
+    return `// ==UserScript==
+// @name         Autodarts Tournament Assistant
+// @version      ${version}
+// ==/UserScript==
+`;
+  }
+
+
+  function getUrlWithoutQuery(url) {
+    const parsed = new URL(String(url || ""));
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString();
+  }
+
+
+  function createHeaders(values = {}) {
+    const normalized = Object.entries(values).reduce((result, [key, value]) => {
+      result[String(key || "").toLowerCase()] = String(value || "");
+      return result;
+    }, {});
+
+    return {
+      get(name) {
+        return normalized[String(name || "").toLowerCase()] || null;
+      },
+    };
+  }
+
+
+  test("update check adds cache-busting query to meta request", async () => {
+    const requests = [];
+    const windowRef = createFakeWindow({
+      fetch: async (url, options = {}) => {
+        requests.push({ url: String(url || ""), options });
+        return {
+          ok: true,
+          status: 200,
+          async text() {
+            return buildUserscriptMeta("0.3.9");
+          },
+        };
+      },
+    });
+
+    const now = 1_770_300_000_000;
+    const status = await resolveLatestUpdateStatus({
+      windowRef,
+      installedVersion: "0.3.8",
+      force: true,
+      now,
+    });
+
+    assertEqual(status.available, true);
+    assertEqual(status.remoteVersion, "0.3.9");
+    assertEqual(requests.length, 1);
+    assertEqual(getUrlWithoutQuery(requests[0].url), USERSCRIPT_UPDATE_URL);
+    assertEqual(new URL(requests[0].url).searchParams.get(UPDATE_CACHE_BUST_PARAM), String(now));
+    assertEqual(requests[0].options.cache, "no-store");
+  });
+
+
+  test("update check falls back from meta url to userscript url", async () => {
+    const requests = [];
+    const windowRef = createFakeWindow({
+      fetch: async (url) => {
+        requests.push(String(url || ""));
+        if (requests.length === 1) {
+          throw new Error("network down");
+        }
+        return {
+          ok: true,
+          status: 200,
+          async text() {
+            return buildUserscriptMeta("0.4.0");
+          },
+        };
+      },
+    });
+
+    const now = 1_770_300_123_456;
+    const status = await resolveLatestUpdateStatus({
+      windowRef,
+      installedVersion: "0.3.8",
+      force: true,
+      now,
+    });
+
+    assertEqual(status.available, true);
+    assertEqual(status.remoteVersion, "0.4.0");
+    assertEqual(status.sourceUrl, USERSCRIPT_DOWNLOAD_URL);
+    assertEqual(requests.length, 2);
+    assertEqual(getUrlWithoutQuery(requests[0]), USERSCRIPT_UPDATE_URL);
+    assertEqual(getUrlWithoutQuery(requests[1]), USERSCRIPT_DOWNLOAD_URL);
+  });
+
+
+  test("update check reuses cached validator version on 304", async () => {
+    const localStorage = createFakeStorage({
+      [UPDATE_STATUS_STORAGE_KEY]: JSON.stringify({
+        remoteVersion: "0.4.1",
+        checkedAt: 0,
+        sourceUrl: USERSCRIPT_UPDATE_URL,
+        validators: {
+          [USERSCRIPT_UPDATE_URL]: {
+            remoteVersion: "0.4.1",
+            etag: "\"etag-1\"",
+            lastModified: "Mon, 01 Jan 2024 00:00:00 GMT",
+          },
+        },
+      }),
+    });
+    const requests = [];
+    const windowRef = createFakeWindow({
+      localStorage,
+      fetch: async (url, options = {}) => {
+        requests.push({ url: String(url || ""), options });
+        return {
+          ok: false,
+          status: 304,
+          headers: createHeaders({
+            etag: "\"etag-1\"",
+            "last-modified": "Mon, 01 Jan 2024 00:00:00 GMT",
+          }),
+          async text() {
+            return "";
+          },
+        };
+      },
+    });
+
+    const status = await resolveLatestUpdateStatus({
+      windowRef,
+      installedVersion: "0.4.0",
+      force: true,
+      now: 1_770_301_000_000,
+    });
+
+    assertEqual(status.available, true);
+    assertEqual(status.remoteVersion, "0.4.1");
+    assertEqual(requests.length, 1);
+    assertEqual(requests[0].options.headers["If-None-Match"], "\"etag-1\"");
+    assertEqual(requests[0].options.headers["If-Modified-Since"], "Mon, 01 Jan 2024 00:00:00 GMT");
+  });
+
+
+  test("update check throttles repeated failed checks inside ttl", async () => {
+    let callCount = 0;
+    const windowRef = createFakeWindow({
+      fetch: async () => {
+        callCount += 1;
+        throw new Error("network down");
+      },
+    });
+
+    const firstNow = 1_770_302_000_000;
+    const firstStatus = await resolveLatestUpdateStatus({
+      windowRef,
+      installedVersion: "0.3.8",
+      force: true,
+      now: firstNow,
+    });
+    const callsAfterFirstAttempt = callCount;
+    const secondStatus = await resolveLatestUpdateStatus({
+      windowRef,
+      installedVersion: "0.3.8",
+      force: false,
+      now: firstNow + 10_000,
+    });
+
+    assertEqual(firstStatus.status, "error");
+    assertEqual(secondStatus.checkedAt, firstNow);
+    assertEqual(callCount, callsAfterFirstAttempt);
+  });
+
+
+  test("update actions support direct install and loader reload", () => {
+    const directWindow = createFakeWindow();
+    const loaderWindow = createFakeWindow({ loaderActive: true });
+    const originalNow = Date.now;
+    Date.now = () => 1_770_300_999_000;
+
+    try {
+      assertEqual(openUserscriptInstall(directWindow), true);
+      assertEqual(reloadForLoaderUpdate(loaderWindow), true);
+    } finally {
+      Date.now = originalNow;
+    }
+
+    const installUrl = String(directWindow.__openedUrls[0] || "");
+    assertEqual(getUrlWithoutQuery(installUrl), USERSCRIPT_DOWNLOAD_URL);
+    assertEqual(new URL(installUrl).searchParams.get(UPDATE_CACHE_BUST_PARAM), "1770300999000");
+    assertEqual(loaderWindow.location.reloadCalled, true);
+    assertEqual(isLoaderRuntimeActive(loaderWindow), true);
+  });
+
 test("Tournament duration: default store uses normal profile", () => {
   const store = createDefaultStore();
   assertEqual(store.settings.tournamentTimeProfile, TOURNAMENT_TIME_PROFILE_NORMAL);
@@ -4069,6 +5004,49 @@ test("Tournament duration: invalid participant count stays pending", () => {
     const rows = standingsForMatches(tournament, tournament.matches, ["A", "B", "C"]);
     const blocked = rows.filter((row) => row.tiebreakState === "playoff_required");
     assertEqual(blocked.length, 3);
+  });
+
+  test("README-Statuslinks: exakte Meldungen werden auf die richtige README-Stelle abgebildet", () => {
+    const authDoc = getReadmeStatusMessageDoc("API Auth fehlt");
+    assert(Boolean(authDoc), "Dokulink fuer API Auth fehlt erwartet.");
+    assertEqual(authDoc.href, `${README_BASE_URL}#statusmeldung-api-auth-fehlt`);
+
+    const boardDoc = getReadmeStatusMessageDoc("Kein aktives Board");
+    assert(Boolean(boardDoc), "Dokulink fuer Kein aktives Board erwartet.");
+    assertEqual(boardDoc.href, `${README_BASE_URL}#statusmeldung-kein-aktives-board`);
+  });
+
+
+  test("README-Statuslinks: dynamische Praefixe werden erkannt", () => {
+    const boardDoc = getReadmeStatusMessageDoc("Board aktiv (abc1234...xyz789)");
+    assert(Boolean(boardDoc), "Dokulink fuer Board aktiv erwartet.");
+    assertEqual(boardDoc.href, `${README_BASE_URL}#statusmeldung-board-aktiv`);
+
+    const syncDoc = getReadmeStatusMessageDoc("API-Sync: aktiv (Lobby lobby-42)");
+    assert(Boolean(syncDoc), "Dokulink fuer aktiven API-Sync erwartet.");
+    assertEqual(syncDoc.href, `${README_BASE_URL}#statusmeldung-api-sync-aktiv`);
+
+    const predecessorDoc = getReadmeStatusMessageDoc("Vorgänger-Match Runde 2 / Spiel 1 muss zuerst abgeschlossen werden.");
+    assert(Boolean(predecessorDoc), "Dokulink fuer blockierendes Vorgaenger-Match erwartet.");
+    assertEqual(predecessorDoc.href, `${README_BASE_URL}#statusmeldung-vorgaenger-match-muss-zuerst-abgeschlossen-werden`);
+  });
+
+
+  test("README-Statuslinks: renderDocLinkableMessage rendert Links nur fuer dokumentierte Meldungen", () => {
+    const linked = renderDocLinkableMessage("API Auth fehlt", {
+      tagName: "span",
+      className: "ata-status-pill",
+    });
+    assert(linked.includes("<a "), "Dokumentierte Meldung sollte als Link gerendert werden.");
+    assert(linked.includes('href="https://github.com/thomasasen/autodarts_local_tournament/blob/main/README.md#statusmeldung-api-auth-fehlt"'));
+    assert(linked.includes('class="ata-status-pill ata-doc-linkable"'));
+
+    const plain = renderDocLinkableMessage("Unbekannte Kurzmeldung", {
+      tagName: "div",
+      className: "ata-note",
+    });
+    assert(plain.includes("<div"), "Undokumentierte Meldung sollte als Fallback-Tag gerendert werden.");
+    assert(!plain.includes("<a "), "Undokumentierte Meldung darf kein Link sein.");
   });
 
   runRegisteredTests()

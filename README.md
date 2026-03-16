@@ -2,6 +2,8 @@
 
 Lokales Turniermanagement direkt in `https://play.autodarts.io` als Userscript.
 
+[![Installieren](https://img.shields.io/badge/Installieren-Autodarts%20Tournament%20Assistant%20Loader-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js)
+
 Der Assistent erweitert die Autodarts-Oberfläche um einen eigenen Bereich für:
 - Turnieranlage (KO, Liga, Gruppenphase + KO)
 - Ergebnisführung
@@ -11,7 +13,7 @@ Der Assistent erweitert die Autodarts-Oberfläche um einen eigenen Bereich für:
 
 ## Inhalt
 1. [Dokumentation](#dokumentation)
-2. [Schnellstart (empfohlen)](#schnellstart-empfohlen)
+2. [Installation](#installation)
 3. [Erste Orientierung in Autodarts](#erste-orientierung-in-autodarts)
 4. [Funktionen](#funktionen)
 5. [Turniermodi](#turniermodi)
@@ -40,24 +42,24 @@ Zusätzliche Detaildoku zur Zeitberechnung: [docs/tournament-duration.md](docs/t
 | [docs/dra-regeln-gui.md](docs/dra-regeln-gui.md) | GUI-bezogene Regelerklärungen für Info-/Regel-Links in der Oberfläche | Nutzer / Turnierleitung / Entwickler |
 | [docs/changelog.md](docs/changelog.md) | Historie der Releases und Funktionsänderungen | Nutzer / Entwickler |
 
-## Schnellstart (empfohlen)
-Installationsablauf im Stil von "Schnellstart (empfohlen)" aus den Theme-Skripten:
+## Installation
+1. Tampermonkey installieren: [tampermonkey.net](https://www.tampermonkey.net/)
+2. Oben auf `Installieren` klicken.
+3. Die Installation in Tampermonkey bestätigen.
+4. `https://play.autodarts.io` neu laden.
+5. Links im Menü **xLokales Turnier** öffnen.
 
-1. Tampermonkey im Browser installieren.
-2. Loader installieren (empfohlen):
-   - `https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js`
-3. `https://play.autodarts.io` neu laden.
-4. Im linken Menü auf **xLokales Turnier** klicken.
+Empfohlen ist die Installation über den Loader:
 
-Falls Tampermonkey nicht in `play.autodarts.io` injiziert:
-- Tampermonkey-FAQ: https://www.tampermonkey.net/faq.php#Q209
+[![ATA Loader installieren](https://img.shields.io/badge/ATA%20Loader-installieren-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js)
 
-Alternative ohne Loader (direkt das Runtime-Skript):
-- `https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/dist/autodarts-tournament-assistant.user.js`
+Alternative ohne Loader:
+- Direktes Runtime-Skript: [autodarts-tournament-assistant.user.js](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.user.js)
 
-Hinweis zum Update-Verhalten:
-- Bei direkter Runtime-Installation zeigt der Tab `Einstellungen` eine GitHub-Update-Prüfung mit Install-Button.
-- Bei Loader-Installation reicht bei neuer GitHub-Version ein Reload von `play.autodarts.io`; der Loader lädt dann die neue Runtime.
+Wichtiger Hinweis nach der Installation:
+- Bei Loader-Installation reicht für Updates ein Reload von `play.autodarts.io`.
+- Bei direkter Runtime-Installation erscheint im Tab `Einstellungen` eine GitHub-Update-Prüfung mit `Update installieren`.
+- Falls Tampermonkey nicht in `play.autodarts.io` injiziert, siehe [Tampermonkey FAQ](https://www.tampermonkey.net/faq.php#Q209).
 
 ![Sidebar-Eintrag xLokales Turnier](assets/ss_autodarts-menu-xLokales-Turnier.png)
 
