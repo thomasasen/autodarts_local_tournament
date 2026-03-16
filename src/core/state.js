@@ -36,6 +36,7 @@
       authTokenSource: "",
       authRefreshPromise: null,
       authHeaderCaptureInstalled: false,
+      authHeaderBridgeInjected: false,
     },
     matchReturnShortcut: {
       root: null,

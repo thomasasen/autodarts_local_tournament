@@ -1083,6 +1083,36 @@
     }
 
     try {
+      const previousToken = state.apiAutomation.authToken;
+      const previousSource = state.apiAutomation.authTokenSource;
+      const previousExpiry = state.apiAutomation.authTokenExpiresAt;
+      try {
+        cacheResolvedAuthToken("", "");
+        installRuntimeAuthHeaderCapture();
+        window.dispatchEvent(new CustomEvent("ata:auth-header-captured", {
+          detail: {
+            token: "bridge.token.capture",
+            source: "selftest:bridge",
+            requestUrl: `${API_GS_BASE}/lobbies`,
+          },
+        }));
+        const snapshot = getAuthStateSnapshot();
+        record(
+          "API Auth: Page-Bridge-Event wird als Runtime-Token übernommen",
+          snapshot.hasCachedToken === true
+            && state.apiAutomation.authTokenSource === "selftest:bridge",
+          `hasCache=${snapshot.hasCachedToken}, source=${state.apiAutomation.authTokenSource || "-"}`,
+        );
+      } finally {
+        state.apiAutomation.authToken = previousToken || "";
+        state.apiAutomation.authTokenSource = previousSource || "";
+        state.apiAutomation.authTokenExpiresAt = Number(previousExpiry || 0);
+      }
+    } catch (error) {
+      record("API Auth: Page-Bridge-Event wird als Runtime-Token übernommen", false, String(error?.message || error));
+    }
+
+    try {
       const previousRefreshToken = localStorage.getItem("autodarts_refresh_token");
       const previousCachedToken = state.apiAutomation.authToken;
       const previousCachedExpiry = state.apiAutomation.authTokenExpiresAt;

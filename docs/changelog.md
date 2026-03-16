@@ -9,6 +9,7 @@
   - Matchstart wird bei doppelten Teilnehmernamen bereits in der UI als nicht API-tauglich blockiert.
   - Auth-Fallback erweitert: wenn kein `Authorization`-Cookie vorhanden ist, wird ein Access-Token aus `autodarts_refresh_token` via `POST /auth/v1/refresh` geholt und gecacht.
   - zusätzlicher Auth-Fallback: wenn Cookie/Refresh fehlen, wird ein Bearer-Token aus laufenden `api.autodarts.io`-Request-Headern erkannt und als Runtime-Cache genutzt.
+  - Auth-Header-Capture läuft jetzt über eine isolierte Page-Bridge statt direkter Userscript-Prototyp-Patches, damit die reguläre Autodarts-Matchanlage stabil bleibt.
 - Runtime-Update-Pfad aus `autodarts-xconfig` technisch übernommen:
   - neue GitHub-Update-Erkennung im Tab `Einstellungen` mit gecachtem Versionsstatus, TTL und manuellem Recheck
   - `.meta.js`-Artefakt für leichtgewichtigen Versionsabgleich ergänzt

@@ -1793,6 +1793,7 @@
       authTokenSource: "",
       authRefreshPromise: null,
       authHeaderCaptureInstalled: false,
+      authHeaderBridgeInjected: false,
     },
     matchReturnShortcut: {
       root: null,
@@ -7812,6 +7813,36 @@
     }
 
     try {
+      const previousToken = state.apiAutomation.authToken;
+      const previousSource = state.apiAutomation.authTokenSource;
+      const previousExpiry = state.apiAutomation.authTokenExpiresAt;
+      try {
+        cacheResolvedAuthToken("", "");
+        installRuntimeAuthHeaderCapture();
+        window.dispatchEvent(new CustomEvent("ata:auth-header-captured", {
+          detail: {
+            token: "bridge.token.capture",
+            source: "selftest:bridge",
+            requestUrl: `${API_GS_BASE}/lobbies`,
+          },
+        }));
+        const snapshot = getAuthStateSnapshot();
+        record(
+          "API Auth: Page-Bridge-Event wird als Runtime-Token übernommen",
+          snapshot.hasCachedToken === true
+            && state.apiAutomation.authTokenSource === "selftest:bridge",
+          `hasCache=${snapshot.hasCachedToken}, source=${state.apiAutomation.authTokenSource || "-"}`,
+        );
+      } finally {
+        state.apiAutomation.authToken = previousToken || "";
+        state.apiAutomation.authTokenSource = previousSource || "";
+        state.apiAutomation.authTokenExpiresAt = Number(previousExpiry || 0);
+      }
+    } catch (error) {
+      record("API Auth: Page-Bridge-Event wird als Runtime-Token übernommen", false, String(error?.message || error));
+    }
+
+    try {
       const previousRefreshToken = localStorage.getItem("autodarts_refresh_token");
       const previousCachedToken = state.apiAutomation.authToken;
       const previousCachedExpiry = state.apiAutomation.authTokenExpiresAt;
@@ -8101,106 +8132,221 @@
   }
 
 
-  function installRuntimeAuthHeaderCapture() {
-    if (state.apiAutomation.authHeaderCaptureInstalled) {
+  const AUTH_HEADER_CAPTURE_EVENT_NAME = "ata:auth-header-captured";
+  const AUTH_HEADER_CAPTURE_DEFAULT_SOURCE = "request-header:bridge";
+  const AUTH_HEADER_CAPTURE_PAGE_FLAG = "__ataAuthHeaderBridgeInstalled";
+
+
+  function buildPageContextAuthHeaderBridgeScript() {
+    return `
+(() => {
+  const EVENT_NAME = ${JSON.stringify(AUTH_HEADER_CAPTURE_EVENT_NAME)};
+  const DEFAULT_SOURCE = ${JSON.stringify(AUTH_HEADER_CAPTURE_DEFAULT_SOURCE)};
+  const PAGE_FLAG = ${JSON.stringify(AUTH_HEADER_CAPTURE_PAGE_FLAG)};
+  const API_HOST = ${JSON.stringify(API_PROVIDER)};
+  const META_KEY = "__ataAuthCaptureMeta";
+  const normalize = (value) => String(value == null ? "" : value).trim();
+  const extractToken = (value) => {
+    const rawValue = normalize(value);
+    if (!rawValue) {
+      return "";
+    }
+    if (/^basic\\s+/i.test(rawValue)) {
+      return "";
+    }
+    if (/^[a-z-]+\\s+/i.test(rawValue) && !/^bearer\\s+/i.test(rawValue)) {
+      return "";
+    }
+    return normalize(rawValue.replace(/^bearer\\s+/i, ""));
+  };
+  const isApiUrl = (url) => {
+    const value = normalize(url);
+    if (!value) {
+      return false;
+    }
+    try {
+      return normalize(new URL(value, location.href).host).toLowerCase() === API_HOST;
+    } catch (_) {
+      return false;
+    }
+  };
+  const readHeaderValue = (headers, name) => {
+    const target = normalize(name).toLowerCase();
+    if (!target || !headers) {
+      return "";
+    }
+    if (typeof Headers !== "undefined" && headers instanceof Headers) {
+      return normalize(headers.get(target) || "");
+    }
+    if (Array.isArray(headers)) {
+      for (let index = 0; index < headers.length; index += 1) {
+        const entry = headers[index];
+        if (!Array.isArray(entry) || entry.length < 2) {
+          continue;
+        }
+        if (normalize(entry[0] || "").toLowerCase() === target) {
+          return normalize(entry[1] || "");
+        }
+      }
+      return "";
+    }
+    if (typeof headers === "object") {
+      const keys = Object.keys(headers);
+      for (let index = 0; index < keys.length; index += 1) {
+        const key = keys[index];
+        if (normalize(key || "").toLowerCase() === target) {
+          return normalize(headers[key] || "");
+        }
+      }
+    }
+    return "";
+  };
+  const emit = (authorizationHeader, source, requestUrl) => {
+    const request = normalize(requestUrl);
+    if (request && !isApiUrl(request)) {
       return;
     }
-    state.apiAutomation.authHeaderCaptureInstalled = true;
+    const token = extractToken(authorizationHeader);
+    if (!token) {
+      return;
+    }
+    window.dispatchEvent(new CustomEvent(EVENT_NAME, {
+      detail: {
+        token,
+        source: normalize(source || DEFAULT_SOURCE) || DEFAULT_SOURCE,
+        requestUrl: request,
+      },
+    }));
+  };
 
-    const restoreHandlers = [];
-    const xhrPrototype = window.XMLHttpRequest?.prototype;
+  try {
+    if (window[PAGE_FLAG]) {
+      return;
+    }
+    window[PAGE_FLAG] = true;
 
+    const xhrPrototype = window.XMLHttpRequest && window.XMLHttpRequest.prototype;
     if (xhrPrototype && typeof xhrPrototype.open === "function" && typeof xhrPrototype.setRequestHeader === "function") {
       const originalOpen = xhrPrototype.open;
       const originalSetRequestHeader = xhrPrototype.setRequestHeader;
       const originalSend = typeof xhrPrototype.send === "function" ? xhrPrototype.send : null;
 
-      xhrPrototype.open = function openWithAtaAuthCapture(method, url) {
-        this.__ataAuthCaptureMeta = {
-          method: normalizeText(method || "GET").toUpperCase(),
-          requestUrl: normalizeText(url || ""),
+      xhrPrototype.open = function ataAuthBridgeOpen(method, url) {
+        this[META_KEY] = {
+          requestUrl: normalize(url || ""),
           headers: {},
         };
         return originalOpen.apply(this, arguments);
       };
 
-      xhrPrototype.setRequestHeader = function setRequestHeaderWithAtaAuthCapture(name, value) {
-        const meta = this.__ataAuthCaptureMeta || {
-          method: "GET",
-          requestUrl: "",
-          headers: {},
-        };
-        meta.headers[normalizeText(name || "").toLowerCase()] = normalizeText(value || "");
-        this.__ataAuthCaptureMeta = meta;
-        if (
-          normalizeText(name || "").toLowerCase() === "authorization"
-          && isApiProviderUrl(meta.requestUrl)
-        ) {
-          captureAuthTokenFromRequestHeaders(meta.headers, {
-            requestUrl: meta.requestUrl,
-            source: "request-header:xhr",
-          });
+      xhrPrototype.setRequestHeader = function ataAuthBridgeSetRequestHeader(name, value) {
+        try {
+          const meta = this[META_KEY] || { requestUrl: "", headers: {} };
+          const normalizedName = normalize(name || "").toLowerCase();
+          meta.headers[normalizedName] = normalize(value || "");
+          this[META_KEY] = meta;
+          if (normalizedName === "authorization") {
+            emit(meta.headers.authorization, "request-header:xhr", meta.requestUrl);
+          }
+        } catch (_) {
+          // Ignore capture errors to avoid impacting host runtime.
         }
         return originalSetRequestHeader.apply(this, arguments);
       };
 
       if (originalSend) {
-        xhrPrototype.send = function sendWithAtaAuthCapture() {
-          const meta = this.__ataAuthCaptureMeta;
-          if (meta?.headers) {
-            captureAuthTokenFromRequestHeaders(meta.headers, {
-              requestUrl: normalizeText(meta.requestUrl || ""),
-              source: "request-header:xhr",
-            });
+        xhrPrototype.send = function ataAuthBridgeSend() {
+          try {
+            const meta = this[META_KEY];
+            emit(meta?.headers?.authorization || "", "request-header:xhr", meta?.requestUrl || "");
+          } catch (_) {
+            // Ignore capture errors to avoid impacting host runtime.
           }
           return originalSend.apply(this, arguments);
         };
       }
-
-      restoreHandlers.push(() => {
-        xhrPrototype.open = originalOpen;
-        xhrPrototype.setRequestHeader = originalSetRequestHeader;
-        if (originalSend) {
-          xhrPrototype.send = originalSend;
-        }
-      });
     }
 
     if (typeof window.fetch === "function") {
       const originalFetch = window.fetch;
-      window.fetch = function fetchWithAtaAuthCapture(input, init) {
-        const requestUrl = normalizeText(
-          (typeof input === "string" ? input : (input?.url || ""))
-          || (typeof init?.url === "string" ? init.url : ""),
-        );
-        captureAuthTokenFromRequestHeaders(init?.headers, {
-          requestUrl,
-          source: "request-header:fetch",
-        });
-        if (input && typeof input === "object") {
-          captureAuthTokenFromRequestHeaders(input.headers, {
-            requestUrl,
-            source: "request-header:fetch",
-          });
+      window.fetch = function ataAuthBridgeFetch(input, init) {
+        try {
+          const requestUrl = normalize(
+            (typeof input === "string" ? input : (input?.url || ""))
+            || (typeof init?.url === "string" ? init.url : ""),
+          );
+          emit(readHeaderValue(init?.headers, "authorization"), "request-header:fetch", requestUrl);
+          if (input && typeof input === "object") {
+            emit(readHeaderValue(input.headers, "authorization"), "request-header:fetch", requestUrl);
+          }
+        } catch (_) {
+          // Ignore capture errors to avoid impacting host runtime.
         }
         return originalFetch.apply(this, arguments);
       };
+    }
+  } catch (_) {
+    // Ignore bridge-install errors to avoid impacting host runtime.
+  }
+})();
+`;
+  }
 
-      restoreHandlers.push(() => {
-        window.fetch = originalFetch;
+
+  function installPageContextAuthHeaderCaptureBridge() {
+    try {
+      if (window[AUTH_HEADER_CAPTURE_PAGE_FLAG]) {
+        return true;
+      }
+      const root = document.documentElement || document.head || document.body;
+      if (!root) {
+        return false;
+      }
+      const script = document.createElement("script");
+      script.type = "text/javascript";
+      script.textContent = buildPageContextAuthHeaderBridgeScript();
+      root.appendChild(script);
+      script.remove();
+      return Boolean(window[AUTH_HEADER_CAPTURE_PAGE_FLAG]);
+    } catch (error) {
+      logWarn("api", "Page-context auth header bridge installation failed.", error);
+      return false;
+    }
+  }
+
+
+  function installRuntimeAuthHeaderCapture() {
+    if (!state.apiAutomation.authHeaderCaptureInstalled) {
+      state.apiAutomation.authHeaderCaptureInstalled = true;
+
+      const bridgeEventListener = (event) => {
+        try {
+          const detail = event?.detail && typeof event.detail === "object"
+            ? event.detail
+            : {};
+          const requestUrl = normalizeText(detail.requestUrl || "");
+          if (requestUrl && !isApiProviderUrl(requestUrl)) {
+            return;
+          }
+          const source = normalizeText(detail.source || AUTH_HEADER_CAPTURE_DEFAULT_SOURCE)
+            || AUTH_HEADER_CAPTURE_DEFAULT_SOURCE;
+          const authorizationValue = normalizeText(detail.token || detail.authorization || "");
+          if (!authorizationValue) {
+            return;
+          }
+          captureAuthTokenFromAuthorizationHeader(authorizationValue, source);
+        } catch (error) {
+          logWarn("api", "Auth header capture bridge event handling failed.", error);
+        }
+      };
+
+      window.addEventListener(AUTH_HEADER_CAPTURE_EVENT_NAME, bridgeEventListener, true);
+      addCleanup(() => {
+        window.removeEventListener(AUTH_HEADER_CAPTURE_EVENT_NAME, bridgeEventListener, true);
       });
     }
-
-    if (restoreHandlers.length) {
-      addCleanup(() => {
-        restoreHandlers.forEach((restoreHandler) => {
-          try {
-            restoreHandler();
-          } catch (error) {
-            logWarn("api", "Auth header capture cleanup failed.", error);
-          }
-        });
-      });
+    if (!state.apiAutomation.authHeaderBridgeInjected) {
+      state.apiAutomation.authHeaderBridgeInjected = installPageContextAuthHeaderCaptureBridge();
     }
   }
 
