@@ -7,6 +7,7 @@
   - bullMode-Validierungsfehler behalten den bestehenden Fallback auf `25/50`, jetzt mit explizitem Debug-Nachweis.
   - Debug-Mode speichert ein kopierbares Matchstart-Protokoll im Tab `Einstellungen` und stellt es zusätzlich über `__ATA_RUNTIME.getDebugReport()` bereit.
   - Matchstart wird bei doppelten Teilnehmernamen bereits in der UI als nicht API-tauglich blockiert.
+  - Auth-Fallback erweitert: wenn kein `Authorization`-Cookie vorhanden ist, wird ein Access-Token aus `autodarts_refresh_token` via `POST /auth/v1/refresh` geholt und gecacht.
 - Runtime-Update-Pfad aus `autodarts-xconfig` technisch übernommen:
   - neue GitHub-Update-Erkennung im Tab `Einstellungen` mit gecachtem Versionsstatus, TTL und manuellem Recheck
   - `.meta.js`-Artefakt für leichtgewichtigen Versionsabgleich ergänzt

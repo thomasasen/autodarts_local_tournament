@@ -75,6 +75,8 @@ const GLOBALS_CONTRACT = Object.freeze({
   const API_PROVIDER = "api.autodarts.io";
   const API_GS_BASE = `https://${API_PROVIDER}/gs/v0`;
   const API_AS_BASE = `https://${API_PROVIDER}/as/v0`;
+  const API_AUTH_BASE = `https://${API_PROVIDER}/auth/v1`;
+  const API_AUTH_CLIENT_ID = "autodarts-play";
   const API_SYNC_INTERVAL_MS = 2500;
   const API_AUTH_NOTICE_THROTTLE_MS = 15000;
   const API_REQUEST_TIMEOUT_MS = 12000;
@@ -1826,6 +1828,10 @@ const GLOBALS_CONTRACT = Object.freeze({
       startingMatchId: "",
       authBackoffUntil: 0,
       lastAuthNoticeAt: 0,
+      authToken: "",
+      authTokenExpiresAt: 0,
+      authTokenSource: "",
+      authRefreshPromise: null,
     },
     matchReturnShortcut: {
       root: null,
@@ -7796,6 +7802,41 @@ const GLOBALS_CONTRACT = Object.freeze({
     }
 
     try {
+      const previousRefreshToken = localStorage.getItem("autodarts_refresh_token");
+      const previousCachedToken = state.apiAutomation.authToken;
+      const previousCachedExpiry = state.apiAutomation.authTokenExpiresAt;
+      const previousCachedSource = state.apiAutomation.authTokenSource;
+      try {
+        localStorage.setItem("autodarts_refresh_token", "selftest-refresh-token");
+        cacheResolvedAuthToken("", "");
+        const snapshotWithRefresh = getAuthStateSnapshot();
+
+        cacheResolvedAuthToken("header.payload.signature", "selftest", Date.now() + 120000);
+        const snapshotWithCache = getAuthStateSnapshot();
+
+        record(
+          "API Auth: Snapshot erkennt Refresh-Token- und Cache-Kontext",
+          snapshotWithRefresh.hasRefreshToken === true
+            && snapshotWithRefresh.hasAnyAuthContext === true
+            && snapshotWithCache.hasCachedToken === true
+            && snapshotWithCache.cachedTokenUsable === true,
+          `refresh=${snapshotWithRefresh.hasRefreshToken}, cache=${snapshotWithCache.hasCachedToken}, usable=${snapshotWithCache.cachedTokenUsable}`,
+        );
+      } finally {
+        if (previousRefreshToken) {
+          localStorage.setItem("autodarts_refresh_token", previousRefreshToken);
+        } else {
+          localStorage.removeItem("autodarts_refresh_token");
+        }
+        state.apiAutomation.authToken = previousCachedToken || "";
+        state.apiAutomation.authTokenExpiresAt = Number(previousCachedExpiry || 0);
+        state.apiAutomation.authTokenSource = previousCachedSource || "";
+      }
+    } catch (error) {
+      record("API Auth: Snapshot erkennt Refresh-Token- und Cache-Kontext", false, String(error?.message || error));
+    }
+
+    try {
       const rawStoreV2 = {
         schemaVersion: 2,
         settings: { debug: false, featureFlags: { autoLobbyStart: false, randomizeKoRound1: true } },
@@ -7890,6 +7931,173 @@ const GLOBALS_CONTRACT = Object.freeze({
   }
 
 
+  function decodeJwtPayload(token) {
+    const rawToken = normalizeText(token || "");
+    if (!rawToken) {
+      return null;
+    }
+    const parts = rawToken.split(".");
+    if (parts.length < 2) {
+      return null;
+    }
+    try {
+      const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const padded = base64 + "===".slice((base64.length + 3) % 4);
+      const json = atob(padded);
+      return JSON.parse(json);
+    } catch (_) {
+      return null;
+    }
+  }
+
+
+  function getTokenExpiryMs(token, fallbackExpiryMs = 0) {
+    const payload = decodeJwtPayload(token);
+    const expSeconds = Number(payload?.exp || 0);
+    if (Number.isFinite(expSeconds) && expSeconds > 0) {
+      return expSeconds * 1000;
+    }
+    return Number(fallbackExpiryMs || 0);
+  }
+
+
+  function cacheResolvedAuthToken(token, source = "", fallbackExpiryMs = 0) {
+    const normalizedToken = normalizeText(token || "");
+    state.apiAutomation.authToken = normalizedToken;
+    state.apiAutomation.authTokenSource = normalizeText(source || "");
+    state.apiAutomation.authTokenExpiresAt = normalizedToken
+      ? getTokenExpiryMs(normalizedToken, fallbackExpiryMs)
+      : 0;
+    return normalizedToken;
+  }
+
+
+  function isCachedAuthTokenUsable() {
+    const token = normalizeText(state.apiAutomation.authToken || "");
+    if (!token) {
+      return false;
+    }
+    const expiresAt = Number(state.apiAutomation.authTokenExpiresAt || 0);
+    if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
+      return true;
+    }
+    return Date.now() < (expiresAt - 30 * 1000);
+  }
+
+
+  function getRefreshTokenFromStorage() {
+    try {
+      return normalizeText(localStorage.getItem("autodarts_refresh_token") || "");
+    } catch (_) {
+      return "";
+    }
+  }
+
+
+  function getAuthStateSnapshot() {
+    const cookieToken = getAuthTokenFromCookie();
+    const refreshToken = getRefreshTokenFromStorage();
+    const cachedToken = normalizeText(state.apiAutomation.authToken || "");
+    const hasCookieToken = Boolean(cookieToken);
+    const hasRefreshToken = Boolean(refreshToken);
+    const hasCachedToken = Boolean(cachedToken);
+    return {
+      hasCookieToken,
+      hasRefreshToken,
+      hasCachedToken,
+      hasAnyAuthContext: hasCookieToken || hasRefreshToken || hasCachedToken,
+      cookieTokenLength: cookieToken.length,
+      refreshTokenLength: refreshToken.length,
+      cachedTokenLength: cachedToken.length,
+      cachedTokenUsable: isCachedAuthTokenUsable(),
+      source: hasCookieToken
+        ? "cookie"
+        : (hasCachedToken ? "cache" : (hasRefreshToken ? "refresh-token" : "none")),
+    };
+  }
+
+
+  async function refreshAuthTokenFromStorageToken(refreshToken) {
+    const payload = {
+      refresh_token: normalizeText(refreshToken || ""),
+      client_id: API_AUTH_CLIENT_ID,
+    };
+    const response = await fetch(`${API_AUTH_BASE}/refresh`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+      credentials: "omit",
+      body: JSON.stringify(payload),
+    });
+    const text = await response.text();
+    const body = parseJsonOrText(text);
+    if (!response.ok) {
+      throw createApiError(response.status, extractApiErrorMessage(response.status, body), body);
+    }
+    return body || {};
+  }
+
+
+  async function resolveAuthToken(options = {}) {
+    const forceRefresh = Boolean(options.forceRefresh);
+    const cookieToken = getAuthTokenFromCookie();
+    if (cookieToken && !forceRefresh) {
+      return cacheResolvedAuthToken(cookieToken, "cookie");
+    }
+
+    if (!forceRefresh && isCachedAuthTokenUsable()) {
+      state.apiAutomation.authTokenSource = state.apiAutomation.authTokenSource || "cache";
+      return normalizeText(state.apiAutomation.authToken || "");
+    }
+
+    const refreshToken = getRefreshTokenFromStorage();
+    if (!refreshToken) {
+      cacheResolvedAuthToken("", "");
+      return "";
+    }
+
+    if (!forceRefresh && state.apiAutomation.authRefreshPromise) {
+      try {
+        return await state.apiAutomation.authRefreshPromise;
+      } catch (_) {
+        return "";
+      }
+    }
+
+    state.apiAutomation.authRefreshPromise = (async () => {
+      try {
+        const refreshed = await refreshAuthTokenFromStorageToken(refreshToken);
+        const accessToken = normalizeText(refreshed?.access_token || "");
+        if (!accessToken) {
+          cacheResolvedAuthToken("", "");
+          return "";
+        }
+        const nextRefreshToken = normalizeText(refreshed?.refresh_token || "");
+        if (nextRefreshToken && nextRefreshToken !== refreshToken) {
+          try {
+            localStorage.setItem("autodarts_refresh_token", nextRefreshToken);
+          } catch (_) {
+            // Ignore storage write failures.
+          }
+        }
+        const expiresInMs = Math.max(0, Number(refreshed?.expires_in || 0)) * 1000;
+        return cacheResolvedAuthToken(accessToken, "refresh", Date.now() + expiresInMs);
+      } catch (error) {
+        logWarn("api", "Auth token refresh via refresh_token failed.", error);
+        cacheResolvedAuthToken("", "");
+        return "";
+      } finally {
+        state.apiAutomation.authRefreshPromise = null;
+      }
+    })();
+
+    return state.apiAutomation.authRefreshPromise;
+  }
+
+
   function getBoardId() {
     try {
       const rawBoardValue = localStorage.getItem("autodarts-board");
@@ -7930,12 +8138,12 @@ const GLOBALS_CONTRACT = Object.freeze({
 
 
   function collectRuntimeStatus() {
-    const token = getAuthTokenFromCookie();
+    const authState = getAuthStateSnapshot();
     const boardId = getBoardId();
     const boardPreview = boardId.length > 18 ? `${boardId.slice(0, 7)}...${boardId.slice(-6)}` : boardId;
     const autoEnabled = Boolean(state.store?.settings?.featureFlags?.autoLobbyStart);
     const authBlocked = Number(state.apiAutomation?.authBackoffUntil || 0) > Date.now();
-    const hasToken = Boolean(token);
+    const hasToken = authState.hasAnyAuthContext;
     const hasBoard = isValidBoardId(boardId);
     const hasBoardValue = Boolean(boardId);
     return {
@@ -8465,7 +8673,7 @@ const GLOBALS_CONTRACT = Object.freeze({
       return { ok: false, reasonCode: "error", message: "Auto-Lobby ist deaktiviert." };
     }
 
-    const token = getAuthTokenFromCookie();
+    const token = await resolveAuthToken();
     if (!token) {
       return { ok: false, reasonCode: "auth", message: "Kein Auth-Token gefunden. Bitte neu einloggen." };
     }
@@ -9005,7 +9213,8 @@ const GLOBALS_CONTRACT = Object.freeze({
       };
     }
 
-    if (!getAuthTokenFromCookie()) {
+    const authState = getAuthStateSnapshot();
+    if (!authState.hasAnyAuthContext) {
       return {
         label: "Match starten",
         disabled: true,
@@ -9090,7 +9299,8 @@ const GLOBALS_CONTRACT = Object.freeze({
     const editability = getMatchEditability(tournament, match);
     const duplicates = getDuplicateParticipantNames(tournament);
     const activeMatch = findActiveStartedMatch(tournament, match.id);
-    const token = getAuthTokenFromCookie();
+    const authState = getAuthStateSnapshot();
+    let token = "";
     const boardId = getBoardId();
     const participant1 = participantById(tournament, match.player1Id);
     const participant2 = participantById(tournament, match.player2Id);
@@ -9104,7 +9314,12 @@ const GLOBALS_CONTRACT = Object.freeze({
       },
       duplicateNames: duplicates.slice(),
       activeStartedMatchId: normalizeText(activeMatch?.id || ""),
-      tokenPresent: Boolean(token),
+      tokenPresent: Boolean(authState.hasAnyAuthContext),
+      tokenSources: {
+        hasCookieToken: Boolean(authState.hasCookieToken),
+        hasRefreshToken: Boolean(authState.hasRefreshToken),
+        hasCachedToken: Boolean(authState.hasCachedToken),
+      },
       boardId: normalizeText(boardId || ""),
       boardValid: isValidBoardId(boardId),
       participant1Name: normalizeText(participant1?.name || ""),
@@ -9236,6 +9451,13 @@ const GLOBALS_CONTRACT = Object.freeze({
       return;
     }
 
+    recordDebugStep("resolve_auth_token", "pending", {
+      hasAnyAuthContext: Boolean(authState.hasAnyAuthContext),
+      hasCookieToken: Boolean(authState.hasCookieToken),
+      hasRefreshToken: Boolean(authState.hasRefreshToken),
+      hasCachedToken: Boolean(authState.hasCachedToken),
+    });
+    token = await resolveAuthToken();
     if (!token) {
       recordDebugStep("blocked", "error", { reasonCode: "missing_auth_token" });
       storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
@@ -9248,6 +9470,10 @@ const GLOBALS_CONTRACT = Object.freeze({
       setNotice("error", "Kein Autodarts-Token gefunden. Bitte einloggen und Seite neu laden.");
       return;
     }
+    recordDebugStep("resolve_auth_token", "ok", {
+      source: normalizeText(state.apiAutomation.authTokenSource || "") || "unknown",
+      tokenLength: token.length,
+    });
 
     if (!boardId) {
       recordDebugStep("blocked", "error", { reasonCode: "missing_board_id" });
@@ -9444,7 +9670,7 @@ const GLOBALS_CONTRACT = Object.freeze({
       return;
     }
 
-    const token = getAuthTokenFromCookie();
+    const token = await resolveAuthToken();
     if (!token) {
       state.apiAutomation.authBackoffUntil = Date.now() + API_AUTH_NOTICE_THROTTLE_MS;
       if (shouldShowAuthNotice()) {

@@ -31,6 +31,10 @@
       startingMatchId: "",
       authBackoffUntil: 0,
       lastAuthNoticeAt: 0,
+      authToken: "",
+      authTokenExpiresAt: 0,
+      authTokenSource: "",
+      authRefreshPromise: null,
     },
     matchReturnShortcut: {
       root: null,

@@ -30,6 +30,173 @@
   }
 
 
+  function decodeJwtPayload(token) {
+    const rawToken = normalizeText(token || "");
+    if (!rawToken) {
+      return null;
+    }
+    const parts = rawToken.split(".");
+    if (parts.length < 2) {
+      return null;
+    }
+    try {
+      const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const padded = base64 + "===".slice((base64.length + 3) % 4);
+      const json = atob(padded);
+      return JSON.parse(json);
+    } catch (_) {
+      return null;
+    }
+  }
+
+
+  function getTokenExpiryMs(token, fallbackExpiryMs = 0) {
+    const payload = decodeJwtPayload(token);
+    const expSeconds = Number(payload?.exp || 0);
+    if (Number.isFinite(expSeconds) && expSeconds > 0) {
+      return expSeconds * 1000;
+    }
+    return Number(fallbackExpiryMs || 0);
+  }
+
+
+  function cacheResolvedAuthToken(token, source = "", fallbackExpiryMs = 0) {
+    const normalizedToken = normalizeText(token || "");
+    state.apiAutomation.authToken = normalizedToken;
+    state.apiAutomation.authTokenSource = normalizeText(source || "");
+    state.apiAutomation.authTokenExpiresAt = normalizedToken
+      ? getTokenExpiryMs(normalizedToken, fallbackExpiryMs)
+      : 0;
+    return normalizedToken;
+  }
+
+
+  function isCachedAuthTokenUsable() {
+    const token = normalizeText(state.apiAutomation.authToken || "");
+    if (!token) {
+      return false;
+    }
+    const expiresAt = Number(state.apiAutomation.authTokenExpiresAt || 0);
+    if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
+      return true;
+    }
+    return Date.now() < (expiresAt - 30 * 1000);
+  }
+
+
+  function getRefreshTokenFromStorage() {
+    try {
+      return normalizeText(localStorage.getItem("autodarts_refresh_token") || "");
+    } catch (_) {
+      return "";
+    }
+  }
+
+
+  function getAuthStateSnapshot() {
+    const cookieToken = getAuthTokenFromCookie();
+    const refreshToken = getRefreshTokenFromStorage();
+    const cachedToken = normalizeText(state.apiAutomation.authToken || "");
+    const hasCookieToken = Boolean(cookieToken);
+    const hasRefreshToken = Boolean(refreshToken);
+    const hasCachedToken = Boolean(cachedToken);
+    return {
+      hasCookieToken,
+      hasRefreshToken,
+      hasCachedToken,
+      hasAnyAuthContext: hasCookieToken || hasRefreshToken || hasCachedToken,
+      cookieTokenLength: cookieToken.length,
+      refreshTokenLength: refreshToken.length,
+      cachedTokenLength: cachedToken.length,
+      cachedTokenUsable: isCachedAuthTokenUsable(),
+      source: hasCookieToken
+        ? "cookie"
+        : (hasCachedToken ? "cache" : (hasRefreshToken ? "refresh-token" : "none")),
+    };
+  }
+
+
+  async function refreshAuthTokenFromStorageToken(refreshToken) {
+    const payload = {
+      refresh_token: normalizeText(refreshToken || ""),
+      client_id: API_AUTH_CLIENT_ID,
+    };
+    const response = await fetch(`${API_AUTH_BASE}/refresh`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+      credentials: "omit",
+      body: JSON.stringify(payload),
+    });
+    const text = await response.text();
+    const body = parseJsonOrText(text);
+    if (!response.ok) {
+      throw createApiError(response.status, extractApiErrorMessage(response.status, body), body);
+    }
+    return body || {};
+  }
+
+
+  async function resolveAuthToken(options = {}) {
+    const forceRefresh = Boolean(options.forceRefresh);
+    const cookieToken = getAuthTokenFromCookie();
+    if (cookieToken && !forceRefresh) {
+      return cacheResolvedAuthToken(cookieToken, "cookie");
+    }
+
+    if (!forceRefresh && isCachedAuthTokenUsable()) {
+      state.apiAutomation.authTokenSource = state.apiAutomation.authTokenSource || "cache";
+      return normalizeText(state.apiAutomation.authToken || "");
+    }
+
+    const refreshToken = getRefreshTokenFromStorage();
+    if (!refreshToken) {
+      cacheResolvedAuthToken("", "");
+      return "";
+    }
+
+    if (!forceRefresh && state.apiAutomation.authRefreshPromise) {
+      try {
+        return await state.apiAutomation.authRefreshPromise;
+      } catch (_) {
+        return "";
+      }
+    }
+
+    state.apiAutomation.authRefreshPromise = (async () => {
+      try {
+        const refreshed = await refreshAuthTokenFromStorageToken(refreshToken);
+        const accessToken = normalizeText(refreshed?.access_token || "");
+        if (!accessToken) {
+          cacheResolvedAuthToken("", "");
+          return "";
+        }
+        const nextRefreshToken = normalizeText(refreshed?.refresh_token || "");
+        if (nextRefreshToken && nextRefreshToken !== refreshToken) {
+          try {
+            localStorage.setItem("autodarts_refresh_token", nextRefreshToken);
+          } catch (_) {
+            // Ignore storage write failures.
+          }
+        }
+        const expiresInMs = Math.max(0, Number(refreshed?.expires_in || 0)) * 1000;
+        return cacheResolvedAuthToken(accessToken, "refresh", Date.now() + expiresInMs);
+      } catch (error) {
+        logWarn("api", "Auth token refresh via refresh_token failed.", error);
+        cacheResolvedAuthToken("", "");
+        return "";
+      } finally {
+        state.apiAutomation.authRefreshPromise = null;
+      }
+    })();
+
+    return state.apiAutomation.authRefreshPromise;
+  }
+
+
   function getBoardId() {
     try {
       const rawBoardValue = localStorage.getItem("autodarts-board");
@@ -70,12 +237,12 @@
 
 
   function collectRuntimeStatus() {
-    const token = getAuthTokenFromCookie();
+    const authState = getAuthStateSnapshot();
     const boardId = getBoardId();
     const boardPreview = boardId.length > 18 ? `${boardId.slice(0, 7)}...${boardId.slice(-6)}` : boardId;
     const autoEnabled = Boolean(state.store?.settings?.featureFlags?.autoLobbyStart);
     const authBlocked = Number(state.apiAutomation?.authBackoffUntil || 0) > Date.now();
-    const hasToken = Boolean(token);
+    const hasToken = authState.hasAnyAuthContext;
     const hasBoard = isValidBoardId(boardId);
     const hasBoardValue = Boolean(boardId);
     return {

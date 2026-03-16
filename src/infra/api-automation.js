@@ -237,7 +237,7 @@
       return { ok: false, reasonCode: "error", message: "Auto-Lobby ist deaktiviert." };
     }
 
-    const token = getAuthTokenFromCookie();
+    const token = await resolveAuthToken();
     if (!token) {
       return { ok: false, reasonCode: "auth", message: "Kein Auth-Token gefunden. Bitte neu einloggen." };
     }
@@ -777,7 +777,8 @@
       };
     }
 
-    if (!getAuthTokenFromCookie()) {
+    const authState = getAuthStateSnapshot();
+    if (!authState.hasAnyAuthContext) {
       return {
         label: "Match starten",
         disabled: true,
@@ -862,7 +863,8 @@
     const editability = getMatchEditability(tournament, match);
     const duplicates = getDuplicateParticipantNames(tournament);
     const activeMatch = findActiveStartedMatch(tournament, match.id);
-    const token = getAuthTokenFromCookie();
+    const authState = getAuthStateSnapshot();
+    let token = "";
     const boardId = getBoardId();
     const participant1 = participantById(tournament, match.player1Id);
     const participant2 = participantById(tournament, match.player2Id);
@@ -876,7 +878,12 @@
       },
       duplicateNames: duplicates.slice(),
       activeStartedMatchId: normalizeText(activeMatch?.id || ""),
-      tokenPresent: Boolean(token),
+      tokenPresent: Boolean(authState.hasAnyAuthContext),
+      tokenSources: {
+        hasCookieToken: Boolean(authState.hasCookieToken),
+        hasRefreshToken: Boolean(authState.hasRefreshToken),
+        hasCachedToken: Boolean(authState.hasCachedToken),
+      },
       boardId: normalizeText(boardId || ""),
       boardValid: isValidBoardId(boardId),
       participant1Name: normalizeText(participant1?.name || ""),
@@ -1008,6 +1015,13 @@
       return;
     }
 
+    recordDebugStep("resolve_auth_token", "pending", {
+      hasAnyAuthContext: Boolean(authState.hasAnyAuthContext),
+      hasCookieToken: Boolean(authState.hasCookieToken),
+      hasRefreshToken: Boolean(authState.hasRefreshToken),
+      hasCachedToken: Boolean(authState.hasCachedToken),
+    });
+    token = await resolveAuthToken();
     if (!token) {
       recordDebugStep("blocked", "error", { reasonCode: "missing_auth_token" });
       storeMatchStartDebugSessionIfEnabled(debugSession, "blocked", {
@@ -1020,6 +1034,10 @@
       setNotice("error", "Kein Autodarts-Token gefunden. Bitte einloggen und Seite neu laden.");
       return;
     }
+    recordDebugStep("resolve_auth_token", "ok", {
+      source: normalizeText(state.apiAutomation.authTokenSource || "") || "unknown",
+      tokenLength: token.length,
+    });
 
     if (!boardId) {
       recordDebugStep("blocked", "error", { reasonCode: "missing_board_id" });
@@ -1216,7 +1234,7 @@
       return;
     }
 
-    const token = getAuthTokenFromCookie();
+    const token = await resolveAuthToken();
     if (!token) {
       state.apiAutomation.authBackoffUntil = Date.now() + API_AUTH_NOTICE_THROTTLE_MS;
       if (shouldShowAuthNotice()) {

@@ -1034,6 +1034,41 @@
     }
 
     try {
+      const previousRefreshToken = localStorage.getItem("autodarts_refresh_token");
+      const previousCachedToken = state.apiAutomation.authToken;
+      const previousCachedExpiry = state.apiAutomation.authTokenExpiresAt;
+      const previousCachedSource = state.apiAutomation.authTokenSource;
+      try {
+        localStorage.setItem("autodarts_refresh_token", "selftest-refresh-token");
+        cacheResolvedAuthToken("", "");
+        const snapshotWithRefresh = getAuthStateSnapshot();
+
+        cacheResolvedAuthToken("header.payload.signature", "selftest", Date.now() + 120000);
+        const snapshotWithCache = getAuthStateSnapshot();
+
+        record(
+          "API Auth: Snapshot erkennt Refresh-Token- und Cache-Kontext",
+          snapshotWithRefresh.hasRefreshToken === true
+            && snapshotWithRefresh.hasAnyAuthContext === true
+            && snapshotWithCache.hasCachedToken === true
+            && snapshotWithCache.cachedTokenUsable === true,
+          `refresh=${snapshotWithRefresh.hasRefreshToken}, cache=${snapshotWithCache.hasCachedToken}, usable=${snapshotWithCache.cachedTokenUsable}`,
+        );
+      } finally {
+        if (previousRefreshToken) {
+          localStorage.setItem("autodarts_refresh_token", previousRefreshToken);
+        } else {
+          localStorage.removeItem("autodarts_refresh_token");
+        }
+        state.apiAutomation.authToken = previousCachedToken || "";
+        state.apiAutomation.authTokenExpiresAt = Number(previousCachedExpiry || 0);
+        state.apiAutomation.authTokenSource = previousCachedSource || "";
+      }
+    } catch (error) {
+      record("API Auth: Snapshot erkennt Refresh-Token- und Cache-Kontext", false, String(error?.message || error));
+    }
+
+    try {
       const rawStoreV2 = {
         schemaVersion: 2,
         settings: { debug: false, featureFlags: { autoLobbyStart: false, randomizeKoRound1: true } },
