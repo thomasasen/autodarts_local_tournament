@@ -35,6 +35,7 @@
       authTokenExpiresAt: 0,
       authTokenSource: "",
       authRefreshPromise: null,
+      authHeaderCaptureInstalled: false,
     },
     matchReturnShortcut: {
       root: null,

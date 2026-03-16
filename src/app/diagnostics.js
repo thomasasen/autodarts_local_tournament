@@ -1034,6 +1034,55 @@
     }
 
     try {
+      const bearer = extractAuthTokenFromAuthorizationHeader("Bearer test.token.value");
+      const plain = extractAuthTokenFromAuthorizationHeader("test.token.value");
+      const invalidBasic = extractAuthTokenFromAuthorizationHeader("Basic test.token.value");
+      const invalidOtherScheme = extractAuthTokenFromAuthorizationHeader("Token test.token.value");
+      record(
+        "API Auth: Authorization-Header-Parser akzeptiert Bearer/plain und lehnt fremde Schemes ab",
+        bearer === "test.token.value"
+          && plain === "test.token.value"
+          && invalidBasic === ""
+          && invalidOtherScheme === "",
+        `bearer=${Boolean(bearer)}, plain=${Boolean(plain)}, basicRejected=${invalidBasic === ""}, otherRejected=${invalidOtherScheme === ""}`,
+      );
+    } catch (error) {
+      record("API Auth: Authorization-Header-Parser akzeptiert Bearer/plain und lehnt fremde Schemes ab", false, String(error?.message || error));
+    }
+
+    try {
+      const previousToken = state.apiAutomation.authToken;
+      const previousSource = state.apiAutomation.authTokenSource;
+      const previousExpiry = state.apiAutomation.authTokenExpiresAt;
+      try {
+        cacheResolvedAuthToken("", "");
+        const ignored = captureAuthTokenFromRequestHeaders(
+          { Authorization: "Bearer ignored.token" },
+          { requestUrl: "https://example.com/test", source: "selftest:ignored" },
+        );
+        const captured = captureAuthTokenFromRequestHeaders(
+          { Authorization: "Bearer captured.token" },
+          { requestUrl: `${API_GS_BASE}/lobbies`, source: "selftest:xhr" },
+        );
+        const snapshot = getAuthStateSnapshot();
+        record(
+          "API Auth: Header-Capture übernimmt nur api.autodarts.io und setzt Cache-Quelle",
+          ignored === ""
+            && captured === "captured.token"
+            && snapshot.hasCachedToken === true
+            && state.apiAutomation.authTokenSource === "selftest:xhr",
+          `ignored=${Boolean(ignored)}, captured=${Boolean(captured)}, hasCache=${snapshot.hasCachedToken}, source=${state.apiAutomation.authTokenSource || "-"}`,
+        );
+      } finally {
+        state.apiAutomation.authToken = previousToken || "";
+        state.apiAutomation.authTokenSource = previousSource || "";
+        state.apiAutomation.authTokenExpiresAt = Number(previousExpiry || 0);
+      }
+    } catch (error) {
+      record("API Auth: Header-Capture übernimmt nur api.autodarts.io und setzt Cache-Quelle", false, String(error?.message || error));
+    }
+
+    try {
       const previousRefreshToken = localStorage.getItem("autodarts_refresh_token");
       const previousCachedToken = state.apiAutomation.authToken;
       const previousCachedExpiry = state.apiAutomation.authTokenExpiresAt;

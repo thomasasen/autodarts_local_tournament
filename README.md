@@ -235,6 +235,8 @@ Tab: `Spiele`
 - Aktives Board in Autodarts
 - Feature-Flag `Automatischer Lobby-Start + API-Sync` aktiv
 
+Das Auth-Token kann aus `Authorization`-Cookie, `autodarts_refresh_token` (Refresh-Flow) oder aus laufenden `api.autodarts.io`-Request-Headern im Runtime-Kontext stammen.
+
 ### Ablauf
 1. Match in `Spiele` über `Match starten` auslösen.
 2. Eine Lobby wird mit den Turnier-Settings erstellt (X01-Felder + Legs aus `Best of Legs`), immer als private Lobby.
@@ -282,7 +284,7 @@ Diese Referenz deckt die aktuell implementierten klickbaren Statusmeldungen rund
 ### Runtime-Statusleiste
 | Meldung | Bedeutung | Typische Aktion |
 |---|---|---|
-| <span id="statusmeldung-api-auth-fehlt"></span>`API Auth fehlt` / `Kein Auth-Token gefunden. Bitte neu einloggen.` | Im aktuellen Browser-Kontext wurde kein nutzbares Autodarts-Auth-Token gefunden. Die API-Halbautomatik kann so keine Lobby erstellen oder Ergebnisse lesen. | In `play.autodarts.io` neu einloggen, Seite neu laden und prüfen, ob Tampermonkey auf derselben Seite aktiv ist. |
+| <span id="statusmeldung-api-auth-fehlt"></span>`API Auth fehlt` / `Kein Auth-Token gefunden. Bitte neu einloggen.` | Im aktuellen Browser-Kontext wurde kein nutzbares Autodarts-Auth-Token gefunden. Die API-Halbautomatik kann so keine Lobby erstellen oder Ergebnisse lesen. | In `play.autodarts.io` neu einloggen, Seite neu laden und prüfen, ob Tampermonkey auf derselben Seite aktiv ist. Falls weiterhin fehlend: kurz in `Lobbies`/`Matches` navigieren, damit vorhandene Runtime-API-Header erkannt werden können. |
 | <span id="statusmeldung-api-auth-abgelaufen"></span>`API Auth abgelaufen` / `Auth abgelaufen. Bitte neu einloggen.` | Es gab zwar bereits Auth-Daten, aber die API lehnt sie aktuell ab (`401/403`). | Neu einloggen und die Seite neu laden. Danach sollte der Status wieder auf `API Auth bereit` wechseln. |
 | <span id="statusmeldung-api-auth-bereit"></span>`API Auth bereit` | Ein Auth-Token ist vorhanden und aktuell nicht durch den Backoff blockiert. | Keine Aktion nötig. Die API-Voraussetzung ist erfüllt. |
 | <span id="statusmeldung-board-aktiv"></span>`Board aktiv (<id>)` | Es wurde eine gültige Board-ID im lokalen Autodarts-Kontext erkannt. | Keine Aktion nötig. Das Board kann für automatische Lobby-Erstellung verwendet werden. |
@@ -515,6 +517,7 @@ Hinweise:
 
 ### API-Start/Sync funktioniert nicht
 - Login prüfen (Token vorhanden?).
+- Kurz zu `Lobbies` oder `Matches` wechseln, damit laufende API-Header erneut erfasst werden.
 - Feature-Flag aktiv?
 - Eindeutige Teilnehmernamen verwenden.
 - Bei mehreren offenen Matches mit derselben Paarung wird absichtlich nicht automatisch übernommen (`Mehrdeutige Zuordnung`), um falsche Ergebnisse zu vermeiden.

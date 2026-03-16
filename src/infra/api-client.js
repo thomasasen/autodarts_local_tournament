@@ -93,7 +93,209 @@
   }
 
 
+  function extractAuthTokenFromAuthorizationHeader(value) {
+    const rawValue = normalizeText(value || "");
+    if (!rawValue) {
+      return "";
+    }
+    if (/^basic\s+/i.test(rawValue)) {
+      return "";
+    }
+    if (/^[a-z-]+\s+/i.test(rawValue) && !/^bearer\s+/i.test(rawValue)) {
+      return "";
+    }
+    return normalizeText(rawValue.replace(/^bearer\s+/i, ""));
+  }
+
+
+  function getHeaderValueCaseInsensitive(headers, name) {
+    const target = normalizeText(name || "").toLowerCase();
+    if (!target || !headers) {
+      return "";
+    }
+    if (typeof Headers !== "undefined" && headers instanceof Headers) {
+      return normalizeText(headers.get(target) || "");
+    }
+    if (Array.isArray(headers)) {
+      for (let index = 0; index < headers.length; index += 1) {
+        const entry = headers[index];
+        if (!Array.isArray(entry) || entry.length < 2) {
+          continue;
+        }
+        if (normalizeText(entry[0] || "").toLowerCase() === target) {
+          return normalizeText(entry[1] || "");
+        }
+      }
+      return "";
+    }
+    if (typeof headers === "object") {
+      const keys = Object.keys(headers);
+      for (let index = 0; index < keys.length; index += 1) {
+        const key = keys[index];
+        if (normalizeText(key || "").toLowerCase() === target) {
+          return normalizeText(headers[key] || "");
+        }
+      }
+    }
+    return "";
+  }
+
+
+  function isApiProviderUrl(url) {
+    const value = normalizeText(url || "");
+    if (!value) {
+      return false;
+    }
+    try {
+      return normalizeText(new URL(value, location.href).host).toLowerCase() === API_PROVIDER;
+    } catch (_) {
+      return false;
+    }
+  }
+
+
+  function captureAuthTokenFromAuthorizationHeader(value, source = "request-header") {
+    const token = extractAuthTokenFromAuthorizationHeader(value);
+    if (!token) {
+      return "";
+    }
+    const previousToken = normalizeText(state.apiAutomation.authToken || "");
+    const previousSource = normalizeText(state.apiAutomation.authTokenSource || "");
+    const normalizedSource = normalizeText(source || "request-header");
+    cacheResolvedAuthToken(token, normalizedSource);
+    if (token !== previousToken || normalizedSource !== previousSource) {
+      logDebug("api", "Auth token captured from runtime request header.", {
+        source: normalizedSource,
+        tokenLength: token.length,
+      });
+      refreshRuntimeStatusUi();
+    }
+    return token;
+  }
+
+
+  function captureAuthTokenFromRequestHeaders(headers, options = {}) {
+    const requestUrl = normalizeText(options.requestUrl || "");
+    if (requestUrl && !isApiProviderUrl(requestUrl)) {
+      return "";
+    }
+    const authorizationHeader = getHeaderValueCaseInsensitive(headers, "authorization");
+    if (!authorizationHeader) {
+      return "";
+    }
+    return captureAuthTokenFromAuthorizationHeader(
+      authorizationHeader,
+      normalizeText(options.source || "request-header"),
+    );
+  }
+
+
+  function installRuntimeAuthHeaderCapture() {
+    if (state.apiAutomation.authHeaderCaptureInstalled) {
+      return;
+    }
+    state.apiAutomation.authHeaderCaptureInstalled = true;
+
+    const restoreHandlers = [];
+    const xhrPrototype = window.XMLHttpRequest?.prototype;
+
+    if (xhrPrototype && typeof xhrPrototype.open === "function" && typeof xhrPrototype.setRequestHeader === "function") {
+      const originalOpen = xhrPrototype.open;
+      const originalSetRequestHeader = xhrPrototype.setRequestHeader;
+      const originalSend = typeof xhrPrototype.send === "function" ? xhrPrototype.send : null;
+
+      xhrPrototype.open = function openWithAtaAuthCapture(method, url) {
+        this.__ataAuthCaptureMeta = {
+          method: normalizeText(method || "GET").toUpperCase(),
+          requestUrl: normalizeText(url || ""),
+          headers: {},
+        };
+        return originalOpen.apply(this, arguments);
+      };
+
+      xhrPrototype.setRequestHeader = function setRequestHeaderWithAtaAuthCapture(name, value) {
+        const meta = this.__ataAuthCaptureMeta || {
+          method: "GET",
+          requestUrl: "",
+          headers: {},
+        };
+        meta.headers[normalizeText(name || "").toLowerCase()] = normalizeText(value || "");
+        this.__ataAuthCaptureMeta = meta;
+        if (
+          normalizeText(name || "").toLowerCase() === "authorization"
+          && isApiProviderUrl(meta.requestUrl)
+        ) {
+          captureAuthTokenFromRequestHeaders(meta.headers, {
+            requestUrl: meta.requestUrl,
+            source: "request-header:xhr",
+          });
+        }
+        return originalSetRequestHeader.apply(this, arguments);
+      };
+
+      if (originalSend) {
+        xhrPrototype.send = function sendWithAtaAuthCapture() {
+          const meta = this.__ataAuthCaptureMeta;
+          if (meta?.headers) {
+            captureAuthTokenFromRequestHeaders(meta.headers, {
+              requestUrl: normalizeText(meta.requestUrl || ""),
+              source: "request-header:xhr",
+            });
+          }
+          return originalSend.apply(this, arguments);
+        };
+      }
+
+      restoreHandlers.push(() => {
+        xhrPrototype.open = originalOpen;
+        xhrPrototype.setRequestHeader = originalSetRequestHeader;
+        if (originalSend) {
+          xhrPrototype.send = originalSend;
+        }
+      });
+    }
+
+    if (typeof window.fetch === "function") {
+      const originalFetch = window.fetch;
+      window.fetch = function fetchWithAtaAuthCapture(input, init) {
+        const requestUrl = normalizeText(
+          (typeof input === "string" ? input : (input?.url || ""))
+          || (typeof init?.url === "string" ? init.url : ""),
+        );
+        captureAuthTokenFromRequestHeaders(init?.headers, {
+          requestUrl,
+          source: "request-header:fetch",
+        });
+        if (input && typeof input === "object") {
+          captureAuthTokenFromRequestHeaders(input.headers, {
+            requestUrl,
+            source: "request-header:fetch",
+          });
+        }
+        return originalFetch.apply(this, arguments);
+      };
+
+      restoreHandlers.push(() => {
+        window.fetch = originalFetch;
+      });
+    }
+
+    if (restoreHandlers.length) {
+      addCleanup(() => {
+        restoreHandlers.forEach((restoreHandler) => {
+          try {
+            restoreHandler();
+          } catch (error) {
+            logWarn("api", "Auth header capture cleanup failed.", error);
+          }
+        });
+      });
+    }
+  }
+
+
   function getAuthStateSnapshot() {
+    installRuntimeAuthHeaderCapture();
     const cookieToken = getAuthTokenFromCookie();
     const refreshToken = getRefreshTokenFromStorage();
     const cachedToken = normalizeText(state.apiAutomation.authToken || "");
@@ -141,6 +343,7 @@
 
 
   async function resolveAuthToken(options = {}) {
+    installRuntimeAuthHeaderCapture();
     const forceRefresh = Boolean(options.forceRefresh);
     const cookieToken = getAuthTokenFromCookie();
     if (cookieToken && !forceRefresh) {
@@ -518,6 +721,9 @@
     }
     return includeErrored && auto.status === "error";
   }
+
+
+  installRuntimeAuthHeaderCapture();
 
 
   function findTournamentMatchByLobbyId(tournament, lobbyId, includeCompleted = false) {
