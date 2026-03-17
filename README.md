@@ -40,6 +40,7 @@ Zusätzliche Detaildoku zur Zeitberechnung: [docs/tournament-duration.md](docs/t
 | [docs/pdc-dra-compliance.md](docs/pdc-dra-compliance.md) | Überblick, welche PDC/DRA-Regelpunkte fachlich umgesetzt sind | Turnierlogik / Regelbezug |
 | [docs/dra-compliance-matrix.md](docs/dra-compliance-matrix.md) | Detailmatrix zu Regel-Mappings, Tie-Break-Profilen und Migration | Entwickler / Regel-Review |
 | [docs/dra-regeln-gui.md](docs/dra-regeln-gui.md) | GUI-bezogene Regelerklärungen für Info-/Regel-Links in der Oberfläche | Nutzer / Turnierleitung / Entwickler |
+| [docs/autodarts-api-capabilities.md](docs/autodarts-api-capabilities.md) | Beobachtete API-Endpunkte, Risikoklassen und Probe-Vorgehen zur laufenden Erweiterung | Entwickler / API-Integration |
 | [docs/changelog.md](docs/changelog.md) | Historie der Releases und Funktionsänderungen | Nutzer / Entwickler |
 
 ## Installation
@@ -236,6 +237,7 @@ Tab: `Spiele`
 - Feature-Flag `Automatischer Lobby-Start + API-Sync` aktiv
 
 Das Auth-Token kann aus `Authorization`-Cookie, `autodarts_refresh_token` (Refresh-Flow) oder aus laufenden `api.autodarts.io`-Request-Headern im Runtime-Kontext stammen.
+Eine laufend gepflegte Endpoint-Matrix steht in [docs/autodarts-api-capabilities.md](docs/autodarts-api-capabilities.md).
 
 ### Ablauf
 1. Match in `Spiele` über `Match starten` auslösen.
@@ -620,7 +622,7 @@ powershell -ExecutionPolicy Bypass -File scripts/test-runtime-contract.ps1
   - `league`: `2..16`
   - `groups_ko`: `4..16`
 - Technisches Hard-Cap: `128` Teilnehmer
-- API-Halbautomatik basiert auf in der Praxis verwendeten Endpunkten (Inference)
+- API-Halbautomatik basiert auf in der Praxis verwendeten Endpunkten (Inference), siehe [docs/autodarts-api-capabilities.md](docs/autodarts-api-capabilities.md)
 - DOM-Autodetect bleibt best-effort
 
 ## Quellen

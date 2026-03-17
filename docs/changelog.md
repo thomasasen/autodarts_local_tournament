@@ -10,6 +10,9 @@
   - Auth-Fallback erweitert: wenn kein `Authorization`-Cookie vorhanden ist, wird ein Access-Token aus `autodarts_refresh_token` via `POST /auth/v1/refresh` geholt und gecacht.
   - zusätzlicher Auth-Fallback: wenn Cookie/Refresh fehlen, wird ein Bearer-Token aus laufenden `api.autodarts.io`-Request-Headern erkannt und als Runtime-Cache genutzt.
   - Auth-Header-Capture läuft jetzt über eine isolierte Page-Bridge statt direkter Userscript-Prototyp-Patches, damit die reguläre Autodarts-Matchanlage stabil bleibt.
+  - Neue API-Dokumentation `docs/autodarts-api-capabilities.md` mit Endpoint-Matrix, Risikoklassen und Probe-Prozess ergänzt.
+  - Versioniertes Console-Probe-Skript `docs/ata-api-probe-v2.js` ergänzt, inklusive Request-Body-Key-Erfassung für Capability-Reports.
+  - Probe-Sicherheitsnetz ergänzt: keine Tokenwerte, keine Query-Parameterwerte, nur strukturelle Body-Key-Pfade im Report.
 - Runtime-Update-Pfad aus `autodarts-xconfig` technisch übernommen:
   - neue GitHub-Update-Erkennung im Tab `Einstellungen` mit gecachtem Versionsstatus, TTL und manuellem Recheck
   - `.meta.js`-Artefakt für leichtgewichtigen Versionsabgleich ergänzt
