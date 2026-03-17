@@ -14,6 +14,7 @@
   - Versioniertes Console-Probe-Skript `docs/ata-api-probe-v2.js` ergänzt, inklusive Request-Body-Key-Erfassung für Capability-Reports.
   - Probe-Sicherheitsnetz ergänzt: keine Tokenwerte, keine Query-Parameterwerte, nur strukturelle Body-Key-Pfade im Report.
   - Troubleshooting ergänzt: `GET /gs/v0/matches/{id}/challenge` mit `404` als beobachteter, nicht blockierender App-Call dokumentiert; zusätzlicher Hinweis zu sensitiven SSO-Parametern in Roh-Logs.
+  - API-Dokumentation mit Internet-Recherche erweitert: quellenmarkierte Gesamtliste (`A/B/C/P`-Confidence), zusätzliche Community-Endpunkte (`/matches/{id}/corrections`, `PATCH /matches/{id}/throws`, `/matches/{id}/undo`, `/lobbies/{id}/players/by-index/{index}`, `/as/v0/users/{id}/stats/{variant}`) und WebSocket-Hinweis `/ms/v0/subscribe`.
 - Runtime-Update-Pfad aus `autodarts-xconfig` technisch übernommen:
   - neue GitHub-Update-Erkennung im Tab `Einstellungen` mit gecachtem Versionsstatus, TTL und manuellem Recheck
   - `.meta.js`-Artefakt für leichtgewichtigen Versionsabgleich ergänzt
