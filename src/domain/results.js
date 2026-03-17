@@ -161,9 +161,21 @@
     if (match.stage === MATCH_STAGE_KO) {
       const blockingMatch = getKoBlockingSourceMatch(tournament, match);
       if (blockingMatch) {
+        const koFinalRound = getMatchesByStage(tournament, MATCH_STAGE_KO).reduce((maxRound, koMatch) => {
+          if (normalizeText(koMatch?.meta?.bracket?.matchRole || "") === "third_place") {
+            return maxRound;
+          }
+          const roundNumber = clampInt(koMatch?.round, 0, 0, 64);
+          return roundNumber > maxRound ? roundNumber : maxRound;
+        }, 0);
+        const blockingLabel = getKoRoundMatchLabel(
+          blockingMatch.round,
+          koFinalRound || blockingMatch.round,
+          blockingMatch.number,
+        );
         return {
           editable: false,
-          reason: `Vorg\u00e4nger-Match Runde ${blockingMatch.round} / Spiel ${blockingMatch.number} muss zuerst abgeschlossen werden.`,
+          reason: `Vorg\u00e4nger-Match ${blockingLabel} muss zuerst abgeschlossen werden.`,
         };
       }
     }

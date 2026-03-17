@@ -697,11 +697,11 @@
   }
 
 
-  function normalizeKoRoundStructure(rawRound, roundFallback) {
+  function normalizeKoRoundStructure(rawRound, roundFallback, totalRounds = roundFallback) {
     const virtualMatchesRaw = Array.isArray(rawRound?.virtualMatches) ? rawRound.virtualMatches : [];
     return {
       round: clampInt(rawRound?.round, roundFallback, 1, 64),
-      label: normalizeText(rawRound?.label || `Round ${roundFallback}`),
+      label: normalizeText(rawRound?.label || getKoRoundLabel(roundFallback, totalRounds)),
       virtualMatches: virtualMatchesRaw.map((entry, index) => (
         normalizeKoVirtualMatch(entry, roundFallback, index + 1)
       )),
@@ -760,7 +760,7 @@
       .map((entry, index) => normalizeKoSeedEntry(entry, index + 1))
       .filter(Boolean);
     const rounds = (Array.isArray(ko.rounds) ? ko.rounds : [])
-      .map((entry, index) => normalizeKoRoundStructure(entry, index + 1));
+      .map((entry, index, array) => normalizeKoRoundStructure(entry, index + 1, array.length || index + 1));
     const fallbackBracketSize = nextPowerOfTwo(Math.max(2, seeding.length));
     const bracketSize = nextPowerOfTwo(clampInt(
       ko.bracketSize,

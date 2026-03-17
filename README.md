@@ -266,7 +266,7 @@ Der dokumentarische Qualitätsstandard (spec-first, Fehlerstandard, Review-Check
 ### Ergebnisführung: Sortierung und Status verstehen
 Sortiersegmente im Tab `Spiele`:
 - `Spielbar zuerst`: priorisiert live/spielbare Paarungen für schnellen Ablauf.
-- `Runde/Spiel`: strikte Reihenfolge nach Turnierstruktur.
+- `Phase/Spiel`: strikte Reihenfolge nach Turnierstruktur.
 - `Status`: gruppiert nach offen/abgeschlossen/Freilos.
 
 Die bekannten Statusmeldungen in Runtime-Leiste, Matchkarten, History-Import und passenden Notice-Bannern sind direkt klickbar und verweisen auf die jeweilige Stelle in dieser README.
@@ -274,7 +274,7 @@ Die bekannten Statusmeldungen in Runtime-Leiste, Matchkarten, History-Import und
 Wichtige Markierungen:
 - `Nächstes Match`: empfohlene nächste Paarung (PDC: Next Match).
 - `Freilos (Bye)`: automatischer Weiterzug ohne Spiel.
-- `Finale`: letzte KO-Paarung.
+- `Achtelfinale`, `Viertelfinale`, `Halbfinale`, `Finale`: offizielle KO-Endphasenbezeichnungen; davor bei großen Feldern `Letzte 32`, `Letzte 64` usw.
 - `Platz 3`: Gewinner des optionalen Platz-3-Spiels.
 - `Champion`: finaler Gewinner inklusive Leg-Ergebnis.
 
@@ -325,7 +325,7 @@ Diese Referenz deckt die aktuell implementierten klickbaren Statusmeldungen rund
 | <span id="statusmeldung-match-nicht-verfuegbar"></span>`Match nicht verfügbar.` | Das Matchobjekt fehlt oder ist im aktuellen Zustand nicht bearbeitbar. | Turnierzustand neu laden; bei persistenter Abweichung Export prüfen oder Turnier neu erzeugen. |
 | <span id="statusmeldung-match-bereits-abgeschlossen"></span>`Match ist bereits abgeschlossen.` | Das Ergebnis wurde schon gespeichert. | Keine erneute Eingabe nötig; ggf. im Turnierbaum oder in der Ergebnisliste prüfen. |
 | <span id="statusmeldung-paarung-steht-noch-nicht-fest"></span>`Paarung steht noch nicht fest.` | Mindestens ein Teilnehmer des Matches ist noch offen, z. B. in späteren KO-Runden. | Zuerst die vorgelagerten Matches abschließen. |
-| <span id="statusmeldung-vorgaenger-match-muss-zuerst-abgeschlossen-werden"></span>`Vorgänger-Match Runde <r> / Spiel <n> muss zuerst abgeschlossen werden.` | Das Match ist fachlich gesperrt, weil die direkte Vorpaarung noch offen ist. | Zuerst das genannte Vorgänger-Match abschließen. |
+| <span id="statusmeldung-vorgaenger-match-muss-zuerst-abgeschlossen-werden"></span>`Vorgänger-Match <phase> / Spiel <n> muss zuerst abgeschlossen werden.` | Das Match ist fachlich gesperrt, weil die direkte Vorpaarung noch offen ist. In KO-Endphasen wird die offizielle Bezeichnung verwendet, z. B. `Halbfinale` statt `Runde 2`. | Zuerst das genannte Vorgänger-Match abschließen. |
 | <span id="statusmeldung-api-ergebnis-noch-nicht-final-verfuegbar"></span>`API-Ergebnis ist noch nicht final verfügbar.` / `Match-Stats noch nicht verfügbar.` | Die Lobby existiert, aber die API liefert noch kein belastbares Endergebnis. Das ist während eines laufenden Matches normal. | Kurz warten und erneut synchronisieren; kein Fehlerzustand. |
 | <span id="statusmeldung-keine-lobby-id-erkannt"></span>`Keine Lobby-ID erkannt.` / `Keine Lobby-ID vorhanden.` | Für die angeforderte Aktion gibt es noch keine verknüpfte Lobby-ID. | Match zuerst starten oder auf der passenden Match-/History-Seite aufrufen. |
 | <span id="statusmeldung-mehrdeutige-zuordnung-lobby"></span>`Mehrdeutige Zuordnung: mehrere offene Turnier-Matches passen zur Lobby. Bitte in der Ergebnisführung manuell speichern.` | Die API-Daten reichen nicht aus, um genau ein offenes Turniermatch sicher zu treffen. Automatik stoppt absichtlich. | Ergebnis manuell im korrekten Match speichern oder die Zuordnung über History/Teilnehmer klären. |

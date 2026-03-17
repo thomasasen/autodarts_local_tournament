@@ -151,7 +151,7 @@
       .sort((left, right) => left[0] - right[0])
       .map(([roundNumber, matches]) => `
           <div class="ata-bracket-round ${roundNumber === maxMainRound ? "ata-bracket-round-final" : ""}">
-            <strong>Runde ${roundNumber}</strong>
+            <strong>${escapeHtml(getKoRoundLabel(roundNumber, maxMainRound || roundNumber))}</strong>
             ${renderStaticBracketFallbackMatches(tournament, matches)}
           </div>
         `).join("");

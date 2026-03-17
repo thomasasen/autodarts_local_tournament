@@ -18,7 +18,7 @@
     assert(Boolean(syncDoc), "Dokulink fuer aktiven API-Sync erwartet.");
     assertEqual(syncDoc.href, `${README_BASE_URL}#statusmeldung-api-sync-aktiv`);
 
-    const predecessorDoc = getReadmeStatusMessageDoc("Vorgänger-Match Runde 2 / Spiel 1 muss zuerst abgeschlossen werden.");
+    const predecessorDoc = getReadmeStatusMessageDoc("Vorgänger-Match Halbfinale / Spiel 1 muss zuerst abgeschlossen werden.");
     assert(Boolean(predecessorDoc), "Dokulink fuer blockierendes Vorgaenger-Match erwartet.");
     assertEqual(predecessorDoc.href, `${README_BASE_URL}#statusmeldung-vorgaenger-match-muss-zuerst-abgeschlossen-werden`);
   });

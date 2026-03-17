@@ -407,7 +407,7 @@
       }
       rounds.push({
         round,
-        label: round === totalRounds ? "Final" : `Round ${round}`,
+        label: getKoRoundLabel(round, totalRounds),
         virtualMatches,
       });
       currentNodes = nextNodes;

@@ -1919,6 +1919,57 @@
   }
 
 
+  function getKoRoundSize(round, totalRounds) {
+    const normalizedRound = clampInt(round, null, 1, 64);
+    const normalizedTotalRounds = clampInt(totalRounds, null, 1, 64);
+    if (!Number.isFinite(normalizedRound) || !Number.isFinite(normalizedTotalRounds) || normalizedRound > normalizedTotalRounds) {
+      return null;
+    }
+    return 2 ** (normalizedTotalRounds - normalizedRound + 1);
+  }
+
+
+  function getKoRoundLabel(round, totalRounds, fallbackPrefix = "Runde") {
+    const normalizedRound = clampInt(round, null, 1, 64);
+    const normalizedTotalRounds = clampInt(totalRounds, null, 1, 64);
+    const prefix = normalizeText(fallbackPrefix || "Runde") || "Runde";
+    if (!Number.isFinite(normalizedRound) || !Number.isFinite(normalizedTotalRounds) || normalizedRound > normalizedTotalRounds) {
+      return Number.isFinite(normalizedRound) ? `${prefix} ${normalizedRound}` : prefix;
+    }
+
+    const roundSize = getKoRoundSize(normalizedRound, normalizedTotalRounds);
+    if (!Number.isFinite(roundSize)) {
+      return `${prefix} ${normalizedRound}`;
+    }
+    if (roundSize === 2) {
+      return "Finale";
+    }
+    if (roundSize === 4) {
+      return "Halbfinale";
+    }
+    if (roundSize === 8) {
+      return "Viertelfinale";
+    }
+    if (roundSize === 16) {
+      return "Achtelfinale";
+    }
+    if (roundSize >= 32) {
+      return `Letzte ${roundSize}`;
+    }
+    return `${prefix} ${normalizedRound}`;
+  }
+
+
+  function getKoRoundMatchLabel(round, totalRounds, matchNumber) {
+    const roundLabel = getKoRoundLabel(round, totalRounds);
+    const normalizedMatchNumber = clampInt(matchNumber, null, 1, 256);
+    if (!Number.isFinite(normalizedMatchNumber)) {
+      return roundLabel;
+    }
+    return `${roundLabel} / Spiel ${normalizedMatchNumber}`;
+  }
+
+
   function parseParticipantLines(rawLines) {
     const lines = String(rawLines || "").split(/\r?\n/);
     const seen = new Set();
@@ -3236,11 +3287,11 @@
   }
 
 
-  function normalizeKoRoundStructure(rawRound, roundFallback) {
+  function normalizeKoRoundStructure(rawRound, roundFallback, totalRounds = roundFallback) {
     const virtualMatchesRaw = Array.isArray(rawRound?.virtualMatches) ? rawRound.virtualMatches : [];
     return {
       round: clampInt(rawRound?.round, roundFallback, 1, 64),
-      label: normalizeText(rawRound?.label || `Round ${roundFallback}`),
+      label: normalizeText(rawRound?.label || getKoRoundLabel(roundFallback, totalRounds)),
       virtualMatches: virtualMatchesRaw.map((entry, index) => (
         normalizeKoVirtualMatch(entry, roundFallback, index + 1)
       )),
@@ -3299,7 +3350,7 @@
       .map((entry, index) => normalizeKoSeedEntry(entry, index + 1))
       .filter(Boolean);
     const rounds = (Array.isArray(ko.rounds) ? ko.rounds : [])
-      .map((entry, index) => normalizeKoRoundStructure(entry, index + 1));
+      .map((entry, index, array) => normalizeKoRoundStructure(entry, index + 1, array.length || index + 1));
     const fallbackBracketSize = nextPowerOfTwo(Math.max(2, seeding.length));
     const bracketSize = nextPowerOfTwo(clampInt(
       ko.bracketSize,
@@ -4083,7 +4134,7 @@
       }
       rounds.push({
         round,
-        label: round === totalRounds ? "Final" : `Round ${round}`,
+        label: getKoRoundLabel(round, totalRounds),
         virtualMatches,
       });
       currentNodes = nextNodes;
@@ -6041,9 +6092,21 @@
     if (match.stage === MATCH_STAGE_KO) {
       const blockingMatch = getKoBlockingSourceMatch(tournament, match);
       if (blockingMatch) {
+        const koFinalRound = getMatchesByStage(tournament, MATCH_STAGE_KO).reduce((maxRound, koMatch) => {
+          if (normalizeText(koMatch?.meta?.bracket?.matchRole || "") === "third_place") {
+            return maxRound;
+          }
+          const roundNumber = clampInt(koMatch?.round, 0, 0, 64);
+          return roundNumber > maxRound ? roundNumber : maxRound;
+        }, 0);
+        const blockingLabel = getKoRoundMatchLabel(
+          blockingMatch.round,
+          koFinalRound || blockingMatch.round,
+          blockingMatch.number,
+        );
         return {
           editable: false,
-          reason: `Vorg\u00e4nger-Match Runde ${blockingMatch.round} / Spiel ${blockingMatch.number} muss zuerst abgeschlossen werden.`,
+          reason: `Vorg\u00e4nger-Match ${blockingLabel} muss zuerst abgeschlossen werden.`,
         };
       }
     }
@@ -12550,7 +12613,7 @@
       { anchor: "statusmeldung-match-nicht-verfuegbar", match: () => exact("Match nicht verfügbar.") },
       { anchor: "statusmeldung-match-bereits-abgeschlossen", match: () => exact("Match ist bereits abgeschlossen.") },
       { anchor: "statusmeldung-paarung-steht-noch-nicht-fest", match: () => exact("Paarung steht noch nicht fest.") },
-      { anchor: "statusmeldung-vorgaenger-match-muss-zuerst-abgeschlossen-werden", match: () => prefix("Vorgänger-Match Runde ") },
+      { anchor: "statusmeldung-vorgaenger-match-muss-zuerst-abgeschlossen-werden", match: () => prefix("Vorgänger-Match ") && text.endsWith(" muss zuerst abgeschlossen werden.") },
       { anchor: "statusmeldung-ergebnis-bereits-im-turnier-gespeichert", match: () => exact("Ergebnis bereits im Turnier gespeichert.") || exact("Ergebnis war bereits übernommen.") },
       { anchor: "statusmeldung-kein-eindeutiger-statistik-host", match: () => exact("Kein eindeutiger Statistik-Host für diese Lobby auf der History-Seite gefunden.") },
       { anchor: "statusmeldung-statistik-host-konnte-nicht-zugeordnet-werden", match: () => exact("Statistik-Host konnte nicht auf einen Kartenbereich zugeordnet werden.") },
@@ -13189,7 +13252,7 @@
     const sortMode = sanitizeMatchesSortMode(state.store?.ui?.matchesSortMode, MATCH_SORT_MODE_READY_FIRST);
     const sortOptions = [
       { id: MATCH_SORT_MODE_READY_FIRST, label: "Spielbar zuerst" },
-      { id: MATCH_SORT_MODE_ROUND, label: "Runde/Spiel" },
+      { id: MATCH_SORT_MODE_ROUND, label: "Phase/Spiel" },
       { id: MATCH_SORT_MODE_STATUS, label: "Status" },
     ];
 
@@ -13224,6 +13287,9 @@
         && !isThirdPlaceMatch
         && koFinalRound > 0
         && Number(match.round) === koFinalRound;
+      const koRoundLabel = match.stage === MATCH_STAGE_KO && !isThirdPlaceMatch
+        ? getKoRoundLabel(match.round, koFinalRound || match.round)
+        : "";
       const stageLabel = match.stage === MATCH_STAGE_GROUP
         ? `Gruppe ${match.groupId || "?"}`
         : match.stage === MATCH_STAGE_LEAGUE
@@ -13245,8 +13311,16 @@
       } else if (!isByeCompletion && auto.status !== "completed") {
         statusLine = autoStatus;
       }
-      const matchCellText = `Runde ${match.round} / Spiel ${match.number}`;
-      const matchCellHelpText = "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
+      const matchCellText = isThirdPlaceMatch
+        ? "Spiel um Platz 3"
+        : match.stage === MATCH_STAGE_KO
+          ? getKoRoundMatchLabel(match.round, koFinalRound || match.round, match.number)
+          : `Runde ${match.round} / Spiel ${match.number}`;
+      const matchCellHelpText = isThirdPlaceMatch
+        ? "Spiel um Platz 3 = separates Bronze-Match, getrennt vom Champion-Pfad."
+        : match.stage === MATCH_STAGE_KO
+          ? `KO-Phase = ${koRoundLabel} bzw. bei großen Feldern Letzte N, Spiel = Paarung innerhalb dieser Phase.`
+          : "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
       const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
       const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
       const saveHelpText = `Speichert Legs f\u00fcr ${player1} vs ${player2}. Sieger wird automatisch aus den Legs bestimmt. Sieger muss ${legsToWin} Legs erreichen.`;
@@ -13554,7 +13628,7 @@
       .sort((left, right) => left[0] - right[0])
       .map(([roundNumber, matches]) => `
           <div class="ata-bracket-round ${roundNumber === maxMainRound ? "ata-bracket-round-final" : ""}">
-            <strong>Runde ${roundNumber}</strong>
+            <strong>${escapeHtml(getKoRoundLabel(roundNumber, maxMainRound || roundNumber))}</strong>
             ${renderStaticBracketFallbackMatches(tournament, matches)}
           </div>
         `).join("");

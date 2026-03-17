@@ -6,6 +6,20 @@
   });
 
 
+  test("KO labels: offizielle Endphasen werden aus der Feldgroesse abgeleitet", () => {
+    assertEqual(getKoRoundLabel(1, 4), "Achtelfinale");
+    assertEqual(getKoRoundLabel(2, 4), "Viertelfinale");
+    assertEqual(getKoRoundLabel(3, 4), "Halbfinale");
+    assertEqual(getKoRoundLabel(4, 4), "Finale");
+  });
+
+
+  test("KO labels: fruehe grosse Felder bleiben bei Letzte N", () => {
+    assertEqual(getKoRoundLabel(1, 5), "Letzte 32");
+    assertEqual(getKoRoundLabel(1, 6), "Letzte 64");
+  });
+
+
   test("KO engine: Draw-Lock haelt die KO-Struktur stabil", () => {
     const tournament = createKoTournament(participantList(8, "DL"), { koDrawLocked: true });
     const before = JSON.stringify(tournament.ko?.rounds || []);
@@ -34,6 +48,20 @@
     assert(changed, "Fortschreibung der Gewinner sollte Aenderungen erzeugen.");
     assertEqual(final.player1Id, semi1.player1Id);
     assertEqual(final.player2Id, semi2.player2Id);
+  });
+
+
+  test("KO engine: blockierende Vorgaenger werden mit offizieller Phase benannt", () => {
+    const tournament = createKoTournament(participantList(4, "BL"));
+    const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
+    const semi1 = koMatches.find((match) => match.round === 1 && match.number === 1);
+    const semi2 = koMatches.find((match) => match.round === 1 && match.number === 2);
+    const final = koMatches.find((match) => match.round === 2 && match.number === 1);
+    final.player1Id = semi1.player1Id;
+    final.player2Id = semi2.player1Id;
+    const playability = getMatchEditability(tournament, final);
+    assertEqual(playability.editable, false);
+    assertEqual(playability.reason, "Vorgänger-Match Halbfinale / Spiel 1 muss zuerst abgeschlossen werden.");
   });
 
 
@@ -116,4 +144,3 @@
     assertEqual(tournament.ko.drawLocked, true);
     assertEqual(tournament.ko.enableThirdPlaceMatch, false);
   });
-

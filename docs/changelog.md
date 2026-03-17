@@ -1,6 +1,10 @@
 ﻿# Changelog
 
 ## Unreleased
+- KO-Phasen fachlich sauber benannt:
+  - KO-Ansicht und Matchkarten zeigen jetzt offizielle Endphasenbezeichnungen (`Achtelfinale`, `Viertelfinale`, `Halbfinale`, `Finale`).
+  - Frühere große KO-Stufen bleiben als `Letzte 32`, `Letzte 64` usw. statt künstlicher `...finale`-Labels benannt.
+  - Blockiermeldungen für Vorgänger-Matches referenzieren dieselbe KO-Phase statt generischem `Runde <n>`.
 - Matchstart robuster und besser debugbar gemacht:
   - `Match starten` nutzt jetzt einen testbaren Start-Flow mit strukturierter Schrittverfolgung.
   - fehlgeschlagene, noch nicht gestartete Lobbys werden vorsichtig per `DELETE /lobbies/{id}` bereinigt.

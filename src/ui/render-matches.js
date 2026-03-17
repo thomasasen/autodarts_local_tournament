@@ -9,7 +9,7 @@
     const sortMode = sanitizeMatchesSortMode(state.store?.ui?.matchesSortMode, MATCH_SORT_MODE_READY_FIRST);
     const sortOptions = [
       { id: MATCH_SORT_MODE_READY_FIRST, label: "Spielbar zuerst" },
-      { id: MATCH_SORT_MODE_ROUND, label: "Runde/Spiel" },
+      { id: MATCH_SORT_MODE_ROUND, label: "Phase/Spiel" },
       { id: MATCH_SORT_MODE_STATUS, label: "Status" },
     ];
 
@@ -44,6 +44,9 @@
         && !isThirdPlaceMatch
         && koFinalRound > 0
         && Number(match.round) === koFinalRound;
+      const koRoundLabel = match.stage === MATCH_STAGE_KO && !isThirdPlaceMatch
+        ? getKoRoundLabel(match.round, koFinalRound || match.round)
+        : "";
       const stageLabel = match.stage === MATCH_STAGE_GROUP
         ? `Gruppe ${match.groupId || "?"}`
         : match.stage === MATCH_STAGE_LEAGUE
@@ -65,8 +68,16 @@
       } else if (!isByeCompletion && auto.status !== "completed") {
         statusLine = autoStatus;
       }
-      const matchCellText = `Runde ${match.round} / Spiel ${match.number}`;
-      const matchCellHelpText = "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
+      const matchCellText = isThirdPlaceMatch
+        ? "Spiel um Platz 3"
+        : match.stage === MATCH_STAGE_KO
+          ? getKoRoundMatchLabel(match.round, koFinalRound || match.round, match.number)
+          : `Runde ${match.round} / Spiel ${match.number}`;
+      const matchCellHelpText = isThirdPlaceMatch
+        ? "Spiel um Platz 3 = separates Bronze-Match, getrennt vom Champion-Pfad."
+        : match.stage === MATCH_STAGE_KO
+          ? `KO-Phase = ${koRoundLabel} bzw. bei großen Feldern Letzte N, Spiel = Paarung innerhalb dieser Phase.`
+          : "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
       const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
       const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
       const saveHelpText = `Speichert Legs f\u00fcr ${player1} vs ${player2}. Sieger wird automatisch aus den Legs bestimmt. Sieger muss ${legsToWin} Legs erreichen.`;

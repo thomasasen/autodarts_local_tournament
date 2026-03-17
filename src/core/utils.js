@@ -78,6 +78,57 @@
   }
 
 
+  function getKoRoundSize(round, totalRounds) {
+    const normalizedRound = clampInt(round, null, 1, 64);
+    const normalizedTotalRounds = clampInt(totalRounds, null, 1, 64);
+    if (!Number.isFinite(normalizedRound) || !Number.isFinite(normalizedTotalRounds) || normalizedRound > normalizedTotalRounds) {
+      return null;
+    }
+    return 2 ** (normalizedTotalRounds - normalizedRound + 1);
+  }
+
+
+  function getKoRoundLabel(round, totalRounds, fallbackPrefix = "Runde") {
+    const normalizedRound = clampInt(round, null, 1, 64);
+    const normalizedTotalRounds = clampInt(totalRounds, null, 1, 64);
+    const prefix = normalizeText(fallbackPrefix || "Runde") || "Runde";
+    if (!Number.isFinite(normalizedRound) || !Number.isFinite(normalizedTotalRounds) || normalizedRound > normalizedTotalRounds) {
+      return Number.isFinite(normalizedRound) ? `${prefix} ${normalizedRound}` : prefix;
+    }
+
+    const roundSize = getKoRoundSize(normalizedRound, normalizedTotalRounds);
+    if (!Number.isFinite(roundSize)) {
+      return `${prefix} ${normalizedRound}`;
+    }
+    if (roundSize === 2) {
+      return "Finale";
+    }
+    if (roundSize === 4) {
+      return "Halbfinale";
+    }
+    if (roundSize === 8) {
+      return "Viertelfinale";
+    }
+    if (roundSize === 16) {
+      return "Achtelfinale";
+    }
+    if (roundSize >= 32) {
+      return `Letzte ${roundSize}`;
+    }
+    return `${prefix} ${normalizedRound}`;
+  }
+
+
+  function getKoRoundMatchLabel(round, totalRounds, matchNumber) {
+    const roundLabel = getKoRoundLabel(round, totalRounds);
+    const normalizedMatchNumber = clampInt(matchNumber, null, 1, 256);
+    if (!Number.isFinite(normalizedMatchNumber)) {
+      return roundLabel;
+    }
+    return `${roundLabel} / Spiel ${normalizedMatchNumber}`;
+  }
+
+
   function parseParticipantLines(rawLines) {
     const lines = String(rawLines || "").split(/\r?\n/);
     const seen = new Set();
