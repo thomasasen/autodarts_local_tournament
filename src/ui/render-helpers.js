@@ -160,11 +160,30 @@
   }
 
 
-  function renderTournamentDurationEstimate(estimate) {
+  function formatDurationAbsoluteTime(isoValue) {
+    const iso = normalizeText(isoValue || "");
+    if (!iso) {
+      return "";
+    }
+    try {
+      return new Intl.DateTimeFormat("de-DE", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(iso));
+    } catch (_) {
+      return "";
+    }
+  }
+
+
+  function renderTournamentDurationEstimate(estimate, options = {}) {
+    const visible = options?.visible !== false;
     const helpLinks = renderInfoLinks([
       { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erkl\u00e4rung zur Turnierzeit-Prognose \u00f6ffnen", title: "README: Turnier anlegen" },
       { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen f\u00fcr das Zeitprofil \u00f6ffnen", title: "README: Einstellungen" },
     ]);
+    const visibilityButtonLabel = visible ? "Ausblenden" : "Einblenden";
+    const visibilityToggleButton = `<button type="button" class="ata-btn ata-btn-sm" data-action="toggle-duration-estimate-visibility">${visibilityButtonLabel}</button>`;
     const estimateReason = normalizeText(estimate?.reason || "");
     const boardCount = sanitizeTournamentBoardCount(
       estimate?.boardCount,
@@ -177,11 +196,32 @@
         <section class="ata-estimate-card ata-estimate-card-pending">
           <div class="ata-estimate-head">
             <strong>Voraussichtliche Turnierzeit</strong>
-            ${helpLinks}
+            <span class="ata-form-inline-actions">
+              ${visibilityToggleButton}
+              ${helpLinks}
+            </span>
           </div>
+          ${!visible ? `<p class="ata-small">Prognose ist ausgeblendet.</p>` : `
           <div class="ata-estimate-value ata-estimate-value-pending">Noch nicht berechenbar</div>
           <p class="ata-small">${escapeHtml(estimateReason || "Die Sch\u00e4tzung startet, sobald die Konfiguration f\u00fcr den gew\u00e4hlten Modus g\u00fcltig ist.")}</p>
           <p class="ata-small">Annahme: Planung mit ${escapeHtml(String(boardCount))} ${escapeHtml(boardLabel)} und abh\u00e4ngigkeitsbasierter Parallelisierung.</p>
+          `}
+        </section>
+      `;
+    }
+
+    if (!visible) {
+      return `
+        <section class="ata-estimate-card">
+          <div class="ata-estimate-head">
+            <strong>Voraussichtliche Turnierzeit</strong>
+            <span class="ata-form-inline-actions">
+              ${visibilityToggleButton}
+              ${helpLinks}
+            </span>
+          </div>
+          <div class="ata-estimate-value">ca. ${escapeHtml(formatDurationMinutes(estimate.likelyMinutes))}</div>
+          <p class="ata-small">Prognose und Parameter sind ausgeblendet.</p>
         </section>
       `;
     }
@@ -196,7 +236,10 @@
       <section class="ata-estimate-card">
         <div class="ata-estimate-head">
           <strong>Voraussichtliche Turnierzeit</strong>
-          ${helpLinks}
+          <span class="ata-form-inline-actions">
+            ${visibilityToggleButton}
+            ${helpLinks}
+          </span>
         </div>
         <div class="ata-estimate-value">ca. ${escapeHtml(formatDurationMinutes(estimate.likelyMinutes))}</div>
         <div class="ata-estimate-meta">
@@ -216,6 +259,49 @@
         <p class="ata-small">${escapeHtml(estimate.profile.description)}</p>
         <p class="ata-small">Parallelisierung ber\u00fccksichtigt Match-Abh\u00e4ngigkeiten und blockierte Spieler-Slots.</p>
         <p class="ata-small">Basis: ${escapeHtml(setupSummary)}.</p>
+      </section>
+    `;
+  }
+
+
+  function renderTournamentDurationProgress(progress, options = {}) {
+    const visible = options?.visible !== false;
+    if (!progress?.ready || !visible) {
+      return "";
+    }
+
+    const completed = clampInt(progress.completedMatches, 0, 0, 9999);
+    if (completed <= 0) {
+      return `
+        <section class="ata-estimate-card ata-estimate-card-progress">
+          <div class="ata-estimate-head">
+            <strong>Laufende Restzeit-Prognose</strong>
+          </div>
+          <p class="ata-small">Startet automatisch nach dem ersten gespeicherten Ergebnis.</p>
+        </section>
+      `;
+    }
+    const remaining = clampInt(progress.remainingMatches, 0, 0, 9999);
+    const progressPercent = Math.round(Math.max(0, Math.min(1, Number(progress.progressRatio || 0))) * 100);
+    const projectedEndTime = formatDurationAbsoluteTime(progress.projectedEndAtIso);
+    const paceLabel = formatDurationDecimal(progress.paceMultiplier || 1, 2);
+
+    return `
+      <section class="ata-estimate-card ata-estimate-card-progress">
+        <div class="ata-estimate-head">
+          <strong>Laufende Restzeit-Prognose</strong>
+        </div>
+        <div class="ata-estimate-value">Rest ca. ${escapeHtml(formatDurationMinutes(progress.projectedRemainingLikelyMinutes))}</div>
+        <div class="ata-estimate-meta">
+          <span>Fortschritt ${escapeHtml(String(completed))}/${escapeHtml(String(completed + remaining))} (${escapeHtml(String(progressPercent))}%)</span>
+          <span>Offene Match-Wellen ${escapeHtml(String(progress.remainingScheduleWaves))}</span>
+          <span>Pace-Faktor ${escapeHtml(paceLabel)}</span>
+          ${projectedEndTime ? `<span>Voraussichtliches Ende ${escapeHtml(projectedEndTime)}</span>` : ""}
+        </div>
+        <div class="ata-estimate-range">
+          Rest realistisch: ${escapeHtml(formatDurationMinutes(progress.remainingLowMinutes))} - ${escapeHtml(formatDurationMinutes(progress.remainingHighMinutes))}
+        </div>
+        <p class="ata-small">Die Restzeit wird aus offenem Matchplan und aktuellem Turnierfortschritt laufend nachgeführt.</p>
       </section>
     `;
   }

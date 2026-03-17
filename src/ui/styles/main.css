@@ -519,6 +519,13 @@
           rgba(17, 28, 56, 0.82);
       }
 
+      .ata-estimate-card-progress {
+        border-color: rgba(90, 210, 153, 0.36);
+        background:
+          radial-gradient(circle at 100% 0%, rgba(90, 210, 153, 0.12), transparent 40%),
+          rgba(17, 28, 56, 0.84);
+      }
+
       .ata-estimate-head {
         display: flex;
         align-items: center;

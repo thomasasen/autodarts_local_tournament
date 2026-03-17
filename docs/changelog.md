@@ -59,6 +59,9 @@
   - neues Eingabefeld `Boards für Zeitprognose` im Turnierformular (`1..32`)
   - Berechnung nutzt jetzt einen abhängigkeitssensitiven Scheduler (Board-Limit, Spieler-Konflikte, KO-/Phasenabhängigkeiten)
   - Ausgabe ergänzt um Match-Wellen, Peak-Parallelität und Board-Auslastung
+  - Zeitprofil-Steuerung von `Einstellungen` direkt in den Tab `Turnier` zur Prognose verschoben
+  - Prognose inkl. Parameter kann direkt ein-/ausgeblendet werden
+  - bei aktivem Turnier zusätzliche laufende Restzeit-Prognose auf Basis des Spielfortschritts ergänzt
 - Turnierzeit-Prognose ergänzt:
   - neue pure Domain-Datei `src/domain/tournament-duration.js`
   - Live-Schätzung in der Turnieranlage unter `Teilnehmer`
@@ -66,7 +69,7 @@
   - Ausgabe als Hauptwert plus realistische Spannweite
 - Neue globale Einstellung:
   - `settings.tournamentTimeProfile` mit `fast | normal | slow`
-  - Select im Tab `Einstellungen` zur Kalibrierung lokaler Spielgeschwindigkeit
+  - Select im Tab `Turnier` zur Kalibrierung lokaler Spielgeschwindigkeit
 - Tests und Doku erweitert:
   - neue Domain-Unit-Tests für Matchanzahl und Zeitlogik
   - README, Architektur- und Codebase-Dokumentation aktualisiert

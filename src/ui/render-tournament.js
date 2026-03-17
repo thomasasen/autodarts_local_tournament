@@ -1,6 +1,19 @@
 ﻿// Auto-generated module split from dist source.
   function renderTournamentTab() {
     const tournament = state.store.tournament;
+    const durationEstimateVisible = state.store?.ui?.durationEstimateVisible !== false;
+    const tournamentTimeProfile = sanitizeTournamentTimeProfile(
+      state.store?.settings?.tournamentTimeProfile,
+      TOURNAMENT_TIME_PROFILE_NORMAL,
+    );
+    const tournamentTimeProfileOptions = TOURNAMENT_TIME_PROFILES.map((profileId) => {
+      const profileMeta = getTournamentTimeProfileMeta(profileId);
+      const selectedAttr = tournamentTimeProfile === profileId ? "selected" : "";
+      const label = profileId === TOURNAMENT_TIME_PROFILE_NORMAL
+        ? `${profileMeta.label} (empfohlen)`
+        : profileMeta.label;
+      return `<option value="${profileMeta.id}" ${selectedAttr}>${escapeHtml(label)}</option>`;
+    }).join("");
     if (!tournament) {
       const draft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store?.settings);
       const randomizeChecked = draft.randomizeKoRound1 ? "checked" : "";
@@ -144,21 +157,29 @@
                   <label for="ata-participants">Teilnehmer (eine Zeile pro Person)</label>
                   <textarea id="ata-participants" name="participants" placeholder="Max Mustermann&#10;Erika Musterfrau">${escapeHtml(draft.participantsText)}</textarea>
                 </div>
-                <div class="ata-field">
-                  <label for="ata-board-count">Boards für Zeitprognose</label>
-                  <input
-                    id="ata-board-count"
-                    name="boardCount"
-                    type="number"
-                    min="1"
-                    max="${TOURNAMENT_DURATION_MAX_BOARD_COUNT}"
-                    step="1"
-                    value="${draft.boardCount}"
-                  >
-                  <div class="ata-small">Parallele Boards werden mit Spieler- und Match-Abhängigkeiten berücksichtigt.</div>
+                <div class="ata-grid-2">
+                  <div class="ata-field">
+                    <label for="ata-board-count">Boards für Zeitprognose</label>
+                    <input
+                      id="ata-board-count"
+                      name="boardCount"
+                      type="number"
+                      min="1"
+                      max="${TOURNAMENT_DURATION_MAX_BOARD_COUNT}"
+                      step="1"
+                      value="${draft.boardCount}"
+                    >
+                  </div>
+                  <div class="ata-field">
+                    <label for="ata-create-time-profile">Zeitprofil</label>
+                    <select id="ata-create-time-profile" name="tournamentTimeProfile" data-action="set-duration-time-profile">
+                      ${tournamentTimeProfileOptions}
+                    </select>
+                  </div>
                 </div>
+                <p class="ata-small">Boards + Zeitprofil steuern die Planung. Parallelisierung berücksichtigt Match-Abhängigkeiten und blockierte Spieler-Slots.</p>
                 <div id="ata-create-duration-estimate">
-                  ${renderTournamentDurationEstimate(durationEstimate)}
+                  ${renderTournamentDurationEstimate(durationEstimate, { visible: durationEstimateVisible })}
                 </div>
                 <div class="ata-actions">
                   <button type="button" class="ata-btn ata-btn-sm" data-action="shuffle-participants">Teilnehmer mischen</button>
@@ -220,6 +241,12 @@
     const activeFormatHelpLinks = renderInfoLinks([
       { href: DRA_GUI_RULE_MODE_FORMATS_URL, kind: "rule", label: "DRA-Regelerklärung zu Modus und Format öffnen", title: "DRA-Regeln in der GUI: Modus und Format" },
     ]);
+    const durationEstimate = estimateTournamentDurationFromTournament(tournament, state.store.settings);
+    const durationProgress = estimateTournamentDurationProgressFromTournament(tournament, state.store.settings);
+    const activeBoardCount = sanitizeTournamentBoardCount(
+      tournament?.duration?.boardCount,
+      TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
+    );
 
     return `
       <section class="ata-card tournamentCard">
@@ -242,6 +269,27 @@
             <div class="ata-player-chip-cloud">${participantsHtml}</div>
           </div>
         </div>
+      </section>
+      <section class="ata-card tournamentCard">
+        ${renderSectionHeading("Turnierzeit-Prognose", [
+          { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erklärung zur Turnierzeit-Prognose öffnen", title: "README: Turnier anlegen" },
+          { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen-Dokumentation öffnen", title: "README: Einstellungen" },
+        ])}
+        <div class="ata-grid-2">
+          <div class="ata-field">
+            <label for="ata-active-board-count">Boards für Prognose</label>
+            <input id="ata-active-board-count" type="number" min="1" max="${TOURNAMENT_DURATION_MAX_BOARD_COUNT}" step="1" value="${activeBoardCount}" data-action="set-duration-board-count">
+          </div>
+          <div class="ata-field">
+            <label for="ata-active-time-profile">Zeitprofil</label>
+            <select id="ata-active-time-profile" data-action="set-duration-time-profile">
+              ${tournamentTimeProfileOptions}
+            </select>
+          </div>
+        </div>
+        <p class="ata-small">Die Restzeit-Prognose aktualisiert sich laufend anhand des Turnierfortschritts.</p>
+        ${renderTournamentDurationEstimate(durationEstimate, { visible: durationEstimateVisible })}
+        ${renderTournamentDurationProgress(durationProgress, { visible: durationEstimateVisible })}
       </section>
       <section class="ata-card tournamentCard">
         <h3>Turnier zur\u00fccksetzen</h3>

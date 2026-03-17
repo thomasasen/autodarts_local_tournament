@@ -103,18 +103,6 @@
     const debugReportText = JSON.stringify(debugReport, null, 2);
     const hasMatchStartDebugSessions = debugReport.sessionCount > 0;
     const debugActionDisabledAttr = hasMatchStartDebugSessions ? "" : "disabled";
-    const tournamentTimeProfile = sanitizeTournamentTimeProfile(
-      state.store.settings.tournamentTimeProfile,
-      TOURNAMENT_TIME_PROFILE_NORMAL,
-    );
-    const tournamentTimeProfileOptions = TOURNAMENT_TIME_PROFILES.map((profileId) => {
-      const profileMeta = getTournamentTimeProfileMeta(profileId);
-      const selectedAttr = tournamentTimeProfile === profileId ? "selected" : "";
-      const label = profileId === TOURNAMENT_TIME_PROFILE_NORMAL
-        ? `${profileMeta.label} (empfohlen)`
-        : profileMeta.label;
-      return `<option value="${profileMeta.id}" ${selectedAttr}>${escapeHtml(label)}</option>`;
-    }).join("");
     const autoLobbyEnabled = state.store.settings.featureFlags.autoLobbyStart ? "checked" : "";
     const randomizeKoEnabled = state.store.settings.featureFlags.randomizeKoRound1 ? "checked" : "";
     const koDrawLockDefaultEnabled = state.store.settings.featureFlags.koDrawLockDefault !== false ? "checked" : "";
@@ -190,13 +178,7 @@
           { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erkl\u00e4rung zur Turnierzeit-Prognose \u00f6ffnen", title: "README: Turnier anlegen" },
           { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen-Dokumentation \u00f6ffnen", title: "README: Einstellungen" },
         ])}
-        <div class="ata-field">
-          <label for="ata-setting-tournament-time-profile">Zeitprofil</label>
-          <select id="ata-setting-tournament-time-profile" data-action="set-tournament-time-profile">
-            ${tournamentTimeProfileOptions}
-          </select>
-        </div>
-        <p class="ata-small">Die Sch\u00e4tzung im Tab <code>Turnier</code> rechnet immer mit Startscore, Best of, In/Out, Bull-off, Bull-Modus, Board-Anzahl und diesem globalen Zeitprofil.</p>
+        <p class="ata-small">Zeitprofil und Board-Anzahl werden direkt im Tab <code>Turnier</code> neben der Prognose gesetzt, damit die Planung ohne Tab-Wechsel angepasst werden kann.</p>
         <p class="ata-small"><strong>Schnell:</strong> z\u00fcgige Abl\u00e4ufe. <strong>Normal:</strong> ausgewogener Standard. <strong>Langsam:</strong> konservativer f\u00fcr gemischte Felder und l\u00e4ngere Wechselzeiten.</p>
       </section>
       <section class="ata-card tournamentCard">

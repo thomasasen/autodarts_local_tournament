@@ -213,9 +213,11 @@ Tab: `Turnier`
   - Anzahl geplanter Spiele
   - durchschnittliche Matchdauer
   - Match-Wellen, Peak-Parallelität und Board-Auslastung
+  - Toggle zum Ein-/Ausblenden der Prognose inkl. Parameter
 - Annahme:
   - abhängigkeitsbasiertes Scheduling mit Board-Limit, Spielerkonflikten und KO-/Phasenabhängigkeiten
-- Die globale Kalibrierung erfolgt über das Zeitprofil im Tab `Einstellungen`.
+- Zeitprofil und Board-Anzahl werden direkt im Tab `Turnier` neben der Prognose gesetzt.
+- Bei aktivem Turnier erscheint zusätzlich eine laufende Restzeit-Prognose auf Basis des Spielfortschritts.
 
 Beispiel der Live-Zeitprognose im Turnierformular:
 
@@ -442,6 +444,7 @@ Legende für die eingeblendeten Hilfelinks:
 ### Turnierzeit-Prognose
 - Details zur Berechnungsgrundlage: [docs/tournament-duration.md](docs/tournament-duration.md)
 - Das Profil kalibriert sowohl die Leg-Geschwindigkeit als auch die Zeit zwischen Matches und Turnierphasen.
+- Das Zeitprofil wird im Tab `Turnier` direkt bei der Prognose gesteuert (nicht mehr als eigenes Select im Tab `Einstellungen`).
 - Zeitprofil:
   - `Schnell`
   - `Normal` (empfohlen)

@@ -335,6 +335,7 @@
       ui: {
         activeTab: "tournament",
         matchesSortMode: MATCH_SORT_MODE_READY_FIRST,
+        durationEstimateVisible: true,
         createDraft: createDefaultCreateDraft(settings),
       },
       debugData: createDefaultDebugData(),
@@ -445,6 +446,17 @@
 
   function sanitizeTournamentBoardCount(value, fallback = TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT) {
     return clampInt(value, fallback, 1, TOURNAMENT_DURATION_MAX_BOARD_COUNT);
+  }
+
+
+  function normalizeTournamentDurationMeta(rawDuration) {
+    const duration = rawDuration && typeof rawDuration === "object" ? rawDuration : {};
+    return {
+      boardCount: sanitizeTournamentBoardCount(
+        duration.boardCount,
+        TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
+      ),
+    };
   }
 
 
@@ -837,6 +849,7 @@
     const fallbackStartScore = sanitizeStartScore(rawTournament.startScore);
     const x01 = normalizeTournamentX01Settings(rawTournament.x01, fallbackStartScore);
     const rules = normalizeTournamentRules(rawTournament.rules);
+    const duration = normalizeTournamentDurationMeta(rawTournament.duration);
 
     return {
       id: normalizeText(rawTournament.id || uuid("tournament")),
@@ -849,6 +862,7 @@
       startScore: x01.baseScore,
       x01,
       rules,
+      duration,
       participants,
       groups,
       matches,
@@ -880,6 +894,7 @@
       ui: {
         activeTab: TAB_IDS.includes(input?.ui?.activeTab) ? input.ui.activeTab : defaults.ui.activeTab,
         matchesSortMode: sanitizeMatchesSortMode(input?.ui?.matchesSortMode, defaults.ui.matchesSortMode),
+        durationEstimateVisible: input?.ui?.durationEstimateVisible !== false,
         createDraft: normalizeCreateDraft(input?.ui?.createDraft, settings),
       },
       debugData: normalizeDebugData(input?.debugData),

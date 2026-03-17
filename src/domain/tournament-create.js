@@ -582,6 +582,12 @@
       startScore: x01.baseScore,
       x01,
       rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
+      duration: {
+        boardCount: sanitizeTournamentBoardCount(
+          config?.boardCount,
+          TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
+        ),
+      },
       participants,
       groups,
       matches,

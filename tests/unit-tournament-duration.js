@@ -1,6 +1,7 @@
 test("Tournament duration: default store uses normal profile", () => {
   const store = createDefaultStore();
   assertEqual(store.settings.tournamentTimeProfile, TOURNAMENT_TIME_PROFILE_NORMAL);
+  assertEqual(store.ui.durationEstimateVisible, true);
 });
 
 
@@ -309,4 +310,52 @@ test("Tournament duration: draft board count is used by the live estimate", () =
   assert(estimate.ready, "Estimate should be ready for valid draft.");
   assertEqual(estimate.boardCount, 3);
   assertEqual(estimate.singleBoard, false);
+});
+
+
+test("Tournament duration: tournament duration meta keeps board count for active forecast", () => {
+  const tournament = createKoTournament(participantList(8), {
+    bestOfLegs: 5,
+    boardCount: 4,
+    randomizeKoRound1: false,
+  });
+  const estimate = estimateTournamentDurationFromTournament(tournament, {
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  assert(estimate.ready, "Estimate should be ready.");
+  assertEqual(estimate.boardCount, 4);
+});
+
+
+test("Tournament duration: running progress forecast shrinks remaining time after completed matches", () => {
+  const tournament = createKoTournament(participantList(8), {
+    bestOfLegs: 5,
+    boardCount: 4,
+    randomizeKoRound1: false,
+  });
+  const before = estimateTournamentDurationProgressFromTournament(tournament, {
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  const m1 = findMatch(tournament, "ko-r1-m1");
+  const m2 = findMatch(tournament, "ko-r1-m2");
+  assert(Boolean(m1) && Boolean(m2), "Expected first-round KO matches.");
+  m1.status = STATUS_COMPLETED;
+  m1.winnerId = m1.player1Id;
+  m1.legs = { p1: 3, p2: 1 };
+  m1.updatedAt = nowIso();
+  m2.status = STATUS_COMPLETED;
+  m2.winnerId = m2.player2Id;
+  m2.legs = { p1: 1, p2: 3 };
+  m2.updatedAt = nowIso();
+
+  const after = estimateTournamentDurationProgressFromTournament(tournament, {
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  assert(before.ready && after.ready, "Progress forecast should be ready.");
+  assert(after.completedMatches > before.completedMatches, "Completed count should increase.");
+  assert(after.remainingMatches < before.remainingMatches, "Remaining matches should decrease.");
+  assert(after.remainingLikelyMinutes < before.remainingLikelyMinutes, "Remaining estimate should shrink.");
 });

@@ -140,6 +140,16 @@
         const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
           ? normalizeText(target.name || "")
           : "";
+        if (fieldName === "tournamentTimeProfile" && target instanceof HTMLSelectElement) {
+          const profileId = sanitizeTournamentTimeProfile(
+            target.value,
+            TOURNAMENT_TIME_PROFILE_NORMAL,
+          );
+          if (state.store.settings.tournamentTimeProfile !== profileId) {
+            state.store.settings.tournamentTimeProfile = profileId;
+            schedulePersist();
+          }
+        }
         if (isCreateDraftPresetField(fieldName)) {
           setCreateFormPresetValue(createForm, X01_PRESET_CUSTOM);
         }
@@ -161,6 +171,59 @@
         });
       }
     }
+
+    shadow.querySelectorAll("[data-action='set-duration-time-profile']").forEach((select) => {
+      if (!(select instanceof HTMLSelectElement)) {
+        return;
+      }
+      select.addEventListener("change", () => {
+        const profileId = sanitizeTournamentTimeProfile(
+          select.value,
+          TOURNAMENT_TIME_PROFILE_NORMAL,
+        );
+        if (state.store.settings.tournamentTimeProfile === profileId) {
+          return;
+        }
+        state.store.settings.tournamentTimeProfile = profileId;
+        schedulePersist();
+        renderShell();
+        setNotice("info", `Turnierzeit-Profil: ${getTournamentTimeProfileMeta(profileId).label}.`, 2200);
+      });
+    });
+
+    shadow.querySelectorAll("[data-action='set-duration-board-count']").forEach((field) => {
+      if (!(field instanceof HTMLInputElement)) {
+        return;
+      }
+      field.addEventListener("change", () => {
+        const tournament = state.store.tournament;
+        if (!tournament) {
+          return;
+        }
+        const nextBoardCount = sanitizeTournamentBoardCount(
+          field.value,
+          tournament?.duration?.boardCount,
+        );
+        if (!tournament.duration || typeof tournament.duration !== "object") {
+          tournament.duration = { boardCount: nextBoardCount };
+        } else if (tournament.duration.boardCount === nextBoardCount) {
+          return;
+        } else {
+          tournament.duration.boardCount = nextBoardCount;
+        }
+        tournament.updatedAt = nowIso();
+        schedulePersist();
+        renderShell();
+      });
+    });
+
+    shadow.querySelectorAll("[data-action='toggle-duration-estimate-visibility']").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.store.ui.durationEstimateVisible = state.store.ui.durationEstimateVisible === false;
+        schedulePersist();
+        renderShell();
+      });
+    });
 
     const shuffleParticipantsButton = shadow.querySelector("[data-action='shuffle-participants']");
     if (shuffleParticipantsButton && createForm instanceof HTMLFormElement) {
@@ -292,19 +355,6 @@
         state.store.settings.featureFlags.koDrawLockDefault = koDrawLockDefaultToggle.checked;
         schedulePersist();
         setNotice("info", `KO Draw-Lock (Standard): ${koDrawLockDefaultToggle.checked ? "ON" : "OFF"}.`, 2200);
-      });
-    }
-
-    const tournamentTimeProfileSelect = shadow.getElementById("ata-setting-tournament-time-profile");
-    if (tournamentTimeProfileSelect instanceof HTMLSelectElement) {
-      tournamentTimeProfileSelect.addEventListener("change", () => {
-        const profileId = sanitizeTournamentTimeProfile(
-          tournamentTimeProfileSelect.value,
-          TOURNAMENT_TIME_PROFILE_NORMAL,
-        );
-        state.store.settings.tournamentTimeProfile = profileId;
-        schedulePersist();
-        setNotice("info", `Turnierzeit-Profil: ${getTournamentTimeProfileMeta(profileId).label}.`, 2200);
       });
     }
 
@@ -665,7 +715,9 @@
     const formData = new FormData(form);
     const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
     const estimate = estimateTournamentDurationFromDraft(draft, state.store.settings);
-    estimateHost.innerHTML = renderTournamentDurationEstimate(estimate);
+    estimateHost.innerHTML = renderTournamentDurationEstimate(estimate, {
+      visible: state.store?.ui?.durationEstimateVisible !== false,
+    });
   }
 
 
@@ -708,6 +760,7 @@
       x01MaxRounds: draft.x01MaxRounds,
       x01BullOffMode: draft.x01BullOffMode,
       lobbyVisibility: "private",
+      boardCount: draft.boardCount,
       randomizeKoRound1: draft.randomizeKoRound1,
       koDrawLocked: state.store.settings.featureFlags.koDrawLockDefault !== false,
       participants,

@@ -586,6 +586,13 @@
           rgba(17, 28, 56, 0.82);
       }
 
+      .ata-estimate-card-progress {
+        border-color: rgba(90, 210, 153, 0.36);
+        background:
+          radial-gradient(circle at 100% 0%, rgba(90, 210, 153, 0.12), transparent 40%),
+          rgba(17, 28, 56, 0.84);
+      }
+
       .ata-estimate-head {
         display: flex;
         align-items: center;
@@ -2858,6 +2865,7 @@
       ui: {
         activeTab: "tournament",
         matchesSortMode: MATCH_SORT_MODE_READY_FIRST,
+        durationEstimateVisible: true,
         createDraft: createDefaultCreateDraft(settings),
       },
       debugData: createDefaultDebugData(),
@@ -2968,6 +2976,17 @@
 
   function sanitizeTournamentBoardCount(value, fallback = TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT) {
     return clampInt(value, fallback, 1, TOURNAMENT_DURATION_MAX_BOARD_COUNT);
+  }
+
+
+  function normalizeTournamentDurationMeta(rawDuration) {
+    const duration = rawDuration && typeof rawDuration === "object" ? rawDuration : {};
+    return {
+      boardCount: sanitizeTournamentBoardCount(
+        duration.boardCount,
+        TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
+      ),
+    };
   }
 
 
@@ -3360,6 +3379,7 @@
     const fallbackStartScore = sanitizeStartScore(rawTournament.startScore);
     const x01 = normalizeTournamentX01Settings(rawTournament.x01, fallbackStartScore);
     const rules = normalizeTournamentRules(rawTournament.rules);
+    const duration = normalizeTournamentDurationMeta(rawTournament.duration);
 
     return {
       id: normalizeText(rawTournament.id || uuid("tournament")),
@@ -3372,6 +3392,7 @@
       startScore: x01.baseScore,
       x01,
       rules,
+      duration,
       participants,
       groups,
       matches,
@@ -3403,6 +3424,7 @@
       ui: {
         activeTab: TAB_IDS.includes(input?.ui?.activeTab) ? input.ui.activeTab : defaults.ui.activeTab,
         matchesSortMode: sanitizeMatchesSortMode(input?.ui?.matchesSortMode, defaults.ui.matchesSortMode),
+        durationEstimateVisible: input?.ui?.durationEstimateVisible !== false,
         createDraft: normalizeCreateDraft(input?.ui?.createDraft, settings),
       },
       debugData: normalizeDebugData(input?.debugData),
@@ -4213,6 +4235,12 @@
       startScore: x01.baseScore,
       x01,
       rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
+      duration: {
+        boardCount: sanitizeTournamentBoardCount(
+          config?.boardCount,
+          TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
+        ),
+      },
       participants,
       groups,
       matches,
@@ -4721,6 +4749,113 @@
   }
 
 
+  function buildCompletedTournamentDurationTaskIdSet(tournament, tasks) {
+    const validTaskIds = new Set((Array.isArray(tasks) ? tasks : []).map((task) => task.id));
+    const completedIds = new Set();
+    (Array.isArray(tournament?.matches) ? tournament.matches : []).forEach((match) => {
+      if (match?.status !== STATUS_COMPLETED) {
+        return;
+      }
+      const taskId = normalizeText(match?.id || "");
+      if (taskId && validTaskIds.has(taskId)) {
+        completedIds.add(taskId);
+      }
+    });
+    return completedIds;
+  }
+
+
+  function getSafeIsoTimestamp(rawIso) {
+    const iso = normalizeText(rawIso || "");
+    if (!iso) {
+      return 0;
+    }
+    const timestamp = Date.parse(iso);
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  }
+
+
+  function clampTournamentDurationPaceMultiplier(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return 1;
+    }
+    return Math.max(0.6, Math.min(2.2, numeric));
+  }
+
+
+  function estimateTournamentDurationProgressFromTournament(tournament, settings = null) {
+    const totalEstimate = estimateTournamentDurationFromTournament(tournament, settings);
+    const progress = {
+      ready: totalEstimate.ready,
+      reason: totalEstimate.reason,
+      totalEstimate,
+      completedMatches: 0,
+      remainingMatches: totalEstimate.matchCount,
+      progressRatio: 0,
+      remainingScheduleWaves: totalEstimate.scheduleWaves,
+      remainingLikelyMinutes: totalEstimate.likelyMinutes,
+      remainingLowMinutes: totalEstimate.lowMinutes,
+      remainingHighMinutes: totalEstimate.highMinutes,
+      modelElapsedMinutes: 0,
+      elapsedMinutes: 0,
+      paceMultiplier: 1,
+      projectedRemainingLikelyMinutes: totalEstimate.likelyMinutes,
+      projectedEndAtIso: "",
+    };
+    if (!totalEstimate.ready || !tournament) {
+      return progress;
+    }
+
+    const mode = normalizeText(tournament?.mode || "ko");
+    const participants = Array.isArray(tournament?.participants) ? tournament.participants : [];
+    const tasks = buildTournamentDurationTasks(mode, participants, participants.length);
+    if (!tasks.length) {
+      return progress;
+    }
+
+    const completedTaskIds = buildCompletedTournamentDurationTaskIdSet(tournament, tasks);
+    const remainingTasks = tasks.filter((task) => !completedTaskIds.has(task.id));
+    const remainingSchedule = estimateTournamentDurationSchedule(remainingTasks, totalEstimate.boardCount);
+    const remainingWaves = remainingSchedule.waves;
+    const remainingLikelyMinutes = (remainingWaves * totalEstimate.matchMinutes)
+      + (totalEstimate.phaseOverheadMinutes * (remainingTasks.length / tasks.length));
+    const remainingLowMinutes = remainingLikelyMinutes * TOURNAMENT_DURATION_LOW_FACTOR;
+    const likelyHighFactor = totalEstimate.likelyMinutes > 0
+      ? totalEstimate.highMinutes / totalEstimate.likelyMinutes
+      : (1 + TOURNAMENT_DURATION_HIGH_BASE_PADDING);
+    const remainingHighMinutes = remainingLikelyMinutes * likelyHighFactor;
+
+    const completedMatches = tasks.length - remainingTasks.length;
+    const progressRatio = tasks.length > 0 ? (completedMatches / tasks.length) : 0;
+    const modelElapsedMinutes = Math.max(0, totalEstimate.likelyMinutes - remainingLikelyMinutes);
+    const now = Date.now();
+    const startedAt = getSafeIsoTimestamp(tournament.createdAt) || now;
+    const elapsedMinutes = completedMatches > 0 ? Math.max(0, (now - startedAt) / 60000) : 0;
+    const paceMultiplier = modelElapsedMinutes > 0 && elapsedMinutes > 0
+      ? clampTournamentDurationPaceMultiplier(elapsedMinutes / modelElapsedMinutes)
+      : 1;
+    const projectedRemainingLikelyMinutes = remainingLikelyMinutes * paceMultiplier;
+    const projectedEndAtIso = completedMatches > 0
+      ? new Date(now + (projectedRemainingLikelyMinutes * 60000)).toISOString()
+      : "";
+
+    progress.completedMatches = completedMatches;
+    progress.remainingMatches = remainingTasks.length;
+    progress.progressRatio = progressRatio;
+    progress.remainingScheduleWaves = remainingWaves;
+    progress.remainingLikelyMinutes = remainingLikelyMinutes;
+    progress.remainingLowMinutes = remainingLowMinutes;
+    progress.remainingHighMinutes = remainingHighMinutes;
+    progress.modelElapsedMinutes = modelElapsedMinutes;
+    progress.elapsedMinutes = elapsedMinutes;
+    progress.paceMultiplier = paceMultiplier;
+    progress.projectedRemainingLikelyMinutes = projectedRemainingLikelyMinutes;
+    progress.projectedEndAtIso = projectedEndAtIso;
+    return progress;
+  }
+
+
   function estimateTournamentDuration(rawInput, settings = null) {
     const modeRaw = normalizeText(rawInput?.mode || "ko");
     const mode = ["ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : "ko";
@@ -4874,7 +5009,7 @@
       x01MaxRounds: x01Settings.maxRounds,
       x01BullOffMode: x01Settings.bullOffMode,
       lobbyVisibility: x01Settings.lobbyVisibility,
-      boardCount: TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
+      boardCount: tournament?.duration?.boardCount,
       participants: tournament.participants,
       tournamentTimeProfile: settings?.tournamentTimeProfile,
     }, settings);
@@ -12383,11 +12518,30 @@
   }
 
 
-  function renderTournamentDurationEstimate(estimate) {
+  function formatDurationAbsoluteTime(isoValue) {
+    const iso = normalizeText(isoValue || "");
+    if (!iso) {
+      return "";
+    }
+    try {
+      return new Intl.DateTimeFormat("de-DE", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(iso));
+    } catch (_) {
+      return "";
+    }
+  }
+
+
+  function renderTournamentDurationEstimate(estimate, options = {}) {
+    const visible = options?.visible !== false;
     const helpLinks = renderInfoLinks([
       { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erkl\u00e4rung zur Turnierzeit-Prognose \u00f6ffnen", title: "README: Turnier anlegen" },
       { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen f\u00fcr das Zeitprofil \u00f6ffnen", title: "README: Einstellungen" },
     ]);
+    const visibilityButtonLabel = visible ? "Ausblenden" : "Einblenden";
+    const visibilityToggleButton = `<button type="button" class="ata-btn ata-btn-sm" data-action="toggle-duration-estimate-visibility">${visibilityButtonLabel}</button>`;
     const estimateReason = normalizeText(estimate?.reason || "");
     const boardCount = sanitizeTournamentBoardCount(
       estimate?.boardCount,
@@ -12400,11 +12554,32 @@
         <section class="ata-estimate-card ata-estimate-card-pending">
           <div class="ata-estimate-head">
             <strong>Voraussichtliche Turnierzeit</strong>
-            ${helpLinks}
+            <span class="ata-form-inline-actions">
+              ${visibilityToggleButton}
+              ${helpLinks}
+            </span>
           </div>
+          ${!visible ? `<p class="ata-small">Prognose ist ausgeblendet.</p>` : `
           <div class="ata-estimate-value ata-estimate-value-pending">Noch nicht berechenbar</div>
           <p class="ata-small">${escapeHtml(estimateReason || "Die Sch\u00e4tzung startet, sobald die Konfiguration f\u00fcr den gew\u00e4hlten Modus g\u00fcltig ist.")}</p>
           <p class="ata-small">Annahme: Planung mit ${escapeHtml(String(boardCount))} ${escapeHtml(boardLabel)} und abh\u00e4ngigkeitsbasierter Parallelisierung.</p>
+          `}
+        </section>
+      `;
+    }
+
+    if (!visible) {
+      return `
+        <section class="ata-estimate-card">
+          <div class="ata-estimate-head">
+            <strong>Voraussichtliche Turnierzeit</strong>
+            <span class="ata-form-inline-actions">
+              ${visibilityToggleButton}
+              ${helpLinks}
+            </span>
+          </div>
+          <div class="ata-estimate-value">ca. ${escapeHtml(formatDurationMinutes(estimate.likelyMinutes))}</div>
+          <p class="ata-small">Prognose und Parameter sind ausgeblendet.</p>
         </section>
       `;
     }
@@ -12419,7 +12594,10 @@
       <section class="ata-estimate-card">
         <div class="ata-estimate-head">
           <strong>Voraussichtliche Turnierzeit</strong>
-          ${helpLinks}
+          <span class="ata-form-inline-actions">
+            ${visibilityToggleButton}
+            ${helpLinks}
+          </span>
         </div>
         <div class="ata-estimate-value">ca. ${escapeHtml(formatDurationMinutes(estimate.likelyMinutes))}</div>
         <div class="ata-estimate-meta">
@@ -12439,6 +12617,49 @@
         <p class="ata-small">${escapeHtml(estimate.profile.description)}</p>
         <p class="ata-small">Parallelisierung ber\u00fccksichtigt Match-Abh\u00e4ngigkeiten und blockierte Spieler-Slots.</p>
         <p class="ata-small">Basis: ${escapeHtml(setupSummary)}.</p>
+      </section>
+    `;
+  }
+
+
+  function renderTournamentDurationProgress(progress, options = {}) {
+    const visible = options?.visible !== false;
+    if (!progress?.ready || !visible) {
+      return "";
+    }
+
+    const completed = clampInt(progress.completedMatches, 0, 0, 9999);
+    if (completed <= 0) {
+      return `
+        <section class="ata-estimate-card ata-estimate-card-progress">
+          <div class="ata-estimate-head">
+            <strong>Laufende Restzeit-Prognose</strong>
+          </div>
+          <p class="ata-small">Startet automatisch nach dem ersten gespeicherten Ergebnis.</p>
+        </section>
+      `;
+    }
+    const remaining = clampInt(progress.remainingMatches, 0, 0, 9999);
+    const progressPercent = Math.round(Math.max(0, Math.min(1, Number(progress.progressRatio || 0))) * 100);
+    const projectedEndTime = formatDurationAbsoluteTime(progress.projectedEndAtIso);
+    const paceLabel = formatDurationDecimal(progress.paceMultiplier || 1, 2);
+
+    return `
+      <section class="ata-estimate-card ata-estimate-card-progress">
+        <div class="ata-estimate-head">
+          <strong>Laufende Restzeit-Prognose</strong>
+        </div>
+        <div class="ata-estimate-value">Rest ca. ${escapeHtml(formatDurationMinutes(progress.projectedRemainingLikelyMinutes))}</div>
+        <div class="ata-estimate-meta">
+          <span>Fortschritt ${escapeHtml(String(completed))}/${escapeHtml(String(completed + remaining))} (${escapeHtml(String(progressPercent))}%)</span>
+          <span>Offene Match-Wellen ${escapeHtml(String(progress.remainingScheduleWaves))}</span>
+          <span>Pace-Faktor ${escapeHtml(paceLabel)}</span>
+          ${projectedEndTime ? `<span>Voraussichtliches Ende ${escapeHtml(projectedEndTime)}</span>` : ""}
+        </div>
+        <div class="ata-estimate-range">
+          Rest realistisch: ${escapeHtml(formatDurationMinutes(progress.remainingLowMinutes))} - ${escapeHtml(formatDurationMinutes(progress.remainingHighMinutes))}
+        </div>
+        <p class="ata-small">Die Restzeit wird aus offenem Matchplan und aktuellem Turnierfortschritt laufend nachgeführt.</p>
       </section>
     `;
   }
@@ -12500,6 +12721,19 @@
 
   function renderTournamentTab() {
     const tournament = state.store.tournament;
+    const durationEstimateVisible = state.store?.ui?.durationEstimateVisible !== false;
+    const tournamentTimeProfile = sanitizeTournamentTimeProfile(
+      state.store?.settings?.tournamentTimeProfile,
+      TOURNAMENT_TIME_PROFILE_NORMAL,
+    );
+    const tournamentTimeProfileOptions = TOURNAMENT_TIME_PROFILES.map((profileId) => {
+      const profileMeta = getTournamentTimeProfileMeta(profileId);
+      const selectedAttr = tournamentTimeProfile === profileId ? "selected" : "";
+      const label = profileId === TOURNAMENT_TIME_PROFILE_NORMAL
+        ? `${profileMeta.label} (empfohlen)`
+        : profileMeta.label;
+      return `<option value="${profileMeta.id}" ${selectedAttr}>${escapeHtml(label)}</option>`;
+    }).join("");
     if (!tournament) {
       const draft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store?.settings);
       const randomizeChecked = draft.randomizeKoRound1 ? "checked" : "";
@@ -12643,21 +12877,29 @@
                   <label for="ata-participants">Teilnehmer (eine Zeile pro Person)</label>
                   <textarea id="ata-participants" name="participants" placeholder="Max Mustermann&#10;Erika Musterfrau">${escapeHtml(draft.participantsText)}</textarea>
                 </div>
-                <div class="ata-field">
-                  <label for="ata-board-count">Boards für Zeitprognose</label>
-                  <input
-                    id="ata-board-count"
-                    name="boardCount"
-                    type="number"
-                    min="1"
-                    max="${TOURNAMENT_DURATION_MAX_BOARD_COUNT}"
-                    step="1"
-                    value="${draft.boardCount}"
-                  >
-                  <div class="ata-small">Parallele Boards werden mit Spieler- und Match-Abhängigkeiten berücksichtigt.</div>
+                <div class="ata-grid-2">
+                  <div class="ata-field">
+                    <label for="ata-board-count">Boards für Zeitprognose</label>
+                    <input
+                      id="ata-board-count"
+                      name="boardCount"
+                      type="number"
+                      min="1"
+                      max="${TOURNAMENT_DURATION_MAX_BOARD_COUNT}"
+                      step="1"
+                      value="${draft.boardCount}"
+                    >
+                  </div>
+                  <div class="ata-field">
+                    <label for="ata-create-time-profile">Zeitprofil</label>
+                    <select id="ata-create-time-profile" name="tournamentTimeProfile" data-action="set-duration-time-profile">
+                      ${tournamentTimeProfileOptions}
+                    </select>
+                  </div>
                 </div>
+                <p class="ata-small">Boards + Zeitprofil steuern die Planung. Parallelisierung berücksichtigt Match-Abhängigkeiten und blockierte Spieler-Slots.</p>
                 <div id="ata-create-duration-estimate">
-                  ${renderTournamentDurationEstimate(durationEstimate)}
+                  ${renderTournamentDurationEstimate(durationEstimate, { visible: durationEstimateVisible })}
                 </div>
                 <div class="ata-actions">
                   <button type="button" class="ata-btn ata-btn-sm" data-action="shuffle-participants">Teilnehmer mischen</button>
@@ -12719,6 +12961,12 @@
     const activeFormatHelpLinks = renderInfoLinks([
       { href: DRA_GUI_RULE_MODE_FORMATS_URL, kind: "rule", label: "DRA-Regelerklärung zu Modus und Format öffnen", title: "DRA-Regeln in der GUI: Modus und Format" },
     ]);
+    const durationEstimate = estimateTournamentDurationFromTournament(tournament, state.store.settings);
+    const durationProgress = estimateTournamentDurationProgressFromTournament(tournament, state.store.settings);
+    const activeBoardCount = sanitizeTournamentBoardCount(
+      tournament?.duration?.boardCount,
+      TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
+    );
 
     return `
       <section class="ata-card tournamentCard">
@@ -12741,6 +12989,27 @@
             <div class="ata-player-chip-cloud">${participantsHtml}</div>
           </div>
         </div>
+      </section>
+      <section class="ata-card tournamentCard">
+        ${renderSectionHeading("Turnierzeit-Prognose", [
+          { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erklärung zur Turnierzeit-Prognose öffnen", title: "README: Turnier anlegen" },
+          { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen-Dokumentation öffnen", title: "README: Einstellungen" },
+        ])}
+        <div class="ata-grid-2">
+          <div class="ata-field">
+            <label for="ata-active-board-count">Boards für Prognose</label>
+            <input id="ata-active-board-count" type="number" min="1" max="${TOURNAMENT_DURATION_MAX_BOARD_COUNT}" step="1" value="${activeBoardCount}" data-action="set-duration-board-count">
+          </div>
+          <div class="ata-field">
+            <label for="ata-active-time-profile">Zeitprofil</label>
+            <select id="ata-active-time-profile" data-action="set-duration-time-profile">
+              ${tournamentTimeProfileOptions}
+            </select>
+          </div>
+        </div>
+        <p class="ata-small">Die Restzeit-Prognose aktualisiert sich laufend anhand des Turnierfortschritts.</p>
+        ${renderTournamentDurationEstimate(durationEstimate, { visible: durationEstimateVisible })}
+        ${renderTournamentDurationProgress(durationProgress, { visible: durationEstimateVisible })}
       </section>
       <section class="ata-card tournamentCard">
         <h3>Turnier zur\u00fccksetzen</h3>
@@ -13319,18 +13588,6 @@
     const debugReportText = JSON.stringify(debugReport, null, 2);
     const hasMatchStartDebugSessions = debugReport.sessionCount > 0;
     const debugActionDisabledAttr = hasMatchStartDebugSessions ? "" : "disabled";
-    const tournamentTimeProfile = sanitizeTournamentTimeProfile(
-      state.store.settings.tournamentTimeProfile,
-      TOURNAMENT_TIME_PROFILE_NORMAL,
-    );
-    const tournamentTimeProfileOptions = TOURNAMENT_TIME_PROFILES.map((profileId) => {
-      const profileMeta = getTournamentTimeProfileMeta(profileId);
-      const selectedAttr = tournamentTimeProfile === profileId ? "selected" : "";
-      const label = profileId === TOURNAMENT_TIME_PROFILE_NORMAL
-        ? `${profileMeta.label} (empfohlen)`
-        : profileMeta.label;
-      return `<option value="${profileMeta.id}" ${selectedAttr}>${escapeHtml(label)}</option>`;
-    }).join("");
     const autoLobbyEnabled = state.store.settings.featureFlags.autoLobbyStart ? "checked" : "";
     const randomizeKoEnabled = state.store.settings.featureFlags.randomizeKoRound1 ? "checked" : "";
     const koDrawLockDefaultEnabled = state.store.settings.featureFlags.koDrawLockDefault !== false ? "checked" : "";
@@ -13406,13 +13663,7 @@
           { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erkl\u00e4rung zur Turnierzeit-Prognose \u00f6ffnen", title: "README: Turnier anlegen" },
           { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen-Dokumentation \u00f6ffnen", title: "README: Einstellungen" },
         ])}
-        <div class="ata-field">
-          <label for="ata-setting-tournament-time-profile">Zeitprofil</label>
-          <select id="ata-setting-tournament-time-profile" data-action="set-tournament-time-profile">
-            ${tournamentTimeProfileOptions}
-          </select>
-        </div>
-        <p class="ata-small">Die Sch\u00e4tzung im Tab <code>Turnier</code> rechnet immer mit Startscore, Best of, In/Out, Bull-off, Bull-Modus, Board-Anzahl und diesem globalen Zeitprofil.</p>
+        <p class="ata-small">Zeitprofil und Board-Anzahl werden direkt im Tab <code>Turnier</code> neben der Prognose gesetzt, damit die Planung ohne Tab-Wechsel angepasst werden kann.</p>
         <p class="ata-small"><strong>Schnell:</strong> z\u00fcgige Abl\u00e4ufe. <strong>Normal:</strong> ausgewogener Standard. <strong>Langsam:</strong> konservativer f\u00fcr gemischte Felder und l\u00e4ngere Wechselzeiten.</p>
       </section>
       <section class="ata-card tournamentCard">
@@ -13611,6 +13862,16 @@
         const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
           ? normalizeText(target.name || "")
           : "";
+        if (fieldName === "tournamentTimeProfile" && target instanceof HTMLSelectElement) {
+          const profileId = sanitizeTournamentTimeProfile(
+            target.value,
+            TOURNAMENT_TIME_PROFILE_NORMAL,
+          );
+          if (state.store.settings.tournamentTimeProfile !== profileId) {
+            state.store.settings.tournamentTimeProfile = profileId;
+            schedulePersist();
+          }
+        }
         if (isCreateDraftPresetField(fieldName)) {
           setCreateFormPresetValue(createForm, X01_PRESET_CUSTOM);
         }
@@ -13632,6 +13893,59 @@
         });
       }
     }
+
+    shadow.querySelectorAll("[data-action='set-duration-time-profile']").forEach((select) => {
+      if (!(select instanceof HTMLSelectElement)) {
+        return;
+      }
+      select.addEventListener("change", () => {
+        const profileId = sanitizeTournamentTimeProfile(
+          select.value,
+          TOURNAMENT_TIME_PROFILE_NORMAL,
+        );
+        if (state.store.settings.tournamentTimeProfile === profileId) {
+          return;
+        }
+        state.store.settings.tournamentTimeProfile = profileId;
+        schedulePersist();
+        renderShell();
+        setNotice("info", `Turnierzeit-Profil: ${getTournamentTimeProfileMeta(profileId).label}.`, 2200);
+      });
+    });
+
+    shadow.querySelectorAll("[data-action='set-duration-board-count']").forEach((field) => {
+      if (!(field instanceof HTMLInputElement)) {
+        return;
+      }
+      field.addEventListener("change", () => {
+        const tournament = state.store.tournament;
+        if (!tournament) {
+          return;
+        }
+        const nextBoardCount = sanitizeTournamentBoardCount(
+          field.value,
+          tournament?.duration?.boardCount,
+        );
+        if (!tournament.duration || typeof tournament.duration !== "object") {
+          tournament.duration = { boardCount: nextBoardCount };
+        } else if (tournament.duration.boardCount === nextBoardCount) {
+          return;
+        } else {
+          tournament.duration.boardCount = nextBoardCount;
+        }
+        tournament.updatedAt = nowIso();
+        schedulePersist();
+        renderShell();
+      });
+    });
+
+    shadow.querySelectorAll("[data-action='toggle-duration-estimate-visibility']").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.store.ui.durationEstimateVisible = state.store.ui.durationEstimateVisible === false;
+        schedulePersist();
+        renderShell();
+      });
+    });
 
     const shuffleParticipantsButton = shadow.querySelector("[data-action='shuffle-participants']");
     if (shuffleParticipantsButton && createForm instanceof HTMLFormElement) {
@@ -13763,19 +14077,6 @@
         state.store.settings.featureFlags.koDrawLockDefault = koDrawLockDefaultToggle.checked;
         schedulePersist();
         setNotice("info", `KO Draw-Lock (Standard): ${koDrawLockDefaultToggle.checked ? "ON" : "OFF"}.`, 2200);
-      });
-    }
-
-    const tournamentTimeProfileSelect = shadow.getElementById("ata-setting-tournament-time-profile");
-    if (tournamentTimeProfileSelect instanceof HTMLSelectElement) {
-      tournamentTimeProfileSelect.addEventListener("change", () => {
-        const profileId = sanitizeTournamentTimeProfile(
-          tournamentTimeProfileSelect.value,
-          TOURNAMENT_TIME_PROFILE_NORMAL,
-        );
-        state.store.settings.tournamentTimeProfile = profileId;
-        schedulePersist();
-        setNotice("info", `Turnierzeit-Profil: ${getTournamentTimeProfileMeta(profileId).label}.`, 2200);
       });
     }
 
@@ -14136,7 +14437,9 @@
     const formData = new FormData(form);
     const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
     const estimate = estimateTournamentDurationFromDraft(draft, state.store.settings);
-    estimateHost.innerHTML = renderTournamentDurationEstimate(estimate);
+    estimateHost.innerHTML = renderTournamentDurationEstimate(estimate, {
+      visible: state.store?.ui?.durationEstimateVisible !== false,
+    });
   }
 
 
@@ -14179,6 +14482,7 @@
       x01MaxRounds: draft.x01MaxRounds,
       x01BullOffMode: draft.x01BullOffMode,
       lobbyVisibility: "private",
+      boardCount: draft.boardCount,
       randomizeKoRound1: draft.randomizeKoRound1,
       koDrawLocked: state.store.settings.featureFlags.koDrawLockDefault !== false,
       participants,
