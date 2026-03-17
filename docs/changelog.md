@@ -15,6 +15,7 @@
   - Probe-Sicherheitsnetz ergänzt: keine Tokenwerte, keine Query-Parameterwerte, nur strukturelle Body-Key-Pfade im Report.
   - Troubleshooting ergänzt: `GET /gs/v0/matches/{id}/challenge` mit `404` als beobachteter, nicht blockierender App-Call dokumentiert; zusätzlicher Hinweis zu sensitiven SSO-Parametern in Roh-Logs.
   - API-Dokumentation mit Internet-Recherche erweitert: quellenmarkierte Gesamtliste (`A/B/C/P`-Confidence), zusätzliche Community-Endpunkte (`/matches/{id}/corrections`, `PATCH /matches/{id}/throws`, `/matches/{id}/undo`, `/lobbies/{id}/players/by-index/{index}`, `/as/v0/users/{id}/stats/{variant}`) und WebSocket-Hinweis `/ms/v0/subscribe`.
+  - neuer State-of-the-art Leitfaden `docs/api-documentation-playbook.md` ergänzt (OpenAPI/AsyncAPI-Zielbild, RFC-9457-Fehlermodell, Governance-Checkliste und Sicherheitsregeln für API-Dokumentation).
 - Runtime-Update-Pfad aus `autodarts-xconfig` technisch übernommen:
   - neue GitHub-Update-Erkennung im Tab `Einstellungen` mit gecachtem Versionsstatus, TTL und manuellem Recheck
   - `.meta.js`-Artefakt für leichtgewichtigen Versionsabgleich ergänzt

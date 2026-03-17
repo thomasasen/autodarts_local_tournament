@@ -41,6 +41,7 @@ Zusätzliche Detaildoku zur Zeitberechnung: [docs/tournament-duration.md](docs/t
 | [docs/dra-compliance-matrix.md](docs/dra-compliance-matrix.md) | Detailmatrix zu Regel-Mappings, Tie-Break-Profilen und Migration | Entwickler / Regel-Review |
 | [docs/dra-regeln-gui.md](docs/dra-regeln-gui.md) | GUI-bezogene Regelerklärungen für Info-/Regel-Links in der Oberfläche | Nutzer / Turnierleitung / Entwickler |
 | [docs/autodarts-api-capabilities.md](docs/autodarts-api-capabilities.md) | Beobachtete API-Endpunkte, Risikoklassen und Probe-Vorgehen zur laufenden Erweiterung | Entwickler / API-Integration |
+| [docs/api-documentation-playbook.md](docs/api-documentation-playbook.md) | State-of-the-art Leitfaden für Aufbau, Qualitätssicherung und Pflege unserer API-Dokumentation | Entwickler / API-Integration |
 | [docs/changelog.md](docs/changelog.md) | Historie der Releases und Funktionsänderungen | Nutzer / Entwickler |
 
 ## Installation
@@ -238,6 +239,7 @@ Tab: `Spiele`
 
 Das Auth-Token kann aus `Authorization`-Cookie, `autodarts_refresh_token` (Refresh-Flow) oder aus laufenden `api.autodarts.io`-Request-Headern im Runtime-Kontext stammen.
 Eine laufend gepflegte Endpoint-Matrix steht in [docs/autodarts-api-capabilities.md](docs/autodarts-api-capabilities.md).
+Der dokumentarische Qualitätsstandard (spec-first, Fehlerstandard, Review-Checkliste) steht in [docs/api-documentation-playbook.md](docs/api-documentation-playbook.md).
 
 ### Ablauf
 1. Match in `Spiele` über `Match starten` auslösen.

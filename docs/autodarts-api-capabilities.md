@@ -20,6 +20,16 @@ Die Liste ist daher **"known complete"**, nicht offiziell garantiert.
   - `us` User Service (`/us/v0/*`)
   - `ms` Message/WebSocket (`/ms/v0/*`)
 
+## Documentation Model
+This document is a discovery ledger (observed reality).
+
+State-of-the-art process and target model are defined separately in:
+- [docs/api-documentation-playbook.md](./api-documentation-playbook.md)
+
+In short:
+- ledger (`this file`) = what we currently know from traces/code/community,
+- contract (`OpenAPI/AsyncAPI`) = machine-readable source of truth we grow into.
+
 ## Confidence Levels
 - `A` = in ATA-Code/Laufzeit direkt genutzt und verifiziert
 - `B` = in produktiven App-Traces gesehen (inkl. HAR), aber nicht zwingend von ATA genutzt
