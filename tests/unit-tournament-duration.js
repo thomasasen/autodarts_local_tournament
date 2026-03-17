@@ -358,4 +358,51 @@ test("Tournament duration: running progress forecast shrinks remaining time afte
   assert(after.completedMatches > before.completedMatches, "Completed count should increase.");
   assert(after.remainingMatches < before.remainingMatches, "Remaining matches should decrease.");
   assert(after.remainingLikelyMinutes < before.remainingLikelyMinutes, "Remaining estimate should shrink.");
+  assertEqual(after.paceMultiplier, 1);
+  assertEqual(after.projectedRemainingLikelyMinutes, after.remainingLikelyMinutes);
+  assertEqual(after.projectedEndAtIso, "");
+});
+
+
+test("Tournament duration: running progress forecast is static against wall-clock time", () => {
+  const tournament = createKoTournament(participantList(8), {
+    bestOfLegs: 5,
+    boardCount: 4,
+    randomizeKoRound1: false,
+  });
+
+  const m1 = findMatch(tournament, "ko-r1-m1");
+  assert(Boolean(m1), "Expected first-round KO match.");
+  m1.status = STATUS_COMPLETED;
+  m1.winnerId = m1.player1Id;
+  m1.legs = { p1: 3, p2: 1 };
+  m1.updatedAt = nowIso();
+
+  const originalNow = Date.now;
+  let earlySnapshot = null;
+  let lateSnapshot = null;
+  try {
+    Date.now = () => 1000;
+    earlySnapshot = estimateTournamentDurationProgressFromTournament(tournament, {
+      tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+    });
+
+    Date.now = () => 9_999_999_000;
+    lateSnapshot = estimateTournamentDurationProgressFromTournament(tournament, {
+      tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+    });
+  } finally {
+    Date.now = originalNow;
+  }
+
+  assert(earlySnapshot && lateSnapshot, "Expected static snapshots.");
+  assertEqual(earlySnapshot.remainingLikelyMinutes, lateSnapshot.remainingLikelyMinutes);
+  assertEqual(earlySnapshot.remainingLowMinutes, lateSnapshot.remainingLowMinutes);
+  assertEqual(earlySnapshot.remainingHighMinutes, lateSnapshot.remainingHighMinutes);
+  assertEqual(earlySnapshot.paceMultiplier, 1);
+  assertEqual(lateSnapshot.paceMultiplier, 1);
+  assertEqual(earlySnapshot.projectedRemainingLikelyMinutes, earlySnapshot.remainingLikelyMinutes);
+  assertEqual(lateSnapshot.projectedRemainingLikelyMinutes, lateSnapshot.remainingLikelyMinutes);
+  assertEqual(earlySnapshot.projectedEndAtIso, "");
+  assertEqual(lateSnapshot.projectedEndAtIso, "");
 });

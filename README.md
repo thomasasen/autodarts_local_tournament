@@ -217,7 +217,7 @@ Tab: `Turnier`
 - Annahme:
   - abhängigkeitsbasiertes Scheduling mit Board-Limit, Spielerkonflikten und KO-/Phasenabhängigkeiten
 - Zeitprofil und Board-Anzahl werden direkt im Tab `Turnier` neben der Prognose gesetzt.
-- Bei aktivem Turnier erscheint zusätzlich eine laufende Restzeit-Prognose auf Basis des Spielfortschritts.
+- Bei aktivem Turnier erscheint zusätzlich eine statische Restzeit-Prognose auf Basis der abgeschlossenen Matches.
 
 Beispiel der Live-Zeitprognose im Turnierformular:
 

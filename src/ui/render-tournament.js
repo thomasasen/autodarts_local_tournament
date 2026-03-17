@@ -287,7 +287,7 @@
             </select>
           </div>
         </div>
-        <p class="ata-small">Die Restzeit-Prognose aktualisiert sich laufend anhand des Turnierfortschritts.</p>
+        <p class="ata-small">Die Restzeit-Prognose wird bei gespeicherten Ergebnissen statisch neu berechnet.</p>
         ${renderTournamentDurationEstimate(durationEstimate, { visible: durationEstimateVisible })}
         ${renderTournamentDurationProgress(durationProgress, { visible: durationEstimateVisible })}
       </section>

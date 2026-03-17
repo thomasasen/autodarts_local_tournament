@@ -4765,25 +4765,6 @@
   }
 
 
-  function getSafeIsoTimestamp(rawIso) {
-    const iso = normalizeText(rawIso || "");
-    if (!iso) {
-      return 0;
-    }
-    const timestamp = Date.parse(iso);
-    return Number.isFinite(timestamp) ? timestamp : 0;
-  }
-
-
-  function clampTournamentDurationPaceMultiplier(value) {
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) {
-      return 1;
-    }
-    return Math.max(0.6, Math.min(2.2, numeric));
-  }
-
-
   function estimateTournamentDurationProgressFromTournament(tournament, settings = null) {
     const totalEstimate = estimateTournamentDurationFromTournament(tournament, settings);
     const progress = {
@@ -4829,16 +4810,10 @@
     const completedMatches = tasks.length - remainingTasks.length;
     const progressRatio = tasks.length > 0 ? (completedMatches / tasks.length) : 0;
     const modelElapsedMinutes = Math.max(0, totalEstimate.likelyMinutes - remainingLikelyMinutes);
-    const now = Date.now();
-    const startedAt = getSafeIsoTimestamp(tournament.createdAt) || now;
-    const elapsedMinutes = completedMatches > 0 ? Math.max(0, (now - startedAt) / 60000) : 0;
-    const paceMultiplier = modelElapsedMinutes > 0 && elapsedMinutes > 0
-      ? clampTournamentDurationPaceMultiplier(elapsedMinutes / modelElapsedMinutes)
-      : 1;
-    const projectedRemainingLikelyMinutes = remainingLikelyMinutes * paceMultiplier;
-    const projectedEndAtIso = completedMatches > 0
-      ? new Date(now + (projectedRemainingLikelyMinutes * 60000)).toISOString()
-      : "";
+    const elapsedMinutes = 0;
+    const paceMultiplier = 1;
+    const projectedRemainingLikelyMinutes = remainingLikelyMinutes;
+    const projectedEndAtIso = "";
 
     progress.completedMatches = completedMatches;
     progress.remainingMatches = remainingTasks.length;
@@ -12518,22 +12493,6 @@
   }
 
 
-  function formatDurationAbsoluteTime(isoValue) {
-    const iso = normalizeText(isoValue || "");
-    if (!iso) {
-      return "";
-    }
-    try {
-      return new Intl.DateTimeFormat("de-DE", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(new Date(iso));
-    } catch (_) {
-      return "";
-    }
-  }
-
-
   function renderTournamentDurationEstimate(estimate, options = {}) {
     const visible = options?.visible !== false;
     const helpLinks = renderInfoLinks([
@@ -12641,25 +12600,20 @@
     }
     const remaining = clampInt(progress.remainingMatches, 0, 0, 9999);
     const progressPercent = Math.round(Math.max(0, Math.min(1, Number(progress.progressRatio || 0))) * 100);
-    const projectedEndTime = formatDurationAbsoluteTime(progress.projectedEndAtIso);
-    const paceLabel = formatDurationDecimal(progress.paceMultiplier || 1, 2);
-
     return `
       <section class="ata-estimate-card ata-estimate-card-progress">
         <div class="ata-estimate-head">
           <strong>Laufende Restzeit-Prognose</strong>
         </div>
-        <div class="ata-estimate-value">Rest ca. ${escapeHtml(formatDurationMinutes(progress.projectedRemainingLikelyMinutes))}</div>
+        <div class="ata-estimate-value">Rest ca. ${escapeHtml(formatDurationMinutes(progress.remainingLikelyMinutes))}</div>
         <div class="ata-estimate-meta">
           <span>Fortschritt ${escapeHtml(String(completed))}/${escapeHtml(String(completed + remaining))} (${escapeHtml(String(progressPercent))}%)</span>
           <span>Offene Match-Wellen ${escapeHtml(String(progress.remainingScheduleWaves))}</span>
-          <span>Pace-Faktor ${escapeHtml(paceLabel)}</span>
-          ${projectedEndTime ? `<span>Voraussichtliches Ende ${escapeHtml(projectedEndTime)}</span>` : ""}
         </div>
         <div class="ata-estimate-range">
           Rest realistisch: ${escapeHtml(formatDurationMinutes(progress.remainingLowMinutes))} - ${escapeHtml(formatDurationMinutes(progress.remainingHighMinutes))}
         </div>
-        <p class="ata-small">Die Restzeit wird aus offenem Matchplan und aktuellem Turnierfortschritt laufend nachgeführt.</p>
+        <p class="ata-small">Die Restzeit wird aus offenem Matchplan und gespeichertem Turnierfortschritt statisch neu berechnet.</p>
       </section>
     `;
   }
@@ -13007,7 +12961,7 @@
             </select>
           </div>
         </div>
-        <p class="ata-small">Die Restzeit-Prognose aktualisiert sich laufend anhand des Turnierfortschritts.</p>
+        <p class="ata-small">Die Restzeit-Prognose wird bei gespeicherten Ergebnissen statisch neu berechnet.</p>
         ${renderTournamentDurationEstimate(durationEstimate, { visible: durationEstimateVisible })}
         ${renderTournamentDurationProgress(durationProgress, { visible: durationEstimateVisible })}
       </section>

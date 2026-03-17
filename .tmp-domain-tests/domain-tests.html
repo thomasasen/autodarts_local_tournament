@@ -99,6 +99,8 @@
   const TOURNAMENT_TIME_PROFILE_FAST = "fast";
   const TOURNAMENT_TIME_PROFILE_NORMAL = "normal";
   const TOURNAMENT_TIME_PROFILE_SLOW = "slow";
+  const TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT = 1;
+  const TOURNAMENT_DURATION_MAX_BOARD_COUNT = 32;
   const TOURNAMENT_TIME_PROFILES = Object.freeze([
     TOURNAMENT_TIME_PROFILE_FAST,
     TOURNAMENT_TIME_PROFILE_NORMAL,
@@ -1506,6 +1508,7 @@
       x01MaxRounds: presetX01?.maxRounds || 50,
       x01BullOffMode: presetX01?.bullOffMode || "Normal",
       lobbyVisibility: presetX01?.lobbyVisibility || "private",
+      boardCount: TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
       participantsText: "",
       randomizeKoRound1: Boolean(defaultRandomize),
     };
@@ -1548,6 +1551,7 @@
       x01MaxRounds: x01Settings.maxRounds,
       x01BullOffMode: x01Settings.bullOffMode,
       lobbyVisibility: x01Settings.lobbyVisibility,
+      boardCount: sanitizeTournamentBoardCount(rawDraft?.boardCount, base.boardCount),
       participantsText: String(rawDraft?.participantsText ?? base.participantsText),
       randomizeKoRound1: typeof rawDraft?.randomizeKoRound1 === "boolean"
         ? rawDraft.randomizeKoRound1
@@ -1578,6 +1582,7 @@
       ui: {
         activeTab: "tournament",
         matchesSortMode: MATCH_SORT_MODE_READY_FIRST,
+        durationEstimateVisible: true,
         createDraft: createDefaultCreateDraft(settings),
       },
       debugData: createDefaultDebugData(),
@@ -1683,6 +1688,22 @@
   function sanitizeTournamentTimeProfile(value, fallback = TOURNAMENT_TIME_PROFILE_NORMAL) {
     const profile = normalizeText(value || "").toLowerCase();
     return TOURNAMENT_TIME_PROFILES.includes(profile) ? profile : fallback;
+  }
+
+
+  function sanitizeTournamentBoardCount(value, fallback = TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT) {
+    return clampInt(value, fallback, 1, TOURNAMENT_DURATION_MAX_BOARD_COUNT);
+  }
+
+
+  function normalizeTournamentDurationMeta(rawDuration) {
+    const duration = rawDuration && typeof rawDuration === "object" ? rawDuration : {};
+    return {
+      boardCount: sanitizeTournamentBoardCount(
+        duration.boardCount,
+        TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
+      ),
+    };
   }
 
 
@@ -2075,6 +2096,7 @@
     const fallbackStartScore = sanitizeStartScore(rawTournament.startScore);
     const x01 = normalizeTournamentX01Settings(rawTournament.x01, fallbackStartScore);
     const rules = normalizeTournamentRules(rawTournament.rules);
+    const duration = normalizeTournamentDurationMeta(rawTournament.duration);
 
     return {
       id: normalizeText(rawTournament.id || uuid("tournament")),
@@ -2087,6 +2109,7 @@
       startScore: x01.baseScore,
       x01,
       rules,
+      duration,
       participants,
       groups,
       matches,
@@ -2118,6 +2141,7 @@
       ui: {
         activeTab: TAB_IDS.includes(input?.ui?.activeTab) ? input.ui.activeTab : defaults.ui.activeTab,
         matchesSortMode: sanitizeMatchesSortMode(input?.ui?.matchesSortMode, defaults.ui.matchesSortMode),
+        durationEstimateVisible: input?.ui?.durationEstimateVisible !== false,
         createDraft: normalizeCreateDraft(input?.ui?.createDraft, settings),
       },
       debugData: normalizeDebugData(input?.debugData),
@@ -3254,6 +3278,12 @@
       startScore: x01.baseScore,
       x01,
       rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
+      duration: {
+        boardCount: sanitizeTournamentBoardCount(
+          config?.boardCount,
+          TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
+        ),
+      },
       participants,
       groups,
       matches,
@@ -3277,7 +3307,7 @@
     return tournament.matches.find((match) => match.id === matchId) || null;
   }
 
-// Domain layer: deterministic single-board tournament duration estimation.
+// Domain layer: deterministic tournament duration estimation with dependency-aware board scheduling.
 
   const TOURNAMENT_DURATION_BASE_LEG_MINUTES = 3.75;
   const TOURNAMENT_DURATION_RESULT_ENTRY_MINUTES = 0.80;
@@ -3433,6 +3463,417 @@
   }
 
 
+  function normalizeTournamentDurationParticipants(rawParticipants) {
+    const source = Array.isArray(rawParticipants) ? rawParticipants : [];
+    return source
+      .map((entry, index) => {
+        const id = normalizeText(entry?.id || entry?.name || entry || `p-${index + 1}`);
+        return id || null;
+      })
+      .filter(Boolean);
+  }
+
+
+  function normalizeTournamentDurationTaskList(rawTasks) {
+    const source = Array.isArray(rawTasks) ? rawTasks : [];
+    const seen = new Set();
+    const normalized = [];
+
+    source.forEach((task, index) => {
+      const taskId = normalizeText(task?.id || `duration-task-${index + 1}`);
+      if (!taskId || seen.has(taskId)) {
+        return;
+      }
+      seen.add(taskId);
+      const participants = (Array.isArray(task?.participants) ? task.participants : [])
+        .map((entry) => normalizeText(entry || ""))
+        .filter(Boolean);
+      const dependsOn = (Array.isArray(task?.dependsOn) ? task.dependsOn : [])
+        .map((entry) => normalizeText(entry || ""))
+        .filter(Boolean);
+      normalized.push({
+        id: taskId,
+        participants,
+        dependsOn,
+      });
+    });
+
+    const taskIds = new Set(normalized.map((task) => task.id));
+    return normalized.map((task) => ({
+      ...task,
+      dependsOn: task.dependsOn.filter((depId) => depId !== task.id && taskIds.has(depId)),
+    }));
+  }
+
+
+  function buildTournamentDurationDependents(tasks) {
+    const dependentsById = new Map();
+    tasks.forEach((task) => {
+      dependentsById.set(task.id, []);
+    });
+    tasks.forEach((task) => {
+      task.dependsOn.forEach((depId) => {
+        if (!dependentsById.has(depId)) {
+          return;
+        }
+        dependentsById.get(depId).push(task.id);
+      });
+    });
+    return dependentsById;
+  }
+
+
+  function getTournamentDurationTaskDepth(taskId, dependentsById, memo, visiting) {
+    if (memo.has(taskId)) {
+      return memo.get(taskId);
+    }
+    if (visiting.has(taskId)) {
+      return 1;
+    }
+
+    visiting.add(taskId);
+    const dependents = dependentsById.get(taskId) || [];
+    let depth = 1;
+    dependents.forEach((dependentId) => {
+      depth = Math.max(
+        depth,
+        1 + getTournamentDurationTaskDepth(dependentId, dependentsById, memo, visiting),
+      );
+    });
+    visiting.delete(taskId);
+    memo.set(taskId, depth);
+    return depth;
+  }
+
+
+  function estimateTournamentDurationSchedule(rawTasks, boardCount) {
+    const safeBoardCount = sanitizeTournamentBoardCount(
+      boardCount,
+      TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
+    );
+    const tasks = normalizeTournamentDurationTaskList(rawTasks);
+    if (!tasks.length) {
+      return {
+        waves: 0,
+        peakParallelMatches: 0,
+        averageParallelMatches: 0,
+        boardUtilization: 0,
+      };
+    }
+
+    const taskById = new Map(tasks.map((task) => [task.id, task]));
+    const dependentsById = buildTournamentDurationDependents(tasks);
+    const remainingDependenciesById = new Map();
+    tasks.forEach((task) => {
+      const dependencyCount = task.dependsOn.filter((depId) => taskById.has(depId)).length;
+      remainingDependenciesById.set(task.id, dependencyCount);
+    });
+
+    const criticalDepthById = new Map();
+    tasks.forEach((task) => {
+      getTournamentDurationTaskDepth(task.id, dependentsById, criticalDepthById, new Set());
+    });
+
+    const unscheduled = new Set(tasks.map((task) => task.id));
+    let waves = 0;
+    let peakParallelMatches = 0;
+    let scheduledMatches = 0;
+
+    while (unscheduled.size > 0) {
+      const ready = tasks
+        .filter((task) => unscheduled.has(task.id) && (remainingDependenciesById.get(task.id) || 0) <= 0)
+        .sort((left, right) => {
+          const leftDepth = criticalDepthById.get(left.id) || 1;
+          const rightDepth = criticalDepthById.get(right.id) || 1;
+          if (leftDepth !== rightDepth) {
+            return rightDepth - leftDepth;
+          }
+          const leftDependentCount = (dependentsById.get(left.id) || []).length;
+          const rightDependentCount = (dependentsById.get(right.id) || []).length;
+          if (leftDependentCount !== rightDependentCount) {
+            return rightDependentCount - leftDependentCount;
+          }
+          if (left.participants.length !== right.participants.length) {
+            return right.participants.length - left.participants.length;
+          }
+          return left.id.localeCompare(right.id);
+        });
+
+      if (!ready.length) {
+        const remaining = unscheduled.size;
+        const fallbackWaves = Math.ceil(remaining / safeBoardCount);
+        waves += fallbackWaves;
+        peakParallelMatches = Math.max(peakParallelMatches, Math.min(safeBoardCount, remaining));
+        scheduledMatches += remaining;
+        break;
+      }
+
+      const usedParticipants = new Set();
+      const selected = [];
+      for (let index = 0; index < ready.length; index += 1) {
+        if (selected.length >= safeBoardCount) {
+          break;
+        }
+        const task = ready[index];
+        const hasConflict = task.participants.some((participantId) => usedParticipants.has(participantId));
+        if (hasConflict) {
+          continue;
+        }
+        selected.push(task);
+        task.participants.forEach((participantId) => usedParticipants.add(participantId));
+      }
+
+      if (!selected.length) {
+        selected.push(ready[0]);
+      }
+
+      waves += 1;
+      peakParallelMatches = Math.max(peakParallelMatches, selected.length);
+      selected.forEach((task) => {
+        if (!unscheduled.has(task.id)) {
+          return;
+        }
+        unscheduled.delete(task.id);
+        scheduledMatches += 1;
+        const dependents = dependentsById.get(task.id) || [];
+        dependents.forEach((dependentId) => {
+          const currentCount = remainingDependenciesById.get(dependentId) || 0;
+          remainingDependenciesById.set(dependentId, Math.max(0, currentCount - 1));
+        });
+      });
+    }
+
+    const averageParallelMatches = waves > 0 ? scheduledMatches / waves : 0;
+    const boardUtilization = waves > 0
+      ? scheduledMatches / (waves * safeBoardCount)
+      : 0;
+    return {
+      waves,
+      peakParallelMatches,
+      averageParallelMatches,
+      boardUtilization,
+    };
+  }
+
+
+  function buildKoTournamentDurationTasks(participantCount) {
+    const count = clampInt(participantCount, 0, 0, TECHNICAL_PARTICIPANT_HARD_MAX);
+    if (count < 2) {
+      return [];
+    }
+
+    const participants = Array.from({ length: count }, (_, index) => ({
+      id: `ko-p-${index + 1}`,
+      name: `P${index + 1}`,
+    }));
+    const structure = buildBracketStructure(participants, generateSeeds(participants, KO_DRAW_MODE_SEEDED));
+    const playableMatchIds = new Set();
+
+    structure.rounds.forEach((roundDef) => {
+      roundDef.virtualMatches.forEach((virtualMatch) => {
+        if (virtualMatch?.structuralBye) {
+          return;
+        }
+        if (!virtualMatch?.competitors?.p1 || !virtualMatch?.competitors?.p2) {
+          return;
+        }
+        playableMatchIds.add(virtualMatch.id);
+      });
+    });
+
+    const tasks = [];
+    structure.rounds.forEach((roundDef) => {
+      roundDef.virtualMatches.forEach((virtualMatch) => {
+        if (!playableMatchIds.has(virtualMatch.id)) {
+          return;
+        }
+        const participantsInMatch = [];
+        const dependencies = [];
+        [virtualMatch.competitors?.p1, virtualMatch.competitors?.p2].forEach((competitorRef) => {
+          if (competitorRef?.type === "participant") {
+            const participantId = normalizeText(competitorRef.participantId || "");
+            if (participantId) {
+              participantsInMatch.push(`p:${participantId}`);
+            }
+            return;
+          }
+          if (competitorRef?.type !== "winner") {
+            return;
+          }
+          const sourceMatchId = normalizeText(competitorRef.matchId || "");
+          if (!sourceMatchId) {
+            return;
+          }
+          participantsInMatch.push(`w:${sourceMatchId}`);
+          if (playableMatchIds.has(sourceMatchId)) {
+            dependencies.push(sourceMatchId);
+          }
+        });
+        tasks.push({
+          id: virtualMatch.id,
+          participants: participantsInMatch,
+          dependsOn: dependencies,
+        });
+      });
+    });
+    return tasks;
+  }
+
+
+  function buildLeagueTournamentDurationTasks(rawParticipants) {
+    const participantIds = normalizeTournamentDurationParticipants(rawParticipants);
+    const rounds = createRoundRobinPairings(participantIds);
+    const tasks = [];
+    rounds.forEach((pairs, roundIndex) => {
+      pairs.forEach((pair, pairIndex) => {
+        tasks.push({
+          id: `league-r${roundIndex + 1}-m${pairIndex + 1}`,
+          participants: [`p:${pair[0]}`, `p:${pair[1]}`],
+          dependsOn: [],
+        });
+      });
+    });
+    return tasks;
+  }
+
+
+  function buildGroupsKoTournamentDurationTasks(rawParticipants) {
+    const participantIds = normalizeTournamentDurationParticipants(rawParticipants);
+    const groups = buildGroups(participantIds);
+    const tasks = [];
+    const groupStageTaskIds = [];
+
+    groups.forEach((group) => {
+      const rounds = createRoundRobinPairings(group.participantIds);
+      rounds.forEach((pairs, roundIndex) => {
+        pairs.forEach((pair, pairIndex) => {
+          const taskId = `group-${group.id}-r${roundIndex + 1}-m${pairIndex + 1}`;
+          tasks.push({
+            id: taskId,
+            participants: [`p:${pair[0]}`, `p:${pair[1]}`],
+            dependsOn: [],
+          });
+          groupStageTaskIds.push(taskId);
+        });
+      });
+    });
+
+    const semifinalAId = "ko-r1-m1";
+    const semifinalBId = "ko-r1-m2";
+    const finalId = "ko-r2-m1";
+    tasks.push({
+      id: semifinalAId,
+      participants: ["slot:A1", "slot:B2"],
+      dependsOn: groupStageTaskIds,
+    });
+    tasks.push({
+      id: semifinalBId,
+      participants: ["slot:B1", "slot:A2"],
+      dependsOn: groupStageTaskIds,
+    });
+    tasks.push({
+      id: finalId,
+      participants: [`w:${semifinalAId}`, `w:${semifinalBId}`],
+      dependsOn: [semifinalAId, semifinalBId],
+    });
+
+    return tasks;
+  }
+
+
+  function buildTournamentDurationTasks(mode, participants, participantCount) {
+    if (mode === "league") {
+      return buildLeagueTournamentDurationTasks(participants);
+    }
+    if (mode === "groups_ko") {
+      return buildGroupsKoTournamentDurationTasks(participants);
+    }
+    return buildKoTournamentDurationTasks(participantCount);
+  }
+
+
+  function buildCompletedTournamentDurationTaskIdSet(tournament, tasks) {
+    const validTaskIds = new Set((Array.isArray(tasks) ? tasks : []).map((task) => task.id));
+    const completedIds = new Set();
+    (Array.isArray(tournament?.matches) ? tournament.matches : []).forEach((match) => {
+      if (match?.status !== STATUS_COMPLETED) {
+        return;
+      }
+      const taskId = normalizeText(match?.id || "");
+      if (taskId && validTaskIds.has(taskId)) {
+        completedIds.add(taskId);
+      }
+    });
+    return completedIds;
+  }
+
+
+  function estimateTournamentDurationProgressFromTournament(tournament, settings = null) {
+    const totalEstimate = estimateTournamentDurationFromTournament(tournament, settings);
+    const progress = {
+      ready: totalEstimate.ready,
+      reason: totalEstimate.reason,
+      totalEstimate,
+      completedMatches: 0,
+      remainingMatches: totalEstimate.matchCount,
+      progressRatio: 0,
+      remainingScheduleWaves: totalEstimate.scheduleWaves,
+      remainingLikelyMinutes: totalEstimate.likelyMinutes,
+      remainingLowMinutes: totalEstimate.lowMinutes,
+      remainingHighMinutes: totalEstimate.highMinutes,
+      modelElapsedMinutes: 0,
+      elapsedMinutes: 0,
+      paceMultiplier: 1,
+      projectedRemainingLikelyMinutes: totalEstimate.likelyMinutes,
+      projectedEndAtIso: "",
+    };
+    if (!totalEstimate.ready || !tournament) {
+      return progress;
+    }
+
+    const mode = normalizeText(tournament?.mode || "ko");
+    const participants = Array.isArray(tournament?.participants) ? tournament.participants : [];
+    const tasks = buildTournamentDurationTasks(mode, participants, participants.length);
+    if (!tasks.length) {
+      return progress;
+    }
+
+    const completedTaskIds = buildCompletedTournamentDurationTaskIdSet(tournament, tasks);
+    const remainingTasks = tasks.filter((task) => !completedTaskIds.has(task.id));
+    const remainingSchedule = estimateTournamentDurationSchedule(remainingTasks, totalEstimate.boardCount);
+    const remainingWaves = remainingSchedule.waves;
+    const remainingLikelyMinutes = (remainingWaves * totalEstimate.matchMinutes)
+      + (totalEstimate.phaseOverheadMinutes * (remainingTasks.length / tasks.length));
+    const remainingLowMinutes = remainingLikelyMinutes * TOURNAMENT_DURATION_LOW_FACTOR;
+    const likelyHighFactor = totalEstimate.likelyMinutes > 0
+      ? totalEstimate.highMinutes / totalEstimate.likelyMinutes
+      : (1 + TOURNAMENT_DURATION_HIGH_BASE_PADDING);
+    const remainingHighMinutes = remainingLikelyMinutes * likelyHighFactor;
+
+    const completedMatches = tasks.length - remainingTasks.length;
+    const progressRatio = tasks.length > 0 ? (completedMatches / tasks.length) : 0;
+    const modelElapsedMinutes = Math.max(0, totalEstimate.likelyMinutes - remainingLikelyMinutes);
+    const elapsedMinutes = 0;
+    const paceMultiplier = 1;
+    const projectedRemainingLikelyMinutes = remainingLikelyMinutes;
+    const projectedEndAtIso = "";
+
+    progress.completedMatches = completedMatches;
+    progress.remainingMatches = remainingTasks.length;
+    progress.progressRatio = progressRatio;
+    progress.remainingScheduleWaves = remainingWaves;
+    progress.remainingLikelyMinutes = remainingLikelyMinutes;
+    progress.remainingLowMinutes = remainingLowMinutes;
+    progress.remainingHighMinutes = remainingHighMinutes;
+    progress.modelElapsedMinutes = modelElapsedMinutes;
+    progress.elapsedMinutes = elapsedMinutes;
+    progress.paceMultiplier = paceMultiplier;
+    progress.projectedRemainingLikelyMinutes = projectedRemainingLikelyMinutes;
+    progress.projectedEndAtIso = projectedEndAtIso;
+    return progress;
+  }
+
+
   function estimateTournamentDuration(rawInput, settings = null) {
     const modeRaw = normalizeText(rawInput?.mode || "ko");
     const mode = ["ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : "ko";
@@ -3454,6 +3895,10 @@
       lobbyVisibility: rawInput?.lobbyVisibility,
     }, rawInput?.startScore);
     const bestOfLegs = sanitizeBestOf(rawInput?.bestOfLegs);
+    const boardCount = sanitizeTournamentBoardCount(
+      rawInput?.boardCount,
+      TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
+    );
     const estimate = {
       ready: false,
       reason: "",
@@ -3472,11 +3917,16 @@
       matchOverheadMinutes: 0,
       matchMinutes: 0,
       matchCount: 0,
+      boardCount,
+      scheduleWaves: 0,
+      averageParallelMatches: 0,
+      peakParallelMatches: 0,
+      boardUtilization: 0,
       phaseOverheadMinutes: 0,
       likelyMinutes: 0,
       lowMinutes: 0,
       highMinutes: 0,
-      singleBoard: true,
+      singleBoard: boardCount === 1,
     };
 
     if (participantCount < participantLimits.min || participantCount > participantLimits.max) {
@@ -3499,10 +3949,16 @@
       + profile.matchTransitionMinutes
       + bullOffOverheadMinutes;
     const matchMinutes = (expectedLegs * legMinutes) + matchOverheadMinutes;
-    const matchCount = getTournamentDurationMatchCount(mode, participantCount);
+    const durationTasks = buildTournamentDurationTasks(mode, participants, participantCount);
+    const fallbackMatchCount = getTournamentDurationMatchCount(mode, participantCount);
+    const matchCount = durationTasks.length || fallbackMatchCount;
+    const schedule = estimateTournamentDurationSchedule(durationTasks, boardCount);
+    const scheduleWaves = schedule.waves > 0
+      ? schedule.waves
+      : (matchCount > 0 ? Math.ceil(matchCount / boardCount) : 0);
     const phaseOverheadMinutes = getTournamentDurationPhaseOverheadMinutes(mode, participantCount)
       * profile.phaseTransitionMultiplier;
-    const likelyMinutes = (matchCount * matchMinutes) + phaseOverheadMinutes;
+    const likelyMinutes = (scheduleWaves * matchMinutes) + phaseOverheadMinutes;
     const highPadding = TOURNAMENT_DURATION_HIGH_BASE_PADDING
       + (TOURNAMENT_DURATION_MAX_ROUNDS_HIGH_PADDING[x01Settings.maxRounds] || 0)
       + getTournamentDurationDifficultyPadding(x01Settings)
@@ -3516,6 +3972,16 @@
     estimate.matchOverheadMinutes = matchOverheadMinutes;
     estimate.matchMinutes = matchMinutes;
     estimate.matchCount = matchCount;
+    estimate.scheduleWaves = scheduleWaves;
+    estimate.averageParallelMatches = scheduleWaves > 0
+      ? (matchCount / scheduleWaves)
+      : 0;
+    estimate.peakParallelMatches = schedule.peakParallelMatches > 0
+      ? schedule.peakParallelMatches
+      : (matchCount > 0 ? Math.min(boardCount, matchCount) : 0);
+    estimate.boardUtilization = scheduleWaves > 0
+      ? (matchCount / (scheduleWaves * boardCount))
+      : 0;
     estimate.phaseOverheadMinutes = phaseOverheadMinutes;
     estimate.likelyMinutes = likelyMinutes;
     estimate.lowMinutes = likelyMinutes * TOURNAMENT_DURATION_LOW_FACTOR;
@@ -3538,6 +4004,7 @@
       x01MaxRounds: draft.x01MaxRounds,
       x01BullOffMode: draft.x01BullOffMode,
       lobbyVisibility: draft.lobbyVisibility,
+      boardCount: draft.boardCount,
       participants,
       tournamentTimeProfile: settings?.tournamentTimeProfile,
     }, settings);
@@ -3560,6 +4027,7 @@
       x01MaxRounds: x01Settings.maxRounds,
       x01BullOffMode: x01Settings.bullOffMode,
       lobbyVisibility: x01Settings.lobbyVisibility,
+      boardCount: tournament?.duration?.boardCount,
       participants: tournament.participants,
       tournamentTimeProfile: settings?.tournamentTimeProfile,
     }, settings);
@@ -4278,39 +4746,80 @@
   }
 
 
-  function renderTournamentDurationEstimate(estimate) {
+  function renderTournamentDurationEstimate(estimate, options = {}) {
+    const visible = options?.visible !== false;
     const helpLinks = renderInfoLinks([
       { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erkl\u00e4rung zur Turnierzeit-Prognose \u00f6ffnen", title: "README: Turnier anlegen" },
       { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen f\u00fcr das Zeitprofil \u00f6ffnen", title: "README: Einstellungen" },
     ]);
+    const visibilityButtonLabel = visible ? "Ausblenden" : "Einblenden";
+    const visibilityToggleButton = `<button type="button" class="ata-btn ata-btn-sm" data-action="toggle-duration-estimate-visibility">${visibilityButtonLabel}</button>`;
     const estimateReason = normalizeText(estimate?.reason || "");
+    const boardCount = sanitizeTournamentBoardCount(
+      estimate?.boardCount,
+      TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
+    );
+    const boardLabel = boardCount === 1 ? "Board" : "Boards";
 
     if (!estimate?.ready) {
       return `
         <section class="ata-estimate-card ata-estimate-card-pending">
           <div class="ata-estimate-head">
             <strong>Voraussichtliche Turnierzeit</strong>
-            ${helpLinks}
+            <span class="ata-form-inline-actions">
+              ${visibilityToggleButton}
+              ${helpLinks}
+            </span>
           </div>
+          ${!visible ? `<p class="ata-small">Prognose ist ausgeblendet.</p>` : `
           <div class="ata-estimate-value ata-estimate-value-pending">Noch nicht berechenbar</div>
           <p class="ata-small">${escapeHtml(estimateReason || "Die Sch\u00e4tzung startet, sobald die Konfiguration f\u00fcr den gew\u00e4hlten Modus g\u00fcltig ist.")}</p>
-          <p class="ata-small">Annahme: Single-Board-Flow auf einem Board.</p>
+          <p class="ata-small">Annahme: Planung mit ${escapeHtml(String(boardCount))} ${escapeHtml(boardLabel)} und abh\u00e4ngigkeitsbasierter Parallelisierung.</p>
+          `}
         </section>
       `;
     }
 
+    if (!visible) {
+      return `
+        <section class="ata-estimate-card">
+          <div class="ata-estimate-head">
+            <strong>Voraussichtliche Turnierzeit</strong>
+            <span class="ata-form-inline-actions">
+              ${visibilityToggleButton}
+              ${helpLinks}
+            </span>
+          </div>
+          <div class="ata-estimate-value">ca. ${escapeHtml(formatDurationMinutes(estimate.likelyMinutes))}</div>
+          <p class="ata-small">Prognose und Parameter sind ausgeblendet.</p>
+        </section>
+      `;
+    }
+
+    const averageParallelMatches = Math.max(1, Number(estimate.averageParallelMatches || 1));
+    const peakParallelMatches = clampInt(estimate.peakParallelMatches, 1, 1, boardCount);
+    const boardUtilization = Math.max(0, Math.min(1, Number(estimate.boardUtilization || 0)));
+    const utilizationPercent = Math.round(boardUtilization * 100);
     const setupSummary = `${estimate.x01.baseScore}, ${estimate.x01.inMode} In, ${estimate.x01.outMode} Out, Bull-off ${estimate.x01.bullOffMode}, Best of ${estimate.bestOfLegs}`;
 
     return `
       <section class="ata-estimate-card">
         <div class="ata-estimate-head">
           <strong>Voraussichtliche Turnierzeit</strong>
-          ${helpLinks}
+          <span class="ata-form-inline-actions">
+            ${visibilityToggleButton}
+            ${helpLinks}
+          </span>
         </div>
         <div class="ata-estimate-value">ca. ${escapeHtml(formatDurationMinutes(estimate.likelyMinutes))}</div>
         <div class="ata-estimate-meta">
           <span>${escapeHtml(String(estimate.participantCount))} Teilnehmer</span>
           <span>${escapeHtml(String(estimate.matchCount))} Spiele</span>
+          <span>${escapeHtml(String(boardCount))} ${escapeHtml(boardLabel)}</span>
+          <span>${escapeHtml(String(estimate.scheduleWaves))} Match-Wellen</span>
+          <span>\u00d8 ${escapeHtml(formatDurationDecimal(averageParallelMatches, 2))} Spiele parallel</span>
+          <span>Peak ${escapeHtml(String(peakParallelMatches))}/${escapeHtml(String(boardCount))} Boards</span>
+          <span>Auslastung ${escapeHtml(String(utilizationPercent))}%</span>
           <span>Durchschnitt ${escapeHtml(formatDurationDecimal(estimate.matchMinutes))} min/Spiel</span>
           <span>Profil ${escapeHtml(estimate.profile.label)}</span>
         </div>
@@ -4318,7 +4827,46 @@
           Realistisch: ${escapeHtml(formatDurationMinutes(estimate.lowMinutes))} - ${escapeHtml(formatDurationMinutes(estimate.highMinutes))}
         </div>
         <p class="ata-small">${escapeHtml(estimate.profile.description)}</p>
+        <p class="ata-small">Parallelisierung ber\u00fccksichtigt Match-Abh\u00e4ngigkeiten und blockierte Spieler-Slots.</p>
         <p class="ata-small">Basis: ${escapeHtml(setupSummary)}.</p>
+      </section>
+    `;
+  }
+
+
+  function renderTournamentDurationProgress(progress, options = {}) {
+    const visible = options?.visible !== false;
+    if (!progress?.ready || !visible) {
+      return "";
+    }
+
+    const completed = clampInt(progress.completedMatches, 0, 0, 9999);
+    if (completed <= 0) {
+      return `
+        <section class="ata-estimate-card ata-estimate-card-progress">
+          <div class="ata-estimate-head">
+            <strong>Laufende Restzeit-Prognose</strong>
+          </div>
+          <p class="ata-small">Startet automatisch nach dem ersten gespeicherten Ergebnis.</p>
+        </section>
+      `;
+    }
+    const remaining = clampInt(progress.remainingMatches, 0, 0, 9999);
+    const progressPercent = Math.round(Math.max(0, Math.min(1, Number(progress.progressRatio || 0))) * 100);
+    return `
+      <section class="ata-estimate-card ata-estimate-card-progress">
+        <div class="ata-estimate-head">
+          <strong>Laufende Restzeit-Prognose</strong>
+        </div>
+        <div class="ata-estimate-value">Rest ca. ${escapeHtml(formatDurationMinutes(progress.remainingLikelyMinutes))}</div>
+        <div class="ata-estimate-meta">
+          <span>Fortschritt ${escapeHtml(String(completed))}/${escapeHtml(String(completed + remaining))} (${escapeHtml(String(progressPercent))}%)</span>
+          <span>Offene Match-Wellen ${escapeHtml(String(progress.remainingScheduleWaves))}</span>
+        </div>
+        <div class="ata-estimate-range">
+          Rest realistisch: ${escapeHtml(formatDurationMinutes(progress.remainingLowMinutes))} - ${escapeHtml(formatDurationMinutes(progress.remainingHighMinutes))}
+        </div>
+        <p class="ata-small">Die Restzeit wird aus offenem Matchplan und gespeichertem Turnierfortschritt statisch neu berechnet.</p>
       </section>
     `;
   }
@@ -4376,6 +4924,7 @@
       x01MaxRounds: overrides.x01MaxRounds || 50,
       x01BullOffMode: overrides.x01BullOffMode || "Normal",
       lobbyVisibility: "private",
+      boardCount: overrides.boardCount,
       randomizeKoRound1: Boolean(overrides.randomizeKoRound1),
       koDrawLocked: overrides.koDrawLocked !== false,
       participants,
@@ -4396,6 +4945,7 @@
       x01MaxRounds: overrides.x01MaxRounds || 50,
       x01BullOffMode: overrides.x01BullOffMode || "Normal",
       lobbyVisibility: "private",
+      boardCount: overrides.boardCount,
       randomizeKoRound1: false,
       koDrawLocked: true,
       participants,
@@ -4830,6 +5380,7 @@ test("Preset defaults: new create draft starts with European Tour official", () 
   assertEqual(draft.x01BullMode, "25/50");
   assertEqual(draft.x01BullOffMode, "Normal");
   assertEqual(draft.x01MaxRounds, 50);
+  assertEqual(draft.boardCount, TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT);
 });
 
 
@@ -5152,6 +5703,7 @@ test("Preset migration: stored legacy tournament preset ids stay backward compat
 test("Tournament duration: default store uses normal profile", () => {
   const store = createDefaultStore();
   assertEqual(store.settings.tournamentTimeProfile, TOURNAMENT_TIME_PROFILE_NORMAL);
+  assertEqual(store.ui.durationEstimateVisible, true);
 });
 
 
@@ -5359,6 +5911,202 @@ test("Tournament duration: invalid participant count stays pending", () => {
 
   assert(!estimate.ready, "Estimate should not be ready below mode minimum.");
   assertEqual(estimate.reason, "Gruppenphase + KO erfordert 4-16 Teilnehmer.");
+});
+
+
+test("Tournament duration: board count is sanitized and stored in estimate", () => {
+  const estimate = estimateTournamentDuration({
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(16),
+    boardCount: 999,
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  assert(estimate.ready, "Estimate should be ready for valid KO setup.");
+  assertEqual(estimate.boardCount, TOURNAMENT_DURATION_MAX_BOARD_COUNT);
+  assert(!estimate.singleBoard, "Board count > 1 should disable single-board flag.");
+});
+
+
+test("Tournament duration: league board scaling respects player conflicts", () => {
+  const oneBoard = estimateTournamentDuration({
+    mode: "league",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(8),
+    boardCount: 1,
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+  const manyBoards = estimateTournamentDuration({
+    mode: "league",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(8),
+    boardCount: 8,
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  assert(manyBoards.ready, "Estimate should be ready.");
+  assert(manyBoards.likelyMinutes < oneBoard.likelyMinutes, "More boards should reduce expected duration.");
+  assertEqual(manyBoards.scheduleWaves, 7);
+  assertEqual(manyBoards.peakParallelMatches, 4);
+  assert(manyBoards.scheduleWaves > Math.ceil(manyBoards.matchCount / manyBoards.boardCount), "Conflicting player slots should block naive full-board usage.");
+});
+
+
+test("Tournament duration: KO dependencies block naive full-board parallelism", () => {
+  const estimate = estimateTournamentDuration({
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(16),
+    boardCount: 8,
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  assert(estimate.ready, "Estimate should be ready.");
+  assertEqual(estimate.scheduleWaves, 4);
+  assertEqual(estimate.peakParallelMatches, 8);
+  assert(estimate.scheduleWaves > Math.ceil(estimate.matchCount / estimate.boardCount), "KO round dependencies should require additional waves.");
+});
+
+
+test("Tournament duration: draft board count is used by the live estimate", () => {
+  const estimate = estimateTournamentDurationFromDraft({
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01MaxRounds: 50,
+    x01BullOffMode: "Normal",
+    boardCount: 3,
+    participantsText: "A\nB\nC\nD",
+  }, {
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  assert(estimate.ready, "Estimate should be ready for valid draft.");
+  assertEqual(estimate.boardCount, 3);
+  assertEqual(estimate.singleBoard, false);
+});
+
+
+test("Tournament duration: tournament duration meta keeps board count for active forecast", () => {
+  const tournament = createKoTournament(participantList(8), {
+    bestOfLegs: 5,
+    boardCount: 4,
+    randomizeKoRound1: false,
+  });
+  const estimate = estimateTournamentDurationFromTournament(tournament, {
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  assert(estimate.ready, "Estimate should be ready.");
+  assertEqual(estimate.boardCount, 4);
+});
+
+
+test("Tournament duration: running progress forecast shrinks remaining time after completed matches", () => {
+  const tournament = createKoTournament(participantList(8), {
+    bestOfLegs: 5,
+    boardCount: 4,
+    randomizeKoRound1: false,
+  });
+  const before = estimateTournamentDurationProgressFromTournament(tournament, {
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  const m1 = findMatch(tournament, "ko-r1-m1");
+  const m2 = findMatch(tournament, "ko-r1-m2");
+  assert(Boolean(m1) && Boolean(m2), "Expected first-round KO matches.");
+  m1.status = STATUS_COMPLETED;
+  m1.winnerId = m1.player1Id;
+  m1.legs = { p1: 3, p2: 1 };
+  m1.updatedAt = nowIso();
+  m2.status = STATUS_COMPLETED;
+  m2.winnerId = m2.player2Id;
+  m2.legs = { p1: 1, p2: 3 };
+  m2.updatedAt = nowIso();
+
+  const after = estimateTournamentDurationProgressFromTournament(tournament, {
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  assert(before.ready && after.ready, "Progress forecast should be ready.");
+  assert(after.completedMatches > before.completedMatches, "Completed count should increase.");
+  assert(after.remainingMatches < before.remainingMatches, "Remaining matches should decrease.");
+  assert(after.remainingLikelyMinutes < before.remainingLikelyMinutes, "Remaining estimate should shrink.");
+  assertEqual(after.paceMultiplier, 1);
+  assertEqual(after.projectedRemainingLikelyMinutes, after.remainingLikelyMinutes);
+  assertEqual(after.projectedEndAtIso, "");
+});
+
+
+test("Tournament duration: running progress forecast is static against wall-clock time", () => {
+  const tournament = createKoTournament(participantList(8), {
+    bestOfLegs: 5,
+    boardCount: 4,
+    randomizeKoRound1: false,
+  });
+
+  const m1 = findMatch(tournament, "ko-r1-m1");
+  assert(Boolean(m1), "Expected first-round KO match.");
+  m1.status = STATUS_COMPLETED;
+  m1.winnerId = m1.player1Id;
+  m1.legs = { p1: 3, p2: 1 };
+  m1.updatedAt = nowIso();
+
+  const originalNow = Date.now;
+  let earlySnapshot = null;
+  let lateSnapshot = null;
+  try {
+    Date.now = () => 1000;
+    earlySnapshot = estimateTournamentDurationProgressFromTournament(tournament, {
+      tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+    });
+
+    Date.now = () => 9_999_999_000;
+    lateSnapshot = estimateTournamentDurationProgressFromTournament(tournament, {
+      tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+    });
+  } finally {
+    Date.now = originalNow;
+  }
+
+  assert(earlySnapshot && lateSnapshot, "Expected static snapshots.");
+  assertEqual(earlySnapshot.remainingLikelyMinutes, lateSnapshot.remainingLikelyMinutes);
+  assertEqual(earlySnapshot.remainingLowMinutes, lateSnapshot.remainingLowMinutes);
+  assertEqual(earlySnapshot.remainingHighMinutes, lateSnapshot.remainingHighMinutes);
+  assertEqual(earlySnapshot.paceMultiplier, 1);
+  assertEqual(lateSnapshot.paceMultiplier, 1);
+  assertEqual(earlySnapshot.projectedRemainingLikelyMinutes, earlySnapshot.remainingLikelyMinutes);
+  assertEqual(lateSnapshot.projectedRemainingLikelyMinutes, lateSnapshot.remainingLikelyMinutes);
+  assertEqual(earlySnapshot.projectedEndAtIso, "");
+  assertEqual(lateSnapshot.projectedEndAtIso, "");
 });
 
   test("Rules config: Tie-Break-Profil kann umgestellt werden", () => {

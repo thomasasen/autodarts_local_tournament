@@ -160,22 +160,6 @@
   }
 
 
-  function formatDurationAbsoluteTime(isoValue) {
-    const iso = normalizeText(isoValue || "");
-    if (!iso) {
-      return "";
-    }
-    try {
-      return new Intl.DateTimeFormat("de-DE", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(new Date(iso));
-    } catch (_) {
-      return "";
-    }
-  }
-
-
   function renderTournamentDurationEstimate(estimate, options = {}) {
     const visible = options?.visible !== false;
     const helpLinks = renderInfoLinks([
@@ -283,25 +267,20 @@
     }
     const remaining = clampInt(progress.remainingMatches, 0, 0, 9999);
     const progressPercent = Math.round(Math.max(0, Math.min(1, Number(progress.progressRatio || 0))) * 100);
-    const projectedEndTime = formatDurationAbsoluteTime(progress.projectedEndAtIso);
-    const paceLabel = formatDurationDecimal(progress.paceMultiplier || 1, 2);
-
     return `
       <section class="ata-estimate-card ata-estimate-card-progress">
         <div class="ata-estimate-head">
           <strong>Laufende Restzeit-Prognose</strong>
         </div>
-        <div class="ata-estimate-value">Rest ca. ${escapeHtml(formatDurationMinutes(progress.projectedRemainingLikelyMinutes))}</div>
+        <div class="ata-estimate-value">Rest ca. ${escapeHtml(formatDurationMinutes(progress.remainingLikelyMinutes))}</div>
         <div class="ata-estimate-meta">
           <span>Fortschritt ${escapeHtml(String(completed))}/${escapeHtml(String(completed + remaining))} (${escapeHtml(String(progressPercent))}%)</span>
           <span>Offene Match-Wellen ${escapeHtml(String(progress.remainingScheduleWaves))}</span>
-          <span>Pace-Faktor ${escapeHtml(paceLabel)}</span>
-          ${projectedEndTime ? `<span>Voraussichtliches Ende ${escapeHtml(projectedEndTime)}</span>` : ""}
         </div>
         <div class="ata-estimate-range">
           Rest realistisch: ${escapeHtml(formatDurationMinutes(progress.remainingLowMinutes))} - ${escapeHtml(formatDurationMinutes(progress.remainingHighMinutes))}
         </div>
-        <p class="ata-small">Die Restzeit wird aus offenem Matchplan und aktuellem Turnierfortschritt laufend nachgeführt.</p>
+        <p class="ata-small">Die Restzeit wird aus offenem Matchplan und gespeichertem Turnierfortschritt statisch neu berechnet.</p>
       </section>
     `;
   }

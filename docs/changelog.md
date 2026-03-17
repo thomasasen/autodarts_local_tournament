@@ -62,6 +62,7 @@
   - Zeitprofil-Steuerung von `Einstellungen` direkt in den Tab `Turnier` zur Prognose verschoben
   - Prognose inkl. Parameter kann direkt ein-/ausgeblendet werden
   - bei aktivem Turnier zusätzliche laufende Restzeit-Prognose auf Basis des Spielfortschritts ergänzt
+  - laufende Restzeit-Prognose auf statische Matchplan-Restzeit umgestellt (ohne Pace-/Uhrzeitfaktor, Neuberechnung nur bei Fortschritt)
 - Turnierzeit-Prognose ergänzt:
   - neue pure Domain-Datei `src/domain/tournament-duration.js`
   - Live-Schätzung in der Turnieranlage unter `Teilnehmer`

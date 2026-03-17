@@ -499,25 +499,6 @@
   }
 
 
-  function getSafeIsoTimestamp(rawIso) {
-    const iso = normalizeText(rawIso || "");
-    if (!iso) {
-      return 0;
-    }
-    const timestamp = Date.parse(iso);
-    return Number.isFinite(timestamp) ? timestamp : 0;
-  }
-
-
-  function clampTournamentDurationPaceMultiplier(value) {
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) {
-      return 1;
-    }
-    return Math.max(0.6, Math.min(2.2, numeric));
-  }
-
-
   function estimateTournamentDurationProgressFromTournament(tournament, settings = null) {
     const totalEstimate = estimateTournamentDurationFromTournament(tournament, settings);
     const progress = {
@@ -563,16 +544,10 @@
     const completedMatches = tasks.length - remainingTasks.length;
     const progressRatio = tasks.length > 0 ? (completedMatches / tasks.length) : 0;
     const modelElapsedMinutes = Math.max(0, totalEstimate.likelyMinutes - remainingLikelyMinutes);
-    const now = Date.now();
-    const startedAt = getSafeIsoTimestamp(tournament.createdAt) || now;
-    const elapsedMinutes = completedMatches > 0 ? Math.max(0, (now - startedAt) / 60000) : 0;
-    const paceMultiplier = modelElapsedMinutes > 0 && elapsedMinutes > 0
-      ? clampTournamentDurationPaceMultiplier(elapsedMinutes / modelElapsedMinutes)
-      : 1;
-    const projectedRemainingLikelyMinutes = remainingLikelyMinutes * paceMultiplier;
-    const projectedEndAtIso = completedMatches > 0
-      ? new Date(now + (projectedRemainingLikelyMinutes * 60000)).toISOString()
-      : "";
+    const elapsedMinutes = 0;
+    const paceMultiplier = 1;
+    const projectedRemainingLikelyMinutes = remainingLikelyMinutes;
+    const projectedEndAtIso = "";
 
     progress.completedMatches = completedMatches;
     progress.remainingMatches = remainingTasks.length;

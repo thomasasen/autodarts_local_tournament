@@ -4,7 +4,7 @@ Diese Dokumentation beschreibt die Berechnungsgrundlage der Live-Prognose in `sr
 
 ## Ziel und Geltungsbereich
 - Die Schätzung ist eine deterministische Planungsprognose für lokale Turniere mit konfigurierbarer Board-Anzahl.
-- Während eines laufenden Turniers wird zusätzlich eine Restzeit-Prognose aus offenem Matchplan und Fortschritt berechnet.
+- Während eines laufenden Turniers wird zusätzlich eine statische Restzeit-Prognose aus offenem Matchplan und abgeschlossenen Matches berechnet.
 - Sie ist bewusst nicht normativ: DRA/PDC definieren kein allgemeines Minutenmodell für lokale Turnierdauer.
 - Ziel ist eine belastbare Vorab-Planung, keine sekundengenaue Laufzeitvorhersage.
 
