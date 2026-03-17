@@ -10,10 +10,11 @@ Statuswerte:
 | DRA Rule | Thema | Status | Umsetzung im Code |
 |---|---|---|---|
 | 2 (Definition "Bye"), p.4 | Freilos-Definition | enforced | `src/domain/tournament-create.js` (`buildKoMatchesFromStructure`), `src/domain/ko-engine.js` (`synchronizeStructuralByeMatch`) |
-| 6.8.1, p.17 | Straight Knockout als Grundprinzip | enforced | `src/domain/tournament-create.js` (KO-Struktur), `src/bracket/payload.js` (single elimination payload) |
+| 6.8.1, p.17 | Straight Knockout als Grundprinzip | enforced | `src/domain/tournament-create.js` (KO-Default mit genau einem Finale), `src/bracket/payload.js` (single elimination payload) |
+| 1.2 / 6.8.4 | Separate Tournament-/Promoter-Rules möglich | enforced / assisted | Optionales `enableThirdPlaceMatch` in `src/domain/tournament-create.js` und `src/domain/ko-engine.js`; Standard bleibt unverändert, Zusatzpfad nur explizit aktiviert |
 | 6.8.2, p.17 | Round Robin zulässig | enforced | `src/domain/tournament-create.js` (`buildLeagueMatches`, Gruppenmatches), `src/domain/standings-dra.js` |
 | 6.10.1 / 6.10.5.2, p.17-18 | Promoter-Discretion / organisatorische Limits | assisted | Projektlimits + Hinweise in `src/ui/render-settings.js`, `README.md` |
-| 6.12.1, p.18 | Draw bleibt bestehen | enforced / assisted | `drawLocked` je Turnier in `src/domain/ko-engine.js`, Entsperren nur als expliziter Promoter-Override in `src/domain/rules-config.js` + `src/app/tournament-actions.js` |
+| 6.12.1, p.18 | Draw bleibt bestehen | enforced / assisted | `drawLocked` je Turnier in `src/domain/ko-engine.js`, Entsperren nur als expliziter Promoter-Override in `src/domain/rules-config.js` + `src/app/tournament-actions.js`; Platz-3-Option ist als Anlage/Import-Regel ausgelegt (kein Live-Toggle im laufenden Turnier) |
 | 6.16.1, p.20 | Tie-Break im Ermessen des Promoters | enforced | Profilmodell `tieBreakProfile` in `src/data/normalization.js`, Ranking in `src/domain/standings-dra.js`, Profilsperre nach erstem relevanten Ergebnis in `src/domain/rules-config.js` |
 | Allgemeine Board-/Ablaufregeln (Practice, Wurfreihenfolge, Offiziellenentscheid) | Vor-Ort-Abläufe | assisted / not_applicable_to_software | DRA-Checkliste in `src/ui/render-settings.js` |
 

@@ -18,6 +18,9 @@
     const suggestedNextMatch = findSuggestedNextMatch(tournament);
     const suggestedNextMatchId = suggestedNextMatch?.id || "";
     const koFinalRound = getMatchesByStage(tournament, MATCH_STAGE_KO).reduce((maxRound, koMatch) => {
+      if (normalizeText(koMatch?.meta?.bracket?.matchRole || "") === "third_place") {
+        return maxRound;
+      }
       const roundNumber = Number.parseInt(String(koMatch?.round || "0"), 10);
       return Number.isFinite(roundNumber) && roundNumber > maxRound ? roundNumber : maxRound;
     }, 0);
@@ -36,12 +39,16 @@
       const isBlockedPending = match.status === STATUS_PENDING && !editable;
       const isReadyPending = match.status === STATUS_PENDING && editable;
       const isSuggestedNext = Boolean(suggestedNextMatchId) && match.id === suggestedNextMatchId;
-      const isKoFinal = match.stage === MATCH_STAGE_KO && koFinalRound > 0 && Number(match.round) === koFinalRound;
+      const isThirdPlaceMatch = normalizeText(match?.meta?.bracket?.matchRole || "") === "third_place";
+      const isKoFinal = match.stage === MATCH_STAGE_KO
+        && !isThirdPlaceMatch
+        && koFinalRound > 0
+        && Number(match.round) === koFinalRound;
       const stageLabel = match.stage === MATCH_STAGE_GROUP
         ? `Gruppe ${match.groupId || "?"}`
         : match.stage === MATCH_STAGE_LEAGUE
           ? "Liga (Round Robin)"
-          : "KO (Straight Knockout)";
+          : (isThirdPlaceMatch ? "KO (Spiel um Platz 3)" : "KO (Straight Knockout)");
       const startUi = getApiMatchStartUi(tournament, match, activeStartedMatch);
       const startDisabledAttr = startUi.disabled ? "disabled" : "";
       const startTitleAttr = startUi.title ? `title="${escapeHtml(startUi.title)}"` : "";
@@ -82,7 +89,11 @@
       const summaryText = isCompleted
         ? (isByeCompletion
           ? `Weiter (Bye): ${winner}`
-          : (isKoFinal ? `Champion: ${winner} (${match.legs.p1}:${match.legs.p2})` : `Sieger: ${winner} (${match.legs.p1}:${match.legs.p2})`))
+          : (isKoFinal
+            ? `Champion: ${winner} (${match.legs.p1}:${match.legs.p2})`
+            : (isThirdPlaceMatch
+              ? `Platz 3: ${winner} (${match.legs.p1}:${match.legs.p2})`
+              : `Sieger: ${winner} (${match.legs.p1}:${match.legs.p2})`)))
         : "";
       const advanceClasses = [
         "ata-match-advance-pill",

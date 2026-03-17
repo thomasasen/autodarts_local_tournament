@@ -264,6 +264,7 @@
       boardCount: TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
       participantsText: "",
       randomizeKoRound1: Boolean(defaultRandomize),
+      enableThirdPlaceMatch: false,
     };
   }
 
@@ -309,6 +310,9 @@
       randomizeKoRound1: typeof rawDraft?.randomizeKoRound1 === "boolean"
         ? rawDraft.randomizeKoRound1
         : base.randomizeKoRound1,
+      enableThirdPlaceMatch: typeof rawDraft?.enableThirdPlaceMatch === "boolean"
+        ? rawDraft.enableThirdPlaceMatch
+        : base.enableThirdPlaceMatch,
     };
     if (requestedPreset && matchesCreatePresetSetup(draft, requestedPreset.id)) {
       draft.x01Preset = requestedPreset.id;
@@ -671,11 +675,20 @@
 
 
   function normalizeKoVirtualMatch(rawMatch, roundFallback, indexFallback) {
+    const matchRole = normalizeText(rawMatch?.matchRole || "").toLowerCase() === "third_place"
+      ? "third_place"
+      : "main";
     return {
       id: normalizeText(rawMatch?.id || `ko-r${roundFallback}-m${indexFallback}`),
       round: clampInt(rawMatch?.round, roundFallback, 1, 64),
       number: clampInt(rawMatch?.number, indexFallback, 1, 256),
       structuralBye: Boolean(rawMatch?.structuralBye),
+      matchRole,
+      advancesWinnerTo: normalizeText(rawMatch?.advancesWinnerTo || "") || null,
+      advancesLoserTo: normalizeText(rawMatch?.advancesLoserTo || "") || null,
+      placementRank: Number.isFinite(Number(rawMatch?.placementRank))
+        ? clampInt(rawMatch?.placementRank, null, 1, 128)
+        : null,
       competitors: {
         p1: rawMatch?.competitors?.p1 || null,
         p2: rawMatch?.competitors?.p2 || null,
@@ -759,6 +772,7 @@
     return {
       drawMode,
       drawLocked,
+      enableThirdPlaceMatch: Boolean(ko.enableThirdPlaceMatch),
       engineVersion,
       bracketSize,
       placement,

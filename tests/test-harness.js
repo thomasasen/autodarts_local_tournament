@@ -53,6 +53,7 @@
       lobbyVisibility: "private",
       boardCount: overrides.boardCount,
       randomizeKoRound1: Boolean(overrides.randomizeKoRound1),
+      enableThirdPlaceMatch: Boolean(overrides.enableThirdPlaceMatch),
       koDrawLocked: overrides.koDrawLocked !== false,
       participants,
     });
@@ -74,6 +75,7 @@
       lobbyVisibility: "private",
       boardCount: overrides.boardCount,
       randomizeKoRound1: false,
+      enableThirdPlaceMatch: false,
       koDrawLocked: true,
       participants,
     });

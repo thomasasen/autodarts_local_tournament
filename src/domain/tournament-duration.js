@@ -347,7 +347,7 @@
   }
 
 
-  function buildKoTournamentDurationTasks(participantCount) {
+  function buildKoTournamentDurationTasks(participantCount, enableThirdPlaceMatch = false) {
     const count = clampInt(participantCount, 0, 0, TECHNICAL_PARTICIPANT_HARD_MAX);
     if (count < 2) {
       return [];
@@ -357,7 +357,11 @@
       id: `ko-p-${index + 1}`,
       name: `P${index + 1}`,
     }));
-    const structure = buildBracketStructure(participants, generateSeeds(participants, KO_DRAW_MODE_SEEDED));
+    const structure = buildBracketStructure(
+      participants,
+      generateSeeds(participants, KO_DRAW_MODE_SEEDED),
+      { enableThirdPlaceMatch: Boolean(enableThirdPlaceMatch) },
+    );
     const playableMatchIds = new Set();
 
     structure.rounds.forEach((roundDef) => {
@@ -472,14 +476,14 @@
   }
 
 
-  function buildTournamentDurationTasks(mode, participants, participantCount) {
+  function buildTournamentDurationTasks(mode, participants, participantCount, options = {}) {
     if (mode === "league") {
       return buildLeagueTournamentDurationTasks(participants);
     }
     if (mode === "groups_ko") {
       return buildGroupsKoTournamentDurationTasks(participants);
     }
-    return buildKoTournamentDurationTasks(participantCount);
+    return buildKoTournamentDurationTasks(participantCount, options?.enableThirdPlaceMatch === true);
   }
 
 
@@ -524,7 +528,9 @@
 
     const mode = normalizeText(tournament?.mode || "ko");
     const participants = Array.isArray(tournament?.participants) ? tournament.participants : [];
-    const tasks = buildTournamentDurationTasks(mode, participants, participants.length);
+    const tasks = buildTournamentDurationTasks(mode, participants, participants.length, {
+      enableThirdPlaceMatch: tournament?.ko?.enableThirdPlaceMatch === true,
+    });
     if (!tasks.length) {
       return progress;
     }
@@ -640,7 +646,9 @@
       + profile.matchTransitionMinutes
       + bullOffOverheadMinutes;
     const matchMinutes = (expectedLegs * legMinutes) + matchOverheadMinutes;
-    const durationTasks = buildTournamentDurationTasks(mode, participants, participantCount);
+    const durationTasks = buildTournamentDurationTasks(mode, participants, participantCount, {
+      enableThirdPlaceMatch: rawInput?.enableThirdPlaceMatch === true,
+    });
     const fallbackMatchCount = getTournamentDurationMatchCount(mode, participantCount);
     const matchCount = durationTasks.length || fallbackMatchCount;
     const schedule = estimateTournamentDurationSchedule(durationTasks, boardCount);
@@ -696,6 +704,7 @@
       x01BullOffMode: draft.x01BullOffMode,
       lobbyVisibility: draft.lobbyVisibility,
       boardCount: draft.boardCount,
+      enableThirdPlaceMatch: draft.enableThirdPlaceMatch,
       participants,
       tournamentTimeProfile: settings?.tournamentTimeProfile,
     }, settings);
@@ -719,6 +728,7 @@
       x01BullOffMode: x01Settings.bullOffMode,
       lobbyVisibility: x01Settings.lobbyVisibility,
       boardCount: tournament?.duration?.boardCount,
+      enableThirdPlaceMatch: tournament?.ko?.enableThirdPlaceMatch === true,
       participants: tournament.participants,
       tournamentTimeProfile: settings?.tournamentTimeProfile,
     }, settings);

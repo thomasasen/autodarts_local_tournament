@@ -64,7 +64,7 @@
   }
 
 
-  function resolveVirtualCompetitorParticipantId(competitorRef, winnerByVirtualMatchId) {
+  function resolveVirtualCompetitorParticipantId(competitorRef, winnerByVirtualMatchId, loserByVirtualMatchId) {
     if (!competitorRef) {
       return null;
     }
@@ -73,6 +73,9 @@
     }
     if (competitorRef.type === "winner") {
       return winnerByVirtualMatchId.get(normalizeText(competitorRef.matchId || "")) || null;
+    }
+    if (competitorRef.type === "loser") {
+      return loserByVirtualMatchId.get(normalizeText(competitorRef.matchId || "")) || null;
     }
     return null;
   }
@@ -95,6 +98,14 @@
         round: clampInt(virtualMatch?.round, 1, 1, 64),
         number: clampInt(virtualMatch?.number, 1, 1, 256),
         structuralBye: Boolean(virtualMatch?.structuralBye),
+        matchRole: normalizeText(virtualMatch?.matchRole || "").toLowerCase() === "third_place"
+          ? "third_place"
+          : "main",
+        advancesWinnerTo: normalizeText(virtualMatch?.advancesWinnerTo || "") || null,
+        advancesLoserTo: normalizeText(virtualMatch?.advancesLoserTo || "") || null,
+        placementRank: Number.isFinite(Number(virtualMatch?.placementRank))
+          ? clampInt(virtualMatch?.placementRank, null, 1, 128)
+          : null,
         competitors: {
           p1: virtualMatch?.competitors?.p1 || null,
           p2: virtualMatch?.competitors?.p2 || null,
@@ -114,6 +125,7 @@
     return {
       drawMode: normalizeKoDrawMode(drawMode, KO_DRAW_MODE_SEEDED),
       drawLocked: Boolean(drawLocked),
+      enableThirdPlaceMatch: Boolean(structure?.enableThirdPlaceMatch),
       engineVersion: KO_ENGINE_VERSION,
       bracketSize,
       placement: normalizedPlacement,
@@ -130,6 +142,7 @@
     }
     return {
       bracketSize: normalized.bracketSize,
+      enableThirdPlaceMatch: Boolean(normalized.enableThirdPlaceMatch),
       placement: normalized.placement,
       seeding: normalized.seeding,
       rounds: normalized.rounds,
@@ -203,6 +216,7 @@
     let changed = false;
     const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED);
     const drawLocked = tournament?.ko?.drawLocked !== false;
+    const enableThirdPlaceMatch = tournament?.ko?.enableThirdPlaceMatch === true;
     const participants = (Array.isArray(tournament.participants) ? tournament.participants : [])
       .map((participant) => ({
         id: normalizeText(participant?.id || ""),
@@ -211,7 +225,11 @@
       }))
       .filter((participant) => participant.id);
 
-    const generatedStructure = buildBracketStructure(participants, generateSeeds(participants, drawMode));
+    const generatedStructure = buildBracketStructure(
+      participants,
+      generateSeeds(participants, drawMode),
+      { enableThirdPlaceMatch },
+    );
     const lockedStructure = drawLocked ? buildKoStructureFromMeta(tournament?.ko, drawMode) : null;
     const structure = lockedStructure || generatedStructure;
     const nextKoMeta = buildKoMetaSnapshot(drawMode, drawLocked, structure);
@@ -223,12 +241,21 @@
     const existingKoMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
     const existingKoById = new Map(existingKoMatches.map((match) => [match.id, match]));
     const winnerByVirtualMatchId = new Map();
+    const loserByVirtualMatchId = new Map();
     const nextKoMatches = [];
 
     structure.rounds.forEach((roundDef) => {
       roundDef.virtualMatches.forEach((virtualMatch) => {
-        const p1 = resolveVirtualCompetitorParticipantId(virtualMatch?.competitors?.p1, winnerByVirtualMatchId);
-        const p2 = resolveVirtualCompetitorParticipantId(virtualMatch?.competitors?.p2, winnerByVirtualMatchId);
+        const p1 = resolveVirtualCompetitorParticipantId(
+          virtualMatch?.competitors?.p1,
+          winnerByVirtualMatchId,
+          loserByVirtualMatchId,
+        );
+        const p2 = resolveVirtualCompetitorParticipantId(
+          virtualMatch?.competitors?.p2,
+          winnerByVirtualMatchId,
+          loserByVirtualMatchId,
+        );
         const structuralBye = Boolean(virtualMatch?.structuralBye);
 
         let match = existingKoById.get(virtualMatch.id) || null;
@@ -297,6 +324,14 @@
           }
           if (isCompletedMatchResultValid(tournament, match)) {
             winnerByVirtualMatchId.set(match.id, match.winnerId);
+            if (!isByeMatchResult(match) && match.player1Id && match.player2Id) {
+              const loserId = match.winnerId === match.player1Id
+                ? match.player2Id
+                : (match.winnerId === match.player2Id ? match.player1Id : null);
+              if (loserId) {
+                loserByVirtualMatchId.set(match.id, loserId);
+              }
+            }
           }
         } else if (structuralBye) {
           const advancedParticipant = p1 || p2 || null;

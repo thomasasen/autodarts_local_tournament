@@ -25,12 +25,18 @@
 
 3. **KO / Straight Knockout**
 - KO-Bracket bleibt Single Elimination.
+- Default bleibt ein klassischer KO-Baum mit genau einem Finale.
 - Seeded/Open Draw bleiben verfügbar.
 - Alle KO-Runden werden als Match-Knoten materialisiert (inklusive zukünftiger offener Paarungen).
 - Freilose (Bye) werden explizit als abgeschlossene Bye-Matches geführt.
+- Optional kann per Turnierregel `enableThirdPlaceMatch` ein Platz-3-Spiel aktiviert werden:
+  - Halbfinal-Sieger bleiben im Hauptfinale.
+  - Halbfinal-Verlierer spielen separat um Platz 3.
+  - Keine Auswirkung auf den Champion-Pfad.
+  - Bei Bye-/Edge-Szenarien wird kein unvollständiger Placement-Pfad erzeugt.
 - Draw-Lock ist standardmäßig aktiv und hält den initialen KO-Draw stabil.
 - Entsperren ist nur als expliziter Promoter-Override mit Bestätigung zulässig.
-- Referenz: DRA Rulebook `6.8.1` (Seite 17), `6.12.1` (Seite 18), PDF-Link: [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
+- Referenz: DRA Rulebook `6.8.1` (Seite 17), `6.12.1` (Seite 18), sowie `1.2`/`6.8.4` für explizite Tournament-/Promoter-Rules; PDF-Link: [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
 
 4. **Terminologie (PDC-konform)**
 - Die UI nutzt deutsche Begriffe mit PDC-Bezug, z. B.:

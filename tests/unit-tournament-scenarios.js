@@ -94,6 +94,41 @@
   });
 
 
+  test("Scenario KO + Platz 3: Finale und Bronze sind getrennte Pfade", () => {
+    const tournament = createKoTournament(participantList(4, "TP"), {
+      randomizeKoRound1: false,
+      enableThirdPlaceMatch: true,
+    });
+    runKoDerivations(tournament);
+
+    const semi1 = findMatch(tournament, "ko-r1-m1");
+    const semi2 = findMatch(tournament, "ko-r1-m2");
+    completeMatchByWinner(tournament, semi1, semi1.player1Id);
+    completeMatchByWinner(tournament, semi2, semi2.player2Id);
+    runKoDerivations(tournament);
+
+    const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
+    const final = koMatches.find((match) => Number(match?.meta?.bracket?.placementRank) === 1);
+    const thirdPlace = koMatches.find((match) => normalizeText(match?.meta?.bracket?.matchRole || "") === "third_place");
+    assert(Boolean(final), "Finale erwartet.");
+    assert(Boolean(thirdPlace), "Spiel um Platz 3 erwartet.");
+    assertEqual(final.player1Id, semi1.player1Id);
+    assertEqual(final.player2Id, semi2.player2Id);
+    assertEqual(thirdPlace.player1Id, semi1.player2Id);
+    assertEqual(thirdPlace.player2Id, semi2.player1Id);
+
+    completeMatchByWinner(tournament, final, final.player1Id);
+    completeMatchByWinner(tournament, thirdPlace, thirdPlace.player2Id);
+    runKoDerivations(tournament);
+
+    assertEqual(final.status, STATUS_COMPLETED);
+    assertEqual(thirdPlace.status, STATUS_COMPLETED);
+    assertEqual(final.winnerId, final.player1Id);
+    assertEqual(thirdPlace.winnerId, thirdPlace.player2Id);
+    assertEqual(tournament.results.length, 4, "4er-KO mit Platz-3-Spiel muss 4 Ergebnisse liefern.");
+  });
+
+
   test("Scenario League (DRA 6.16.1): volle Round-Robin-Wertung liefert erwartete Reihenfolge", () => {
     const tournament = createLeagueTournament(participantList(4, "L"), { bestOfLegs: 3 });
     const winnerByPair = new Map([

@@ -14,6 +14,7 @@
     "src/domain/tournament-duration.js",
     "src/domain/ko-engine.js",
     "src/domain/rules-config.js",
+    "src/bracket/payload.js",
     "src/ui/render-helpers.js"
   ],
   "tests": [
@@ -22,6 +23,7 @@
     "tests/unit-tournament-scenarios.js",
     "tests/unit-ko-engine.js",
     "tests/unit-presets.js",
+    "tests/unit-bracket-payload.js",
     "tests/unit-update-check.js",
     "tests/unit-tournament-duration.js",
     "tests/unit-rules-config.js",

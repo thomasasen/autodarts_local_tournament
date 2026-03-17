@@ -90,6 +90,34 @@ Screenshot-Kontext:
 ### Nachprüfen im PDF
 - [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
 
+<a id="dra-gui-rule-third-place"></a>
+## Spiel um Platz 3 (optional)
+
+### GUI-Stellen
+- Turnier > Spiel um Platz 3 (optional)
+- Turnier > Aktives Turnier > Tag `Spiel um Platz 3: aktiv/aus`
+- Turnierbaum > KO-Turnierbaum (`Consolation Final` / separate Bronze-Sektion im Fallback)
+
+### DRA-Referenz (Kapitel/Punkt/Seite)
+- `6.8.1`, Seite `17`
+- `6.12.1`, Seite `18`
+- `1.2` und `6.8.4` (separate Tournament-/Promoter-Rules möglich)
+
+### Deutsche Erklärung
+- Standard bleibt KO mit genau einem Finale (`6.8.1`).
+- Das Platz-3-Spiel ist eine **explizite Zusatzregel** und wird nur per Option bei Anlage/Import aktiviert.
+- Das Hauptfinale bleibt fachlich getrennt; Bronze hat keinen Einfluss auf den Champion-Pfad.
+- Die Option ist draw-stabil gedacht: kein stilles Umschalten im laufenden Turnier (`6.12.1`).
+
+### Warum wichtig
+- Klare Trennung zwischen Standardregel und optionaler Veranstalterregel.
+- Keine versteckten Strukturänderungen nach Draw-Veröffentlichung.
+- Bei Byes/Edgecases werden keine irreführenden oder unvollständigen Placement-Pfade angezeigt.
+
+### Nachprüfen im PDF
+- [DRA-RULE_BOOK.pdf#page=17](DRA-RULE_BOOK.pdf#page=17)
+- [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
+
 <a id="dra-gui-rule-participant-limits"></a>
 ## Teilnehmerlimits
 

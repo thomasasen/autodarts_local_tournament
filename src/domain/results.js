@@ -110,6 +110,23 @@
       return null;
     }
 
+    const sourceMatchIds = new Set();
+    const p1SourceType = normalizeText(match?.meta?.bracket?.p1Source?.type || "");
+    const p2SourceType = normalizeText(match?.meta?.bracket?.p2Source?.type || "");
+    const p1SourceMatchId = normalizeText(match?.meta?.bracket?.p1Source?.matchId || "");
+    const p2SourceMatchId = normalizeText(match?.meta?.bracket?.p2Source?.matchId || "");
+    if ((p1SourceType === "winner" || p1SourceType === "loser") && p1SourceMatchId) {
+      sourceMatchIds.add(p1SourceMatchId);
+    }
+    if ((p2SourceType === "winner" || p2SourceType === "loser") && p2SourceMatchId) {
+      sourceMatchIds.add(p2SourceMatchId);
+    }
+    if (sourceMatchIds.size) {
+      const sourceMatches = getMatchesByStage(tournament, MATCH_STAGE_KO)
+        .filter((item) => sourceMatchIds.has(normalizeText(item?.id || "")));
+      return sourceMatches.find((item) => item.status !== STATUS_COMPLETED) || null;
+    }
+
     const previousRound = match.round - 1;
     const sourceNumberA = ((match.number - 1) * 2) + 1;
     const sourceNumberB = sourceNumberA + 1;

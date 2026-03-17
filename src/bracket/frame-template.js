@@ -377,6 +377,9 @@
           }
           var titleEl = node.querySelector("h3");
           var title = titleEl ? String(titleEl.textContent || "").trim() : "";
+          if (/(consolation|third|bronze|platz\\s*3)/i.test(title)) {
+            return;
+          }
           if (/(^|\\s)(final|finale|endspiel|grand\\s*final|championship)(\\s|$)/i.test(title)) {
             finalRoundNode = node;
           }

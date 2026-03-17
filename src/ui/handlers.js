@@ -682,6 +682,7 @@
       boardCount: formData.get("boardCount"),
       participantsText: String(formData.get("participants") || ""),
       randomizeKoRound1: formData.get("randomizeKoRound1") !== null,
+      enableThirdPlaceMatch: formData.get("enableThirdPlaceMatch") !== null,
     };
   }
 
@@ -762,6 +763,7 @@
       lobbyVisibility: "private",
       boardCount: draft.boardCount,
       randomizeKoRound1: draft.randomizeKoRound1,
+      enableThirdPlaceMatch: draft.enableThirdPlaceMatch,
       koDrawLocked: state.store.settings.featureFlags.koDrawLockDefault !== false,
       participants,
     };

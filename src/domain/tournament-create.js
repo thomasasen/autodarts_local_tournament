@@ -15,6 +15,10 @@
    * @property {number} round
    * @property {number} number
    * @property {boolean} structuralBye
+   * @property {"main"|"third_place"} matchRole
+   * @property {string|null} advancesWinnerTo
+   * @property {string|null} advancesLoserTo
+   * @property {number|null} placementRank
    * @property {Object} competitors
    * @property {Object|null} competitors.p1
    * @property {Object|null} competitors.p2
@@ -84,7 +88,45 @@
         matchId: node.sourceMatchId,
       };
     }
+    if (node.kind === "loser") {
+      return {
+        type: "loser",
+        matchId: node.sourceMatchId,
+      };
+    }
     return null;
+  }
+
+
+  function createKoVirtualMatch({
+    id,
+    round,
+    number,
+    structuralBye = false,
+    competitors = null,
+    matchRole = "main",
+    advancesWinnerTo = null,
+    advancesLoserTo = null,
+    placementRank = null,
+  }) {
+    const normalizedRole = matchRole === "third_place" ? "third_place" : "main";
+    const normalizedPlacementRank = Number.isFinite(Number(placementRank))
+      ? clampInt(placementRank, null, 1, 128)
+      : null;
+    return {
+      id: normalizeText(id || ""),
+      round: clampInt(round, 1, 1, 64),
+      number: clampInt(number, 1, 1, 256),
+      structuralBye: Boolean(structuralBye),
+      matchRole: normalizedRole,
+      advancesWinnerTo: normalizeText(advancesWinnerTo || "") || null,
+      advancesLoserTo: normalizeText(advancesLoserTo || "") || null,
+      placementRank: Number.isFinite(normalizedPlacementRank) ? normalizedPlacementRank : null,
+      competitors: {
+        p1: competitors?.p1 || null,
+        p2: competitors?.p2 || null,
+      },
+    };
   }
 
 
@@ -292,8 +334,9 @@
   }
 
 
-  function buildBracketStructure(players, seeds) {
+  function buildBracketStructure(players, seeds, options = {}) {
     const normalizedParticipants = normalizeSeedParticipants(players);
+    const enableThirdPlaceMatch = Boolean(options?.enableThirdPlaceMatch);
     const seeded = Array.isArray(seeds) && seeds.length
       ? seeds.slice()
       : generateSeeds(normalizedParticipants, KO_DRAW_MODE_SEEDED);
@@ -334,16 +377,22 @@
         const id = `ko-r${round}-m${number}`;
         const structuralBye = Boolean((leftNode && !rightNode) || (!leftNode && rightNode));
 
-        virtualMatches.push({
+        virtualMatches.push(createKoVirtualMatch({
           id,
           round,
           number,
           structuralBye,
+          matchRole: "main",
+          advancesWinnerTo: round < totalRounds
+            ? `ko-r${round + 1}-m${Math.ceil(number / 2)}`
+            : null,
+          advancesLoserTo: null,
+          placementRank: round === totalRounds ? 1 : null,
           competitors: {
             p1: createKoVirtualCompetitorRef(leftNode),
             p2: createKoVirtualCompetitorRef(rightNode),
           },
-        });
+        }));
 
         if (!leftNode && !rightNode) {
           nextNodes.push(null);
@@ -364,9 +413,49 @@
       currentNodes = nextNodes;
     }
 
+    if (enableThirdPlaceMatch && totalRounds >= 2) {
+      const semifinalRound = totalRounds - 1;
+      const semifinalRoundDef = rounds.find((entry) => entry.round === semifinalRound);
+      const finalRoundDef = rounds.find((entry) => entry.round === totalRounds);
+      const semifinalMatches = (Array.isArray(semifinalRoundDef?.virtualMatches) ? semifinalRoundDef.virtualMatches : [])
+        .filter((entry) => entry?.matchRole !== "third_place")
+        .sort((left, right) => left.number - right.number);
+      const isValidThirdPlacePath = semifinalMatches.length === 2
+        && semifinalMatches.every((entry) => (
+          !entry.structuralBye
+          && Boolean(entry?.competitors?.p1)
+          && Boolean(entry?.competitors?.p2)
+        ));
+      if (isValidThirdPlacePath && finalRoundDef) {
+        const thirdPlaceMatchId = `ko-r${totalRounds}-m2`;
+        semifinalMatches.forEach((entry) => {
+          entry.advancesLoserTo = thirdPlaceMatchId;
+        });
+        const thirdPlaceMatch = createKoVirtualMatch({
+          id: thirdPlaceMatchId,
+          round: totalRounds,
+          number: 2,
+          structuralBye: false,
+          matchRole: "third_place",
+          advancesWinnerTo: null,
+          advancesLoserTo: null,
+          placementRank: 3,
+          competitors: {
+            p1: createKoVirtualCompetitorRef({ kind: "loser", sourceMatchId: semifinalMatches[0].id }),
+            p2: createKoVirtualCompetitorRef({ kind: "loser", sourceMatchId: semifinalMatches[1].id }),
+          },
+        });
+        finalRoundDef.virtualMatches = finalRoundDef.virtualMatches
+          .filter((entry) => entry.id !== thirdPlaceMatch.id)
+          .concat(thirdPlaceMatch)
+          .sort((left, right) => left.number - right.number);
+      }
+    }
+
     return {
       bracketSize: assignedByes.bracketSize,
       byeCount: assignedByes.byeCount,
+      enableThirdPlaceMatch,
       placement,
       seeding,
       rounds,
@@ -379,6 +468,12 @@
       bracket: {
         p1Source: virtualMatch?.competitors?.p1 || null,
         p2Source: virtualMatch?.competitors?.p2 || null,
+        matchRole: virtualMatch?.matchRole === "third_place" ? "third_place" : "main",
+        advancesWinnerTo: normalizeText(virtualMatch?.advancesWinnerTo || "") || null,
+        advancesLoserTo: normalizeText(virtualMatch?.advancesLoserTo || "") || null,
+        placementRank: Number.isFinite(Number(virtualMatch?.placementRank))
+          ? clampInt(virtualMatch?.placementRank, null, 1, 128)
+          : null,
       },
     };
   }
@@ -538,6 +633,9 @@
     const koDrawLocked = config.mode === "ko"
       ? config.koDrawLocked !== false
       : false;
+    const enableThirdPlaceMatch = config.mode === "ko"
+      ? config.enableThirdPlaceMatch === true
+      : false;
     const x01 = normalizeTournamentX01Settings({
       presetId: config.x01Preset,
       baseScore: config.startScore,
@@ -560,11 +658,12 @@
       matches = buildGroupMatches(groups).concat(buildGroupsKoMatches());
     } else {
       const koSeeds = generateSeeds(participants, koDrawMode);
-      const koStructure = buildBracketStructure(participants, koSeeds);
+      const koStructure = buildBracketStructure(participants, koSeeds, { enableThirdPlaceMatch });
       matches = buildKoMatchesFromStructure(koStructure);
       koMeta = {
         drawMode: koDrawMode,
         drawLocked: koDrawLocked,
+        enableThirdPlaceMatch: koStructure.enableThirdPlaceMatch,
         engineVersion: KO_ENGINE_VERSION,
         bracketSize: koStructure.bracketSize,
         placement: koStructure.placement,

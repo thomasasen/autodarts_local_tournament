@@ -112,6 +112,15 @@ Nach Installation ist links im Hauptmenü der neue Eintrag sichtbar. Darüber ö
 - Hybrid-Draw:
   - `KO-Erstrunde zufällig mischen = OFF` -> `seeded` (Eingabereihenfolge als Seed 1..n).
   - `KO-Erstrunde zufällig mischen = ON` -> `open_draw` (deterministisch gemischte Seed-Reihenfolge).
+- Standard bleibt klassisches Single Elimination mit genau einem Finale.
+- Optional kann bei der Turnieranlage `Spiel um Platz 3` aktiviert werden:
+  - Nur für `ko`, Default `AUS`.
+  - Halbfinal-Sieger gehen weiterhin ins Finale, Halbfinal-Verlierer ins Platz-3-Spiel.
+  - Das Platz-3-Spiel beeinflusst den Champion-Pfad nie.
+  - Bei Bye-/Edge-Szenarien wird kein kaputter Platzierungs-Pfad erzeugt.
+- Die Option ist draw-stabil:
+  - wirksam bei Anlage/Import,
+  - nicht als Live-Toggle im aktiven Turnier vorgesehen.
 - Bye-Verteilung ist PDC/DRA-konform für gesetzte Draws:
   - Bei nicht voller 2er-Potenz erhalten Top-Seeds Freilose.
   - Beispiel mit 9 Spielern im 16er-Baum: Nur Seed 8 vs Seed 9 spielt in Runde 1.
@@ -165,6 +174,7 @@ Tab: `Turnier`
 | `Lobby` | fix `Privat` | Sichtbarkeit der API-Lobby | Lokales Turnier bleibt bewusst privat/sicher |
 | `Preset` | Auswahlfeld + Button `Preset anwenden` | Setzt alle Preset-relevanten Turnierfelder konsistent | Offizielle und kompatible Profile bleiben klar getrennt |
 | `KO-Erstrunde zufällig mischen` | Checkbox `ON/OFF` | `open_draw` oder `seeded` in Runde 1 | Transparente Entscheidung zwischen deterministischer Open-Draw-Reihenfolge und Setzlogik |
+| `Spiel um Platz 3 (optional)` | Checkbox `ON/OFF` | Fügt im KO-Modus ein separates Bronze-Match (Halbfinal-Verlierer) hinzu | Default bleibt klassisches KO mit genau einem Finale; zusätzliche Platzierung nur als explizite Tournament Rule |
 | `Teilnehmer` | Je Spieler eine Zeile | Teilnehmerliste inkl. Reihenfolge | Reihenfolge ist bei `seeded` zugleich Seed-Reihenfolge |
 | `Boards für Zeitprognose` | Zahl `1..32` | Parallele Match-Slots in der Dauerberechnung | Verhindert naive Vollauslastungsannahmen und macht Warteeffekte sichtbar |
 | `Teilnehmer mischen` | Button | Mischt Teilnehmertextliste | Praktisch für spontane Auslosung vor Start |
@@ -229,7 +239,7 @@ Die Anzeige bündelt Teilnehmerzahl, geplante Spielanzahl, durchschnittliche Mat
 Im aktiven Turnier siehst du die wichtigsten Tags sofort:
 - Format (`KO`, `Liga`, `Gruppenphase + KO`)
 - `Best of`, `First to`, `Startpunkte`
-- Bei KO: `Open Draw`/`Gesetzter Draw`, `Draw-Lock aktiv/aus`
+- Bei KO: `Open Draw`/`Gesetzter Draw`, `Draw-Lock aktiv/aus`, `Spiel um Platz 3 aktiv/aus`
 - X01-Zusammenfassung und Teilnehmerchips
 
 ![Aktives Turnier nach Anlage](assets/ss_Turnier_angelegt.png)
@@ -265,6 +275,7 @@ Wichtige Markierungen:
 - `Nächstes Match`: empfohlene nächste Paarung (PDC: Next Match).
 - `Freilos (Bye)`: automatischer Weiterzug ohne Spiel.
 - `Finale`: letzte KO-Paarung.
+- `Platz 3`: Gewinner des optionalen Platz-3-Spiels.
 - `Champion`: finaler Gewinner inklusive Leg-Ergebnis.
 
 ![Spiele direkt nach Turnierstart](assets/ss_Spiele_Neu-gestartet.png)
@@ -348,8 +359,9 @@ Tab: `Turnierbaum`
 - KO-Baum wird im iframe über `brackets-viewer` gerendert.
 - Bei CDN-Problemen zeigt die App einen HTML-Fallback.
 - Freilose, abgeschlossene Spiele und Finale sind visuell markiert.
+- Optionales Platz-3-Spiel wird im Viewer als `Consolation Final` abgebildet; im HTML-Fallback als separate, klar getrennte Sektion.
 - Je nach Modus zeigt der Tab unterschiedliche Ansichten:
-  - `KO`: klassischer Turnierbaum mit offenen Slots, Freilosen und Finale.
+  - `KO`: klassischer Turnierbaum mit offenen Slots, Freilosen und Finale (optional zusätzlich Platz-3-Spiel).
   - `Liga`: Tabelle und vollständiger Spielplan in einer gemeinsamen Ansicht.
   - `Gruppenphase + KO`: Gruppentabellen oben, KO-Turnierbaum darunter.
 
@@ -383,6 +395,7 @@ Tab: `Import/Export`
 - Beim Import werden Daten defensiv normalisiert.
 - Legacy-KO-Turniere werden auf KO-Engine v3 migriert.
 - Vor KO-Migration wird ein Backup unter `ata:tournament:ko-migration-backups:v2` abgelegt.
+- Legacy-Daten ohne `tournament.ko.enableThirdPlaceMatch` bleiben kompatibel und werden als `false` behandelt.
 - Bestehende Turniere werden auf
   `tournament.rules.tieBreakProfile = promoter_h2h_minitable` normalisiert.
 

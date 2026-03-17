@@ -17,6 +17,7 @@
     if (!tournament) {
       const draft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store?.settings);
       const randomizeChecked = draft.randomizeKoRound1 ? "checked" : "";
+      const thirdPlaceChecked = draft.enableThirdPlaceMatch ? "checked" : "";
       const modeLimitSummary = buildModeParticipantLimitSummary();
       const startScoreOptions = X01_START_SCORE_OPTIONS.map((score) => (
         `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${score}</option>`
@@ -147,6 +148,13 @@
                   </div>
                   <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
                 </div>
+                <div class="ata-toggle ata-toggle-compact">
+                  <div>
+                    <strong>Spiel um Platz 3 (optional)</strong>
+                    <div class="ata-small">Nur im KO-Modus: Halbfinal-Verlierer spielen um Platz 3. Ohne Option bleibt klassischer Single-Elimination-Baum.</div>
+                  </div>
+                  <input id="ata-enable-third-place" name="enableThirdPlaceMatch" type="checkbox" ${thirdPlaceChecked}>
+                </div>
                 <p class="ata-small ata-create-help">PDC European Tour (Official): KO, Best of 11 Legs (First to 6), 501, Straight In, Double Out, Bull 25/50. Bull-off Normal und Max Runden 50 bleiben technische AutoDarts-Werte.</p>
                 <p class="ata-small ata-create-help">PDC 501 / Double Out (Basic): kompatibler Ersatz für das frühere irreführende „PDC-Standard“-Preset. Ehrlich benannt, aber kein offizielles PDC-Eventformat.</p>
                 <p class="ata-small ata-create-help">PDC World Championship im echten Set-Format wird bewusst nicht als offizielles Preset angeboten, weil AutoDarts hier nur Legs / First to N unterstützt.</p>
@@ -214,6 +222,9 @@
     const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED);
     const drawModeLabel = drawMode === KO_DRAW_MODE_OPEN_DRAW ? "Open Draw" : "Gesetzter Draw";
     const drawLockLabel = tournament?.ko?.drawLocked !== false ? "Draw-Lock aktiv" : "Draw-Lock aus";
+    const thirdPlaceLabel = tournament?.ko?.enableThirdPlaceMatch === true
+      ? "Spiel um Platz 3: aktiv"
+      : "Spiel um Platz 3: aus";
     const primaryTags = [
       { text: `Best of ${tournament.bestOfLegs} Legs`, cls: "ata-info-tag ata-info-tag-key" },
       { text: `First to ${legsToWin} Legs`, cls: "ata-info-tag" },
@@ -222,6 +233,7 @@
         ? [
           { text: drawModeLabel, cls: "ata-info-tag ata-info-tag-accent" },
           { text: drawLockLabel, cls: "ata-info-tag" },
+          { text: thirdPlaceLabel, cls: "ata-info-tag" },
         ]
         : []),
     ];

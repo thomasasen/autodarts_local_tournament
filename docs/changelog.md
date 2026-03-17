@@ -24,6 +24,13 @@
 - Regelhärtung für DRA-konforme Entscheidungszeitpunkte:
   - Tie-Break-Profil ist nach dem ersten abgeschlossenen Gruppen-/Liga-Ergebnis gesperrt (`DRA 6.16.1`).
   - Draw-Lock-Entsperren wurde auf expliziten Promoter-Override mit Bestätigung und Zeitfenster umgestellt (`DRA 6.12.1`).
+- KO optional um Platz-3-Spiel erweitert:
+  - neues Turnierfeld `enableThirdPlaceMatch` (Default `false`) für `mode = ko`
+  - Default-Verhalten unverändert: Single Elimination mit genau einem Finale
+  - bei aktivierter Option: Halbfinal-Verlierer spielen um Platz 3, ohne Einfluss auf den Champion-Pfad
+  - bei Bye-/Edge-Szenarien wird kein kaputter Placement-Pfad erzeugt
+  - Bracket-Payload setzt bei vorhandenem Platz-3-Spiel `consolationFinal` und trennt Hauptbaum/Bronze per `group_id`
+  - Legacy-Turniere ohne neues Feld bleiben kompatibel
 - History-Import robuster gemacht:
   - Legs-Abweichungen werden nicht mehr still normalisiert, sondern liefern zuerst `requires_confirmation`.
   - Bestätigung ist signaturgebunden und zeitlich begrenzt; ungültige/abgelaufene Bestätigungen werden abgelehnt.

@@ -31,6 +31,8 @@
       const participantId = normalizeText(resolved);
       return participantIdSet.has(participantId) ? participantId : null;
     };
+    const isThirdPlaceMatch = (match) => normalizeText(match?.meta?.bracket?.matchRole || "") === "third_place";
+    const hasThirdPlaceMatch = koMatches.some((match) => isThirdPlaceMatch(match));
 
     const matches = koMatches.map((match) => {
       const player1Id = resolveBracketParticipantId(match.player1Id);
@@ -64,7 +66,7 @@
       return {
         id: match.id,
         stage_id: 1,
-        group_id: 1,
+        group_id: isThirdPlaceMatch(match) ? 2 : 1,
         round_id: match.round,
         number: match.number,
         child_count: 0,
@@ -80,7 +82,10 @@
         tournament_id: 1,
         name: tournament.mode === "groups_ko" ? "KO-Phase" : "KO",
         type: "single_elimination",
-        settings: { size: bracketSize },
+        settings: {
+          size: bracketSize,
+          consolationFinal: hasThirdPlaceMatch,
+        },
         number: 1,
       }],
       matches,
