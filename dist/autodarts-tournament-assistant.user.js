@@ -1702,6 +1702,8 @@
   const TOURNAMENT_TIME_PROFILE_FAST = "fast";
   const TOURNAMENT_TIME_PROFILE_NORMAL = "normal";
   const TOURNAMENT_TIME_PROFILE_SLOW = "slow";
+  const TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT = 1;
+  const TOURNAMENT_DURATION_MAX_BOARD_COUNT = 32;
   const TOURNAMENT_TIME_PROFILES = Object.freeze([
     TOURNAMENT_TIME_PROFILE_FAST,
     TOURNAMENT_TIME_PROFILE_NORMAL,
@@ -2782,6 +2784,7 @@
       x01MaxRounds: presetX01?.maxRounds || 50,
       x01BullOffMode: presetX01?.bullOffMode || "Normal",
       lobbyVisibility: presetX01?.lobbyVisibility || "private",
+      boardCount: TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
       participantsText: "",
       randomizeKoRound1: Boolean(defaultRandomize),
     };
@@ -2824,6 +2827,7 @@
       x01MaxRounds: x01Settings.maxRounds,
       x01BullOffMode: x01Settings.bullOffMode,
       lobbyVisibility: x01Settings.lobbyVisibility,
+      boardCount: sanitizeTournamentBoardCount(rawDraft?.boardCount, base.boardCount),
       participantsText: String(rawDraft?.participantsText ?? base.participantsText),
       randomizeKoRound1: typeof rawDraft?.randomizeKoRound1 === "boolean"
         ? rawDraft.randomizeKoRound1
@@ -2959,6 +2963,11 @@
   function sanitizeTournamentTimeProfile(value, fallback = TOURNAMENT_TIME_PROFILE_NORMAL) {
     const profile = normalizeText(value || "").toLowerCase();
     return TOURNAMENT_TIME_PROFILES.includes(profile) ? profile : fallback;
+  }
+
+
+  function sanitizeTournamentBoardCount(value, fallback = TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT) {
+    return clampInt(value, fallback, 1, TOURNAMENT_DURATION_MAX_BOARD_COUNT);
   }
 
 
@@ -4227,7 +4236,7 @@
     return tournament.matches.find((match) => match.id === matchId) || null;
   }
 
-// Domain layer: deterministic single-board tournament duration estimation.
+// Domain layer: deterministic tournament duration estimation with dependency-aware board scheduling.
 
   const TOURNAMENT_DURATION_BASE_LEG_MINUTES = 3.75;
   const TOURNAMENT_DURATION_RESULT_ENTRY_MINUTES = 0.80;
@@ -4383,6 +4392,335 @@
   }
 
 
+  function normalizeTournamentDurationParticipants(rawParticipants) {
+    const source = Array.isArray(rawParticipants) ? rawParticipants : [];
+    return source
+      .map((entry, index) => {
+        const id = normalizeText(entry?.id || entry?.name || entry || `p-${index + 1}`);
+        return id || null;
+      })
+      .filter(Boolean);
+  }
+
+
+  function normalizeTournamentDurationTaskList(rawTasks) {
+    const source = Array.isArray(rawTasks) ? rawTasks : [];
+    const seen = new Set();
+    const normalized = [];
+
+    source.forEach((task, index) => {
+      const taskId = normalizeText(task?.id || `duration-task-${index + 1}`);
+      if (!taskId || seen.has(taskId)) {
+        return;
+      }
+      seen.add(taskId);
+      const participants = (Array.isArray(task?.participants) ? task.participants : [])
+        .map((entry) => normalizeText(entry || ""))
+        .filter(Boolean);
+      const dependsOn = (Array.isArray(task?.dependsOn) ? task.dependsOn : [])
+        .map((entry) => normalizeText(entry || ""))
+        .filter(Boolean);
+      normalized.push({
+        id: taskId,
+        participants,
+        dependsOn,
+      });
+    });
+
+    const taskIds = new Set(normalized.map((task) => task.id));
+    return normalized.map((task) => ({
+      ...task,
+      dependsOn: task.dependsOn.filter((depId) => depId !== task.id && taskIds.has(depId)),
+    }));
+  }
+
+
+  function buildTournamentDurationDependents(tasks) {
+    const dependentsById = new Map();
+    tasks.forEach((task) => {
+      dependentsById.set(task.id, []);
+    });
+    tasks.forEach((task) => {
+      task.dependsOn.forEach((depId) => {
+        if (!dependentsById.has(depId)) {
+          return;
+        }
+        dependentsById.get(depId).push(task.id);
+      });
+    });
+    return dependentsById;
+  }
+
+
+  function getTournamentDurationTaskDepth(taskId, dependentsById, memo, visiting) {
+    if (memo.has(taskId)) {
+      return memo.get(taskId);
+    }
+    if (visiting.has(taskId)) {
+      return 1;
+    }
+
+    visiting.add(taskId);
+    const dependents = dependentsById.get(taskId) || [];
+    let depth = 1;
+    dependents.forEach((dependentId) => {
+      depth = Math.max(
+        depth,
+        1 + getTournamentDurationTaskDepth(dependentId, dependentsById, memo, visiting),
+      );
+    });
+    visiting.delete(taskId);
+    memo.set(taskId, depth);
+    return depth;
+  }
+
+
+  function estimateTournamentDurationSchedule(rawTasks, boardCount) {
+    const safeBoardCount = sanitizeTournamentBoardCount(
+      boardCount,
+      TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
+    );
+    const tasks = normalizeTournamentDurationTaskList(rawTasks);
+    if (!tasks.length) {
+      return {
+        waves: 0,
+        peakParallelMatches: 0,
+        averageParallelMatches: 0,
+        boardUtilization: 0,
+      };
+    }
+
+    const taskById = new Map(tasks.map((task) => [task.id, task]));
+    const dependentsById = buildTournamentDurationDependents(tasks);
+    const remainingDependenciesById = new Map();
+    tasks.forEach((task) => {
+      const dependencyCount = task.dependsOn.filter((depId) => taskById.has(depId)).length;
+      remainingDependenciesById.set(task.id, dependencyCount);
+    });
+
+    const criticalDepthById = new Map();
+    tasks.forEach((task) => {
+      getTournamentDurationTaskDepth(task.id, dependentsById, criticalDepthById, new Set());
+    });
+
+    const unscheduled = new Set(tasks.map((task) => task.id));
+    let waves = 0;
+    let peakParallelMatches = 0;
+    let scheduledMatches = 0;
+
+    while (unscheduled.size > 0) {
+      const ready = tasks
+        .filter((task) => unscheduled.has(task.id) && (remainingDependenciesById.get(task.id) || 0) <= 0)
+        .sort((left, right) => {
+          const leftDepth = criticalDepthById.get(left.id) || 1;
+          const rightDepth = criticalDepthById.get(right.id) || 1;
+          if (leftDepth !== rightDepth) {
+            return rightDepth - leftDepth;
+          }
+          const leftDependentCount = (dependentsById.get(left.id) || []).length;
+          const rightDependentCount = (dependentsById.get(right.id) || []).length;
+          if (leftDependentCount !== rightDependentCount) {
+            return rightDependentCount - leftDependentCount;
+          }
+          if (left.participants.length !== right.participants.length) {
+            return right.participants.length - left.participants.length;
+          }
+          return left.id.localeCompare(right.id);
+        });
+
+      if (!ready.length) {
+        const remaining = unscheduled.size;
+        const fallbackWaves = Math.ceil(remaining / safeBoardCount);
+        waves += fallbackWaves;
+        peakParallelMatches = Math.max(peakParallelMatches, Math.min(safeBoardCount, remaining));
+        scheduledMatches += remaining;
+        break;
+      }
+
+      const usedParticipants = new Set();
+      const selected = [];
+      for (let index = 0; index < ready.length; index += 1) {
+        if (selected.length >= safeBoardCount) {
+          break;
+        }
+        const task = ready[index];
+        const hasConflict = task.participants.some((participantId) => usedParticipants.has(participantId));
+        if (hasConflict) {
+          continue;
+        }
+        selected.push(task);
+        task.participants.forEach((participantId) => usedParticipants.add(participantId));
+      }
+
+      if (!selected.length) {
+        selected.push(ready[0]);
+      }
+
+      waves += 1;
+      peakParallelMatches = Math.max(peakParallelMatches, selected.length);
+      selected.forEach((task) => {
+        if (!unscheduled.has(task.id)) {
+          return;
+        }
+        unscheduled.delete(task.id);
+        scheduledMatches += 1;
+        const dependents = dependentsById.get(task.id) || [];
+        dependents.forEach((dependentId) => {
+          const currentCount = remainingDependenciesById.get(dependentId) || 0;
+          remainingDependenciesById.set(dependentId, Math.max(0, currentCount - 1));
+        });
+      });
+    }
+
+    const averageParallelMatches = waves > 0 ? scheduledMatches / waves : 0;
+    const boardUtilization = waves > 0
+      ? scheduledMatches / (waves * safeBoardCount)
+      : 0;
+    return {
+      waves,
+      peakParallelMatches,
+      averageParallelMatches,
+      boardUtilization,
+    };
+  }
+
+
+  function buildKoTournamentDurationTasks(participantCount) {
+    const count = clampInt(participantCount, 0, 0, TECHNICAL_PARTICIPANT_HARD_MAX);
+    if (count < 2) {
+      return [];
+    }
+
+    const participants = Array.from({ length: count }, (_, index) => ({
+      id: `ko-p-${index + 1}`,
+      name: `P${index + 1}`,
+    }));
+    const structure = buildBracketStructure(participants, generateSeeds(participants, KO_DRAW_MODE_SEEDED));
+    const playableMatchIds = new Set();
+
+    structure.rounds.forEach((roundDef) => {
+      roundDef.virtualMatches.forEach((virtualMatch) => {
+        if (virtualMatch?.structuralBye) {
+          return;
+        }
+        if (!virtualMatch?.competitors?.p1 || !virtualMatch?.competitors?.p2) {
+          return;
+        }
+        playableMatchIds.add(virtualMatch.id);
+      });
+    });
+
+    const tasks = [];
+    structure.rounds.forEach((roundDef) => {
+      roundDef.virtualMatches.forEach((virtualMatch) => {
+        if (!playableMatchIds.has(virtualMatch.id)) {
+          return;
+        }
+        const participantsInMatch = [];
+        const dependencies = [];
+        [virtualMatch.competitors?.p1, virtualMatch.competitors?.p2].forEach((competitorRef) => {
+          if (competitorRef?.type === "participant") {
+            const participantId = normalizeText(competitorRef.participantId || "");
+            if (participantId) {
+              participantsInMatch.push(`p:${participantId}`);
+            }
+            return;
+          }
+          if (competitorRef?.type !== "winner") {
+            return;
+          }
+          const sourceMatchId = normalizeText(competitorRef.matchId || "");
+          if (!sourceMatchId) {
+            return;
+          }
+          participantsInMatch.push(`w:${sourceMatchId}`);
+          if (playableMatchIds.has(sourceMatchId)) {
+            dependencies.push(sourceMatchId);
+          }
+        });
+        tasks.push({
+          id: virtualMatch.id,
+          participants: participantsInMatch,
+          dependsOn: dependencies,
+        });
+      });
+    });
+    return tasks;
+  }
+
+
+  function buildLeagueTournamentDurationTasks(rawParticipants) {
+    const participantIds = normalizeTournamentDurationParticipants(rawParticipants);
+    const rounds = createRoundRobinPairings(participantIds);
+    const tasks = [];
+    rounds.forEach((pairs, roundIndex) => {
+      pairs.forEach((pair, pairIndex) => {
+        tasks.push({
+          id: `league-r${roundIndex + 1}-m${pairIndex + 1}`,
+          participants: [`p:${pair[0]}`, `p:${pair[1]}`],
+          dependsOn: [],
+        });
+      });
+    });
+    return tasks;
+  }
+
+
+  function buildGroupsKoTournamentDurationTasks(rawParticipants) {
+    const participantIds = normalizeTournamentDurationParticipants(rawParticipants);
+    const groups = buildGroups(participantIds);
+    const tasks = [];
+    const groupStageTaskIds = [];
+
+    groups.forEach((group) => {
+      const rounds = createRoundRobinPairings(group.participantIds);
+      rounds.forEach((pairs, roundIndex) => {
+        pairs.forEach((pair, pairIndex) => {
+          const taskId = `group-${group.id}-r${roundIndex + 1}-m${pairIndex + 1}`;
+          tasks.push({
+            id: taskId,
+            participants: [`p:${pair[0]}`, `p:${pair[1]}`],
+            dependsOn: [],
+          });
+          groupStageTaskIds.push(taskId);
+        });
+      });
+    });
+
+    const semifinalAId = "ko-r1-m1";
+    const semifinalBId = "ko-r1-m2";
+    const finalId = "ko-r2-m1";
+    tasks.push({
+      id: semifinalAId,
+      participants: ["slot:A1", "slot:B2"],
+      dependsOn: groupStageTaskIds,
+    });
+    tasks.push({
+      id: semifinalBId,
+      participants: ["slot:B1", "slot:A2"],
+      dependsOn: groupStageTaskIds,
+    });
+    tasks.push({
+      id: finalId,
+      participants: [`w:${semifinalAId}`, `w:${semifinalBId}`],
+      dependsOn: [semifinalAId, semifinalBId],
+    });
+
+    return tasks;
+  }
+
+
+  function buildTournamentDurationTasks(mode, participants, participantCount) {
+    if (mode === "league") {
+      return buildLeagueTournamentDurationTasks(participants);
+    }
+    if (mode === "groups_ko") {
+      return buildGroupsKoTournamentDurationTasks(participants);
+    }
+    return buildKoTournamentDurationTasks(participantCount);
+  }
+
+
   function estimateTournamentDuration(rawInput, settings = null) {
     const modeRaw = normalizeText(rawInput?.mode || "ko");
     const mode = ["ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : "ko";
@@ -4404,6 +4742,10 @@
       lobbyVisibility: rawInput?.lobbyVisibility,
     }, rawInput?.startScore);
     const bestOfLegs = sanitizeBestOf(rawInput?.bestOfLegs);
+    const boardCount = sanitizeTournamentBoardCount(
+      rawInput?.boardCount,
+      TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
+    );
     const estimate = {
       ready: false,
       reason: "",
@@ -4422,11 +4764,16 @@
       matchOverheadMinutes: 0,
       matchMinutes: 0,
       matchCount: 0,
+      boardCount,
+      scheduleWaves: 0,
+      averageParallelMatches: 0,
+      peakParallelMatches: 0,
+      boardUtilization: 0,
       phaseOverheadMinutes: 0,
       likelyMinutes: 0,
       lowMinutes: 0,
       highMinutes: 0,
-      singleBoard: true,
+      singleBoard: boardCount === 1,
     };
 
     if (participantCount < participantLimits.min || participantCount > participantLimits.max) {
@@ -4449,10 +4796,16 @@
       + profile.matchTransitionMinutes
       + bullOffOverheadMinutes;
     const matchMinutes = (expectedLegs * legMinutes) + matchOverheadMinutes;
-    const matchCount = getTournamentDurationMatchCount(mode, participantCount);
+    const durationTasks = buildTournamentDurationTasks(mode, participants, participantCount);
+    const fallbackMatchCount = getTournamentDurationMatchCount(mode, participantCount);
+    const matchCount = durationTasks.length || fallbackMatchCount;
+    const schedule = estimateTournamentDurationSchedule(durationTasks, boardCount);
+    const scheduleWaves = schedule.waves > 0
+      ? schedule.waves
+      : (matchCount > 0 ? Math.ceil(matchCount / boardCount) : 0);
     const phaseOverheadMinutes = getTournamentDurationPhaseOverheadMinutes(mode, participantCount)
       * profile.phaseTransitionMultiplier;
-    const likelyMinutes = (matchCount * matchMinutes) + phaseOverheadMinutes;
+    const likelyMinutes = (scheduleWaves * matchMinutes) + phaseOverheadMinutes;
     const highPadding = TOURNAMENT_DURATION_HIGH_BASE_PADDING
       + (TOURNAMENT_DURATION_MAX_ROUNDS_HIGH_PADDING[x01Settings.maxRounds] || 0)
       + getTournamentDurationDifficultyPadding(x01Settings)
@@ -4466,6 +4819,16 @@
     estimate.matchOverheadMinutes = matchOverheadMinutes;
     estimate.matchMinutes = matchMinutes;
     estimate.matchCount = matchCount;
+    estimate.scheduleWaves = scheduleWaves;
+    estimate.averageParallelMatches = scheduleWaves > 0
+      ? (matchCount / scheduleWaves)
+      : 0;
+    estimate.peakParallelMatches = schedule.peakParallelMatches > 0
+      ? schedule.peakParallelMatches
+      : (matchCount > 0 ? Math.min(boardCount, matchCount) : 0);
+    estimate.boardUtilization = scheduleWaves > 0
+      ? (matchCount / (scheduleWaves * boardCount))
+      : 0;
     estimate.phaseOverheadMinutes = phaseOverheadMinutes;
     estimate.likelyMinutes = likelyMinutes;
     estimate.lowMinutes = likelyMinutes * TOURNAMENT_DURATION_LOW_FACTOR;
@@ -4488,6 +4851,7 @@
       x01MaxRounds: draft.x01MaxRounds,
       x01BullOffMode: draft.x01BullOffMode,
       lobbyVisibility: draft.lobbyVisibility,
+      boardCount: draft.boardCount,
       participants,
       tournamentTimeProfile: settings?.tournamentTimeProfile,
     }, settings);
@@ -4510,6 +4874,7 @@
       x01MaxRounds: x01Settings.maxRounds,
       x01BullOffMode: x01Settings.bullOffMode,
       lobbyVisibility: x01Settings.lobbyVisibility,
+      boardCount: TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
       participants: tournament.participants,
       tournamentTimeProfile: settings?.tournamentTimeProfile,
     }, settings);
@@ -12024,6 +12389,11 @@
       { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen f\u00fcr das Zeitprofil \u00f6ffnen", title: "README: Einstellungen" },
     ]);
     const estimateReason = normalizeText(estimate?.reason || "");
+    const boardCount = sanitizeTournamentBoardCount(
+      estimate?.boardCount,
+      TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
+    );
+    const boardLabel = boardCount === 1 ? "Board" : "Boards";
 
     if (!estimate?.ready) {
       return `
@@ -12034,11 +12404,15 @@
           </div>
           <div class="ata-estimate-value ata-estimate-value-pending">Noch nicht berechenbar</div>
           <p class="ata-small">${escapeHtml(estimateReason || "Die Sch\u00e4tzung startet, sobald die Konfiguration f\u00fcr den gew\u00e4hlten Modus g\u00fcltig ist.")}</p>
-          <p class="ata-small">Annahme: Single-Board-Flow auf einem Board.</p>
+          <p class="ata-small">Annahme: Planung mit ${escapeHtml(String(boardCount))} ${escapeHtml(boardLabel)} und abh\u00e4ngigkeitsbasierter Parallelisierung.</p>
         </section>
       `;
     }
 
+    const averageParallelMatches = Math.max(1, Number(estimate.averageParallelMatches || 1));
+    const peakParallelMatches = clampInt(estimate.peakParallelMatches, 1, 1, boardCount);
+    const boardUtilization = Math.max(0, Math.min(1, Number(estimate.boardUtilization || 0)));
+    const utilizationPercent = Math.round(boardUtilization * 100);
     const setupSummary = `${estimate.x01.baseScore}, ${estimate.x01.inMode} In, ${estimate.x01.outMode} Out, Bull-off ${estimate.x01.bullOffMode}, Best of ${estimate.bestOfLegs}`;
 
     return `
@@ -12051,6 +12425,11 @@
         <div class="ata-estimate-meta">
           <span>${escapeHtml(String(estimate.participantCount))} Teilnehmer</span>
           <span>${escapeHtml(String(estimate.matchCount))} Spiele</span>
+          <span>${escapeHtml(String(boardCount))} ${escapeHtml(boardLabel)}</span>
+          <span>${escapeHtml(String(estimate.scheduleWaves))} Match-Wellen</span>
+          <span>\u00d8 ${escapeHtml(formatDurationDecimal(averageParallelMatches, 2))} Spiele parallel</span>
+          <span>Peak ${escapeHtml(String(peakParallelMatches))}/${escapeHtml(String(boardCount))} Boards</span>
+          <span>Auslastung ${escapeHtml(String(utilizationPercent))}%</span>
           <span>Durchschnitt ${escapeHtml(formatDurationDecimal(estimate.matchMinutes))} min/Spiel</span>
           <span>Profil ${escapeHtml(estimate.profile.label)}</span>
         </div>
@@ -12058,6 +12437,7 @@
           Realistisch: ${escapeHtml(formatDurationMinutes(estimate.lowMinutes))} - ${escapeHtml(formatDurationMinutes(estimate.highMinutes))}
         </div>
         <p class="ata-small">${escapeHtml(estimate.profile.description)}</p>
+        <p class="ata-small">Parallelisierung ber\u00fccksichtigt Match-Abh\u00e4ngigkeiten und blockierte Spieler-Slots.</p>
         <p class="ata-small">Basis: ${escapeHtml(setupSummary)}.</p>
       </section>
     `;
@@ -12262,6 +12642,19 @@
                 <div class="ata-field">
                   <label for="ata-participants">Teilnehmer (eine Zeile pro Person)</label>
                   <textarea id="ata-participants" name="participants" placeholder="Max Mustermann&#10;Erika Musterfrau">${escapeHtml(draft.participantsText)}</textarea>
+                </div>
+                <div class="ata-field">
+                  <label for="ata-board-count">Boards für Zeitprognose</label>
+                  <input
+                    id="ata-board-count"
+                    name="boardCount"
+                    type="number"
+                    min="1"
+                    max="${TOURNAMENT_DURATION_MAX_BOARD_COUNT}"
+                    step="1"
+                    value="${draft.boardCount}"
+                  >
+                  <div class="ata-small">Parallele Boards werden mit Spieler- und Match-Abhängigkeiten berücksichtigt.</div>
                 </div>
                 <div id="ata-create-duration-estimate">
                   ${renderTournamentDurationEstimate(durationEstimate)}
@@ -13019,7 +13412,7 @@
             ${tournamentTimeProfileOptions}
           </select>
         </div>
-        <p class="ata-small">Die Sch\u00e4tzung im Tab <code>Turnier</code> rechnet immer mit Startscore, Best of, In/Out, Bull-off, Bull-Modus und diesem globalen Zeitprofil.</p>
+        <p class="ata-small">Die Sch\u00e4tzung im Tab <code>Turnier</code> rechnet immer mit Startscore, Best of, In/Out, Bull-off, Bull-Modus, Board-Anzahl und diesem globalen Zeitprofil.</p>
         <p class="ata-small"><strong>Schnell:</strong> z\u00fcgige Abl\u00e4ufe. <strong>Normal:</strong> ausgewogener Standard. <strong>Langsam:</strong> konservativer f\u00fcr gemischte Felder und l\u00e4ngere Wechselzeiten.</p>
       </section>
       <section class="ata-card tournamentCard">
@@ -13707,6 +14100,7 @@
       x01BullMode: formData.get("x01BullMode"),
       x01MaxRounds: formData.get("x01MaxRounds"),
       x01BullOffMode: formData.get("x01BullOffMode"),
+      boardCount: formData.get("boardCount"),
       participantsText: String(formData.get("participants") || ""),
       randomizeKoRound1: formData.get("randomizeKoRound1") !== null,
     };

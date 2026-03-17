@@ -209,3 +209,104 @@ test("Tournament duration: invalid participant count stays pending", () => {
   assert(!estimate.ready, "Estimate should not be ready below mode minimum.");
   assertEqual(estimate.reason, "Gruppenphase + KO erfordert 4-16 Teilnehmer.");
 });
+
+
+test("Tournament duration: board count is sanitized and stored in estimate", () => {
+  const estimate = estimateTournamentDuration({
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(16),
+    boardCount: 999,
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  assert(estimate.ready, "Estimate should be ready for valid KO setup.");
+  assertEqual(estimate.boardCount, TOURNAMENT_DURATION_MAX_BOARD_COUNT);
+  assert(!estimate.singleBoard, "Board count > 1 should disable single-board flag.");
+});
+
+
+test("Tournament duration: league board scaling respects player conflicts", () => {
+  const oneBoard = estimateTournamentDuration({
+    mode: "league",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(8),
+    boardCount: 1,
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+  const manyBoards = estimateTournamentDuration({
+    mode: "league",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(8),
+    boardCount: 8,
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  assert(manyBoards.ready, "Estimate should be ready.");
+  assert(manyBoards.likelyMinutes < oneBoard.likelyMinutes, "More boards should reduce expected duration.");
+  assertEqual(manyBoards.scheduleWaves, 7);
+  assertEqual(manyBoards.peakParallelMatches, 4);
+  assert(manyBoards.scheduleWaves > Math.ceil(manyBoards.matchCount / manyBoards.boardCount), "Conflicting player slots should block naive full-board usage.");
+});
+
+
+test("Tournament duration: KO dependencies block naive full-board parallelism", () => {
+  const estimate = estimateTournamentDuration({
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01BullOffMode: "Normal",
+    x01MaxRounds: 50,
+    participants: participantList(16),
+    boardCount: 8,
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  assert(estimate.ready, "Estimate should be ready.");
+  assertEqual(estimate.scheduleWaves, 4);
+  assertEqual(estimate.peakParallelMatches, 8);
+  assert(estimate.scheduleWaves > Math.ceil(estimate.matchCount / estimate.boardCount), "KO round dependencies should require additional waves.");
+});
+
+
+test("Tournament duration: draft board count is used by the live estimate", () => {
+  const estimate = estimateTournamentDurationFromDraft({
+    mode: "ko",
+    bestOfLegs: 5,
+    startScore: 501,
+    x01InMode: "Straight",
+    x01OutMode: "Double",
+    x01BullMode: "25/50",
+    x01MaxRounds: 50,
+    x01BullOffMode: "Normal",
+    boardCount: 3,
+    participantsText: "A\nB\nC\nD",
+  }, {
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  assert(estimate.ready, "Estimate should be ready for valid draft.");
+  assertEqual(estimate.boardCount, 3);
+  assertEqual(estimate.singleBoard, false);
+});

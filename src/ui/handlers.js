@@ -629,6 +629,7 @@
       x01BullMode: formData.get("x01BullMode"),
       x01MaxRounds: formData.get("x01MaxRounds"),
       x01BullOffMode: formData.get("x01BullOffMode"),
+      boardCount: formData.get("boardCount"),
       participantsText: String(formData.get("participants") || ""),
       randomizeKoRound1: formData.get("randomizeKoRound1") !== null,
     };

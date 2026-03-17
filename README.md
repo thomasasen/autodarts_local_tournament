@@ -166,6 +166,7 @@ Tab: `Turnier`
 | `Preset` | Auswahlfeld + Button `Preset anwenden` | Setzt alle Preset-relevanten Turnierfelder konsistent | Offizielle und kompatible Profile bleiben klar getrennt |
 | `KO-Erstrunde zufällig mischen` | Checkbox `ON/OFF` | `open_draw` oder `seeded` in Runde 1 | Transparente Entscheidung zwischen deterministischer Open-Draw-Reihenfolge und Setzlogik |
 | `Teilnehmer` | Je Spieler eine Zeile | Teilnehmerliste inkl. Reihenfolge | Reihenfolge ist bei `seeded` zugleich Seed-Reihenfolge |
+| `Boards für Zeitprognose` | Zahl `1..32` | Parallele Match-Slots in der Dauerberechnung | Verhindert naive Vollauslastungsannahmen und macht Warteeffekte sichtbar |
 | `Teilnehmer mischen` | Button | Mischt Teilnehmertextliste | Praktisch für spontane Auslosung vor Start |
 
 ### Preset-Katalog
@@ -205,20 +206,22 @@ Tab: `Turnier`
   - `In-Modus`, `Out-Modus`
   - `Bull-off`, `Bull-Modus`
   - `Max Runden`
+  - `Boards für Zeitprognose`
 - Die Schätzung zeigt:
   - Hauptwert `ca. Xh Ym`
   - realistische Spannweite
   - Anzahl geplanter Spiele
   - durchschnittliche Matchdauer
+  - Match-Wellen, Peak-Parallelität und Board-Auslastung
 - Annahme:
-  - Single-Board-Flow auf einem Board
+  - abhängigkeitsbasiertes Scheduling mit Board-Limit, Spielerkonflikten und KO-/Phasenabhängigkeiten
 - Die globale Kalibrierung erfolgt über das Zeitprofil im Tab `Einstellungen`.
 
 Beispiel der Live-Zeitprognose im Turnierformular:
 
 ![Live-Zeitprognose für ein Turnier](assets/ss_Turnier_Zeitprognose.png)
 
-Die Anzeige bündelt Teilnehmerzahl, geplante Spielanzahl, durchschnittliche Matchdauer, aktives Zeitprofil und eine realistische Spannweite in einem kompakten Überblick.
+Die Anzeige bündelt Teilnehmerzahl, geplante Spielanzahl, durchschnittliche Matchdauer, Board-Auslastung, aktives Zeitprofil und eine realistische Spannweite in einem kompakten Überblick.
 
 ### Nach dem Anlegen
 Im aktiven Turnier siehst du die wichtigsten Tags sofort:
@@ -451,6 +454,7 @@ Legende für die eingeblendeten Hilfelinks:
   - `In` / `Out`
   - `Bull-off` / `Bull-Modus`
   - `Max Runden`
+  - `Boards für Zeitprognose` (im Tab `Turnier`)
 - Warum: lokale Felder spielen unterschiedlich schnell; das Profil erlaubt eine saubere Anpassung, ohne die eigentliche Turnierlogik zu verändern.
 
 ### Promoter Tie-Break-Profil

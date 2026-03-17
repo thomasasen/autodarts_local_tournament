@@ -166,6 +166,11 @@
       { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen f\u00fcr das Zeitprofil \u00f6ffnen", title: "README: Einstellungen" },
     ]);
     const estimateReason = normalizeText(estimate?.reason || "");
+    const boardCount = sanitizeTournamentBoardCount(
+      estimate?.boardCount,
+      TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
+    );
+    const boardLabel = boardCount === 1 ? "Board" : "Boards";
 
     if (!estimate?.ready) {
       return `
@@ -176,11 +181,15 @@
           </div>
           <div class="ata-estimate-value ata-estimate-value-pending">Noch nicht berechenbar</div>
           <p class="ata-small">${escapeHtml(estimateReason || "Die Sch\u00e4tzung startet, sobald die Konfiguration f\u00fcr den gew\u00e4hlten Modus g\u00fcltig ist.")}</p>
-          <p class="ata-small">Annahme: Single-Board-Flow auf einem Board.</p>
+          <p class="ata-small">Annahme: Planung mit ${escapeHtml(String(boardCount))} ${escapeHtml(boardLabel)} und abh\u00e4ngigkeitsbasierter Parallelisierung.</p>
         </section>
       `;
     }
 
+    const averageParallelMatches = Math.max(1, Number(estimate.averageParallelMatches || 1));
+    const peakParallelMatches = clampInt(estimate.peakParallelMatches, 1, 1, boardCount);
+    const boardUtilization = Math.max(0, Math.min(1, Number(estimate.boardUtilization || 0)));
+    const utilizationPercent = Math.round(boardUtilization * 100);
     const setupSummary = `${estimate.x01.baseScore}, ${estimate.x01.inMode} In, ${estimate.x01.outMode} Out, Bull-off ${estimate.x01.bullOffMode}, Best of ${estimate.bestOfLegs}`;
 
     return `
@@ -193,6 +202,11 @@
         <div class="ata-estimate-meta">
           <span>${escapeHtml(String(estimate.participantCount))} Teilnehmer</span>
           <span>${escapeHtml(String(estimate.matchCount))} Spiele</span>
+          <span>${escapeHtml(String(boardCount))} ${escapeHtml(boardLabel)}</span>
+          <span>${escapeHtml(String(estimate.scheduleWaves))} Match-Wellen</span>
+          <span>\u00d8 ${escapeHtml(formatDurationDecimal(averageParallelMatches, 2))} Spiele parallel</span>
+          <span>Peak ${escapeHtml(String(peakParallelMatches))}/${escapeHtml(String(boardCount))} Boards</span>
+          <span>Auslastung ${escapeHtml(String(utilizationPercent))}%</span>
           <span>Durchschnitt ${escapeHtml(formatDurationDecimal(estimate.matchMinutes))} min/Spiel</span>
           <span>Profil ${escapeHtml(estimate.profile.label)}</span>
         </div>
@@ -200,6 +214,7 @@
           Realistisch: ${escapeHtml(formatDurationMinutes(estimate.lowMinutes))} - ${escapeHtml(formatDurationMinutes(estimate.highMinutes))}
         </div>
         <p class="ata-small">${escapeHtml(estimate.profile.description)}</p>
+        <p class="ata-small">Parallelisierung ber\u00fccksichtigt Match-Abh\u00e4ngigkeiten und blockierte Spieler-Slots.</p>
         <p class="ata-small">Basis: ${escapeHtml(setupSummary)}.</p>
       </section>
     `;

@@ -261,6 +261,7 @@
       x01MaxRounds: presetX01?.maxRounds || 50,
       x01BullOffMode: presetX01?.bullOffMode || "Normal",
       lobbyVisibility: presetX01?.lobbyVisibility || "private",
+      boardCount: TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
       participantsText: "",
       randomizeKoRound1: Boolean(defaultRandomize),
     };
@@ -303,6 +304,7 @@
       x01MaxRounds: x01Settings.maxRounds,
       x01BullOffMode: x01Settings.bullOffMode,
       lobbyVisibility: x01Settings.lobbyVisibility,
+      boardCount: sanitizeTournamentBoardCount(rawDraft?.boardCount, base.boardCount),
       participantsText: String(rawDraft?.participantsText ?? base.participantsText),
       randomizeKoRound1: typeof rawDraft?.randomizeKoRound1 === "boolean"
         ? rawDraft.randomizeKoRound1
@@ -438,6 +440,11 @@
   function sanitizeTournamentTimeProfile(value, fallback = TOURNAMENT_TIME_PROFILE_NORMAL) {
     const profile = normalizeText(value || "").toLowerCase();
     return TOURNAMENT_TIME_PROFILES.includes(profile) ? profile : fallback;
+  }
+
+
+  function sanitizeTournamentBoardCount(value, fallback = TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT) {
+    return clampInt(value, fallback, 1, TOURNAMENT_DURATION_MAX_BOARD_COUNT);
   }
 
 

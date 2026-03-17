@@ -196,7 +196,7 @@
             ${tournamentTimeProfileOptions}
           </select>
         </div>
-        <p class="ata-small">Die Sch\u00e4tzung im Tab <code>Turnier</code> rechnet immer mit Startscore, Best of, In/Out, Bull-off, Bull-Modus und diesem globalen Zeitprofil.</p>
+        <p class="ata-small">Die Sch\u00e4tzung im Tab <code>Turnier</code> rechnet immer mit Startscore, Best of, In/Out, Bull-off, Bull-Modus, Board-Anzahl und diesem globalen Zeitprofil.</p>
         <p class="ata-small"><strong>Schnell:</strong> z\u00fcgige Abl\u00e4ufe. <strong>Normal:</strong> ausgewogener Standard. <strong>Langsam:</strong> konservativer f\u00fcr gemischte Felder und l\u00e4ngere Wechselzeiten.</p>
       </section>
       <section class="ata-card tournamentCard">

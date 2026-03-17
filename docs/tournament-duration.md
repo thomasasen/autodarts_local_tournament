@@ -3,7 +3,7 @@
 Diese Dokumentation beschreibt die Berechnungsgrundlage der Live-Prognose in `src/domain/tournament-duration.js`.
 
 ## Ziel und Geltungsbereich
-- Die Schätzung ist eine deterministische Planungsprognose für lokale Turniere auf genau einem Board.
+- Die Schätzung ist eine deterministische Planungsprognose für lokale Turniere mit konfigurierbarer Board-Anzahl.
 - Sie ist bewusst nicht normativ: DRA/PDC definieren kein allgemeines Minutenmodell für lokale Turnierdauer.
 - Ziel ist eine belastbare Vorab-Planung, keine sekundengenaue Laufzeitvorhersage.
 
@@ -20,6 +20,7 @@ Diese Dokumentation beschreibt die Berechnungsgrundlage der Live-Prognose in `sr
 | `x01BullMode` | Ja, wenn `Bull-off != Off` | In der App ist `Bull-Modus` dann fachlich relevant und wird mit einem kleinen Faktor bewertet. |
 | `x01MaxRounds` | Ja | Wirkt vor allem auf die obere Spannweite, nicht auf den Normalfall. |
 | `tournamentTimeProfile` | Ja | Kalibriert Wurfgeschwindigkeit und Verzögerung zwischen Matches/Phasen. |
+| `boardCount` | Ja | Legt die maximale Parallelität fest; tatsächliche Auslastung wird über Scheduler mit Abhängigkeiten und Spielerkonflikten berechnet. |
 
 ## Absichtlich nicht genutzte Parameter
 | Parameter | Warum nicht |
@@ -30,7 +31,6 @@ Diese Dokumentation beschreibt die Berechnungsgrundlage der Live-Prognose in `sr
 | `lobbyVisibility` | Ist organisatorisch relevant, aber kein deterministischer Zeitfaktor. |
 | Teilnehmer-Reihenfolge | Beeinflusst Seeding, aber nicht die Zahl der Matches oder Legs. |
 | `rules.tieBreakProfile` | Kann nur in Sonderfällen zu Playoffs führen; das ist vor Turnierstart nicht deterministisch planbar. |
-| Mehrere Boards | Das Produkt modelliert bewusst nur `singleBoard = true`. |
 | Individuelle Spieler-Stats | Vor Turnierstart nicht verlässlich verfügbar; dafür existiert das globale Zeitprofil. |
 
 ## Formel
@@ -75,10 +75,17 @@ matchMinutes = expectedLegs * legMinutes + matchOverheadMinutes
 - `groups_ko`: fixer Zusatzblock für Gruppenabschluss und Start des KO-Teils
 - `league`: kein eigener Phasenblock, weil alle Paarungen direkt planbar sind
 
-8. Gesamtzeit:
+8. Scheduling-Wellen mit Board-Limit:
+- Ein Scheduler baut aus den Matches eine ausführbare Folge von Match-Wellen.
+- Pro Welle gelten zwei harte Grenzen:
+  - maximal `boardCount` gleichzeitige Matches
+  - ein Spieler darf nicht in zwei Matches derselben Welle stehen
+- Zusätzlich werden Match-Abhängigkeiten berücksichtigt (z. B. KO-Folgematch erst nach Abschluss der Vorgänger).
+
+9. Gesamtzeit:
 
 ```text
-likelyMinutes = matchCount * matchMinutes + phaseOverheadMinutes
+likelyMinutes = scheduleWaves * matchMinutes + phaseOverheadMinutes
 lowMinutes = likelyMinutes * 0.90
 highMinutes = likelyMinutes * (1 + highPadding)
 ```
@@ -138,7 +145,7 @@ Das folgt direkt aus Organisatoren-Praxis: nicht nur die Wurfstärke, sondern au
   - durchschnittlicher Dauer eines Legs
   - Zeit zwischen Matches
 - Das bestätigt zwei Kernannahmen dieser App:
-  - `singleBoard = true` muss explizit in die Formel eingebaut sein
+  - `boardCount` muss explizit in das Modell eingehen
   - ein globales Profil muss sowohl Wurfpace als auch Übergangszeiten abbilden
 
 ### Vereins-Richtwert: Bognor Regis Darts Association
@@ -155,7 +162,7 @@ Das folgt direkt aus Organisatoren-Praxis: nicht nur die Wurfstärke, sondern au
   - etwa `10-15 min` pro Leg bei Gelegenheitsspielern
   - etwa `5-7 min` pro Leg bei geübteren Spielern
   - etwa `15-20 min` für ein Best-of-5-Match
-- Das dient als Plausibilitätscheck für die `501`-Normal-Kalibrierung im lokalen Ein-Board-Setup.
+- Das dient als Plausibilitätscheck für die `501`-Normal-Kalibrierung pro Match; die Gesamtdauer ergibt sich danach aus dem Board-Scheduler.
 
 ## Ergebnis der aktuellen Justierung
 - `501`, `Best of 5`, `Straight In`, `Double Out`, `Bull-off Normal`, Profil `normal` bleibt bei rund `17.5 min` pro Match.
@@ -165,7 +172,7 @@ Das folgt direkt aus Organisatoren-Praxis: nicht nur die Wurfstärke, sondern au
 ## Grenzen der Prognose
 - Keine Playoff-Sonderfälle aus Tie-Break-Stillständen.
 - Keine Einplanung von Einwurf-/Practice-Fenstern je Match.
-- Keine Parallelisierung auf mehreren Boards.
+- Keine Optimierung auf exakte globale Minimum-Schedule (deterministischer Greedy-Scheduler statt Vollsuche).
 - Keine individuelle Spielerform oder Average-basierte Dynamik.
 
 Für diese Fälle bleibt die Prognose absichtlich konservativ und zeigt zusätzlich eine Spannweite statt nur eines Einzelwerts.

@@ -55,6 +55,10 @@
   - Zeitprofil beeinflusst jetzt auch Match-/Phasenübergänge statt nur die Leg-Geschwindigkeit
   - Score-Faktoren für kurze und lange X01-Distanzen näher an externen Richtwerten ausgerichtet
   - neue Dokumentation `docs/tournament-duration.md` mit Formel, Parametern und Benchmark-Basis
+- Turnierzeit-Prognose um Multi-Board-Scheduling erweitert:
+  - neues Eingabefeld `Boards für Zeitprognose` im Turnierformular (`1..32`)
+  - Berechnung nutzt jetzt einen abhängigkeitssensitiven Scheduler (Board-Limit, Spieler-Konflikte, KO-/Phasenabhängigkeiten)
+  - Ausgabe ergänzt um Match-Wellen, Peak-Parallelität und Board-Auslastung
 - Turnierzeit-Prognose ergänzt:
   - neue pure Domain-Datei `src/domain/tournament-duration.js`
   - Live-Schätzung in der Turnieranlage unter `Teilnehmer`

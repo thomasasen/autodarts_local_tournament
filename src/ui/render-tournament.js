@@ -144,6 +144,19 @@
                   <label for="ata-participants">Teilnehmer (eine Zeile pro Person)</label>
                   <textarea id="ata-participants" name="participants" placeholder="Max Mustermann&#10;Erika Musterfrau">${escapeHtml(draft.participantsText)}</textarea>
                 </div>
+                <div class="ata-field">
+                  <label for="ata-board-count">Boards für Zeitprognose</label>
+                  <input
+                    id="ata-board-count"
+                    name="boardCount"
+                    type="number"
+                    min="1"
+                    max="${TOURNAMENT_DURATION_MAX_BOARD_COUNT}"
+                    step="1"
+                    value="${draft.boardCount}"
+                  >
+                  <div class="ata-small">Parallele Boards werden mit Spieler- und Match-Abhängigkeiten berücksichtigt.</div>
+                </div>
                 <div id="ata-create-duration-estimate">
                   ${renderTournamentDurationEstimate(durationEstimate)}
                 </div>
