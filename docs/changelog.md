@@ -13,6 +13,7 @@
   - Neue API-Dokumentation `docs/autodarts-api-capabilities.md` mit Endpoint-Matrix, Risikoklassen und Probe-Prozess ergänzt.
   - Versioniertes Console-Probe-Skript `docs/ata-api-probe-v2.js` ergänzt, inklusive Request-Body-Key-Erfassung für Capability-Reports.
   - Probe-Sicherheitsnetz ergänzt: keine Tokenwerte, keine Query-Parameterwerte, nur strukturelle Body-Key-Pfade im Report.
+  - Troubleshooting ergänzt: `GET /gs/v0/matches/{id}/challenge` mit `404` als beobachteter, nicht blockierender App-Call dokumentiert; zusätzlicher Hinweis zu sensitiven SSO-Parametern in Roh-Logs.
 - Runtime-Update-Pfad aus `autodarts-xconfig` technisch übernommen:
   - neue GitHub-Update-Erkennung im Tab `Einstellungen` mit gecachtem Versionsstatus, TTL und manuellem Recheck
   - `.meta.js`-Artefakt für leichtgewichtigen Versionsabgleich ergänzt

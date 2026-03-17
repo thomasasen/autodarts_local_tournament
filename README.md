@@ -523,6 +523,8 @@ Hinweise:
 - Feature-Flag aktiv?
 - Eindeutige Teilnehmernamen verwenden.
 - Bei mehreren offenen Matches mit derselben Paarung wird absichtlich nicht automatisch übernommen (`Mehrdeutige Zuordnung`), um falsche Ergebnisse zu vermeiden.
+- `GET /gs/v0/matches/{id}/challenge` kann in der Autodarts-Webapp mit `404` erscheinen; das ist beobachtet und blockiert den ATA-Matchstart-/Sync-Flow nicht.
+- Roh-Console-Logs nicht ungefiltert committen oder teilen: SSO-URLs können Einmal-Parameter wie `code`, `state` und `session_state` enthalten.
 
 ### Bracket wird nicht gerendert
 - CDN kann temporär nicht erreichbar sein.
