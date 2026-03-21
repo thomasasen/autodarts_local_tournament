@@ -4,7 +4,7 @@ Diese Datei erklärt die Architektur auf hoher Ebene.
 Die vollständige Ordner- und Dateikarte inklusive Build-/Runtime-Verbindungen steht in [codebase-map.md](codebase-map.md).
 
 ## Überblick
-Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einzelnes Userscript ausgeliefert (`dist/autodarts-tournament-assistant.user.js`).
+Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einzelnes Userscript ausgeliefert (`dist/autodarts-local-tournament.user.js`).
 
 - `src/core`: Konstanten, State, Utilities, Events, Logging
 - `src/domain`: fachliche Turnierregeln, pure Match-/KO-/Standings-/Zeitprognose-Logik
@@ -26,11 +26,13 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
 - `runtime -> core, app, infra, ui`
 
 ## Build und Distribution
-- Der Build läuft ohne npm/Node über `scripts/build.ps1`.
-- Die Reihenfolge ist deterministisch über `build/manifest.json`.
-- Die Versionsquelle liegt in `build/version.json` und wird beim Build in Header und `APP_VERSION` injiziert.
+- Die Versionsquelle liegt in `package.json`.
+- Der Build läuft über `scripts/build-userscript.mjs` (esbuild), optional über den Wrapper `scripts/build.ps1`.
+- Die Modulreihenfolge bleibt deterministisch über `build/manifest.json`.
 - CSS liegt in `src/ui/styles/main.css` und wird beim Build in das Bundle eingebettet.
-- Der Build erzeugt `dist/autodarts-tournament-assistant.user.js` plus den leichten Versions-Endpoint `dist/autodarts-tournament-assistant.meta.js`.
+- Der Build erzeugt:
+  - `dist/autodarts-local-tournament.user.js` + `dist/autodarts-local-tournament.meta.js` (Standard)
+  - `dist/autodarts-tournament-assistant.user.js` + `dist/autodarts-tournament-assistant.meta.js` (Legacy-Alias)
 - `dist/*` bleibt ein generiertes Artefakt und wird nicht manuell gepflegt.
 
 ## Runtime

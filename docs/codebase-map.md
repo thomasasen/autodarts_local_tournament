@@ -102,6 +102,9 @@ autodarts_local_tournament/
 |  |- version.json
 |  `- domain-test-manifest.json
 |- scripts/
+|  |- build-userscript.mjs
+|  |- check-syntax.mjs
+|  |- run-tests.mjs
 |  |- build.ps1
 |  |- qa.ps1
 |  |- qa-architecture.ps1
@@ -127,6 +130,8 @@ autodarts_local_tournament/
 |- installer/
 |  `- Autodarts Tournament Assistant Loader.user.js
 |- dist/
+|  |- autodarts-local-tournament.meta.js
+|  |- autodarts-local-tournament.user.js
 |  |- autodarts-tournament-assistant.meta.js
 |  `- autodarts-tournament-assistant.user.js
 |- docs/
@@ -148,27 +153,28 @@ autodarts_local_tournament/
 ```
 
 ## Build- und Auslieferungspfad
-Der Build bleibt bewusst einfach: kein npm, kein Bundler-Framework, keine Zwischenpakete. Stattdessen werden die Quellmodule in der Reihenfolge aus `build/manifest.json` gelesen, zu einer Userscript-Datei zusammengeführt und mit eingebettetem CSS sowie eingebettetem PDC-Logo ausgegeben.
+Der Build bleibt bewusst einfach: npm-Skripte mit einem schlanken, reproduzierbaren esbuild-Flow ohne komplexes Framework. Die Quellmodule werden in der Reihenfolge aus `build/manifest.json` gelesen, zu einer Userscript-Datei zusammengeführt und mit eingebettetem CSS sowie eingebettetem PDC-Logo ausgegeben.
 
 Praktischer Ablauf:
 
 1. `build/manifest.json` definiert die Reihenfolge der Quelldateien.
-2. `build/version.json` ist die zentrale Versionsquelle für das Runtime-Bundle.
-3. `scripts/build.ps1` liest diese Dateien, lädt jedes Modul, entfernt alte Split-Marker und fügt die Inhalte zusammen.
-4. Dasselbe Skript injiziert die App-Version sowie `src/ui/styles/main.css` und `assets/pdc_logo.png` direkt ins Bundle.
-5. Das Ergebnis landet als installierbare Runtime-Datei in `dist/autodarts-tournament-assistant.user.js` plus leichtgewichtigem Versions-Header in `dist/autodarts-tournament-assistant.meta.js`.
-6. Der Loader in `installer/Autodarts Tournament Assistant Loader.user.js` lädt die veröffentlichte Runtime-Datei remote und nutzt bei Bedarf einen Cache-Fallback.
+2. `package.json` ist die zentrale Versionsquelle für das Runtime-Bundle.
+3. `scripts/build-userscript.mjs` liest diese Dateien, lädt jedes Modul, entfernt alte Split-Marker und fügt die Inhalte zusammen.
+4. Dasselbe Skript injiziert die App-Version sowie `src/ui/styles/main.css` und `assets/pdc_logo.png` direkt ins Bundle und transpiliert mit esbuild (`iife`, browser).
+5. Das Ergebnis landet als installierbare Runtime-Datei in `dist/autodarts-local-tournament.user.js` plus leichtgewichtigem Versions-Header in `dist/autodarts-local-tournament.meta.js`.
+6. Zusätzlich werden Legacy-Alias-Dateien `dist/autodarts-tournament-assistant.*` erzeugt, damit bestehende Installationen updatefähig bleiben.
+7. Der Loader in `installer/Autodarts Tournament Assistant Loader.user.js` bleibt als Legacy-Fallback erhalten (deprecated), lädt aber weiterhin remote und nutzt bei Bedarf einen Cache-Fallback.
 
 ```mermaid
 flowchart LR
   manifest["build/manifest.json"]
-  version["build/version.json"]
+  version["package.json"]
   src["src/**/*.js"]
   css["src/ui/styles/main.css"]
   logo["assets/pdc_logo.png"]
-  build["scripts/build.ps1"]
-  dist["dist/autodarts-tournament-assistant.user.js"]
-  meta["dist/autodarts-tournament-assistant.meta.js"]
+  build["scripts/build-userscript.mjs"]
+  dist["dist/autodarts-local-tournament.user.js"]
+  meta["dist/autodarts-local-tournament.meta.js"]
   loader["installer/Autodarts Tournament Assistant Loader.user.js"]
 
   manifest -->|bestimmt Modulreihenfolge| build
@@ -178,7 +184,7 @@ flowchart LR
   logo -->|wird als Data-URI eingebettet| build
   build -->|erzeugt Runtime| dist
   build -->|erzeugt Versions-Header| meta
-  loader -.->|lädt veröffentlichte dist-Datei remote<br/>und nutzt Cache-Fallback| dist
+  loader -.->|legacy fallback: lädt veröffentlichte dist-Datei remote<br/>und nutzt Cache-Fallback| dist
 ```
 
 Wichtig dabei:
@@ -320,20 +326,23 @@ Die Tabellen unten beschreiben pro Datei:
 
 | Datei | Rolle | Wichtige Inhalte / Hauptfunktionen | Primäre Verbindungen |
 |---|---|---|---|
-| `build/manifest.json` | Reihenfolgevertrag des Bundles | listet alle `src/*.js`-Module in deterministischer Reihenfolge | `scripts/build.ps1`, `src/core/constants.js`, `src/runtime/bootstrap.js` |
-| `build/version.json` | zentrale Versionsquelle | liefert `APP_VERSION` für Runtime-Header, Runtime-Code und Meta-Datei | `scripts/build.ps1`, `src/core/constants.js`, `dist/autodarts-tournament-assistant.user.js`, `dist/autodarts-tournament-assistant.meta.js` |
+| `build/manifest.json` | Reihenfolgevertrag des Bundles | listet alle `src/*.js`-Module in deterministischer Reihenfolge | `scripts/build-userscript.mjs`, `src/core/constants.js`, `src/runtime/bootstrap.js` |
+| `package.json` | zentrale Versionsquelle | liefert `version` für Runtime-Header, Runtime-Code und Meta-Datei | `scripts/build-userscript.mjs`, `scripts/qa-build-discipline.ps1`, `dist/*` |
 | `build/domain-test-manifest.json` | Test-Bundle-Vertrag | definiert, welche Dateien in den isolierten Domain-Harness geladen werden | `scripts/test-domain.ps1`, `tests/test-harness.js`, `tests/unit-*.js` |
-| `scripts/build.ps1` | Build-Orchestrierung | liest Manifest und Version, fügt Module zusammen, injiziert Version, bettet CSS und Logo ein, schreibt Runtime- und Meta-Artefakte nach `dist/*` | `build/manifest.json`, `build/version.json`, `src/ui/styles/main.css`, `assets/pdc_logo.png`, `dist/autodarts-tournament-assistant.user.js`, `dist/autodarts-tournament-assistant.meta.js` |
+| `scripts/build-userscript.mjs` | Build-Orchestrierung | liest Manifest und `package.json`, fügt Module zusammen, injiziert Version, bettet CSS und Logo ein, transpiliert via esbuild und schreibt Runtime-/Meta-Artefakte nach `dist/*` | `build/manifest.json`, `package.json`, `src/ui/styles/main.css`, `assets/pdc_logo.png`, `dist/autodarts-local-tournament.user.js`, `dist/autodarts-local-tournament.meta.js`, Legacy-Alias in `dist/autodarts-tournament-assistant.*` |
+| `scripts/build.ps1` | Kompatibilitäts-Wrapper | ruft den Node-Build (`scripts/build-userscript.mjs`) auf | `scripts/build-userscript.mjs` |
 | `scripts/qa.ps1` | Gesamt-QA | ruft Build, Architektur-QA, Encoding, Regelcheck, Domain-Harness, Runtime-Contract und Build-Disziplin auf | `scripts/build.ps1`, `scripts/qa-architecture.ps1`, `scripts/test-domain.ps1`, `scripts/test-runtime-contract.ps1`, `scripts/qa-build-discipline.ps1` |
 | `scripts/qa-architecture.ps1` | Architektur-Gate | prüft Domain-Reinheit, Runtime-/Bracket-/Storage-Grenzen und UI-Renderer-Regeln | `src/domain/*`, `src/bracket/*`, `src/data/storage.js`, `src/runtime/*`, `src/ui/render-*.js` |
-| `scripts/qa-encoding.ps1` | Zeichensatz- und Terminologie-Prüfung | prüft UTF-8, Mojibake und zentrale UI-Begriffe in Quell-, Dist- und Doku-Dateien | `src/*`, `dist/autodarts-tournament-assistant.user.js`, `docs/*`, `README.md` |
-| `scripts/qa-regelcheck.ps1` | fachlicher Regex-Check | prüft in `dist/*`, ob zentrale Regelmappings, KO-Logik und Terminologie im Bundle vorkommen | `dist/autodarts-tournament-assistant.user.js`, Domain-Logik aus `src/domain/*` |
+| `scripts/qa-encoding.ps1` | Zeichensatz- und Terminologie-Prüfung | prüft UTF-8, Mojibake und zentrale UI-Begriffe in Quell-, Dist- und Doku-Dateien | `src/*`, `dist/autodarts-local-tournament.user.js`, `docs/*`, `README.md` |
+| `scripts/qa-regelcheck.ps1` | fachlicher Regex-Check | prüft in `dist/*`, ob zentrale Regelmappings, KO-Logik und Terminologie im Bundle vorkommen | `dist/autodarts-local-tournament.user.js`, Domain-Logik aus `src/domain/*` |
 | `scripts/test-domain.ps1` | isolierter Domain-Harness | baut einen no-deps Test-Bundle für pure Domain-Logik und führt ihn im Headless-Browser aus | `build/domain-test-manifest.json`, `tests/test-harness.js`, `tests/domain-isolation.js`, `tests/unit-*.js` |
-| `scripts/test-runtime-contract.ps1` | Runtime-Contract-Test | lädt `dist/*` im Headless-Browser und prüft `window.__ATA_RUNTIME` plus `runSelfTests()` | `dist/autodarts-tournament-assistant.user.js`, `tests/contracts/*` |
-| `scripts/qa-build-discipline.ps1` | Build-Disziplin | prüft Placeholder-Nutzung, Versionseinbau und generierte Runtime-/Meta-Artefakte | `build/version.json`, `src/core/constants.js`, `dist/autodarts-tournament-assistant.user.js`, `dist/autodarts-tournament-assistant.meta.js` |
-| `installer/Autodarts Tournament Assistant Loader.user.js` | Loader-Skript, nicht App-Logik | lädt die veröffentlichte Dist-Datei remote, validiert sie, cached sie lokal und erzeugt den Menü-Einstieg | `dist/autodarts-tournament-assistant.user.js`, GitHub Raw URL, Tampermonkey GM APIs |
-| `dist/autodarts-tournament-assistant.user.js` | generiertes Auslieferungsartefakt | enthält das komplette Userscript als eine Datei; ist Loader-kompatibel und direkt installierbar | `scripts/build.ps1`, `installer/Autodarts Tournament Assistant Loader.user.js`, Browser/Tampermonkey |
-| `dist/autodarts-tournament-assistant.meta.js` | leichtgewichtiges Versionsartefakt | enthält nur den Userscript-Header für Update-Checks und `@updateURL` | `scripts/build.ps1`, `src/infra/update-check.js`, Tampermonkey/GitHub Raw |
+| `scripts/test-runtime-contract.ps1` | Runtime-Contract-Test | lädt `dist/*` im Headless-Browser und prüft `window.__ATA_RUNTIME` plus `runSelfTests()` | `dist/autodarts-local-tournament.user.js`, `tests/contracts/*` |
+| `scripts/qa-build-discipline.ps1` | Build-Disziplin | prüft Placeholder-Nutzung, Versionseinbau und generierte Runtime-/Meta-Artefakte | `package.json`, `src/core/constants.js`, `dist/autodarts-local-tournament.user.js`, `dist/autodarts-local-tournament.meta.js`, Legacy-Alias |
+| `installer/Autodarts Tournament Assistant Loader.user.js` | Loader-Skript (Legacy-Fallback, deprecated) | lädt die veröffentlichte Dist-Datei remote, validiert sie, cached sie lokal, zeigt Migrationshinweis und erzeugt den Menü-Einstieg | `dist/autodarts-tournament-assistant.user.js`, GitHub Raw URL, Tampermonkey GM APIs |
+| `dist/autodarts-local-tournament.user.js` | generiertes Auslieferungsartefakt (Standard) | enthält das komplette Userscript als eine Datei; direkt installierbar ohne Loader | `scripts/build-userscript.mjs`, Browser/Tampermonkey |
+| `dist/autodarts-local-tournament.meta.js` | leichtgewichtiges Versionsartefakt (Standard) | enthält nur den Userscript-Header für Update-Checks und `@updateURL` | `scripts/build-userscript.mjs`, `src/infra/update-check.js`, Tampermonkey/GitHub Raw |
+| `dist/autodarts-tournament-assistant.user.js` | Legacy-Alias-Artefakt | kompatibler Alias für bestehende Installationen und Loader-Fallback | `scripts/build-userscript.mjs`, `installer/Autodarts Tournament Assistant Loader.user.js` |
+| `dist/autodarts-tournament-assistant.meta.js` | Legacy-Alias-Meta-Artefakt | Header-Only Alias für bestehende Updatepfade | `scripts/build-userscript.mjs`, Tampermonkey |
 
 ### Tests
 
@@ -347,7 +356,7 @@ Die Tabellen unten beschreiben pro Datei:
 | `tests/unit-update-check.js` | Update-Check-Unit-Tests | prüft Versionsvergleich, Cache-Busting, Fallback und TTL ohne Netzabhängigkeit | `src/infra/update-check.js`, `tests/test-harness.js` |
 | `tests/unit-rules-config.js` | Rules-Unit-Tests | prüft pure Tie-Break- und Draw-Lock-Mutationen | `src/domain/rules-config.js`, `tests/test-harness.js` |
 | `tests/unit-standings-dra.js` | Standings-Unit-Tests | prüft H2H/Mini-Tabelle, Legacy-Profil und `playoff_required` | `src/domain/standings-dra.js`, `tests/test-harness.js` |
-| `tests/selftest-runtime.js` | Browser-Konsole-Helfer | ruft `window.__ATA_RUNTIME.runSelfTests()` auf und formatiert das Ergebnis für `console.table` | `src/app/diagnostics.js`, `dist/autodarts-tournament-assistant.user.js` |
+| `tests/selftest-runtime.js` | Browser-Konsole-Helfer | ruft `window.__ATA_RUNTIME.runSelfTests()` auf und formatiert das Ergebnis für `console.table` | `src/app/diagnostics.js`, `dist/autodarts-local-tournament.user.js` |
 
 ### Core
 
@@ -449,7 +458,7 @@ Hier liegt die eigentliche Turnierlogik. Wenn sich eine fachliche Regel ändert,
 
 ### `src/ui/styles/main.css`
 - enthält das komplette Shadow-DOM-Styling der UI
-- wird nicht separat ausgeliefert, sondern durch `scripts/build.ps1` in das Bundle eingebettet
+- wird nicht separat ausgeliefert, sondern durch `scripts/build-userscript.mjs` in das Bundle eingebettet
 - ist deshalb Quellmaterial, aber kein eigener Runtime-Ladepunkt
 
 ### `tests/fixtures/*.json`
@@ -473,7 +482,7 @@ Assets erklären das Produkt und speisen zum Teil den Build, tragen aber keine L
 
 ## Pflegehinweise für künftige Änderungen
 - Neue Quellmodule immer auch in `build/manifest.json` eintragen. Die Datei existiert nicht nur dokumentarisch, sondern steuert die tatsächliche Bundle-Reihenfolge.
-- `dist/autodarts-tournament-assistant.user.js` und `dist/autodarts-tournament-assistant.meta.js` nicht manuell pflegen. Änderungen gehören in `src/*`, `src/ui/styles/main.css` oder `assets/*`.
+- `dist/autodarts-local-tournament.user.js` / `.meta.js` sowie die Legacy-Aliase in `dist/autodarts-tournament-assistant.*` nicht manuell pflegen. Änderungen gehören in `src/*`, `src/ui/styles/main.css` oder `assets/*`.
 - Neue Fachregeln zuerst in `src/domain/*` verorten, nicht in Render-Dateien oder API-Schichten.
 - Neue Persistenzfelder immer mit Blick auf `src/data/normalization.js` und `src/data/migration.js` einführen.
 - Wenn UI-Hilfelinks, Regelbegriffe oder Doku-Einstiegspunkte geändert werden, auch `README.md`, `docs/architecture.md` und gegebenenfalls `docs/dra-regeln-gui.md` mitprüfen.

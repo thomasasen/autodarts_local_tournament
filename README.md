@@ -2,7 +2,7 @@
 
 Lokales Turniermanagement direkt in `https://play.autodarts.io` als Userscript.
 
-[![Installieren](https://img.shields.io/badge/Installieren-Autodarts%20Tournament%20Assistant%20Loader-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js)
+[![Installieren](https://img.shields.io/badge/Installieren-Autodarts%20Local%20Tournament-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-local-tournament.user.js)
 
 Der Assistent erweitert die Autodarts-Oberfläche um einen eigenen Bereich für:
 - Turnieranlage (KO, Liga, Gruppenphase + KO)
@@ -51,16 +51,18 @@ Zusätzliche Detaildoku zur Zeitberechnung: [docs/tournament-duration.md](docs/t
 4. `https://play.autodarts.io` neu laden.
 5. Links im Menü **xLokales Turnier** öffnen.
 
-Empfohlen ist die Installation über den Loader:
+Empfohlen ist die direkte Dist-Installation (ohne Remote-Runtime-Loader):
 
-[![ATA Loader installieren](https://img.shields.io/badge/ATA%20Loader-installieren-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js)
+[![ATA Dist installieren](https://img.shields.io/badge/ATA%20Dist-installieren-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-local-tournament.user.js)
 
-Alternative ohne Loader:
-- Direktes Runtime-Skript: [autodarts-tournament-assistant.user.js](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.user.js)
+Legacy-Fallback (deprecated):
+- Loader: [Autodarts Tournament Assistant Loader.user.js](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js)
+- Legacy-Alias der Runtime: [autodarts-tournament-assistant.user.js](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.user.js)
 
 Wichtiger Hinweis nach der Installation:
-- Bei Loader-Installation reicht für Updates ein Reload von `play.autodarts.io`.
-- Bei direkter Runtime-Installation erscheint im Tab `Einstellungen` eine GitHub-Update-Prüfung mit `Update installieren`.
+- Der neue Standardpfad ist `dist/autodarts-local-tournament.user.js` (kein dynamischer Runtime-Download von GitHub).
+- Bei direkter Dist-Installation erscheint im Tab `Einstellungen` eine GitHub-Update-Prüfung mit `Update installieren`.
+- Der Loader bleibt nur als Legacy-/Fallback-Pfad im Repo und zeigt einen Migrationshinweis auf den neuen Installer.
 - Falls Tampermonkey nicht in `play.autodarts.io` injiziert, siehe [Tampermonkey FAQ](https://www.tampermonkey.net/faq.php#Q209).
 
 ![Sidebar-Eintrag xLokales Turnier](assets/ss_autodarts-menu-xLokales-Turnier.png)
@@ -424,11 +426,11 @@ Legende für die eingeblendeten Hilfelinks:
 
 ### Script-Update
 - Der Tab `Einstellungen` prüft die veröffentlichte GitHub-Version gegen die installierte Runtime-Version.
-- Die Prüfung nutzt `dist/autodarts-tournament-assistant.meta.js` als primären Versions-Endpoint und fällt bei Bedarf auf `dist/autodarts-tournament-assistant.user.js` zurück.
+- Die Prüfung nutzt `dist/autodarts-local-tournament.meta.js` als primären Versions-Endpoint und fällt bei Bedarf auf `dist/autodarts-local-tournament.user.js` zurück.
 - Direkt installierte Runtime:
   - Button `Update installieren` öffnet die veröffentlichte Userscript-Datei mit Cache-Busting.
 - Loader aktiv:
-  - Bei verfügbarer neuer Runtime genügt `Neu laden`, weil der Loader die aktuelle Dist-Datei beim nächsten Seitenaufruf frisch lädt.
+  - Loader ist nur noch Legacy-Fallback; der empfohlene Wechsel ist auf die direkte Dist-Installation.
 - Der Sidebar-Menüeintrag `xLokales Turnier` markiert verfügbare Updates zusätzlich mit einem Punkt.
 
 ### Automatischer Lobby-Start + API-Sync
@@ -569,10 +571,12 @@ autodarts_local_tournament/
 |  |- runtime/
 |- build/
 |  |- manifest.json
-|  |- version.json
 |  `- domain-test-manifest.json
 |- scripts/
 |  |- build.ps1
+|  |- build-userscript.mjs
+|  |- check-syntax.mjs
+|  |- run-tests.mjs
 |  |- qa.ps1
 |  |- qa-architecture.ps1
 |  |- qa-build-discipline.ps1
@@ -592,8 +596,10 @@ autodarts_local_tournament/
 |- installer/
 |  |- Autodarts Tournament Assistant Loader.user.js
 |- dist/
-|  |- autodarts-tournament-assistant.meta.js
+|  |- autodarts-local-tournament.meta.js
+|  |- autodarts-local-tournament.user.js
 |  |- autodarts-tournament-assistant.user.js
+|  `- autodarts-tournament-assistant.meta.js
 |- docs/
 |  |- architecture.md
 |  |- codebase-map.md
@@ -606,21 +612,27 @@ autodarts_local_tournament/
 |- assets/
 |- README.md
 |- LICENSE
+|- package.json
 ```
 
 Die vollständige Datei- und Verbindungsdoku steht in [docs/codebase-map.md](docs/codebase-map.md).
 
 ### Hauptdateien
 - Quellcode: `src/*`
-- Build-Metadaten: `build/manifest.json`, `build/version.json`
-- Build/QA: `scripts/*.ps1`
-- Runtime-Script: `dist/autodarts-tournament-assistant.user.js`
-- Meta-Endpoint für Versionsabgleich: `dist/autodarts-tournament-assistant.meta.js`
-- Loader-Script: `installer/Autodarts Tournament Assistant Loader.user.js`
+- Build-Metadaten: `build/manifest.json`
+- Versionsquelle: `package.json`
+- Build/QA: `scripts/*.mjs`, `scripts/*.ps1`
+- Empfohlenes Runtime-Script: `dist/autodarts-local-tournament.user.js`
+- Empfohlener Meta-Endpoint: `dist/autodarts-local-tournament.meta.js`
+- Legacy-Loader: `installer/Autodarts Tournament Assistant Loader.user.js`
+- Legacy-Runtime-Alias: `dist/autodarts-tournament-assistant.user.js`
 
 ### Build und QA
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/build.ps1
+npm install
+npm run build
+npm run check:syntax
+npm test
 powershell -ExecutionPolicy Bypass -File scripts/qa.ps1
 ```
 
@@ -631,6 +643,25 @@ powershell -ExecutionPolicy Bypass -File scripts/qa-architecture.ps1
 powershell -ExecutionPolicy Bypass -File scripts/test-domain.ps1
 powershell -ExecutionPolicy Bypass -File scripts/test-runtime-contract.ps1
 ```
+
+Smoke-Test (manuell):
+1. Frisches Browserprofil + Tampermonkey starten.
+2. `dist/autodarts-local-tournament.user.js` installieren.
+3. `https://play.autodarts.io/*` öffnen.
+4. Prüfen, dass `xLokales Turnier` genau einmal injiziert wird.
+5. Tabs `Turnier`, `Spiele`, `Turnierbaum`, `Import/Export`, `Einstellungen` öffnen.
+6. In der Konsole auf doppelte Handler-/Bootstrap-Anzeichen prüfen.
+7. Optional Legacy-Loader separat installieren und den Deprecation-Hinweis mit Migrationsbutton prüfen.
+
+Upgrade-Test (manuell):
+1. Bestehende Installation in Tampermonkey öffnen.
+2. Neue Version von `dist/autodarts-local-tournament.user.js` installieren.
+3. Sicherstellen, dass bestehende Turnierdaten erhalten bleiben und keine Doppelinitialisierung auftritt.
+
+Rollback-Test (manuell):
+1. Aktuelle Dist-Version in Tampermonkey deaktivieren.
+2. Entweder vorherige Dist-Version oder den Legacy-Loader installieren.
+3. Seite neu laden und Grundfunktionen (`xLokales Turnier`, Tabs, Matchliste) prüfen.
 
 ### Architektur
 - Shadow DOM für gekapselte UI

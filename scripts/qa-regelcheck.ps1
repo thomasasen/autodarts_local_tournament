@@ -1,5 +1,5 @@
 param(
-  [string]$DistPath = "dist/autodarts-tournament-assistant.user.js"
+  [string]$DistPath = "dist/autodarts-local-tournament.user.js"
 )
 
 $ErrorActionPreference = "Stop"

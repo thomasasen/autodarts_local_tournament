@@ -1,0 +1,5 @@
+﻿node_modules/
+*.log
+npm-debug.log*
+.tmp-domain-tests/
+.tmp-runtime-contract/

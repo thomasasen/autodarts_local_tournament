@@ -25,13 +25,10 @@ function Get-BrowserPath() {
 }
 
 $repoRoot = Resolve-RepoPath "."
-$tempRoot = Join-Path $repoRoot ".tmp-runtime-contract"
-if (Test-Path $tempRoot) {
-  Remove-Item $tempRoot -Recurse -Force
-}
-New-Item -ItemType Directory -Path $tempRoot | Out-Null
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("ata-runtime-contract-" + [System.Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
 
-$distPath = Resolve-RepoPath "dist/autodarts-tournament-assistant.user.js"
+$distPath = Resolve-RepoPath "dist/autodarts-local-tournament.user.js"
 $runtimeContractPath = Resolve-RepoPath "tests/contracts/runtime-api-contract.js"
 $globalsContractPath = Resolve-RepoPath "tests/contracts/globals-contract.js"
 $htmlPath = Join-Path $tempRoot "runtime-contract.html"

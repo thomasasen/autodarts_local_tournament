@@ -2,7 +2,7 @@
 // @name         Autodarts Tournament Assistant Loader
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
 // @version      0.1.4
-// @description  Loads the latest Autodarts Tournament Assistant userscript with cache fallback.
+// @description  Legacy loader (deprecated): loads ATA runtime from GitHub with cache fallback and migration hint.
 // @author       Thomas Asen
 // @license      MIT
 // @match        *://play.autodarts.io/*
@@ -11,7 +11,6 @@
 // @grant        GM_setValue
 // @grant        GM_xmlhttpRequest
 // @connect      raw.githubusercontent.com
-// @connect      api.autodarts.io
 // @downloadURL  https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js
 // @updateURL    https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js
 // ==/UserScript==
@@ -23,9 +22,12 @@
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const CACHE_CODE_KEY = "ata:loader:cache:code:v1";
   const CACHE_META_KEY = "ata:loader:cache:meta:v1";
+  const DEPRECATION_NOTICE_KEY = "ata:loader:deprecation-notice-seen:v1";
+  const DEPRECATION_NOTICE_ID = "ata-loader-deprecation-notice";
   const REQUEST_TIMEOUT_MS = 10_000;
 
   const REMOTE_SOURCE_URL = "https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.user.js";
+  const NEW_INSTALLER_URL = "https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-local-tournament.user.js";
 
   const MENU_ITEM_ID = "ata-loader-menu-item";
   const MENU_LABEL = "xLokales Turnier";
@@ -103,6 +105,124 @@
     } catch (_) {
       // Ignore localStorage write errors.
     }
+  }
+
+  function createDeprecationNotice(onDismiss) {
+    const notice = document.createElement("div");
+    notice.id = DEPRECATION_NOTICE_ID;
+    notice.setAttribute("role", "status");
+    notice.setAttribute("aria-live", "polite");
+    notice.style.position = "fixed";
+    notice.style.left = "12px";
+    notice.style.right = "12px";
+    notice.style.bottom = "12px";
+    notice.style.maxWidth = "760px";
+    notice.style.margin = "0 auto";
+    notice.style.zIndex = "2147483647";
+    notice.style.background = "#152643";
+    notice.style.color = "#f5f7ff";
+    notice.style.border = "1px solid rgba(255,255,255,0.2)";
+    notice.style.borderRadius = "10px";
+    notice.style.boxShadow = "0 16px 36px rgba(0,0,0,0.35)";
+    notice.style.padding = "12px 14px";
+    notice.style.fontFamily = "Segoe UI, Tahoma, Arial, sans-serif";
+    notice.style.fontSize = "13px";
+    notice.style.lineHeight = "1.35";
+
+    const message = document.createElement("div");
+    message.textContent = "Der ATA Loader ist veraltet (deprecated), wird nicht weiter gepflegt und wird in Zukunft aus dem Repository entfernt. Danach funktionieren Loader-Updates nicht mehr zuverlässig. Bitte auf den neuen direkten Dist-Installer wechseln.";
+    notice.appendChild(message);
+
+    const actions = document.createElement("div");
+    actions.style.display = "flex";
+    actions.style.flexWrap = "wrap";
+    actions.style.gap = "8px";
+    actions.style.marginTop = "10px";
+
+    const switchButton = document.createElement("button");
+    switchButton.type = "button";
+    switchButton.textContent = "Zum neuen Installer";
+    switchButton.style.border = "1px solid rgba(255,255,255,0.3)";
+    switchButton.style.background = "#1f73c9";
+    switchButton.style.color = "#ffffff";
+    switchButton.style.padding = "6px 10px";
+    switchButton.style.borderRadius = "7px";
+    switchButton.style.cursor = "pointer";
+    switchButton.addEventListener("click", () => {
+      try {
+        window.open(NEW_INSTALLER_URL, "_blank", "noopener,noreferrer");
+      } catch (_) {
+        // Ignore window.open failures.
+      }
+      onDismiss("switch");
+    });
+
+    const laterButton = document.createElement("button");
+    laterButton.type = "button";
+    laterButton.textContent = "Später";
+    laterButton.style.border = "1px solid rgba(255,255,255,0.3)";
+    laterButton.style.background = "transparent";
+    laterButton.style.color = "#ffffff";
+    laterButton.style.padding = "6px 10px";
+    laterButton.style.borderRadius = "7px";
+    laterButton.style.cursor = "pointer";
+    laterButton.addEventListener("click", () => onDismiss("dismiss"));
+
+    actions.appendChild(switchButton);
+    actions.appendChild(laterButton);
+    notice.appendChild(actions);
+    return notice;
+  }
+
+  function mountDeprecationNotice(onDismiss) {
+    if (document.getElementById(DEPRECATION_NOTICE_ID)) {
+      return;
+    }
+    if (!document.body) {
+      return;
+    }
+    const notice = createDeprecationNotice(onDismiss);
+    document.body.appendChild(notice);
+  }
+
+  async function showDeprecationBannerOnce() {
+    const alreadySeen = Boolean(await readStore(DEPRECATION_NOTICE_KEY, false));
+    if (alreadySeen) {
+      return;
+    }
+
+    warn("Legacy loader is deprecated. Please migrate to dist/autodarts-local-tournament.user.js.");
+
+    let dismissed = false;
+    const dismiss = async (reason) => {
+      if (dismissed) {
+        return;
+      }
+      dismissed = true;
+      await writeStore(DEPRECATION_NOTICE_KEY, true);
+      const existing = document.getElementById(DEPRECATION_NOTICE_ID);
+      if (existing) {
+        existing.remove();
+      }
+      log(`Deprecation notice acknowledged (${reason}).`);
+    };
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () => {
+        mountDeprecationNotice((reason) => {
+          dismiss(reason).catch((errorValue) => {
+            warn("Failed to persist deprecation notice state.", errorValue);
+          });
+        });
+      }, { once: true });
+      return;
+    }
+
+    mountDeprecationNotice((reason) => {
+      dismiss(reason).catch((errorValue) => {
+        warn("Failed to persist deprecation notice state.", errorValue);
+      });
+    });
   }
 
   function requestText(url) {
@@ -700,4 +820,7 @@
   });
 
   initUiSyncLoop();
+  showDeprecationBannerOnce().catch((unexpectedError) => {
+    warn("Deprecation notice failed.", unexpectedError);
+  });
 })();

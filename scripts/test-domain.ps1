@@ -29,11 +29,8 @@ $manifest = Get-Content $manifestPath -Raw -Encoding utf8 | ConvertFrom-Json
 $browserPath = Get-BrowserPath
 $repoRoot = Resolve-RepoPath "."
 
-$tempRoot = Join-Path $repoRoot ".tmp-domain-tests"
-if (Test-Path $tempRoot) {
-  Remove-Item $tempRoot -Recurse -Force
-}
-New-Item -ItemType Directory -Path $tempRoot | Out-Null
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("ata-domain-tests-" + [System.Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
 
 $htmlPath = Join-Path $tempRoot "domain-tests.html"
 
@@ -98,13 +95,26 @@ $bundleInline
 Set-Content -Path $htmlPath -Value $html -Encoding utf8
 
 $htmlUri = [System.Uri]::new((Resolve-Path $htmlPath).Path)
-$domOutput = & $browserPath `
-  --headless=new `
-  --disable-gpu `
-  --allow-file-access-from-files `
-  --virtual-time-budget=6000 `
-  --dump-dom `
-  $htmlUri.AbsoluteUri 2>&1 | Out-String
+$stdoutPath = Join-Path $tempRoot "domain-tests.stdout.txt"
+$stderrPath = Join-Path $tempRoot "domain-tests.stderr.txt"
+$arguments = @(
+  "--headless=new",
+  "--disable-gpu",
+  "--allow-file-access-from-files",
+  "--virtual-time-budget=6000",
+  "--dump-dom",
+  $htmlUri.AbsoluteUri
+)
+
+$process = Start-Process -FilePath $browserPath `
+  -ArgumentList $arguments `
+  -RedirectStandardOutput $stdoutPath `
+  -RedirectStandardError $stderrPath `
+  -PassThru `
+  -Wait `
+  -NoNewWindow
+
+$domOutput = Get-Content $stdoutPath -Raw -Encoding utf8
 
 if ($null -eq $domOutput) {
   throw "Headless-Browser lieferte keine DOM-Ausgabe."

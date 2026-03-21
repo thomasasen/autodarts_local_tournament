@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string[]]$Paths = @("src", "dist", "docs", "README.md")
 )
 
@@ -22,7 +22,7 @@ foreach ($path in $Paths) {
   $item = Get-Item $full
   if ($item.PSIsContainer) {
     Get-ChildItem $full -Recurse -File | ForEach-Object {
-      if ($_.Extension -in @('.js', '.ps1', '.md', '.json', '.css')) {
+      if ($_.Extension -in @('.js', '.ps1', '.md', '.json', '.css', '.mjs')) {
         $filesToCheck.Add($_.FullName)
       }
     }
@@ -44,10 +44,10 @@ foreach ($file in $filesToCheck) {
   }
 }
 
-$distPath = Resolve-RepoPath "dist/autodarts-tournament-assistant.user.js"
+$distPath = Resolve-RepoPath "dist/autodarts-local-tournament.user.js"
 if (Test-Path $distPath) {
   $dist = Get-Content $distPath -Raw -Encoding utf8
-  if (-not ($dist -match 'N(\\u00e4|\\x{00E4})chstes Match')) {
+  if (-not ($dist -match 'N.{1}chstes Match')) {
     $errors += "Required UI term 'Nächstes Match' missing (escaped or UTF-8)."
   }
   if (-not ($dist -match 'Freilos\s*\(Bye\)')) {

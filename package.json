@@ -1,0 +1,17 @@
+﻿{
+  "name": "autodarts-local-tournament",
+  "version": "0.3.5",
+  "description": "Local tournament manager userscript for play.autodarts.io",
+  "type": "module",
+  "scripts": {
+    "build": "node ./scripts/build-userscript.mjs",
+    "build:userscript": "node ./scripts/build-userscript.mjs",
+    "check:syntax": "node ./scripts/check-syntax.mjs",
+    "test": "node ./scripts/run-tests.mjs",
+    "verify": "npm run build && npm run test && powershell -ExecutionPolicy Bypass -File scripts/qa.ps1"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.25.12"
+  }
+}

@@ -1,12 +1,16 @@
 ﻿# Refactor Guide
 
 ## Ziel
-Modulare Pflege des Userscripts ohne npm/Node mit reproduzierbarem Build.
+Modulare Pflege des Userscripts mit reproduzierbarem Build und klarer Dist-Distribution.
 
 ## Arbeitsweise
 1. Änderungen in `src/*` durchführen.
-2. Versionsquelle bei Releases in `build/version.json` pflegen.
+2. Versionsquelle bei Releases in `package.json` pflegen.
 2. Build ausführen:
+```powershell
+npm run build
+```
+Optional kompatibel:
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/build.ps1
 ```
@@ -16,6 +20,8 @@ powershell -ExecutionPolicy Bypass -File scripts/test-domain.ps1
 ```
 4. QA ausführen:
 ```powershell
+npm run check:syntax
+npm test
 powershell -ExecutionPolicy Bypass -File scripts/qa.ps1
 ```
 

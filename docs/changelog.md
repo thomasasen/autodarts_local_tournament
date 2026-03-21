@@ -1,6 +1,15 @@
 ﻿# Changelog
 
 ## Unreleased
+- Dist-First Packaging-Migration umgesetzt:
+  - `package.json` als zentrale Versionsquelle eingeführt.
+  - neuer reproduzierbarer Build via `scripts/build-userscript.mjs` (esbuild, `iife`, browser).
+  - neuer Standard-Installationspfad: `dist/autodarts-local-tournament.user.js` + `.meta.js`.
+  - Legacy-Alias-Dateien `dist/autodarts-tournament-assistant.*` bleiben für Update-Kompatibilität erhalten.
+  - neue Prüfskripte `scripts/check-syntax.mjs` und `scripts/run-tests.mjs` ergänzt.
+  - `scripts/build.ps1` auf den neuen Build-Flow umgestellt.
+  - Runtime- und Domain-Testharness schreiben in echte Temp-Verzeichnisse statt getrackter `.tmp/*`-Dateien.
+  - Legacy-Loader bleibt verfügbar, ist aber klar als deprecated markiert und zeigt einmalig einen Migrationshinweis auf den neuen Installer.
 - KO-Phasen fachlich sauber benannt:
   - KO-Ansicht und Matchkarten zeigen jetzt offizielle Endphasenbezeichnungen (`Achtelfinale`, `Viertelfinale`, `Halbfinale`, `Finale`).
   - Frühere große KO-Stufen bleiben als `Letzte 32`, `Letzte 64` usw. statt künstlicher `...finale`-Labels benannt.
