@@ -129,6 +129,79 @@
   });
 
 
+  function completeReadyDoubleKoUntil(tournament, stopMatchId) {
+    for (let guard = 0; guard < 80; guard += 1) {
+      runDoubleKoDerivations(tournament);
+      const stopMatch = findMatch(tournament, stopMatchId);
+      if (stopMatch?.status === STATUS_PENDING && stopMatch.player1Id && stopMatch.player2Id) {
+        return stopMatch;
+      }
+      const ready = getMatchesByStage(tournament, MATCH_STAGE_KO)
+        .filter((match) => (
+          match.id !== stopMatchId
+          && match.status === STATUS_PENDING
+          && match.player1Id
+          && match.player2Id
+          && getMatchEditability(tournament, match).editable
+        ))
+        .sort((left, right) => left.round - right.round || left.number - right.number);
+      if (!ready.length) {
+        return stopMatch || null;
+      }
+      completeMatchByWinner(tournament, ready[0], ready[0].player1Id);
+    }
+    return null;
+  }
+
+
+  function runDoubleKoDerivations(tournament) {
+    for (let i = 0; i < 10; i += 1) {
+      let changed = false;
+      changed = synchronizeKoBracketState(tournament) || changed;
+      changed = normalizeCompletedMatchResults(tournament) || changed;
+      changed = synchronizeKoBracketState(tournament) || changed;
+      changed = refreshTournamentResultsIndex(tournament) || changed;
+      if (!changed) {
+        break;
+      }
+    }
+  }
+
+
+  test("Scenario Doppel-KO: kompletter 8er-Lauf mit Reset Final", () => {
+    const tournament = createDoubleKoTournament(participantList(8, "R8"), {
+      grandFinalResetMode: GRAND_FINAL_RESET_IF_NEEDED,
+    });
+    let grandFinal = completeReadyDoubleKoUntil(tournament, "gf-r1-m1");
+    assert(Boolean(grandFinal?.player1Id && grandFinal?.player2Id), "Grand Final muss spielbereit werden.");
+    completeMatchByWinner(tournament, grandFinal, grandFinal.player2Id);
+    runDoubleKoDerivations(tournament);
+
+    const resetFinal = findMatch(tournament, "gf-r2-m1");
+    assert(Boolean(resetFinal?.player1Id && resetFinal?.player2Id), "Reset Final muss spielbereit werden.");
+    completeMatchByWinner(tournament, resetFinal, resetFinal.player1Id);
+    runDoubleKoDerivations(tournament);
+
+    assertEqual(resetFinal.status, STATUS_COMPLETED);
+    assertEqual(tournament.results[tournament.results.length - 1]?.matchId, "gf-r2-m1");
+  });
+
+
+  test("Scenario Doppel-KO: kompletter 8er-Lauf ohne Reset", () => {
+    const tournament = createDoubleKoTournament(participantList(8, "N8"), {
+      grandFinalResetMode: GRAND_FINAL_RESET_IF_NEEDED,
+    });
+    const grandFinal = completeReadyDoubleKoUntil(tournament, "gf-r1-m1");
+    assert(Boolean(grandFinal?.player1Id && grandFinal?.player2Id), "Grand Final muss spielbereit werden.");
+    completeMatchByWinner(tournament, grandFinal, grandFinal.player1Id);
+    runDoubleKoDerivations(tournament);
+
+    assertEqual(Boolean(findMatch(tournament, "gf-r2-m1")), false);
+    assertEqual(grandFinal.status, STATUS_COMPLETED);
+    assertEqual(tournament.results[tournament.results.length - 1]?.matchId, "gf-r1-m1");
+  });
+
+
   test("Scenario League (DRA 6.16.1): volle Round-Robin-Wertung liefert erwartete Reihenfolge", () => {
     const tournament = createLeagueTournament(participantList(4, "L"), { bestOfLegs: 3 });
     const winnerByPair = new Map([

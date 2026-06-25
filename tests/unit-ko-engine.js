@@ -144,3 +144,92 @@
     assertEqual(tournament.ko.drawLocked, true);
     assertEqual(tournament.ko.enableThirdPlaceMatch, false);
   });
+
+
+  test("Doppel-KO: 8 Teilnehmer erzeugen Winners, Losers und Grand Final", () => {
+    const tournament = createDoubleKoTournament(participantList(8, "D8"));
+    synchronizeKoBracketState(tournament);
+    const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
+    const winners = koMatches.filter((match) => normalizeText(match?.meta?.bracket?.bracketSide || "") === "winners");
+    const losers = koMatches.filter((match) => normalizeText(match?.meta?.bracket?.bracketSide || "") === "losers");
+    const finals = koMatches.filter((match) => normalizeText(match?.meta?.bracket?.bracketSide || "") === "finals");
+
+    assertEqual(tournament.mode, "double_ko");
+    assertEqual(tournament.ko?.grandFinalResetMode, GRAND_FINAL_RESET_IF_NEEDED);
+    assertEqual(winners.length, 7);
+    assertEqual(losers.length, 6);
+    assertEqual(finals.length, 1);
+    assert(Boolean(findMatch(tournament, "wb-r1-m1")), "Winners-Bracket Match erwartet.");
+    assert(Boolean(findMatch(tournament, "lb-r1-m1")), "Losers-Bracket Match erwartet.");
+    assert(Boolean(findMatch(tournament, "gf-r1-m1")), "Grand Final erwartet.");
+  });
+
+
+  test("Doppel-KO: 6 Teilnehmer bleiben mit Byes stabil", () => {
+    const tournament = createDoubleKoTournament(participantList(6, "D6"));
+    for (let i = 0; i < 8; i += 1) {
+      synchronizeKoBracketState(tournament);
+      normalizeCompletedMatchResults(tournament);
+    }
+    const koMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
+    assertEqual(koMatches.some((match) => match.player1Id === match.player2Id && match.player1Id), false);
+    assert(Boolean(findMatch(tournament, "gf-r1-m1")), "Grand Final muss vorhanden bleiben.");
+  });
+
+
+  test("Doppel-KO: Lower-Bracket-Sieger erzwingt Reset-Finale wenn konfiguriert", () => {
+    const tournament = createDoubleKoTournament(participantList(2, "DR"), {
+      grandFinalResetMode: GRAND_FINAL_RESET_IF_NEEDED,
+    });
+    synchronizeKoBracketState(tournament);
+    const winnersFinal = findMatch(tournament, "wb-r1-m1");
+    assert(Boolean(winnersFinal), "Winners Final erwartet.");
+    let result = applyMatchResultToTournament(tournament, winnersFinal.id, winnersFinal.player1Id, { p1: 2, p2: 0 }, "manual");
+    assert(result.ok, result.message || "Winners Final konnte nicht gespeichert werden.");
+    synchronizeKoBracketState(tournament);
+    const grandFinal = findMatch(tournament, "gf-r1-m1");
+    assertEqual(grandFinal.player1Id, winnersFinal.player1Id);
+    assertEqual(grandFinal.player2Id, winnersFinal.player2Id);
+    result = applyMatchResultToTournament(tournament, grandFinal.id, grandFinal.player2Id, { p1: 0, p2: 2 }, "manual");
+    assert(result.ok, result.message || "Grand Final konnte nicht gespeichert werden.");
+    synchronizeKoBracketState(tournament);
+
+    const resetFinal = findMatch(tournament, "gf-r2-m1");
+    assert(Boolean(resetFinal), "Reset Final muss nach Grand-Final-Sieg des Lower-Spielers entstehen.");
+    assertEqual(resetFinal.player1Id, grandFinal.player1Id);
+    assertEqual(resetFinal.player2Id, grandFinal.player2Id);
+  });
+
+
+  test("Doppel-KO: Winners-Bracket-Sieger beendet Grand Final ohne Reset", () => {
+    const tournament = createDoubleKoTournament(participantList(2, "DW"), {
+      grandFinalResetMode: GRAND_FINAL_RESET_IF_NEEDED,
+    });
+    synchronizeKoBracketState(tournament);
+    const winnersFinal = findMatch(tournament, "wb-r1-m1");
+    let result = applyMatchResultToTournament(tournament, winnersFinal.id, winnersFinal.player1Id, { p1: 2, p2: 0 }, "manual");
+    assert(result.ok, result.message || "Winners Final konnte nicht gespeichert werden.");
+    synchronizeKoBracketState(tournament);
+    const grandFinal = findMatch(tournament, "gf-r1-m1");
+    result = applyMatchResultToTournament(tournament, grandFinal.id, grandFinal.player1Id, { p1: 2, p2: 0 }, "manual");
+    assert(result.ok, result.message || "Grand Final konnte nicht gespeichert werden.");
+    synchronizeKoBracketState(tournament);
+    assertEqual(Boolean(findMatch(tournament, "gf-r2-m1")), false);
+  });
+
+
+  test("Doppel-KO: single_match erzeugt nie ein Reset-Finale", () => {
+    const tournament = createDoubleKoTournament(participantList(2, "DS"), {
+      grandFinalResetMode: GRAND_FINAL_RESET_SINGLE_MATCH,
+    });
+    synchronizeKoBracketState(tournament);
+    const winnersFinal = findMatch(tournament, "wb-r1-m1");
+    let result = applyMatchResultToTournament(tournament, winnersFinal.id, winnersFinal.player1Id, { p1: 2, p2: 0 }, "manual");
+    assert(result.ok, result.message || "Winners Final konnte nicht gespeichert werden.");
+    synchronizeKoBracketState(tournament);
+    const grandFinal = findMatch(tournament, "gf-r1-m1");
+    result = applyMatchResultToTournament(tournament, grandFinal.id, grandFinal.player2Id, { p1: 0, p2: 2 }, "manual");
+    assert(result.ok, result.message || "Grand Final konnte nicht gespeichert werden.");
+    synchronizeKoBracketState(tournament);
+    assertEqual(Boolean(findMatch(tournament, "gf-r2-m1")), false);
+  });

@@ -106,10 +106,10 @@
     const autoLobbyEnabled = state.store.settings.featureFlags.autoLobbyStart ? "checked" : "";
     const randomizeKoEnabled = state.store.settings.featureFlags.randomizeKoRound1 ? "checked" : "";
     const koDrawLockDefaultEnabled = state.store.settings.featureFlags.koDrawLockDefault !== false ? "checked" : "";
-    const activeKoDrawLocked = state.store?.tournament?.mode === "ko"
+    const activeKoDrawLocked = state.store?.tournament?.mode === "ko" || state.store?.tournament?.mode === "double_ko"
       ? (state.store?.tournament?.ko?.drawLocked !== false ? "checked" : "")
       : "";
-    const activeKoDrawLockDisabledAttr = state.store?.tournament?.mode === "ko" ? "" : "disabled";
+    const activeKoDrawLockDisabledAttr = state.store?.tournament?.mode === "ko" || state.store?.tournament?.mode === "double_ko" ? "" : "disabled";
     const modeLimitSummary = buildModeParticipantLimitSummary();
     const tieBreakProfile = normalizeTieBreakProfile(
       state.store?.tournament?.rules?.tieBreakProfile,

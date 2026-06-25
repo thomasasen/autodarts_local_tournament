@@ -15,7 +15,7 @@
 
   function queueBracketRender(forceReload = false) {
     const tournament = state.store.tournament;
-    if (!tournament || (tournament.mode !== "ko" && tournament.mode !== "groups_ko")) {
+    if (!tournament || (tournament.mode !== "ko" && tournament.mode !== "double_ko" && tournament.mode !== "groups_ko")) {
       return;
     }
     const frame = resolveBracketFrameElement(state.shadowRoot);

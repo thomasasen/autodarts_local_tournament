@@ -5,6 +5,7 @@
       return null;
     }
 
+    const isDoubleKo = tournament.mode === "double_ko";
     const bracketSize = tournament.mode === "groups_ko"
       ? 4
       : nextPowerOfTwo(clampInt(tournament?.ko?.bracketSize, tournament.participants.length, 2, TECHNICAL_PARTICIPANT_HARD_MAX));
@@ -33,6 +34,16 @@
     };
     const isThirdPlaceMatch = (match) => normalizeText(match?.meta?.bracket?.matchRole || "") === "third_place";
     const hasThirdPlaceMatch = koMatches.some((match) => isThirdPlaceMatch(match));
+    const getDoubleKoGroupId = (match) => {
+      const side = normalizeText(match?.meta?.bracket?.bracketSide || "winners");
+      if (side === "losers") {
+        return 2;
+      }
+      if (side === "finals") {
+        return 3;
+      }
+      return 1;
+    };
 
     const matches = koMatches.map((match) => {
       const player1Id = resolveBracketParticipantId(match.player1Id);
@@ -66,8 +77,10 @@
       return {
         id: match.id,
         stage_id: 1,
-        group_id: isThirdPlaceMatch(match) ? 2 : 1,
-        round_id: match.round,
+        group_id: isDoubleKo ? getDoubleKoGroupId(match) : (isThirdPlaceMatch(match) ? 2 : 1),
+        round_id: isDoubleKo
+          ? clampInt(match?.meta?.bracket?.sectionRound, match.round, 1, 64)
+          : match.round,
         number: match.number,
         child_count: 0,
         status,
@@ -80,11 +93,14 @@
       stages: [{
         id: 1,
         tournament_id: 1,
-        name: tournament.mode === "groups_ko" ? "KO-Phase" : "KO",
-        type: "single_elimination",
+        name: isDoubleKo ? "Doppel-KO" : (tournament.mode === "groups_ko" ? "KO-Phase" : "KO"),
+        type: isDoubleKo ? "double_elimination" : "single_elimination",
         settings: {
           size: bracketSize,
-          consolationFinal: hasThirdPlaceMatch,
+          consolationFinal: !isDoubleKo && hasThirdPlaceMatch,
+          grandFinal: isDoubleKo
+            ? (sanitizeGrandFinalResetMode(tournament?.ko?.grandFinalResetMode) === GRAND_FINAL_RESET_IF_NEEDED ? "double" : "simple")
+            : undefined,
         },
         number: 1,
       }],

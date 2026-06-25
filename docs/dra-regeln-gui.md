@@ -134,6 +134,7 @@ Screenshot-Kontext:
 - Es gibt Veranstalter-Ermessen für Organisation und Ablauf.
 - Die App setzt daher bewusste Leitplanken:
   - `ko`: `2..128`
+  - `double_ko`: `2..32`
   - `league`: `2..16`
   - `groups_ko`: `4..16`
 

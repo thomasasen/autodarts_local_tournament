@@ -35,3 +35,18 @@
     assert(payload.matches.every((match) => match.group_id === 1), "Klassisches KO darf keine Zusatzgruppen enthalten.");
   });
 
+
+  test("Bracket payload: Doppel-KO nutzt double_elimination mit drei Gruppen", () => {
+    const tournament = createDoubleKoTournament(participantList(8, "BD"));
+    synchronizeKoBracketState(tournament);
+    const payload = buildBracketPayload(tournament);
+    assert(Boolean(payload), "Bracket-Payload erwartet.");
+    assertEqual(payload.stages?.[0]?.type, "double_elimination");
+    assertEqual(payload.stages?.[0]?.settings?.grandFinal, "double");
+    assert(payload.matches.some((match) => match.group_id === 1), "Winners-Gruppe erwartet.");
+    assert(payload.matches.some((match) => match.group_id === 2), "Losers-Gruppe erwartet.");
+    assert(payload.matches.some((match) => match.group_id === 3), "Finals-Gruppe erwartet.");
+    assertEqual(payload.matches.find((match) => match.id === "lb-r1-m1")?.round_id, 1);
+    assertEqual(payload.matches.find((match) => match.id === "gf-r1-m1")?.round_id, 1);
+  });
+

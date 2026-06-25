@@ -19,6 +19,8 @@
    * @property {string|null} advancesWinnerTo
    * @property {string|null} advancesLoserTo
    * @property {number|null} placementRank
+   * @property {"winners"|"losers"|"finals"} bracketSide
+   * @property {number} sectionRound
    * @property {Object} competitors
    * @property {Object|null} competitors.p1
    * @property {Object|null} competitors.p2
@@ -108,8 +110,13 @@
     advancesWinnerTo = null,
     advancesLoserTo = null,
     placementRank = null,
+    bracketSide = "winners",
+    sectionRound = null,
   }) {
     const normalizedRole = matchRole === "third_place" ? "third_place" : "main";
+    const normalizedBracketSide = ["winners", "losers", "finals"].includes(normalizeText(bracketSide || "").toLowerCase())
+      ? normalizeText(bracketSide).toLowerCase()
+      : "winners";
     const normalizedPlacementRank = Number.isFinite(Number(placementRank))
       ? clampInt(placementRank, null, 1, 128)
       : null;
@@ -122,6 +129,8 @@
       advancesWinnerTo: normalizeText(advancesWinnerTo || "") || null,
       advancesLoserTo: normalizeText(advancesLoserTo || "") || null,
       placementRank: Number.isFinite(normalizedPlacementRank) ? normalizedPlacementRank : null,
+      bracketSide: normalizedBracketSide,
+      sectionRound: clampInt(sectionRound, round, 1, 64),
       competitors: {
         p1: competitors?.p1 || null,
         p2: competitors?.p2 || null,
@@ -383,6 +392,8 @@
           number,
           structuralBye,
           matchRole: "main",
+          bracketSide: "winners",
+          sectionRound: round,
           advancesWinnerTo: round < totalRounds
             ? `ko-r${round + 1}-m${Math.ceil(number / 2)}`
             : null,
@@ -437,6 +448,8 @@
           number: 2,
           structuralBye: false,
           matchRole: "third_place",
+          bracketSide: "winners",
+          sectionRound: totalRounds,
           advancesWinnerTo: null,
           advancesLoserTo: null,
           placementRank: 3,
@@ -474,7 +487,232 @@
         placementRank: Number.isFinite(Number(virtualMatch?.placementRank))
           ? clampInt(virtualMatch?.placementRank, null, 1, 128)
           : null,
+        bracketSide: ["winners", "losers", "finals"].includes(normalizeText(virtualMatch?.bracketSide || "").toLowerCase())
+          ? normalizeText(virtualMatch.bracketSide).toLowerCase()
+          : "winners",
+        sectionRound: clampInt(virtualMatch?.sectionRound, virtualMatch?.round, 1, 64),
       },
+    };
+  }
+
+
+  function buildDoubleKoWinnersBracket(players, seeds, options = {}) {
+    const normalizedParticipants = normalizeSeedParticipants(players);
+    const seeded = Array.isArray(seeds) && seeds.length
+      ? seeds.slice()
+      : generateSeeds(normalizedParticipants, KO_DRAW_MODE_SEEDED);
+    const assignedByes = assignByes(seeded, normalizedParticipants.length);
+    const placement = buildSeedPlacement(assignedByes.bracketSize);
+    const seedByNumber = new Map(assignedByes.seeds.map((entry) => [entry.seed, entry]));
+
+    const slotByParticipantId = new Map();
+    const leafNodes = placement.map((seedNumber, slotIndex) => {
+      const seedEntry = seedByNumber.get(seedNumber) || null;
+      if (!seedEntry) {
+        return null;
+      }
+      slotByParticipantId.set(seedEntry.participantId, slotIndex + 1);
+      return {
+        kind: "participant",
+        participantId: seedEntry.participantId,
+        seed: seedEntry.seed,
+      };
+    });
+
+    const seeding = assignedByes.seeds.map((seedEntry) => ({
+      ...seedEntry,
+      slot: slotByParticipantId.get(seedEntry.participantId) || null,
+    }));
+
+    const rounds = [];
+    let currentNodes = leafNodes;
+    const totalRounds = Math.log2(assignedByes.bracketSize);
+    for (let round = 1; round <= totalRounds; round += 1) {
+      const matchesInRound = currentNodes.length / 2;
+      const virtualMatches = [];
+      const nextNodes = [];
+      for (let number = 1; number <= matchesInRound; number += 1) {
+        const idx = (number - 1) * 2;
+        const leftNode = currentNodes[idx] || null;
+        const rightNode = currentNodes[idx + 1] || null;
+        const id = `wb-r${round}-m${number}`;
+        const structuralBye = Boolean((leftNode && !rightNode) || (!leftNode && rightNode));
+        virtualMatches.push(createKoVirtualMatch({
+          id,
+          round,
+          number,
+          structuralBye,
+          matchRole: "main",
+          bracketSide: "winners",
+          sectionRound: round,
+          advancesWinnerTo: round < totalRounds
+            ? `wb-r${round + 1}-m${Math.ceil(number / 2)}`
+            : "gf-r1-m1",
+          advancesLoserTo: null,
+          placementRank: null,
+          competitors: {
+            p1: createKoVirtualCompetitorRef(leftNode),
+            p2: createKoVirtualCompetitorRef(rightNode),
+          },
+        }));
+        if (!leftNode && !rightNode) {
+          nextNodes.push(null);
+        } else if (structuralBye) {
+          nextNodes.push(leftNode || rightNode);
+        } else {
+          nextNodes.push({ kind: "winner", sourceMatchId: id });
+        }
+      }
+      rounds.push({
+        round,
+        label: `Winners Bracket R${round}`,
+        virtualMatches,
+      });
+      currentNodes = nextNodes;
+    }
+
+    return {
+      bracketSize: assignedByes.bracketSize,
+      byeCount: assignedByes.byeCount,
+      placement,
+      seeding,
+      rounds,
+      totalRounds,
+      grandFinalResetMode: sanitizeGrandFinalResetMode(options?.grandFinalResetMode),
+    };
+  }
+
+
+  function createVirtualWinnerRef(matchId) {
+    return createKoVirtualCompetitorRef({ kind: "winner", sourceMatchId: matchId });
+  }
+
+
+  function createVirtualLoserRef(matchId) {
+    return createKoVirtualCompetitorRef({ kind: "loser", sourceMatchId: matchId });
+  }
+
+
+  function buildDoubleKoBracketStructure(players, seeds, options = {}) {
+    const winners = buildDoubleKoWinnersBracket(players, seeds, options);
+    const totalWinnerRounds = winners.totalRounds;
+    const grandFinalResetMode = sanitizeGrandFinalResetMode(options?.grandFinalResetMode);
+    const includeResetFinal = grandFinalResetMode === GRAND_FINAL_RESET_IF_NEEDED
+      && options?.includeResetFinal === true;
+    const rounds = winners.rounds.map((roundDef) => ({
+      ...roundDef,
+      virtualMatches: roundDef.virtualMatches.slice(),
+    }));
+
+    const addRound = (round, label, virtualMatches) => {
+      rounds.push({
+        round,
+        label,
+        virtualMatches,
+      });
+    };
+
+    let globalRound = totalWinnerRounds;
+    let lastLosersRoundMatches = [];
+    if (totalWinnerRounds > 1) {
+      for (let pairRound = 1; pairRound <= totalWinnerRounds - 1; pairRound += 1) {
+        const matchCount = winners.bracketSize / Math.pow(2, pairRound + 1);
+        const firstLosersRoundNumber = ((pairRound - 1) * 2) + 1;
+        const firstLosersRound = [];
+        for (let number = 1; number <= matchCount; number += 1) {
+          const id = `lb-r${firstLosersRoundNumber}-m${number}`;
+          const competitors = pairRound === 1
+            ? {
+              p1: createVirtualLoserRef(`wb-r1-m${((number - 1) * 2) + 1}`),
+              p2: createVirtualLoserRef(`wb-r1-m${((number - 1) * 2) + 2}`),
+            }
+            : {
+              p1: createVirtualWinnerRef(`lb-r${firstLosersRoundNumber - 1}-m${((number - 1) * 2) + 1}`),
+              p2: createVirtualWinnerRef(`lb-r${firstLosersRoundNumber - 1}-m${((number - 1) * 2) + 2}`),
+            };
+          firstLosersRound.push(createKoVirtualMatch({
+            id,
+            round: globalRound + 1,
+            number,
+            matchRole: "main",
+            bracketSide: "losers",
+            sectionRound: firstLosersRoundNumber,
+            advancesWinnerTo: `lb-r${firstLosersRoundNumber + 1}-m${number}`,
+            competitors,
+          }));
+        }
+        globalRound += 1;
+        addRound(globalRound, `Losers Bracket R${firstLosersRoundNumber}`, firstLosersRound);
+
+        const secondLosersRoundNumber = firstLosersRoundNumber + 1;
+        const secondLosersRound = [];
+        for (let number = 1; number <= matchCount; number += 1) {
+          const id = `lb-r${secondLosersRoundNumber}-m${number}`;
+          const isLastLosersMatch = pairRound === totalWinnerRounds - 1 && matchCount === 1;
+          secondLosersRound.push(createKoVirtualMatch({
+            id,
+            round: globalRound + 1,
+            number,
+            matchRole: "main",
+            bracketSide: "losers",
+            sectionRound: secondLosersRoundNumber,
+            advancesWinnerTo: isLastLosersMatch ? "gf-r1-m1" : null,
+            competitors: {
+              p1: createVirtualWinnerRef(`lb-r${firstLosersRoundNumber}-m${number}`),
+              p2: createVirtualLoserRef(`wb-r${pairRound + 1}-m${number}`),
+            },
+          }));
+        }
+        globalRound += 1;
+        addRound(globalRound, `Losers Bracket R${secondLosersRoundNumber}`, secondLosersRound);
+        lastLosersRoundMatches = secondLosersRound;
+      }
+    }
+
+    const winnerFinalId = `wb-r${totalWinnerRounds}-m1`;
+    const loserFinalId = lastLosersRoundMatches[0]?.id || winnerFinalId;
+    const grandFinal = createKoVirtualMatch({
+      id: "gf-r1-m1",
+      round: globalRound + 1,
+      number: 1,
+      matchRole: "main",
+      bracketSide: "finals",
+      sectionRound: 1,
+      advancesWinnerTo: includeResetFinal ? "gf-r2-m1" : null,
+      placementRank: includeResetFinal ? null : 1,
+      competitors: {
+        p1: createVirtualWinnerRef(winnerFinalId),
+        p2: totalWinnerRounds > 1 ? createVirtualWinnerRef(loserFinalId) : createVirtualLoserRef(winnerFinalId),
+      },
+    });
+    globalRound += 1;
+    addRound(globalRound, "Grand Final", [grandFinal]);
+
+    if (includeResetFinal) {
+      globalRound += 1;
+      addRound(globalRound, "Reset Final", [createKoVirtualMatch({
+        id: "gf-r2-m1",
+        round: globalRound,
+        number: 1,
+        matchRole: "main",
+        bracketSide: "finals",
+        sectionRound: 2,
+        placementRank: 1,
+        competitors: {
+          p1: createVirtualLoserRef("gf-r1-m1"),
+          p2: createVirtualWinnerRef("gf-r1-m1"),
+        },
+      })]);
+    }
+
+    return {
+      bracketSize: winners.bracketSize,
+      byeCount: winners.byeCount,
+      enableThirdPlaceMatch: false,
+      grandFinalResetMode,
+      placement: winners.placement,
+      seeding: winners.seeding,
+      rounds,
     };
   }
 
@@ -611,7 +849,7 @@
     if (!normalizeText(config.name)) {
       errors.push("Bitte einen Turniernamen eingeben.");
     }
-    if (!["ko", "league", "groups_ko"].includes(config.mode)) {
+    if (!["ko", "double_ko", "league", "groups_ko"].includes(config.mode)) {
       errors.push("Ungültiger Modus.");
     }
     const participantCountError = getParticipantCountError(config.mode, config.participants.length);
@@ -627,10 +865,11 @@
     const modeLimits = getModeParticipantLimits(config.mode);
     const participants = config.participants.slice(0, modeLimits.max);
     const participantIds = participants.map((participant) => participant.id);
-    const koDrawMode = config.mode === "ko" && config.randomizeKoRound1
+    const isKoLikeMode = config.mode === "ko" || config.mode === "double_ko";
+    const koDrawMode = isKoLikeMode && config.randomizeKoRound1
       ? KO_DRAW_MODE_OPEN_DRAW
       : KO_DRAW_MODE_SEEDED;
-    const koDrawLocked = config.mode === "ko"
+    const koDrawLocked = isKoLikeMode
       ? config.koDrawLocked !== false
       : false;
     const enableThirdPlaceMatch = config.mode === "ko"
@@ -656,6 +895,23 @@
     } else if (config.mode === "groups_ko") {
       groups = buildGroups(participantIds);
       matches = buildGroupMatches(groups).concat(buildGroupsKoMatches());
+    } else if (config.mode === "double_ko") {
+      const koSeeds = generateSeeds(participants, koDrawMode);
+      const koStructure = buildDoubleKoBracketStructure(participants, koSeeds, {
+        grandFinalResetMode: config.grandFinalResetMode,
+      });
+      matches = buildKoMatchesFromStructure(koStructure);
+      koMeta = {
+        drawMode: koDrawMode,
+        drawLocked: koDrawLocked,
+        enableThirdPlaceMatch: false,
+        grandFinalResetMode: koStructure.grandFinalResetMode,
+        engineVersion: KO_ENGINE_VERSION,
+        bracketSize: koStructure.bracketSize,
+        placement: koStructure.placement,
+        seeding: koStructure.seeding,
+        rounds: koStructure.rounds,
+      };
     } else {
       const koSeeds = generateSeeds(participants, koDrawMode);
       const koStructure = buildBracketStructure(participants, koSeeds, { enableThirdPlaceMatch });

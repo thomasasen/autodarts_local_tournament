@@ -34,6 +34,33 @@ test("Tournament duration: KO estimate uses n-1 matches", () => {
 });
 
 
+test("Tournament duration: Doppel-KO counts reset-final maximum by default", () => {
+  const tournament = createDoubleKoTournament(participantList(8, "TD"), {
+    grandFinalResetMode: GRAND_FINAL_RESET_IF_NEEDED,
+  });
+  const estimate = estimateTournamentDurationFromTournament(tournament, {
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  assert(estimate.ready, "Estimate should be ready for Doppel-KO.");
+  assertEqual(estimate.matchCount, 15);
+  assert(estimate.scheduleWaves >= 6, "Doppel-KO dependencies should limit naive parallel scheduling.");
+});
+
+
+test("Tournament duration: Doppel-KO single grand final removes reset maximum", () => {
+  const tournament = createDoubleKoTournament(participantList(8, "TS"), {
+    grandFinalResetMode: GRAND_FINAL_RESET_SINGLE_MATCH,
+  });
+  const estimate = estimateTournamentDurationFromTournament(tournament, {
+    tournamentTimeProfile: TOURNAMENT_TIME_PROFILE_NORMAL,
+  });
+
+  assert(estimate.ready, "Estimate should be ready for single-match Doppel-KO.");
+  assertEqual(estimate.matchCount, 14);
+});
+
+
 test("Tournament duration: league estimate scales with round robin match count", () => {
   const tournament = createLeagueTournament(participantList(8), {
     bestOfLegs: 5,

@@ -5,7 +5,7 @@ Lokales Turniermanagement direkt in `https://play.autodarts.io` als Userscript.
 [![Installieren](https://img.shields.io/badge/Installieren-Autodarts%20Tournament%20Assistant%20Loader-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js)
 
 Der Assistent erweitert die Autodarts-Oberfläche um einen eigenen Bereich für:
-- Turnieranlage (KO, Liga, Gruppenphase + KO)
+- Turnieranlage (KO, Doppel-KO, Liga, Gruppenphase + KO)
 - Ergebnisführung
 - Turnieransicht (Tabelle + Bracket)
 - Import/Export
@@ -78,6 +78,7 @@ Nach Installation ist links im Hauptmenü der neue Eintrag sichtbar. Darüber ö
 ## Funktionen
 - Turniermodi:
   - `ko`
+  - `double_ko`
   - `league`
   - `groups_ko`
 - Ergebnisführung:
@@ -105,6 +106,7 @@ Nach Installation ist links im Hauptmenü der neue Eintrag sichtbar. Darüber ö
 | Modus | Beschreibung | Typischer Einsatz |
 |---|---|---|
 | `ko` | Klassischer Single-Elimination-Baum | Schnelles Turnier mit Finalrunde |
+| `double_ko` <span style="display:inline-block;background:#1f883d;color:#fff;border-radius:999px;padding:1px 7px;font-size:0.78em;font-weight:700;">Neu</span><br><small>hinzugefügt am 25.06.2026</small> | Doppel-KO mit Winners Bracket, Losers Bracket und Grand Final | Private Freundschaftsspiele und kleine lokale Felder, bei denen eine Niederlage noch nicht ausscheiden soll |
 | `league` | Jeder gegen jeden (Round Robin) | Kleine Gruppe mit kompletter Tabelle |
 | `groups_ko` | 2 Gruppen, danach KO-Phase | Kombination aus Gruppenphase und Finalrunde |
 
@@ -129,6 +131,35 @@ Nach Installation ist links im Hauptmenü der neue Eintrag sichtbar. Darüber ö
   - Bei Runde > 1 müssen die direkten Vorgänger-Matches abgeschlossen sein.
 - Nur Runde-1-Byes dürfen automatisch als abgeschlossen gesetzt werden.
 - Freilose werden im Tab `Spiele` explizit als `Freilos (Bye)` markiert.
+
+### Doppel-KO (`double_ko`) <span style="display:inline-block;background:#1f883d;color:#fff;border-radius:999px;padding:1px 8px;font-size:0.72em;font-weight:700;vertical-align:middle;">Neu</span>
+Hinzugefügt am 25.06.2026.
+
+Doppel-KO ist für private Freundschaftsspiele und lokale Abende gedacht, bei denen niemand nach einer einzigen Niederlage sofort rausfliegen soll. Jeder Spieler hat dadurch eine zweite Chance: Erst nach der zweiten Niederlage ist das Turnier beendet. Für Amateure bedeutet das schlicht mehr Spielzeit und weniger Wartefrust; für erfahrene Spieler ist es ein klassisches Double-Elimination-Format mit Winners Bracket, Losers Bracket und Grand Final.
+
+- Eigenständiger Double-Elimination-Modus für `2..32` Teilnehmer.
+- Initialer Draw nutzt dieselben Regeln wie KO:
+  - `KO-Erstrunde zufällig mischen = OFF` -> `seeded`.
+  - `KO-Erstrunde zufällig mischen = ON` -> `open_draw`.
+  - Draw-Lock schützt den initialen Winners-Bracket-Draw.
+- Struktur:
+  - Winners Bracket: Alle starten hier. Wer gewinnt, bleibt auf dem direkten Weg ins Finale.
+  - Losers Bracket: Wer einmal verliert, fällt hierhin und kann sich weiter zurückkämpfen.
+  - Ausscheiden: Erst die zweite Niederlage beendet das Turnier für diesen Spieler.
+  - Grand Final: Der Sieger des Winners Bracket spielt gegen den Sieger des Losers Bracket.
+- Grand-Final-Regel ist bei der Anlage konfigurierbar:
+  - `Reset-Finale falls nötig` ist Default und klassisches Doppel-KO.
+  - Verliert der Winners-Bracket-Sieger das erste Grand Final, entsteht ein zweites Finale.
+  - `Ein einzelnes Grand Final` ist schneller, aber kein vollständiges klassisches Doppel-KO.
+- Kein separates Spiel um Platz 3 in v1; der Lower-Bracket-Verlauf ist kein offizieller Bronze-Pfad.
+
+Einfaches Beispiel mit 8 Spielern:
+1. Alle 8 Spieler starten im Winners Bracket.
+2. Spieler A verliert sein erstes Match. Er ist nicht raus, sondern spielt im Losers Bracket weiter.
+3. Spieler A gewinnt dort mehrere Matches und erreicht trotzdem noch das Grand Final.
+4. Verliert Spieler A später noch einmal, ist er ausgeschieden. Gewinnt er das Losers Bracket, bekommt er im Grand Final wieder eine Chance auf den Turniersieg.
+
+Kurz gesagt: Single-KO ist schnell und hart, Doppel-KO ist fairer für lockere Runden, weil ein schlechter Start nicht sofort das Ende bedeutet.
 
 ### Liga (`league`)
 - Vollständiger Round-Robin-Spielplan.
@@ -162,7 +193,7 @@ Tab: `Turnier`
 | Feld | Optionen / Eingaben | Was es steuert | Warum das wichtig ist |
 |---|---|---|---|
 | `Turniername` | Freitext | Name für aktive Sitzung/Export | Erleichtert Zuordnung bei mehreren lokalen Events |
-| `Modus` | `KO`, `Liga`, `Gruppenphase + KO` | Spielplanlogik, Tabellenlogik, KO-Pfade | Falscher Modus führt zu falscher Matchanzahl/Fortschrittslogik |
+| `Modus` | `KO`, `Doppel-KO`, `Liga`, `Gruppenphase + KO` | Spielplanlogik, Tabellenlogik, KO-Pfade | Falscher Modus führt zu falscher Matchanzahl/Fortschrittslogik |
 | `Best of Legs` | Ungerade `1..21` | Matchlänge; intern `First to N` | Definiert Siegbedingung pro Match und Turnierdauer |
 | `Startpunkte` | `121`, `170`, `301`, `501`, `701`, `901` | X01-Basis für jedes Match | Beeinflusst Matchdauer und Schwierigkeitsprofil |
 | `In-Modus` | `Straight`, `Double`, `Master` | Wie ein Leg gestartet wird | Regelt Einstiegsanforderung je Spielstil/Regelwerk |
@@ -175,6 +206,7 @@ Tab: `Turnier`
 | `Preset` | Auswahlfeld + Button `Preset anwenden` | Setzt alle Preset-relevanten Turnierfelder konsistent | Offizielle und kompatible Profile bleiben klar getrennt |
 | `KO-Erstrunde zufällig mischen` | Checkbox `ON/OFF` | `open_draw` oder `seeded` in Runde 1 | Transparente Entscheidung zwischen deterministischer Open-Draw-Reihenfolge und Setzlogik |
 | `Spiel um Platz 3 (optional)` | Checkbox `ON/OFF` | Fügt im KO-Modus ein separates Bronze-Match (Halbfinal-Verlierer) hinzu | Default bleibt klassisches KO mit genau einem Finale; zusätzliche Platzierung nur als explizite Tournament Rule |
+| `Doppel-KO Grand Final` | `Reset-Finale falls nötig`, `Ein einzelnes Grand Final` | Legt fest, ob bei Sieg des Losers-Bracket-Siegers im Grand Final ein Reset-Finale entsteht | Default bildet klassisches Doppel-KO ab; Einzelmatch ist eine bewusst schnellere Turnierregel |
 | `Teilnehmer` | Je Spieler eine Zeile | Teilnehmerliste inkl. Reihenfolge | Reihenfolge ist bei `seeded` zugleich Seed-Reihenfolge |
 | `Boards für Zeitprognose` | Zahl `1..32` | Parallele Match-Slots in der Dauerberechnung | Verhindert naive Vollauslastungsannahmen und macht Warteeffekte sichtbar |
 | `Teilnehmer mischen` | Button | Mischt Teilnehmertextliste | Praktisch für spontane Auslosung vor Start |
@@ -237,9 +269,10 @@ Die Anzeige bündelt Teilnehmerzahl, geplante Spielanzahl, durchschnittliche Mat
 
 ### Nach dem Anlegen
 Im aktiven Turnier siehst du die wichtigsten Tags sofort:
-- Format (`KO`, `Liga`, `Gruppenphase + KO`)
+- Format (`KO`, `Doppel-KO`, `Liga`, `Gruppenphase + KO`)
 - `Best of`, `First to`, `Startpunkte`
 - Bei KO: `Open Draw`/`Gesetzter Draw`, `Draw-Lock aktiv/aus`, `Spiel um Platz 3 aktiv/aus`
+- Bei Doppel-KO: `Open Draw`/`Gesetzter Draw`, `Draw-Lock aktiv/aus`, Grand-Final-Regel
 - X01-Zusammenfassung und Teilnehmerchips
 
 ![Aktives Turnier nach Anlage](assets/ss_Turnier_angelegt.png)
@@ -514,6 +547,7 @@ Priorisierung für Limits in diesem Projekt:
 | Modus | Limit | Warum |
 |---|---|---|
 | `ko` | `2..128` | Regelkonform ohne kleines Kunstlimit; 128 als technischer Stabilitätsdeckel für Bracket/UI. |
+| `double_ko` | `2..32` | Doppel-KO erzeugt bis zu `2n - 1` Matches; 32 ist v1-Leitplanke für lokale Board-Abende und stabile Darstellung. |
 | `league` | `2..16` | Round Robin wächst quadratisch (`n*(n-1)/2`); oberhalb 16 wird Dauer und Bedienung für lokale Events schnell unpraktisch. |
 | `groups_ko` | `4..16` | Mindestens 4 für zwei Gruppen mit anschliessender KO-Phase; Obergrenze aus Spielanzahl/Bedienbarkeit. |
 
@@ -643,6 +677,7 @@ powershell -ExecutionPolicy Bypass -File scripts/test-runtime-contract.ps1
 ## Limitationen
 - Modus-Limits:
   - `ko`: `2..128`
+  - `double_ko`: `2..32`
   - `league`: `2..16`
   - `groups_ko`: `4..16`
 - Technisches Hard-Cap: `128` Teilnehmer

@@ -106,6 +106,10 @@
         placementRank: Number.isFinite(Number(virtualMatch?.placementRank))
           ? clampInt(virtualMatch?.placementRank, null, 1, 128)
           : null,
+        bracketSide: ["winners", "losers", "finals"].includes(normalizeText(virtualMatch?.bracketSide || "").toLowerCase())
+          ? normalizeText(virtualMatch.bracketSide).toLowerCase()
+          : "winners",
+        sectionRound: clampInt(virtualMatch?.sectionRound, virtualMatch?.round, 1, 64),
         competitors: {
           p1: virtualMatch?.competitors?.p1 || null,
           p2: virtualMatch?.competitors?.p2 || null,
@@ -126,6 +130,7 @@
       drawMode: normalizeKoDrawMode(drawMode, KO_DRAW_MODE_SEEDED),
       drawLocked: Boolean(drawLocked),
       enableThirdPlaceMatch: Boolean(structure?.enableThirdPlaceMatch),
+      grandFinalResetMode: sanitizeGrandFinalResetMode(structure?.grandFinalResetMode),
       engineVersion: KO_ENGINE_VERSION,
       bracketSize,
       placement: normalizedPlacement,
@@ -143,10 +148,90 @@
     return {
       bracketSize: normalized.bracketSize,
       enableThirdPlaceMatch: Boolean(normalized.enableThirdPlaceMatch),
+      grandFinalResetMode: sanitizeGrandFinalResetMode(normalized.grandFinalResetMode),
       placement: normalized.placement,
       seeding: normalized.seeding,
       rounds: normalized.rounds,
     };
+  }
+
+
+  function findKoMatchById(tournament, matchId) {
+    const targetId = normalizeText(matchId || "");
+    if (!targetId) {
+      return null;
+    }
+    return (Array.isArray(tournament?.matches) ? tournament.matches : [])
+      .find((match) => match?.stage === MATCH_STAGE_KO && normalizeText(match.id || "") === targetId) || null;
+  }
+
+
+  function isVirtualCompetitorRefResolved(tournament, competitorRef) {
+    if (!competitorRef || competitorRef.type === "participant") {
+      return true;
+    }
+    if (competitorRef.type !== "winner" && competitorRef.type !== "loser") {
+      return true;
+    }
+    const sourceMatch = findKoMatchById(tournament, competitorRef.matchId);
+    return Boolean(sourceMatch && sourceMatch.status === STATUS_COMPLETED && isCompletedMatchResultValid(tournament, sourceMatch));
+  }
+
+
+  function isDynamicallyResolvedBye(tournament, virtualMatch, p1, p2) {
+    const hasP1 = Boolean(p1);
+    const hasP2 = Boolean(p2);
+    if (hasP1 === hasP2) {
+      return false;
+    }
+    return isVirtualCompetitorRefResolved(tournament, virtualMatch?.competitors?.p1)
+      && isVirtualCompetitorRefResolved(tournament, virtualMatch?.competitors?.p2);
+  }
+
+
+  function isVirtualCompetitorRefResolvedWithSet(tournament, competitorRef, resolvedVirtualMatchIds) {
+    if (!competitorRef || competitorRef.type === "participant") {
+      return true;
+    }
+    if (competitorRef.type !== "winner" && competitorRef.type !== "loser") {
+      return true;
+    }
+    const sourceMatchId = normalizeText(competitorRef.matchId || "");
+    if (sourceMatchId && resolvedVirtualMatchIds?.has(sourceMatchId)) {
+      return true;
+    }
+    return isVirtualCompetitorRefResolved(tournament, competitorRef);
+  }
+
+
+  function areVirtualMatchCompetitorsResolved(tournament, virtualMatch, resolvedVirtualMatchIds) {
+    return isVirtualCompetitorRefResolvedWithSet(tournament, virtualMatch?.competitors?.p1, resolvedVirtualMatchIds)
+      && isVirtualCompetitorRefResolvedWithSet(tournament, virtualMatch?.competitors?.p2, resolvedVirtualMatchIds);
+  }
+
+
+  function isDynamicallyResolvedByeWithSet(tournament, virtualMatch, p1, p2, resolvedVirtualMatchIds) {
+    const hasP1 = Boolean(p1);
+    const hasP2 = Boolean(p2);
+    if (hasP1 === hasP2) {
+      return false;
+    }
+    return areVirtualMatchCompetitorsResolved(tournament, virtualMatch, resolvedVirtualMatchIds);
+  }
+
+
+  function shouldIncludeDoubleKoResetFinal(tournament) {
+    if (!tournament || tournament.mode !== "double_ko") {
+      return false;
+    }
+    if (sanitizeGrandFinalResetMode(tournament?.ko?.grandFinalResetMode) !== GRAND_FINAL_RESET_IF_NEEDED) {
+      return false;
+    }
+    const grandFinal = findKoMatchById(tournament, "gf-r1-m1");
+    if (!grandFinal || grandFinal.status !== STATUS_COMPLETED || !isCompletedMatchResultValid(tournament, grandFinal)) {
+      return false;
+    }
+    return Boolean(grandFinal.player2Id && grandFinal.winnerId === grandFinal.player2Id);
   }
 
 
@@ -209,7 +294,7 @@
 
 
   function synchronizeKoBracketState(tournament) {
-    if (!tournament || tournament.mode !== "ko") {
+    if (!tournament || (tournament.mode !== "ko" && tournament.mode !== "double_ko")) {
       return false;
     }
 
@@ -217,6 +302,7 @@
     const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED);
     const drawLocked = tournament?.ko?.drawLocked !== false;
     const enableThirdPlaceMatch = tournament?.ko?.enableThirdPlaceMatch === true;
+    const grandFinalResetMode = sanitizeGrandFinalResetMode(tournament?.ko?.grandFinalResetMode);
     const participants = (Array.isArray(tournament.participants) ? tournament.participants : [])
       .map((participant) => ({
         id: normalizeText(participant?.id || ""),
@@ -225,12 +311,23 @@
       }))
       .filter((participant) => participant.id);
 
-    const generatedStructure = buildBracketStructure(
-      participants,
-      generateSeeds(participants, drawMode),
-      { enableThirdPlaceMatch },
-    );
-    const lockedStructure = drawLocked ? buildKoStructureFromMeta(tournament?.ko, drawMode) : null;
+    const generatedStructure = tournament.mode === "double_ko"
+      ? buildDoubleKoBracketStructure(
+        participants,
+        drawLocked && Array.isArray(tournament?.ko?.seeding) && tournament.ko.seeding.length
+          ? tournament.ko.seeding
+          : generateSeeds(participants, drawMode),
+        {
+          grandFinalResetMode,
+          includeResetFinal: shouldIncludeDoubleKoResetFinal(tournament),
+        },
+      )
+      : buildBracketStructure(
+        participants,
+        generateSeeds(participants, drawMode),
+        { enableThirdPlaceMatch },
+      );
+    const lockedStructure = drawLocked && tournament.mode === "ko" ? buildKoStructureFromMeta(tournament?.ko, drawMode) : null;
     const structure = lockedStructure || generatedStructure;
     const nextKoMeta = buildKoMetaSnapshot(drawMode, drawLocked, structure);
     if (!isSerializableEqual(tournament.ko, nextKoMeta)) {
@@ -242,6 +339,7 @@
     const existingKoById = new Map(existingKoMatches.map((match) => [match.id, match]));
     const winnerByVirtualMatchId = new Map();
     const loserByVirtualMatchId = new Map();
+    const resolvedVirtualMatchIds = new Set();
     const nextKoMatches = [];
 
     structure.rounds.forEach((roundDef) => {
@@ -257,6 +355,8 @@
           loserByVirtualMatchId,
         );
         const structuralBye = Boolean(virtualMatch?.structuralBye);
+        const dynamicBye = isDynamicallyResolvedByeWithSet(tournament, virtualMatch, p1, p2, resolvedVirtualMatchIds);
+        const competitorsResolved = areVirtualMatchCompetitorsResolved(tournament, virtualMatch, resolvedVirtualMatchIds);
 
         let match = existingKoById.get(virtualMatch.id) || null;
         if (!match) {
@@ -269,7 +369,7 @@
             player2Id: p2,
             meta: buildKoMatchMetaFromVirtualMatch(virtualMatch),
           });
-          if (structuralBye) {
+          if (structuralBye || dynamicBye) {
             synchronizeStructuralByeMatch(match, p1, p2);
           }
           changed = true;
@@ -283,7 +383,7 @@
           changed = assignPlayerSlot(match, 1, p1) || changed;
           changed = assignPlayerSlot(match, 2, p2) || changed;
 
-          if (structuralBye) {
+          if (structuralBye || dynamicBye) {
             changed = synchronizeStructuralByeMatch(match, p1, p2) || changed;
           } else if (isByeMatchResult(match)) {
             const localChanged = setMatchResultKind(match, null);
@@ -332,12 +432,16 @@
                 loserByVirtualMatchId.set(match.id, loserId);
               }
             }
+            resolvedVirtualMatchIds.add(match.id);
           }
-        } else if (structuralBye) {
+        } else if (structuralBye || dynamicBye) {
           const advancedParticipant = p1 || p2 || null;
           if (advancedParticipant) {
             winnerByVirtualMatchId.set(virtualMatch.id, advancedParticipant);
+            resolvedVirtualMatchIds.add(virtualMatch.id);
           }
+        } else if (competitorsResolved && !p1 && !p2) {
+          resolvedVirtualMatchIds.add(virtualMatch.id);
         }
       });
     });
@@ -367,7 +471,7 @@
 
 
   function migrateKoTournamentToV3(tournament, defaultDrawMode = KO_DRAW_MODE_SEEDED) {
-    if (!tournament || tournament.mode !== "ko") {
+    if (!tournament || (tournament.mode !== "ko" && tournament.mode !== "double_ko")) {
       return false;
     }
 

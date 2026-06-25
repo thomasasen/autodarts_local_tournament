@@ -136,6 +136,37 @@
       return `<p class="ata-small">Kein KO-Turnierbaum vorhanden.</p>`;
     }
 
+    if (tournament?.mode === "double_ko") {
+      const sections = [
+        { side: "winners", title: "Winners Bracket" },
+        { side: "losers", title: "Losers Bracket" },
+        { side: "finals", title: "Finals" },
+      ];
+      return sections.map((section) => {
+        const sectionMatches = koMatches.filter((match) => normalizeText(match?.meta?.bracket?.bracketSide || "winners") === section.side);
+        if (!sectionMatches.length) {
+          return "";
+        }
+        const roundMap = new Map();
+        sectionMatches.forEach((match) => {
+          const sectionRound = clampInt(match?.meta?.bracket?.sectionRound, match.round, 1, 64);
+          if (!roundMap.has(sectionRound)) {
+            roundMap.set(sectionRound, []);
+          }
+          roundMap.get(sectionRound).push(match);
+        });
+        const roundsHtml = Array.from(roundMap.entries())
+          .sort((left, right) => left[0] - right[0])
+          .map(([roundNumber, matches]) => `
+            <div class="ata-bracket-round">
+              <h4>${escapeHtml(section.title)} R${roundNumber}</h4>
+              ${renderStaticBracketFallbackMatches(tournament, matches.sort((left, right) => left.number - right.number))}
+            </div>
+          `).join("");
+        return `<div class="ata-bracket-section"><h3>${escapeHtml(section.title)}</h3><div class="ata-bracket-grid">${roundsHtml}</div></div>`;
+      }).join("");
+    }
+
     const mainMatches = koMatches.filter((match) => normalizeText(match?.meta?.bracket?.matchRole || "") !== "third_place");
     const thirdPlaceMatches = koMatches.filter((match) => normalizeText(match?.meta?.bracket?.matchRole || "") === "third_place");
     const maxMainRound = mainMatches.reduce((maxRound, match) => Math.max(maxRound, clampInt(match?.round, 0, 0, 64)), 0);
@@ -211,7 +242,7 @@
       }
     }
 
-    if (tournament.mode === "ko" || tournament.mode === "groups_ko") {
+    if (tournament.mode === "ko" || tournament.mode === "double_ko" || tournament.mode === "groups_ko") {
       html += `
         <section class="ata-card tournamentCard">
           ${renderSectionHeading("KO-Turnierbaum", [

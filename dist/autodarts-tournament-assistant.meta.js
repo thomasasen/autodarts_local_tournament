@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.3.5
+// @version      0.4.0
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT

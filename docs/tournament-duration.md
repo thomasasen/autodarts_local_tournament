@@ -11,7 +11,7 @@ Diese Dokumentation beschreibt die Berechnungsgrundlage der Live-Prognose in `sr
 ## Verwendete Turnier-Parameter
 | Parameter | Wird genutzt | Warum |
 |---|---|---|
-| `mode` | Ja | Steuert Matchanzahl und Phasenlogik (`ko`, `league`, `groups_ko`). |
+| `mode` | Ja | Steuert Matchanzahl und Phasenlogik (`ko`, `double_ko`, `league`, `groups_ko`). |
 | `participants.length` | Ja | Steuert Matchanzahl direkt. |
 | `bestOfLegs` | Ja | Daraus werden `legsToWin` und die erwartete Leg-Anzahl je Match berechnet. |
 | `startScore` | Ja | Modelliert den X01-Abstand (`121` bis `901`). |
@@ -68,11 +68,13 @@ matchMinutes = expectedLegs * legMinutes + matchOverheadMinutes
 
 6. Matchanzahl:
 - `ko`: `participants - 1`
+- `double_ko`: maximal `2n - 1` mit Reset-Finale, `2n - 2` bei einzelnem Grand Final; Freilose werden im Taskgraphen berücksichtigt
 - `league`: `n * (n - 1) / 2`
 - `groups_ko`: Round Robin in zwei Gruppen plus festes KO mit zwei Halbfinals und einem Finale
 
 7. Phasen-Overhead:
 - `ko`: kleine Zusatzzeit je Rundenwechsel
+- `double_ko`: KO-Rundenwechsel plus Zusatzpuffer für Wechsel zwischen Winners Bracket, Losers Bracket und Grand Final
 - `groups_ko`: fixer Zusatzblock für Gruppenabschluss und Start des KO-Teils
 - `league`: kein eigener Phasenblock, weil alle Paarungen direkt planbar sind
 

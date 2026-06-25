@@ -38,6 +38,7 @@ test("Preset defaults: new create draft starts with European Tour official", () 
   assertEqual(draft.x01MaxRounds, 50);
   assertEqual(draft.boardCount, TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT);
   assertEqual(draft.enableThirdPlaceMatch, false);
+  assertEqual(draft.grandFinalResetMode, GRAND_FINAL_RESET_IF_NEEDED);
 });
 
 

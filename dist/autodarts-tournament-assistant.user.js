@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.3.5
+// @version      0.4.0
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -22,7 +22,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.3.5";
+  const APP_VERSION = "0.4.0";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 4;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
@@ -1704,6 +1704,8 @@
   const KO_ENGINE_VERSION = 3;
   const KO_DRAW_MODE_SEEDED = "seeded";
   const KO_DRAW_MODE_OPEN_DRAW = "open_draw";
+  const GRAND_FINAL_RESET_IF_NEEDED = "if_needed";
+  const GRAND_FINAL_RESET_SINGLE_MATCH = "single_match";
   const X01_VARIANT = "X01";
   const X01_PRESET_LEGACY_PDC_STANDARD = "pdc_standard";
   const X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL = "pdc_european_tour_official";
@@ -1754,6 +1756,7 @@
   const TECHNICAL_PARTICIPANT_HARD_MAX = 128;
   const MODE_PARTICIPANT_LIMITS = Object.freeze({
     ko: Object.freeze({ label: "KO", min: 2, max: 128 }),
+    double_ko: Object.freeze({ label: "Doppel-KO", min: 2, max: 32 }),
     league: Object.freeze({ label: "Liga", min: 2, max: 16 }),
     groups_ko: Object.freeze({ label: "Gruppenphase + KO", min: 4, max: 16 }),
   });
@@ -2855,6 +2858,7 @@
       participantsText: "",
       randomizeKoRound1: Boolean(defaultRandomize),
       enableThirdPlaceMatch: false,
+      grandFinalResetMode: GRAND_FINAL_RESET_IF_NEEDED,
     };
   }
 
@@ -2870,7 +2874,7 @@
     const presetApply = requestedPreset?.apply || null;
     const modeFallback = presetApply?.mode || base.mode;
     const modeRaw = normalizeText(rawDraft?.mode ?? modeFallback);
-    const mode = ["ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : modeFallback;
+    const mode = ["ko", "double_ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : modeFallback;
     const bestOfFallback = presetApply?.bestOfLegs ?? base.bestOfLegs;
     const startScoreFallback = presetApply?.startScore ?? base.startScore;
     const x01Settings = normalizeTournamentX01Settings({
@@ -2903,6 +2907,7 @@
       enableThirdPlaceMatch: typeof rawDraft?.enableThirdPlaceMatch === "boolean"
         ? rawDraft.enableThirdPlaceMatch
         : base.enableThirdPlaceMatch,
+      grandFinalResetMode: sanitizeGrandFinalResetMode(rawDraft?.grandFinalResetMode),
     };
     if (requestedPreset && matchesCreatePresetSetup(draft, requestedPreset.id)) {
       draft.x01Preset = requestedPreset.id;
@@ -2950,6 +2955,15 @@
   function normalizeKoEngineVersion(value, fallback = 0) {
     const parsed = clampInt(value, fallback, 0, KO_ENGINE_VERSION);
     return parsed > KO_ENGINE_VERSION ? KO_ENGINE_VERSION : parsed;
+  }
+
+
+  function sanitizeGrandFinalResetMode(value, fallback = GRAND_FINAL_RESET_IF_NEEDED) {
+    const mode = normalizeText(value || "").toLowerCase();
+    if (mode === GRAND_FINAL_RESET_SINGLE_MATCH || mode === GRAND_FINAL_RESET_IF_NEEDED) {
+      return mode;
+    }
+    return fallback;
   }
 
 
@@ -3279,6 +3293,10 @@
       placementRank: Number.isFinite(Number(rawMatch?.placementRank))
         ? clampInt(rawMatch?.placementRank, null, 1, 128)
         : null,
+      bracketSide: ["winners", "losers", "finals"].includes(normalizeText(rawMatch?.bracketSide || "").toLowerCase())
+        ? normalizeText(rawMatch.bracketSide).toLowerCase()
+        : "winners",
+      sectionRound: clampInt(rawMatch?.sectionRound, roundFallback, 1, 64),
       competitors: {
         p1: rawMatch?.competitors?.p1 || null,
         p2: rawMatch?.competitors?.p2 || null,
@@ -3363,6 +3381,7 @@
       drawMode,
       drawLocked,
       enableThirdPlaceMatch: Boolean(ko.enableThirdPlaceMatch),
+      grandFinalResetMode: sanitizeGrandFinalResetMode(ko.grandFinalResetMode),
       engineVersion,
       bracketSize,
       placement,
@@ -3399,7 +3418,7 @@
       return null;
     }
 
-    const mode = ["ko", "league", "groups_ko"].includes(rawTournament.mode) ? rawTournament.mode : "ko";
+    const mode = ["ko", "double_ko", "league", "groups_ko"].includes(rawTournament.mode) ? rawTournament.mode : "ko";
     const modeLimits = getModeParticipantLimits(mode);
     const participantsRaw = Array.isArray(rawTournament.participants) ? rawTournament.participants : [];
     const participants = participantsRaw
@@ -3459,7 +3478,7 @@
       id: normalizeText(rawTournament.id || uuid("tournament")),
       name: normalizeText(rawTournament.name || "Lokales Turnier"),
       mode,
-      ko: mode === "ko"
+      ko: mode === "ko" || mode === "double_ko"
         ? normalizeTournamentKoMeta(rawTournament.ko, KO_DRAW_MODE_SEEDED, fallbackKoDrawLocked)
         : null,
       bestOfLegs: sanitizeBestOf(rawTournament.bestOfLegs),
@@ -3702,8 +3721,8 @@
     if (!tournament) {
       return { ok: false, message: "Kein aktives Turnier vorhanden." };
     }
-    if (tournament.mode !== "ko") {
-      return { ok: false, message: "Draw-Lock ist nur im KO-Modus verfügbar." };
+    if (tournament.mode !== "ko" && tournament.mode !== "double_ko") {
+      return { ok: false, message: "Draw-Lock ist nur im KO-Modus oder Doppel-KO-Modus verfügbar." };
     }
     const nextDrawLocked = Boolean(drawLocked);
     const currentDrawLocked = tournament?.ko?.drawLocked !== false;
@@ -3746,6 +3765,8 @@
    * @property {string|null} advancesWinnerTo
    * @property {string|null} advancesLoserTo
    * @property {number|null} placementRank
+   * @property {"winners"|"losers"|"finals"} bracketSide
+   * @property {number} sectionRound
    * @property {Object} competitors
    * @property {Object|null} competitors.p1
    * @property {Object|null} competitors.p2
@@ -3835,8 +3856,13 @@
     advancesWinnerTo = null,
     advancesLoserTo = null,
     placementRank = null,
+    bracketSide = "winners",
+    sectionRound = null,
   }) {
     const normalizedRole = matchRole === "third_place" ? "third_place" : "main";
+    const normalizedBracketSide = ["winners", "losers", "finals"].includes(normalizeText(bracketSide || "").toLowerCase())
+      ? normalizeText(bracketSide).toLowerCase()
+      : "winners";
     const normalizedPlacementRank = Number.isFinite(Number(placementRank))
       ? clampInt(placementRank, null, 1, 128)
       : null;
@@ -3849,6 +3875,8 @@
       advancesWinnerTo: normalizeText(advancesWinnerTo || "") || null,
       advancesLoserTo: normalizeText(advancesLoserTo || "") || null,
       placementRank: Number.isFinite(normalizedPlacementRank) ? normalizedPlacementRank : null,
+      bracketSide: normalizedBracketSide,
+      sectionRound: clampInt(sectionRound, round, 1, 64),
       competitors: {
         p1: competitors?.p1 || null,
         p2: competitors?.p2 || null,
@@ -4110,6 +4138,8 @@
           number,
           structuralBye,
           matchRole: "main",
+          bracketSide: "winners",
+          sectionRound: round,
           advancesWinnerTo: round < totalRounds
             ? `ko-r${round + 1}-m${Math.ceil(number / 2)}`
             : null,
@@ -4164,6 +4194,8 @@
           number: 2,
           structuralBye: false,
           matchRole: "third_place",
+          bracketSide: "winners",
+          sectionRound: totalRounds,
           advancesWinnerTo: null,
           advancesLoserTo: null,
           placementRank: 3,
@@ -4201,7 +4233,232 @@
         placementRank: Number.isFinite(Number(virtualMatch?.placementRank))
           ? clampInt(virtualMatch?.placementRank, null, 1, 128)
           : null,
+        bracketSide: ["winners", "losers", "finals"].includes(normalizeText(virtualMatch?.bracketSide || "").toLowerCase())
+          ? normalizeText(virtualMatch.bracketSide).toLowerCase()
+          : "winners",
+        sectionRound: clampInt(virtualMatch?.sectionRound, virtualMatch?.round, 1, 64),
       },
+    };
+  }
+
+
+  function buildDoubleKoWinnersBracket(players, seeds, options = {}) {
+    const normalizedParticipants = normalizeSeedParticipants(players);
+    const seeded = Array.isArray(seeds) && seeds.length
+      ? seeds.slice()
+      : generateSeeds(normalizedParticipants, KO_DRAW_MODE_SEEDED);
+    const assignedByes = assignByes(seeded, normalizedParticipants.length);
+    const placement = buildSeedPlacement(assignedByes.bracketSize);
+    const seedByNumber = new Map(assignedByes.seeds.map((entry) => [entry.seed, entry]));
+
+    const slotByParticipantId = new Map();
+    const leafNodes = placement.map((seedNumber, slotIndex) => {
+      const seedEntry = seedByNumber.get(seedNumber) || null;
+      if (!seedEntry) {
+        return null;
+      }
+      slotByParticipantId.set(seedEntry.participantId, slotIndex + 1);
+      return {
+        kind: "participant",
+        participantId: seedEntry.participantId,
+        seed: seedEntry.seed,
+      };
+    });
+
+    const seeding = assignedByes.seeds.map((seedEntry) => ({
+      ...seedEntry,
+      slot: slotByParticipantId.get(seedEntry.participantId) || null,
+    }));
+
+    const rounds = [];
+    let currentNodes = leafNodes;
+    const totalRounds = Math.log2(assignedByes.bracketSize);
+    for (let round = 1; round <= totalRounds; round += 1) {
+      const matchesInRound = currentNodes.length / 2;
+      const virtualMatches = [];
+      const nextNodes = [];
+      for (let number = 1; number <= matchesInRound; number += 1) {
+        const idx = (number - 1) * 2;
+        const leftNode = currentNodes[idx] || null;
+        const rightNode = currentNodes[idx + 1] || null;
+        const id = `wb-r${round}-m${number}`;
+        const structuralBye = Boolean((leftNode && !rightNode) || (!leftNode && rightNode));
+        virtualMatches.push(createKoVirtualMatch({
+          id,
+          round,
+          number,
+          structuralBye,
+          matchRole: "main",
+          bracketSide: "winners",
+          sectionRound: round,
+          advancesWinnerTo: round < totalRounds
+            ? `wb-r${round + 1}-m${Math.ceil(number / 2)}`
+            : "gf-r1-m1",
+          advancesLoserTo: null,
+          placementRank: null,
+          competitors: {
+            p1: createKoVirtualCompetitorRef(leftNode),
+            p2: createKoVirtualCompetitorRef(rightNode),
+          },
+        }));
+        if (!leftNode && !rightNode) {
+          nextNodes.push(null);
+        } else if (structuralBye) {
+          nextNodes.push(leftNode || rightNode);
+        } else {
+          nextNodes.push({ kind: "winner", sourceMatchId: id });
+        }
+      }
+      rounds.push({
+        round,
+        label: `Winners Bracket R${round}`,
+        virtualMatches,
+      });
+      currentNodes = nextNodes;
+    }
+
+    return {
+      bracketSize: assignedByes.bracketSize,
+      byeCount: assignedByes.byeCount,
+      placement,
+      seeding,
+      rounds,
+      totalRounds,
+      grandFinalResetMode: sanitizeGrandFinalResetMode(options?.grandFinalResetMode),
+    };
+  }
+
+
+  function createVirtualWinnerRef(matchId) {
+    return createKoVirtualCompetitorRef({ kind: "winner", sourceMatchId: matchId });
+  }
+
+
+  function createVirtualLoserRef(matchId) {
+    return createKoVirtualCompetitorRef({ kind: "loser", sourceMatchId: matchId });
+  }
+
+
+  function buildDoubleKoBracketStructure(players, seeds, options = {}) {
+    const winners = buildDoubleKoWinnersBracket(players, seeds, options);
+    const totalWinnerRounds = winners.totalRounds;
+    const grandFinalResetMode = sanitizeGrandFinalResetMode(options?.grandFinalResetMode);
+    const includeResetFinal = grandFinalResetMode === GRAND_FINAL_RESET_IF_NEEDED
+      && options?.includeResetFinal === true;
+    const rounds = winners.rounds.map((roundDef) => ({
+      ...roundDef,
+      virtualMatches: roundDef.virtualMatches.slice(),
+    }));
+
+    const addRound = (round, label, virtualMatches) => {
+      rounds.push({
+        round,
+        label,
+        virtualMatches,
+      });
+    };
+
+    let globalRound = totalWinnerRounds;
+    let lastLosersRoundMatches = [];
+    if (totalWinnerRounds > 1) {
+      for (let pairRound = 1; pairRound <= totalWinnerRounds - 1; pairRound += 1) {
+        const matchCount = winners.bracketSize / Math.pow(2, pairRound + 1);
+        const firstLosersRoundNumber = ((pairRound - 1) * 2) + 1;
+        const firstLosersRound = [];
+        for (let number = 1; number <= matchCount; number += 1) {
+          const id = `lb-r${firstLosersRoundNumber}-m${number}`;
+          const competitors = pairRound === 1
+            ? {
+              p1: createVirtualLoserRef(`wb-r1-m${((number - 1) * 2) + 1}`),
+              p2: createVirtualLoserRef(`wb-r1-m${((number - 1) * 2) + 2}`),
+            }
+            : {
+              p1: createVirtualWinnerRef(`lb-r${firstLosersRoundNumber - 1}-m${((number - 1) * 2) + 1}`),
+              p2: createVirtualWinnerRef(`lb-r${firstLosersRoundNumber - 1}-m${((number - 1) * 2) + 2}`),
+            };
+          firstLosersRound.push(createKoVirtualMatch({
+            id,
+            round: globalRound + 1,
+            number,
+            matchRole: "main",
+            bracketSide: "losers",
+            sectionRound: firstLosersRoundNumber,
+            advancesWinnerTo: `lb-r${firstLosersRoundNumber + 1}-m${number}`,
+            competitors,
+          }));
+        }
+        globalRound += 1;
+        addRound(globalRound, `Losers Bracket R${firstLosersRoundNumber}`, firstLosersRound);
+
+        const secondLosersRoundNumber = firstLosersRoundNumber + 1;
+        const secondLosersRound = [];
+        for (let number = 1; number <= matchCount; number += 1) {
+          const id = `lb-r${secondLosersRoundNumber}-m${number}`;
+          const isLastLosersMatch = pairRound === totalWinnerRounds - 1 && matchCount === 1;
+          secondLosersRound.push(createKoVirtualMatch({
+            id,
+            round: globalRound + 1,
+            number,
+            matchRole: "main",
+            bracketSide: "losers",
+            sectionRound: secondLosersRoundNumber,
+            advancesWinnerTo: isLastLosersMatch ? "gf-r1-m1" : null,
+            competitors: {
+              p1: createVirtualWinnerRef(`lb-r${firstLosersRoundNumber}-m${number}`),
+              p2: createVirtualLoserRef(`wb-r${pairRound + 1}-m${number}`),
+            },
+          }));
+        }
+        globalRound += 1;
+        addRound(globalRound, `Losers Bracket R${secondLosersRoundNumber}`, secondLosersRound);
+        lastLosersRoundMatches = secondLosersRound;
+      }
+    }
+
+    const winnerFinalId = `wb-r${totalWinnerRounds}-m1`;
+    const loserFinalId = lastLosersRoundMatches[0]?.id || winnerFinalId;
+    const grandFinal = createKoVirtualMatch({
+      id: "gf-r1-m1",
+      round: globalRound + 1,
+      number: 1,
+      matchRole: "main",
+      bracketSide: "finals",
+      sectionRound: 1,
+      advancesWinnerTo: includeResetFinal ? "gf-r2-m1" : null,
+      placementRank: includeResetFinal ? null : 1,
+      competitors: {
+        p1: createVirtualWinnerRef(winnerFinalId),
+        p2: totalWinnerRounds > 1 ? createVirtualWinnerRef(loserFinalId) : createVirtualLoserRef(winnerFinalId),
+      },
+    });
+    globalRound += 1;
+    addRound(globalRound, "Grand Final", [grandFinal]);
+
+    if (includeResetFinal) {
+      globalRound += 1;
+      addRound(globalRound, "Reset Final", [createKoVirtualMatch({
+        id: "gf-r2-m1",
+        round: globalRound,
+        number: 1,
+        matchRole: "main",
+        bracketSide: "finals",
+        sectionRound: 2,
+        placementRank: 1,
+        competitors: {
+          p1: createVirtualLoserRef("gf-r1-m1"),
+          p2: createVirtualWinnerRef("gf-r1-m1"),
+        },
+      })]);
+    }
+
+    return {
+      bracketSize: winners.bracketSize,
+      byeCount: winners.byeCount,
+      enableThirdPlaceMatch: false,
+      grandFinalResetMode,
+      placement: winners.placement,
+      seeding: winners.seeding,
+      rounds,
     };
   }
 
@@ -4338,7 +4595,7 @@
     if (!normalizeText(config.name)) {
       errors.push("Bitte einen Turniernamen eingeben.");
     }
-    if (!["ko", "league", "groups_ko"].includes(config.mode)) {
+    if (!["ko", "double_ko", "league", "groups_ko"].includes(config.mode)) {
       errors.push("Ungültiger Modus.");
     }
     const participantCountError = getParticipantCountError(config.mode, config.participants.length);
@@ -4354,10 +4611,11 @@
     const modeLimits = getModeParticipantLimits(config.mode);
     const participants = config.participants.slice(0, modeLimits.max);
     const participantIds = participants.map((participant) => participant.id);
-    const koDrawMode = config.mode === "ko" && config.randomizeKoRound1
+    const isKoLikeMode = config.mode === "ko" || config.mode === "double_ko";
+    const koDrawMode = isKoLikeMode && config.randomizeKoRound1
       ? KO_DRAW_MODE_OPEN_DRAW
       : KO_DRAW_MODE_SEEDED;
-    const koDrawLocked = config.mode === "ko"
+    const koDrawLocked = isKoLikeMode
       ? config.koDrawLocked !== false
       : false;
     const enableThirdPlaceMatch = config.mode === "ko"
@@ -4383,6 +4641,23 @@
     } else if (config.mode === "groups_ko") {
       groups = buildGroups(participantIds);
       matches = buildGroupMatches(groups).concat(buildGroupsKoMatches());
+    } else if (config.mode === "double_ko") {
+      const koSeeds = generateSeeds(participants, koDrawMode);
+      const koStructure = buildDoubleKoBracketStructure(participants, koSeeds, {
+        grandFinalResetMode: config.grandFinalResetMode,
+      });
+      matches = buildKoMatchesFromStructure(koStructure);
+      koMeta = {
+        drawMode: koDrawMode,
+        drawLocked: koDrawLocked,
+        enableThirdPlaceMatch: false,
+        grandFinalResetMode: koStructure.grandFinalResetMode,
+        engineVersion: KO_ENGINE_VERSION,
+        bracketSize: koStructure.bracketSize,
+        placement: koStructure.placement,
+        seeding: koStructure.seeding,
+        rounds: koStructure.rounds,
+      };
     } else {
       const koSeeds = generateSeeds(participants, koDrawMode);
       const koStructure = buildBracketStructure(participants, koSeeds, { enableThirdPlaceMatch });
@@ -4553,6 +4828,9 @@
       const groupB = Math.floor(count / 2);
       return ((groupA * (groupA - 1)) / 2) + ((groupB * (groupB - 1)) / 2) + 3;
     }
+    if (mode === "double_ko") {
+      return Math.max(0, (2 * count) - 1);
+    }
     return Math.max(0, count - 1);
   }
 
@@ -4562,12 +4840,13 @@
     if (mode === "groups_ko") {
       return 4;
     }
-    if (mode !== "ko" || count < 2) {
+    if ((mode !== "ko" && mode !== "double_ko") || count < 2) {
       return 0;
     }
     const bracketSize = calculateBracketSize(count);
     const rounds = Math.log2(bracketSize);
-    return Math.max(0, rounds - 1) * 1.5;
+    const base = Math.max(0, rounds - 1) * 1.5;
+    return mode === "double_ko" ? base + Math.max(2, rounds * 1.25) : base;
   }
 
 
@@ -4854,6 +5133,71 @@
   }
 
 
+  function buildDoubleKoTournamentDurationTasks(rawParticipants, grandFinalResetMode = GRAND_FINAL_RESET_IF_NEEDED) {
+    const participantIds = normalizeTournamentDurationParticipants(rawParticipants);
+    const participants = participantIds.map((participantId) => ({
+      id: participantId,
+      name: participantId,
+    }));
+    if (participants.length < 2) {
+      return [];
+    }
+    const structure = buildDoubleKoBracketStructure(
+      participants,
+      generateSeeds(participants, KO_DRAW_MODE_SEEDED),
+      {
+        grandFinalResetMode,
+        includeResetFinal: sanitizeGrandFinalResetMode(grandFinalResetMode) === GRAND_FINAL_RESET_IF_NEEDED,
+      },
+    );
+    const playableMatchIds = new Set();
+    structure.rounds.forEach((roundDef) => {
+      roundDef.virtualMatches.forEach((virtualMatch) => {
+        if (virtualMatch?.structuralBye) {
+          return;
+        }
+        playableMatchIds.add(virtualMatch.id);
+      });
+    });
+    const tasks = [];
+    structure.rounds.forEach((roundDef) => {
+      roundDef.virtualMatches.forEach((virtualMatch) => {
+        if (!playableMatchIds.has(virtualMatch.id)) {
+          return;
+        }
+        const participantsInMatch = [];
+        const dependencies = [];
+        [virtualMatch.competitors?.p1, virtualMatch.competitors?.p2].forEach((competitorRef) => {
+          if (competitorRef?.type === "participant") {
+            const participantId = normalizeText(competitorRef.participantId || "");
+            if (participantId) {
+              participantsInMatch.push(`p:${participantId}`);
+            }
+            return;
+          }
+          if (competitorRef?.type !== "winner" && competitorRef?.type !== "loser") {
+            return;
+          }
+          const sourceMatchId = normalizeText(competitorRef.matchId || "");
+          if (!sourceMatchId) {
+            return;
+          }
+          participantsInMatch.push(`${competitorRef.type === "winner" ? "w" : "l"}:${sourceMatchId}`);
+          if (playableMatchIds.has(sourceMatchId)) {
+            dependencies.push(sourceMatchId);
+          }
+        });
+        tasks.push({
+          id: virtualMatch.id,
+          participants: participantsInMatch,
+          dependsOn: dependencies,
+        });
+      });
+    });
+    return tasks;
+  }
+
+
   function buildLeagueTournamentDurationTasks(rawParticipants) {
     const participantIds = normalizeTournamentDurationParticipants(rawParticipants);
     const rounds = createRoundRobinPairings(participantIds);
@@ -4922,6 +5266,9 @@
     if (mode === "groups_ko") {
       return buildGroupsKoTournamentDurationTasks(participants);
     }
+    if (mode === "double_ko") {
+      return buildDoubleKoTournamentDurationTasks(participants, options?.grandFinalResetMode);
+    }
     return buildKoTournamentDurationTasks(participantCount, options?.enableThirdPlaceMatch === true);
   }
 
@@ -4969,6 +5316,7 @@
     const participants = Array.isArray(tournament?.participants) ? tournament.participants : [];
     const tasks = buildTournamentDurationTasks(mode, participants, participants.length, {
       enableThirdPlaceMatch: tournament?.ko?.enableThirdPlaceMatch === true,
+      grandFinalResetMode: tournament?.ko?.grandFinalResetMode,
     });
     if (!tasks.length) {
       return progress;
@@ -5012,7 +5360,7 @@
 
   function estimateTournamentDuration(rawInput, settings = null) {
     const modeRaw = normalizeText(rawInput?.mode || "ko");
-    const mode = ["ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : "ko";
+    const mode = ["ko", "double_ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : "ko";
     const participants = (Array.isArray(rawInput?.participants) ? rawInput.participants : [])
       .filter((entry) => normalizeText(entry?.id || entry?.name || entry || ""));
     const participantCount = participants.length;
@@ -5087,6 +5435,7 @@
     const matchMinutes = (expectedLegs * legMinutes) + matchOverheadMinutes;
     const durationTasks = buildTournamentDurationTasks(mode, participants, participantCount, {
       enableThirdPlaceMatch: rawInput?.enableThirdPlaceMatch === true,
+      grandFinalResetMode: rawInput?.grandFinalResetMode,
     });
     const fallbackMatchCount = getTournamentDurationMatchCount(mode, participantCount);
     const matchCount = durationTasks.length || fallbackMatchCount;
@@ -5144,6 +5493,7 @@
       lobbyVisibility: draft.lobbyVisibility,
       boardCount: draft.boardCount,
       enableThirdPlaceMatch: draft.enableThirdPlaceMatch,
+      grandFinalResetMode: draft.grandFinalResetMode,
       participants,
       tournamentTimeProfile: settings?.tournamentTimeProfile,
     }, settings);
@@ -5168,6 +5518,7 @@
       lobbyVisibility: x01Settings.lobbyVisibility,
       boardCount: tournament?.duration?.boardCount,
       enableThirdPlaceMatch: tournament?.ko?.enableThirdPlaceMatch === true,
+      grandFinalResetMode: tournament?.ko?.grandFinalResetMode,
       participants: tournament.participants,
       tournamentTimeProfile: settings?.tournamentTimeProfile,
     }, settings);
@@ -5516,6 +5867,10 @@
         placementRank: Number.isFinite(Number(virtualMatch?.placementRank))
           ? clampInt(virtualMatch?.placementRank, null, 1, 128)
           : null,
+        bracketSide: ["winners", "losers", "finals"].includes(normalizeText(virtualMatch?.bracketSide || "").toLowerCase())
+          ? normalizeText(virtualMatch.bracketSide).toLowerCase()
+          : "winners",
+        sectionRound: clampInt(virtualMatch?.sectionRound, virtualMatch?.round, 1, 64),
         competitors: {
           p1: virtualMatch?.competitors?.p1 || null,
           p2: virtualMatch?.competitors?.p2 || null,
@@ -5536,6 +5891,7 @@
       drawMode: normalizeKoDrawMode(drawMode, KO_DRAW_MODE_SEEDED),
       drawLocked: Boolean(drawLocked),
       enableThirdPlaceMatch: Boolean(structure?.enableThirdPlaceMatch),
+      grandFinalResetMode: sanitizeGrandFinalResetMode(structure?.grandFinalResetMode),
       engineVersion: KO_ENGINE_VERSION,
       bracketSize,
       placement: normalizedPlacement,
@@ -5553,10 +5909,90 @@
     return {
       bracketSize: normalized.bracketSize,
       enableThirdPlaceMatch: Boolean(normalized.enableThirdPlaceMatch),
+      grandFinalResetMode: sanitizeGrandFinalResetMode(normalized.grandFinalResetMode),
       placement: normalized.placement,
       seeding: normalized.seeding,
       rounds: normalized.rounds,
     };
+  }
+
+
+  function findKoMatchById(tournament, matchId) {
+    const targetId = normalizeText(matchId || "");
+    if (!targetId) {
+      return null;
+    }
+    return (Array.isArray(tournament?.matches) ? tournament.matches : [])
+      .find((match) => match?.stage === MATCH_STAGE_KO && normalizeText(match.id || "") === targetId) || null;
+  }
+
+
+  function isVirtualCompetitorRefResolved(tournament, competitorRef) {
+    if (!competitorRef || competitorRef.type === "participant") {
+      return true;
+    }
+    if (competitorRef.type !== "winner" && competitorRef.type !== "loser") {
+      return true;
+    }
+    const sourceMatch = findKoMatchById(tournament, competitorRef.matchId);
+    return Boolean(sourceMatch && sourceMatch.status === STATUS_COMPLETED && isCompletedMatchResultValid(tournament, sourceMatch));
+  }
+
+
+  function isDynamicallyResolvedBye(tournament, virtualMatch, p1, p2) {
+    const hasP1 = Boolean(p1);
+    const hasP2 = Boolean(p2);
+    if (hasP1 === hasP2) {
+      return false;
+    }
+    return isVirtualCompetitorRefResolved(tournament, virtualMatch?.competitors?.p1)
+      && isVirtualCompetitorRefResolved(tournament, virtualMatch?.competitors?.p2);
+  }
+
+
+  function isVirtualCompetitorRefResolvedWithSet(tournament, competitorRef, resolvedVirtualMatchIds) {
+    if (!competitorRef || competitorRef.type === "participant") {
+      return true;
+    }
+    if (competitorRef.type !== "winner" && competitorRef.type !== "loser") {
+      return true;
+    }
+    const sourceMatchId = normalizeText(competitorRef.matchId || "");
+    if (sourceMatchId && resolvedVirtualMatchIds?.has(sourceMatchId)) {
+      return true;
+    }
+    return isVirtualCompetitorRefResolved(tournament, competitorRef);
+  }
+
+
+  function areVirtualMatchCompetitorsResolved(tournament, virtualMatch, resolvedVirtualMatchIds) {
+    return isVirtualCompetitorRefResolvedWithSet(tournament, virtualMatch?.competitors?.p1, resolvedVirtualMatchIds)
+      && isVirtualCompetitorRefResolvedWithSet(tournament, virtualMatch?.competitors?.p2, resolvedVirtualMatchIds);
+  }
+
+
+  function isDynamicallyResolvedByeWithSet(tournament, virtualMatch, p1, p2, resolvedVirtualMatchIds) {
+    const hasP1 = Boolean(p1);
+    const hasP2 = Boolean(p2);
+    if (hasP1 === hasP2) {
+      return false;
+    }
+    return areVirtualMatchCompetitorsResolved(tournament, virtualMatch, resolvedVirtualMatchIds);
+  }
+
+
+  function shouldIncludeDoubleKoResetFinal(tournament) {
+    if (!tournament || tournament.mode !== "double_ko") {
+      return false;
+    }
+    if (sanitizeGrandFinalResetMode(tournament?.ko?.grandFinalResetMode) !== GRAND_FINAL_RESET_IF_NEEDED) {
+      return false;
+    }
+    const grandFinal = findKoMatchById(tournament, "gf-r1-m1");
+    if (!grandFinal || grandFinal.status !== STATUS_COMPLETED || !isCompletedMatchResultValid(tournament, grandFinal)) {
+      return false;
+    }
+    return Boolean(grandFinal.player2Id && grandFinal.winnerId === grandFinal.player2Id);
   }
 
 
@@ -5619,7 +6055,7 @@
 
 
   function synchronizeKoBracketState(tournament) {
-    if (!tournament || tournament.mode !== "ko") {
+    if (!tournament || (tournament.mode !== "ko" && tournament.mode !== "double_ko")) {
       return false;
     }
 
@@ -5627,6 +6063,7 @@
     const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED);
     const drawLocked = tournament?.ko?.drawLocked !== false;
     const enableThirdPlaceMatch = tournament?.ko?.enableThirdPlaceMatch === true;
+    const grandFinalResetMode = sanitizeGrandFinalResetMode(tournament?.ko?.grandFinalResetMode);
     const participants = (Array.isArray(tournament.participants) ? tournament.participants : [])
       .map((participant) => ({
         id: normalizeText(participant?.id || ""),
@@ -5635,12 +6072,23 @@
       }))
       .filter((participant) => participant.id);
 
-    const generatedStructure = buildBracketStructure(
-      participants,
-      generateSeeds(participants, drawMode),
-      { enableThirdPlaceMatch },
-    );
-    const lockedStructure = drawLocked ? buildKoStructureFromMeta(tournament?.ko, drawMode) : null;
+    const generatedStructure = tournament.mode === "double_ko"
+      ? buildDoubleKoBracketStructure(
+        participants,
+        drawLocked && Array.isArray(tournament?.ko?.seeding) && tournament.ko.seeding.length
+          ? tournament.ko.seeding
+          : generateSeeds(participants, drawMode),
+        {
+          grandFinalResetMode,
+          includeResetFinal: shouldIncludeDoubleKoResetFinal(tournament),
+        },
+      )
+      : buildBracketStructure(
+        participants,
+        generateSeeds(participants, drawMode),
+        { enableThirdPlaceMatch },
+      );
+    const lockedStructure = drawLocked && tournament.mode === "ko" ? buildKoStructureFromMeta(tournament?.ko, drawMode) : null;
     const structure = lockedStructure || generatedStructure;
     const nextKoMeta = buildKoMetaSnapshot(drawMode, drawLocked, structure);
     if (!isSerializableEqual(tournament.ko, nextKoMeta)) {
@@ -5652,6 +6100,7 @@
     const existingKoById = new Map(existingKoMatches.map((match) => [match.id, match]));
     const winnerByVirtualMatchId = new Map();
     const loserByVirtualMatchId = new Map();
+    const resolvedVirtualMatchIds = new Set();
     const nextKoMatches = [];
 
     structure.rounds.forEach((roundDef) => {
@@ -5667,6 +6116,8 @@
           loserByVirtualMatchId,
         );
         const structuralBye = Boolean(virtualMatch?.structuralBye);
+        const dynamicBye = isDynamicallyResolvedByeWithSet(tournament, virtualMatch, p1, p2, resolvedVirtualMatchIds);
+        const competitorsResolved = areVirtualMatchCompetitorsResolved(tournament, virtualMatch, resolvedVirtualMatchIds);
 
         let match = existingKoById.get(virtualMatch.id) || null;
         if (!match) {
@@ -5679,7 +6130,7 @@
             player2Id: p2,
             meta: buildKoMatchMetaFromVirtualMatch(virtualMatch),
           });
-          if (structuralBye) {
+          if (structuralBye || dynamicBye) {
             synchronizeStructuralByeMatch(match, p1, p2);
           }
           changed = true;
@@ -5693,7 +6144,7 @@
           changed = assignPlayerSlot(match, 1, p1) || changed;
           changed = assignPlayerSlot(match, 2, p2) || changed;
 
-          if (structuralBye) {
+          if (structuralBye || dynamicBye) {
             changed = synchronizeStructuralByeMatch(match, p1, p2) || changed;
           } else if (isByeMatchResult(match)) {
             const localChanged = setMatchResultKind(match, null);
@@ -5742,12 +6193,16 @@
                 loserByVirtualMatchId.set(match.id, loserId);
               }
             }
+            resolvedVirtualMatchIds.add(match.id);
           }
-        } else if (structuralBye) {
+        } else if (structuralBye || dynamicBye) {
           const advancedParticipant = p1 || p2 || null;
           if (advancedParticipant) {
             winnerByVirtualMatchId.set(virtualMatch.id, advancedParticipant);
+            resolvedVirtualMatchIds.add(virtualMatch.id);
           }
+        } else if (competitorsResolved && !p1 && !p2) {
+          resolvedVirtualMatchIds.add(virtualMatch.id);
         }
       });
     });
@@ -5777,7 +6232,7 @@
 
 
   function migrateKoTournamentToV3(tournament, defaultDrawMode = KO_DRAW_MODE_SEEDED) {
-    if (!tournament || tournament.mode !== "ko") {
+    if (!tournament || (tournament.mode !== "ko" && tournament.mode !== "double_ko")) {
       return false;
     }
 
@@ -6120,6 +6575,7 @@
       return null;
     }
 
+    const isDoubleKo = tournament.mode === "double_ko";
     const bracketSize = tournament.mode === "groups_ko"
       ? 4
       : nextPowerOfTwo(clampInt(tournament?.ko?.bracketSize, tournament.participants.length, 2, TECHNICAL_PARTICIPANT_HARD_MAX));
@@ -6148,6 +6604,16 @@
     };
     const isThirdPlaceMatch = (match) => normalizeText(match?.meta?.bracket?.matchRole || "") === "third_place";
     const hasThirdPlaceMatch = koMatches.some((match) => isThirdPlaceMatch(match));
+    const getDoubleKoGroupId = (match) => {
+      const side = normalizeText(match?.meta?.bracket?.bracketSide || "winners");
+      if (side === "losers") {
+        return 2;
+      }
+      if (side === "finals") {
+        return 3;
+      }
+      return 1;
+    };
 
     const matches = koMatches.map((match) => {
       const player1Id = resolveBracketParticipantId(match.player1Id);
@@ -6181,8 +6647,10 @@
       return {
         id: match.id,
         stage_id: 1,
-        group_id: isThirdPlaceMatch(match) ? 2 : 1,
-        round_id: match.round,
+        group_id: isDoubleKo ? getDoubleKoGroupId(match) : (isThirdPlaceMatch(match) ? 2 : 1),
+        round_id: isDoubleKo
+          ? clampInt(match?.meta?.bracket?.sectionRound, match.round, 1, 64)
+          : match.round,
         number: match.number,
         child_count: 0,
         status,
@@ -6195,11 +6663,14 @@
       stages: [{
         id: 1,
         tournament_id: 1,
-        name: tournament.mode === "groups_ko" ? "KO-Phase" : "KO",
-        type: "single_elimination",
+        name: isDoubleKo ? "Doppel-KO" : (tournament.mode === "groups_ko" ? "KO-Phase" : "KO"),
+        type: isDoubleKo ? "double_elimination" : "single_elimination",
         settings: {
           size: bracketSize,
-          consolationFinal: hasThirdPlaceMatch,
+          consolationFinal: !isDoubleKo && hasThirdPlaceMatch,
+          grandFinal: isDoubleKo
+            ? (sanitizeGrandFinalResetMode(tournament?.ko?.grandFinalResetMode) === GRAND_FINAL_RESET_IF_NEEDED ? "double" : "simple")
+            : undefined,
         },
         number: 1,
       }],
@@ -7254,7 +7725,7 @@
 
   function queueBracketRender(forceReload = false) {
     const tournament = state.store.tournament;
-    if (!tournament || (tournament.mode !== "ko" && tournament.mode !== "groups_ko")) {
+    if (!tournament || (tournament.mode !== "ko" && tournament.mode !== "double_ko" && tournament.mode !== "groups_ko")) {
       return;
     }
     const frame = resolveBracketFrameElement(state.shadowRoot);
@@ -12947,6 +13418,7 @@
       const draft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store?.settings);
       const randomizeChecked = draft.randomizeKoRound1 ? "checked" : "";
       const thirdPlaceChecked = draft.enableThirdPlaceMatch ? "checked" : "";
+      const grandFinalResetMode = sanitizeGrandFinalResetMode(draft.grandFinalResetMode);
       const modeLimitSummary = buildModeParticipantLimitSummary();
       const startScoreOptions = X01_START_SCORE_OPTIONS.map((score) => (
         `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${score}</option>`
@@ -12996,6 +13468,7 @@
                     <label for="ata-mode">Modus ${modeHelpLinks}</label>
                     <select id="ata-mode" name="mode">
                       <option value="ko" ${draft.mode === "ko" ? "selected" : ""}>KO</option>
+                      <option value="double_ko" ${draft.mode === "double_ko" ? "selected" : ""}>Doppel-KO</option>
                       <option value="league" ${draft.mode === "league" ? "selected" : ""}>Liga</option>
                       <option value="groups_ko" ${draft.mode === "groups_ko" ? "selected" : ""}>Gruppenphase + KO</option>
                     </select>
@@ -13084,6 +13557,14 @@
                   </div>
                   <input id="ata-enable-third-place" name="enableThirdPlaceMatch" type="checkbox" ${thirdPlaceChecked}>
                 </div>
+                <div class="ata-field">
+                  <label for="ata-grand-final-reset-mode">Doppel-KO Grand Final</label>
+                  <select id="ata-grand-final-reset-mode" name="grandFinalResetMode">
+                    <option value="${GRAND_FINAL_RESET_IF_NEEDED}" ${grandFinalResetMode === GRAND_FINAL_RESET_IF_NEEDED ? "selected" : ""}>Reset-Finale falls nötig (empfohlen)</option>
+                    <option value="${GRAND_FINAL_RESET_SINGLE_MATCH}" ${grandFinalResetMode === GRAND_FINAL_RESET_SINGLE_MATCH ? "selected" : ""}>Ein einzelnes Grand Final</option>
+                  </select>
+                  <p class="ata-small ata-create-help">Gilt für Doppel-KO: Beim Reset-Finale darf der Winners-Bracket-Sieger das erste Grand Final verlieren; dann entscheidet ein zweites Finale. Ein einzelnes Grand Final ist schneller, aber kein vollständiges klassisches Doppel-KO.</p>
+                </div>
                 <p class="ata-small ata-create-help">PDC European Tour (Official): KO, Best of 11 Legs (First to 6), 501, Straight In, Double Out, Bull 25/50. Bull-off Normal und Max Runden 50 bleiben technische AutoDarts-Werte.</p>
                 <p class="ata-small ata-create-help">PDC 501 / Double Out (Basic): kompatibler Ersatz für das frühere irreführende „PDC-Standard“-Preset. Ehrlich benannt, aber kein offizielles PDC-Eventformat.</p>
                 <p class="ata-small ata-create-help">PDC World Championship im echten Set-Format wird bewusst nicht als offizielles Preset angeboten, weil AutoDarts hier nur Legs / First to N unterstützt.</p>
@@ -13133,6 +13614,8 @@
 
     const modeLabel = tournament.mode === "ko"
       ? "KO (Straight Knockout)"
+      : tournament.mode === "double_ko"
+        ? "Doppel-KO (Double Elimination)"
       : tournament.mode === "league"
         ? "Liga (Round Robin)"
         : "Gruppenphase + KO (Round Robin + Straight Knockout)";
@@ -13154,15 +13637,20 @@
     const thirdPlaceLabel = tournament?.ko?.enableThirdPlaceMatch === true
       ? "Spiel um Platz 3: aktiv"
       : "Spiel um Platz 3: aus";
+    const grandFinalResetLabel = sanitizeGrandFinalResetMode(tournament?.ko?.grandFinalResetMode) === GRAND_FINAL_RESET_IF_NEEDED
+      ? "Grand Final: Reset falls nötig"
+      : "Grand Final: Einzelmatch";
     const primaryTags = [
       { text: `Best of ${tournament.bestOfLegs} Legs`, cls: "ata-info-tag ata-info-tag-key" },
       { text: `First to ${legsToWin} Legs`, cls: "ata-info-tag" },
       { text: `Startpunkte ${tournament.startScore}`, cls: "ata-info-tag" },
-      ...(tournament.mode === "ko"
+      ...(tournament.mode === "ko" || tournament.mode === "double_ko"
         ? [
           { text: drawModeLabel, cls: "ata-info-tag ata-info-tag-accent" },
           { text: drawLockLabel, cls: "ata-info-tag" },
-          { text: thirdPlaceLabel, cls: "ata-info-tag" },
+          ...(tournament.mode === "ko"
+            ? [{ text: thirdPlaceLabel, cls: "ata-info-tag" }]
+            : [{ text: grandFinalResetLabel, cls: "ata-info-tag" }]),
         ]
         : []),
     ];
@@ -13261,7 +13749,8 @@
     const suggestedNextMatch = findSuggestedNextMatch(tournament);
     const suggestedNextMatchId = suggestedNextMatch?.id || "";
     const koFinalRound = getMatchesByStage(tournament, MATCH_STAGE_KO).reduce((maxRound, koMatch) => {
-      if (normalizeText(koMatch?.meta?.bracket?.matchRole || "") === "third_place") {
+      const bracketSide = normalizeText(koMatch?.meta?.bracket?.bracketSide || "");
+      if (normalizeText(koMatch?.meta?.bracket?.matchRole || "") === "third_place" || bracketSide === "losers") {
         return maxRound;
       }
       const roundNumber = Number.parseInt(String(koMatch?.round || "0"), 10);
@@ -13283,8 +13772,14 @@
       const isReadyPending = match.status === STATUS_PENDING && editable;
       const isSuggestedNext = Boolean(suggestedNextMatchId) && match.id === suggestedNextMatchId;
       const isThirdPlaceMatch = normalizeText(match?.meta?.bracket?.matchRole || "") === "third_place";
+      const bracketSide = normalizeText(match?.meta?.bracket?.bracketSide || "");
+      const sectionRound = clampInt(match?.meta?.bracket?.sectionRound, match.round, 1, 64);
+      const isDoubleKo = tournament.mode === "double_ko";
+      const isGrandFinal = isDoubleKo && bracketSide === "finals" && sectionRound === 1;
+      const isResetFinal = isDoubleKo && bracketSide === "finals" && sectionRound === 2;
       const isKoFinal = match.stage === MATCH_STAGE_KO
         && !isThirdPlaceMatch
+        && (!isDoubleKo || bracketSide === "finals")
         && koFinalRound > 0
         && Number(match.round) === koFinalRound;
       const koRoundLabel = match.stage === MATCH_STAGE_KO && !isThirdPlaceMatch
@@ -13294,7 +13789,11 @@
         ? `Gruppe ${match.groupId || "?"}`
         : match.stage === MATCH_STAGE_LEAGUE
           ? "Liga (Round Robin)"
-          : (isThirdPlaceMatch ? "KO (Spiel um Platz 3)" : "KO (Straight Knockout)");
+          : isDoubleKo
+            ? (bracketSide === "losers"
+              ? "Losers Bracket"
+              : (bracketSide === "finals" ? "Finals" : "Winners Bracket"))
+            : (isThirdPlaceMatch ? "KO (Spiel um Platz 3)" : "KO (Straight Knockout)");
       const startUi = getApiMatchStartUi(tournament, match, activeStartedMatch);
       const startDisabledAttr = startUi.disabled ? "disabled" : "";
       const startTitleAttr = startUi.title ? `title="${escapeHtml(startUi.title)}"` : "";
@@ -13313,14 +13812,24 @@
       }
       const matchCellText = isThirdPlaceMatch
         ? "Spiel um Platz 3"
-        : match.stage === MATCH_STAGE_KO
-          ? getKoRoundMatchLabel(match.round, koFinalRound || match.round, match.number)
-          : `Runde ${match.round} / Spiel ${match.number}`;
+        : isResetFinal
+          ? "Reset Final"
+          : isGrandFinal
+            ? "Grand Final"
+            : isDoubleKo && bracketSide === "losers"
+              ? `Losers Bracket R${sectionRound} / Spiel ${match.number}`
+              : isDoubleKo && bracketSide === "winners"
+                ? `Winners Bracket R${sectionRound} / Spiel ${match.number}`
+                : match.stage === MATCH_STAGE_KO
+                  ? getKoRoundMatchLabel(match.round, koFinalRound || match.round, match.number)
+                  : `Runde ${match.round} / Spiel ${match.number}`;
       const matchCellHelpText = isThirdPlaceMatch
         ? "Spiel um Platz 3 = separates Bronze-Match, getrennt vom Champion-Pfad."
-        : match.stage === MATCH_STAGE_KO
-          ? `KO-Phase = ${koRoundLabel} bzw. bei großen Feldern Letzte N, Spiel = Paarung innerhalb dieser Phase.`
-          : "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
+        : isDoubleKo
+          ? "Doppel-KO: Winners-Bracket-Verlierer wechseln in das Losers Bracket; das Grand Final entscheidet den Turniersieg."
+          : match.stage === MATCH_STAGE_KO
+            ? `KO-Phase = ${koRoundLabel} bzw. bei großen Feldern Letzte N, Spiel = Paarung innerhalb dieser Phase.`
+            : "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
       const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
       const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
       const saveHelpText = `Speichert Legs f\u00fcr ${player1} vs ${player2}. Sieger wird automatisch aus den Legs bestimmt. Sieger muss ${legsToWin} Legs erreichen.`;
@@ -13613,6 +14122,37 @@
       return `<p class="ata-small">Kein KO-Turnierbaum vorhanden.</p>`;
     }
 
+    if (tournament?.mode === "double_ko") {
+      const sections = [
+        { side: "winners", title: "Winners Bracket" },
+        { side: "losers", title: "Losers Bracket" },
+        { side: "finals", title: "Finals" },
+      ];
+      return sections.map((section) => {
+        const sectionMatches = koMatches.filter((match) => normalizeText(match?.meta?.bracket?.bracketSide || "winners") === section.side);
+        if (!sectionMatches.length) {
+          return "";
+        }
+        const roundMap = new Map();
+        sectionMatches.forEach((match) => {
+          const sectionRound = clampInt(match?.meta?.bracket?.sectionRound, match.round, 1, 64);
+          if (!roundMap.has(sectionRound)) {
+            roundMap.set(sectionRound, []);
+          }
+          roundMap.get(sectionRound).push(match);
+        });
+        const roundsHtml = Array.from(roundMap.entries())
+          .sort((left, right) => left[0] - right[0])
+          .map(([roundNumber, matches]) => `
+            <div class="ata-bracket-round">
+              <h4>${escapeHtml(section.title)} R${roundNumber}</h4>
+              ${renderStaticBracketFallbackMatches(tournament, matches.sort((left, right) => left.number - right.number))}
+            </div>
+          `).join("");
+        return `<div class="ata-bracket-section"><h3>${escapeHtml(section.title)}</h3><div class="ata-bracket-grid">${roundsHtml}</div></div>`;
+      }).join("");
+    }
+
     const mainMatches = koMatches.filter((match) => normalizeText(match?.meta?.bracket?.matchRole || "") !== "third_place");
     const thirdPlaceMatches = koMatches.filter((match) => normalizeText(match?.meta?.bracket?.matchRole || "") === "third_place");
     const maxMainRound = mainMatches.reduce((maxRound, match) => Math.max(maxRound, clampInt(match?.round, 0, 0, 64)), 0);
@@ -13688,7 +14228,7 @@
       }
     }
 
-    if (tournament.mode === "ko" || tournament.mode === "groups_ko") {
+    if (tournament.mode === "ko" || tournament.mode === "double_ko" || tournament.mode === "groups_ko") {
       html += `
         <section class="ata-card tournamentCard">
           ${renderSectionHeading("KO-Turnierbaum", [
@@ -13846,10 +14386,10 @@
     const autoLobbyEnabled = state.store.settings.featureFlags.autoLobbyStart ? "checked" : "";
     const randomizeKoEnabled = state.store.settings.featureFlags.randomizeKoRound1 ? "checked" : "";
     const koDrawLockDefaultEnabled = state.store.settings.featureFlags.koDrawLockDefault !== false ? "checked" : "";
-    const activeKoDrawLocked = state.store?.tournament?.mode === "ko"
+    const activeKoDrawLocked = state.store?.tournament?.mode === "ko" || state.store?.tournament?.mode === "double_ko"
       ? (state.store?.tournament?.ko?.drawLocked !== false ? "checked" : "")
       : "";
-    const activeKoDrawLockDisabledAttr = state.store?.tournament?.mode === "ko" ? "" : "disabled";
+    const activeKoDrawLockDisabledAttr = state.store?.tournament?.mode === "ko" || state.store?.tournament?.mode === "double_ko" ? "" : "disabled";
     const modeLimitSummary = buildModeParticipantLimitSummary();
     const tieBreakProfile = normalizeTieBreakProfile(
       state.store?.tournament?.rules?.tieBreakProfile,
@@ -14570,6 +15110,14 @@
     }
     const bullOffSelect = form.querySelector("#ata-x01-bulloff");
     const bullModeSelect = form.querySelector("#ata-x01-bullmode");
+    const modeSelect = form.querySelector("#ata-mode");
+    const grandFinalSelect = form.querySelector("#ata-grand-final-reset-mode");
+    if (modeSelect instanceof HTMLSelectElement && grandFinalSelect instanceof HTMLSelectElement) {
+      const grandFinalField = grandFinalSelect.closest(".ata-field");
+      if (grandFinalField instanceof HTMLElement) {
+        grandFinalField.style.display = normalizeText(modeSelect.value) === "double_ko" ? "" : "none";
+      }
+    }
     if (!(bullOffSelect instanceof HTMLSelectElement) || !(bullModeSelect instanceof HTMLSelectElement)) {
       refreshCreateFormPresetBadge(form);
       return;
@@ -14660,6 +15208,7 @@
       participantsText: String(formData.get("participants") || ""),
       randomizeKoRound1: formData.get("randomizeKoRound1") !== null,
       enableThirdPlaceMatch: formData.get("enableThirdPlaceMatch") !== null,
+      grandFinalResetMode: formData.get("grandFinalResetMode"),
     };
   }
 
@@ -14741,6 +15290,7 @@
       boardCount: draft.boardCount,
       randomizeKoRound1: draft.randomizeKoRound1,
       enableThirdPlaceMatch: draft.enableThirdPlaceMatch,
+      grandFinalResetMode: draft.grandFinalResetMode,
       koDrawLocked: state.store.settings.featureFlags.koDrawLockDefault !== false,
       participants,
     };

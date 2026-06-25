@@ -98,13 +98,19 @@ $bundleInline
 Set-Content -Path $htmlPath -Value $html -Encoding utf8
 
 $htmlUri = [System.Uri]::new((Resolve-Path $htmlPath).Path)
-$domOutput = & $browserPath `
-  --headless=new `
-  --disable-gpu `
-  --allow-file-access-from-files `
-  --virtual-time-budget=6000 `
-  --dump-dom `
-  $htmlUri.AbsoluteUri 2>&1 | Out-String
+$previousErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+  $domOutput = & $browserPath `
+    --headless=new `
+    --disable-gpu `
+    --allow-file-access-from-files `
+    --virtual-time-budget=6000 `
+    --dump-dom `
+    $htmlUri.AbsoluteUri 2>&1 | Out-String
+} finally {
+  $ErrorActionPreference = $previousErrorActionPreference
+}
 
 if ($null -eq $domOutput) {
   throw "Headless-Browser lieferte keine DOM-Ausgabe."

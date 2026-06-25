@@ -593,6 +593,14 @@
     }
     const bullOffSelect = form.querySelector("#ata-x01-bulloff");
     const bullModeSelect = form.querySelector("#ata-x01-bullmode");
+    const modeSelect = form.querySelector("#ata-mode");
+    const grandFinalSelect = form.querySelector("#ata-grand-final-reset-mode");
+    if (modeSelect instanceof HTMLSelectElement && grandFinalSelect instanceof HTMLSelectElement) {
+      const grandFinalField = grandFinalSelect.closest(".ata-field");
+      if (grandFinalField instanceof HTMLElement) {
+        grandFinalField.style.display = normalizeText(modeSelect.value) === "double_ko" ? "" : "none";
+      }
+    }
     if (!(bullOffSelect instanceof HTMLSelectElement) || !(bullModeSelect instanceof HTMLSelectElement)) {
       refreshCreateFormPresetBadge(form);
       return;
@@ -683,6 +691,7 @@
       participantsText: String(formData.get("participants") || ""),
       randomizeKoRound1: formData.get("randomizeKoRound1") !== null,
       enableThirdPlaceMatch: formData.get("enableThirdPlaceMatch") !== null,
+      grandFinalResetMode: formData.get("grandFinalResetMode"),
     };
   }
 
@@ -764,6 +773,7 @@
       boardCount: draft.boardCount,
       randomizeKoRound1: draft.randomizeKoRound1,
       enableThirdPlaceMatch: draft.enableThirdPlaceMatch,
+      grandFinalResetMode: draft.grandFinalResetMode,
       koDrawLocked: state.store.settings.featureFlags.koDrawLockDefault !== false,
       participants,
     };

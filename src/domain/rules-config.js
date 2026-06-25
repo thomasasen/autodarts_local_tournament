@@ -40,8 +40,8 @@
     if (!tournament) {
       return { ok: false, message: "Kein aktives Turnier vorhanden." };
     }
-    if (tournament.mode !== "ko") {
-      return { ok: false, message: "Draw-Lock ist nur im KO-Modus verfügbar." };
+    if (tournament.mode !== "ko" && tournament.mode !== "double_ko") {
+      return { ok: false, message: "Draw-Lock ist nur im KO-Modus oder Doppel-KO-Modus verfügbar." };
     }
     const nextDrawLocked = Boolean(drawLocked);
     const currentDrawLocked = tournament?.ko?.drawLocked !== false;

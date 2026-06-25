@@ -78,6 +78,8 @@
   const KO_ENGINE_VERSION = 3;
   const KO_DRAW_MODE_SEEDED = "seeded";
   const KO_DRAW_MODE_OPEN_DRAW = "open_draw";
+  const GRAND_FINAL_RESET_IF_NEEDED = "if_needed";
+  const GRAND_FINAL_RESET_SINGLE_MATCH = "single_match";
   const X01_VARIANT = "X01";
   const X01_PRESET_LEGACY_PDC_STANDARD = "pdc_standard";
   const X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL = "pdc_european_tour_official";
@@ -128,6 +130,7 @@
   const TECHNICAL_PARTICIPANT_HARD_MAX = 128;
   const MODE_PARTICIPANT_LIMITS = Object.freeze({
     ko: Object.freeze({ label: "KO", min: 2, max: 128 }),
+    double_ko: Object.freeze({ label: "Doppel-KO", min: 2, max: 32 }),
     league: Object.freeze({ label: "Liga", min: 2, max: 16 }),
     groups_ko: Object.freeze({ label: "Gruppenphase + KO", min: 4, max: 16 }),
   });

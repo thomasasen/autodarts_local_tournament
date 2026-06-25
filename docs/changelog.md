@@ -35,6 +35,12 @@
   - bei Bye-/Edge-Szenarien wird kein kaputter Placement-Pfad erzeugt
   - Bracket-Payload setzt bei vorhandenem Platz-3-Spiel `consolationFinal` und trennt Hauptbaum/Bronze per `group_id`
   - Legacy-Turniere ohne neues Feld bleiben kompatibel
+- Doppel-KO-Modus ergänzt:
+  - neuer Modus `double_ko` mit Limit `2..32`
+  - Winners Bracket, Losers Bracket und Finals werden deterministisch aus demselben Seed-/Open-Draw-Modell wie KO aufgebaut
+  - Grand Final ist konfigurierbar: Reset-Finale falls nötig (Default) oder einzelnes Grand Final
+  - Bracket-Payload nutzt `double_elimination`; statischer Fallback gruppiert Winners, Losers und Finals
+  - Dauerprognose berücksichtigt `2n - 1` Matches mit Reset-Maximum bzw. `2n - 2` beim Einzel-Grand-Final
 - History-Import robuster gemacht:
   - Legs-Abweichungen werden nicht mehr still normalisiert, sondern liefern zuerst `requires_confirmation`.
   - Bestätigung ist signaturgebunden und zeitlich begrenzt; ungültige/abgelaufene Bestätigungen werden abgelehnt.

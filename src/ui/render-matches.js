@@ -18,7 +18,8 @@
     const suggestedNextMatch = findSuggestedNextMatch(tournament);
     const suggestedNextMatchId = suggestedNextMatch?.id || "";
     const koFinalRound = getMatchesByStage(tournament, MATCH_STAGE_KO).reduce((maxRound, koMatch) => {
-      if (normalizeText(koMatch?.meta?.bracket?.matchRole || "") === "third_place") {
+      const bracketSide = normalizeText(koMatch?.meta?.bracket?.bracketSide || "");
+      if (normalizeText(koMatch?.meta?.bracket?.matchRole || "") === "third_place" || bracketSide === "losers") {
         return maxRound;
       }
       const roundNumber = Number.parseInt(String(koMatch?.round || "0"), 10);
@@ -40,8 +41,14 @@
       const isReadyPending = match.status === STATUS_PENDING && editable;
       const isSuggestedNext = Boolean(suggestedNextMatchId) && match.id === suggestedNextMatchId;
       const isThirdPlaceMatch = normalizeText(match?.meta?.bracket?.matchRole || "") === "third_place";
+      const bracketSide = normalizeText(match?.meta?.bracket?.bracketSide || "");
+      const sectionRound = clampInt(match?.meta?.bracket?.sectionRound, match.round, 1, 64);
+      const isDoubleKo = tournament.mode === "double_ko";
+      const isGrandFinal = isDoubleKo && bracketSide === "finals" && sectionRound === 1;
+      const isResetFinal = isDoubleKo && bracketSide === "finals" && sectionRound === 2;
       const isKoFinal = match.stage === MATCH_STAGE_KO
         && !isThirdPlaceMatch
+        && (!isDoubleKo || bracketSide === "finals")
         && koFinalRound > 0
         && Number(match.round) === koFinalRound;
       const koRoundLabel = match.stage === MATCH_STAGE_KO && !isThirdPlaceMatch
@@ -51,7 +58,11 @@
         ? `Gruppe ${match.groupId || "?"}`
         : match.stage === MATCH_STAGE_LEAGUE
           ? "Liga (Round Robin)"
-          : (isThirdPlaceMatch ? "KO (Spiel um Platz 3)" : "KO (Straight Knockout)");
+          : isDoubleKo
+            ? (bracketSide === "losers"
+              ? "Losers Bracket"
+              : (bracketSide === "finals" ? "Finals" : "Winners Bracket"))
+            : (isThirdPlaceMatch ? "KO (Spiel um Platz 3)" : "KO (Straight Knockout)");
       const startUi = getApiMatchStartUi(tournament, match, activeStartedMatch);
       const startDisabledAttr = startUi.disabled ? "disabled" : "";
       const startTitleAttr = startUi.title ? `title="${escapeHtml(startUi.title)}"` : "";
@@ -70,14 +81,24 @@
       }
       const matchCellText = isThirdPlaceMatch
         ? "Spiel um Platz 3"
-        : match.stage === MATCH_STAGE_KO
-          ? getKoRoundMatchLabel(match.round, koFinalRound || match.round, match.number)
-          : `Runde ${match.round} / Spiel ${match.number}`;
+        : isResetFinal
+          ? "Reset Final"
+          : isGrandFinal
+            ? "Grand Final"
+            : isDoubleKo && bracketSide === "losers"
+              ? `Losers Bracket R${sectionRound} / Spiel ${match.number}`
+              : isDoubleKo && bracketSide === "winners"
+                ? `Winners Bracket R${sectionRound} / Spiel ${match.number}`
+                : match.stage === MATCH_STAGE_KO
+                  ? getKoRoundMatchLabel(match.round, koFinalRound || match.round, match.number)
+                  : `Runde ${match.round} / Spiel ${match.number}`;
       const matchCellHelpText = isThirdPlaceMatch
         ? "Spiel um Platz 3 = separates Bronze-Match, getrennt vom Champion-Pfad."
-        : match.stage === MATCH_STAGE_KO
-          ? `KO-Phase = ${koRoundLabel} bzw. bei großen Feldern Letzte N, Spiel = Paarung innerhalb dieser Phase.`
-          : "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
+        : isDoubleKo
+          ? "Doppel-KO: Winners-Bracket-Verlierer wechseln in das Losers Bracket; das Grand Final entscheidet den Turniersieg."
+          : match.stage === MATCH_STAGE_KO
+            ? `KO-Phase = ${koRoundLabel} bzw. bei großen Feldern Letzte N, Spiel = Paarung innerhalb dieser Phase.`
+            : "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
       const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
       const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
       const saveHelpText = `Speichert Legs f\u00fcr ${player1} vs ${player2}. Sieger wird automatisch aus den Legs bestimmt. Sieger muss ${legsToWin} Legs erreichen.`;

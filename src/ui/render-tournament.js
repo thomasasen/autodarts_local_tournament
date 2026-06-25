@@ -18,6 +18,7 @@
       const draft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store?.settings);
       const randomizeChecked = draft.randomizeKoRound1 ? "checked" : "";
       const thirdPlaceChecked = draft.enableThirdPlaceMatch ? "checked" : "";
+      const grandFinalResetMode = sanitizeGrandFinalResetMode(draft.grandFinalResetMode);
       const modeLimitSummary = buildModeParticipantLimitSummary();
       const startScoreOptions = X01_START_SCORE_OPTIONS.map((score) => (
         `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${score}</option>`
@@ -67,6 +68,7 @@
                     <label for="ata-mode">Modus ${modeHelpLinks}</label>
                     <select id="ata-mode" name="mode">
                       <option value="ko" ${draft.mode === "ko" ? "selected" : ""}>KO</option>
+                      <option value="double_ko" ${draft.mode === "double_ko" ? "selected" : ""}>Doppel-KO</option>
                       <option value="league" ${draft.mode === "league" ? "selected" : ""}>Liga</option>
                       <option value="groups_ko" ${draft.mode === "groups_ko" ? "selected" : ""}>Gruppenphase + KO</option>
                     </select>
@@ -155,6 +157,14 @@
                   </div>
                   <input id="ata-enable-third-place" name="enableThirdPlaceMatch" type="checkbox" ${thirdPlaceChecked}>
                 </div>
+                <div class="ata-field">
+                  <label for="ata-grand-final-reset-mode">Doppel-KO Grand Final</label>
+                  <select id="ata-grand-final-reset-mode" name="grandFinalResetMode">
+                    <option value="${GRAND_FINAL_RESET_IF_NEEDED}" ${grandFinalResetMode === GRAND_FINAL_RESET_IF_NEEDED ? "selected" : ""}>Reset-Finale falls nötig (empfohlen)</option>
+                    <option value="${GRAND_FINAL_RESET_SINGLE_MATCH}" ${grandFinalResetMode === GRAND_FINAL_RESET_SINGLE_MATCH ? "selected" : ""}>Ein einzelnes Grand Final</option>
+                  </select>
+                  <p class="ata-small ata-create-help">Gilt für Doppel-KO: Beim Reset-Finale darf der Winners-Bracket-Sieger das erste Grand Final verlieren; dann entscheidet ein zweites Finale. Ein einzelnes Grand Final ist schneller, aber kein vollständiges klassisches Doppel-KO.</p>
+                </div>
                 <p class="ata-small ata-create-help">PDC European Tour (Official): KO, Best of 11 Legs (First to 6), 501, Straight In, Double Out, Bull 25/50. Bull-off Normal und Max Runden 50 bleiben technische AutoDarts-Werte.</p>
                 <p class="ata-small ata-create-help">PDC 501 / Double Out (Basic): kompatibler Ersatz für das frühere irreführende „PDC-Standard“-Preset. Ehrlich benannt, aber kein offizielles PDC-Eventformat.</p>
                 <p class="ata-small ata-create-help">PDC World Championship im echten Set-Format wird bewusst nicht als offizielles Preset angeboten, weil AutoDarts hier nur Legs / First to N unterstützt.</p>
@@ -204,6 +214,8 @@
 
     const modeLabel = tournament.mode === "ko"
       ? "KO (Straight Knockout)"
+      : tournament.mode === "double_ko"
+        ? "Doppel-KO (Double Elimination)"
       : tournament.mode === "league"
         ? "Liga (Round Robin)"
         : "Gruppenphase + KO (Round Robin + Straight Knockout)";
@@ -225,15 +237,20 @@
     const thirdPlaceLabel = tournament?.ko?.enableThirdPlaceMatch === true
       ? "Spiel um Platz 3: aktiv"
       : "Spiel um Platz 3: aus";
+    const grandFinalResetLabel = sanitizeGrandFinalResetMode(tournament?.ko?.grandFinalResetMode) === GRAND_FINAL_RESET_IF_NEEDED
+      ? "Grand Final: Reset falls nötig"
+      : "Grand Final: Einzelmatch";
     const primaryTags = [
       { text: `Best of ${tournament.bestOfLegs} Legs`, cls: "ata-info-tag ata-info-tag-key" },
       { text: `First to ${legsToWin} Legs`, cls: "ata-info-tag" },
       { text: `Startpunkte ${tournament.startScore}`, cls: "ata-info-tag" },
-      ...(tournament.mode === "ko"
+      ...(tournament.mode === "ko" || tournament.mode === "double_ko"
         ? [
           { text: drawModeLabel, cls: "ata-info-tag ata-info-tag-accent" },
           { text: drawLockLabel, cls: "ata-info-tag" },
-          { text: thirdPlaceLabel, cls: "ata-info-tag" },
+          ...(tournament.mode === "ko"
+            ? [{ text: thirdPlaceLabel, cls: "ata-info-tag" }]
+            : [{ text: grandFinalResetLabel, cls: "ata-info-tag" }]),
         ]
         : []),
     ];
