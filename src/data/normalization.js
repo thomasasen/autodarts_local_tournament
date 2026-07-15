@@ -266,6 +266,8 @@
       randomizeKoRound1: Boolean(defaultRandomize),
       enableThirdPlaceMatch: false,
       grandFinalResetMode: GRAND_FINAL_RESET_IF_NEEDED,
+      groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
+      groupsKoOddParticipantAcknowledged: false,
     };
   }
 
@@ -315,6 +317,11 @@
         ? rawDraft.enableThirdPlaceMatch
         : base.enableThirdPlaceMatch,
       grandFinalResetMode: sanitizeGrandFinalResetMode(rawDraft?.grandFinalResetMode),
+      groupsKoOddParticipantPolicy: sanitizeGroupsKoOddParticipantPolicy(
+        rawDraft?.groupsKoOddParticipantPolicy,
+        base.groupsKoOddParticipantPolicy,
+      ),
+      groupsKoOddParticipantAcknowledged: rawDraft?.groupsKoOddParticipantAcknowledged === true,
     };
     if (requestedPreset && matchesCreatePresetSetup(draft, requestedPreset.id)) {
       draft.x01Preset = requestedPreset.id;
@@ -508,13 +515,31 @@
   }
 
 
-  function normalizeTournamentRules(rawRules) {
+  function sanitizeGroupsKoOddParticipantPolicy(
+    value,
+    fallback = GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
+  ) {
+    const policy = normalizeText(value || "").toLowerCase();
+    return GROUPS_KO_ODD_PARTICIPANT_POLICIES.includes(policy) ? policy : fallback;
+  }
+
+
+  function normalizeTournamentRules(rawRules, options = {}) {
     const rules = rawRules && typeof rawRules === "object" ? rawRules : {};
     const tieBreakRaw = Object.prototype.hasOwnProperty.call(rules, "tieBreakProfile")
       ? rules.tieBreakProfile
       : rules.tieBreakMode;
+    const groupsKoPolicyFallback = sanitizeGroupsKoOddParticipantPolicy(
+      options?.groupsKoOddParticipantPolicyFallback,
+      GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
+    );
     return {
       tieBreakProfile: normalizeTieBreakProfile(tieBreakRaw, TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE),
+      groupsKoOddParticipantPolicy: sanitizeGroupsKoOddParticipantPolicy(
+        rules.groupsKoOddParticipantPolicy,
+        groupsKoPolicyFallback,
+      ),
+      groupsKoOddParticipantAcknowledged: rules.groupsKoOddParticipantAcknowledged === true,
     };
   }
 
@@ -878,7 +903,16 @@
 
     const fallbackStartScore = sanitizeStartScore(rawTournament.startScore);
     const x01 = normalizeTournamentX01Settings(rawTournament.x01, fallbackStartScore);
-    const rules = normalizeTournamentRules(rawTournament.rules);
+    const storedGroupSizes = groups.slice(0, 2).map((group) => group.participantIds.length);
+    const hasStoredUnequalGroups = storedGroupSizes.length === 2
+      && storedGroupSizes[0] !== storedGroupSizes[1];
+    const legacyGroupsKoPolicy = mode === "groups_ko"
+      && (participants.length % 2 === 1 || hasStoredUnequalGroups)
+      ? GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL
+      : GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN;
+    const rules = normalizeTournamentRules(rawTournament.rules, {
+      groupsKoOddParticipantPolicyFallback: legacyGroupsKoPolicy,
+    });
     const duration = normalizeTournamentDurationMeta(rawTournament.duration);
 
     return {

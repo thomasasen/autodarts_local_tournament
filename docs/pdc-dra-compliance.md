@@ -7,7 +7,8 @@
 
 ## Umgesetzte Punkte
 
-1. **Round Robin Tie-Break als Promoter-Profil (DRA 6.16.1)**
+1. **Round Robin Tie-Break als Veranstalterprofil (DRA 6.16.1)**
+- DRA `6.16.1` schreibt keine universelle Tie-Break-Reihenfolge vor; die konkrete Reihenfolge ist eine Veranstalterregel.
 - Implementiert in `standingsForMatches`.
 - Profil `promoter_h2h_minitable`:
   - Punkte
@@ -22,13 +23,18 @@
 2. **Gruppenauflösung**
 - `groupResolution.status` wird auf `playoff_required` gesetzt, wenn Gleichstände nicht auflösbar sind.
 - KO-Qualifikation wird bis zur manuellen Klärung blockiert.
+- Für neue ungerade `groups_ko`-Felder verlangt die Anwendung eine ausdrückliche Veranstalterregel:
+  - `require_even` ist der sichere Produktstandard, keine DRA-Universalregel.
+  - `allow_unequal` erhält die deterministische A/B-Verteilung und erfordert bei ungerader Anzahl eine Bestätigung der konkreten Turnierordnung.
+- Unterstützt werden ausschließlich zwei Gruppen mit vollständigem Round Robin und Top 2 je Gruppe. Andere offizielle Formate werden nicht angenähert oder als durch diesen Modus regelkonform abgebildet bezeichnet.
+- Legacy-Turniere bleiben ohne Neuverteilung spielbar; eine fehlende historische Bestätigung wird transparent angezeigt und nicht erfunden.
 
 3. **KO / Straight Knockout**
 - KO-Bracket bleibt Single Elimination.
 - Default bleibt ein klassischer KO-Baum mit genau einem Finale.
 - Seeded/Open Draw bleiben verfügbar.
 - Alle KO-Runden werden als Match-Knoten materialisiert (inklusive zukünftiger offener Paarungen).
-- Freilose (Bye) werden explizit als abgeschlossene Bye-Matches geführt.
+- Freilose (Bye) werden explizit als abgeschlossene Bye-Matches geführt; ihre Verteilung folgt dem im Projekt festgelegten Seed-Placement.
 - Optional kann per Turnierregel `enableThirdPlaceMatch` ein Platz-3-Spiel aktiviert werden:
   - Halbfinal-Sieger bleiben im Hauptfinale.
   - Halbfinal-Verlierer spielen separat um Platz 3.

@@ -117,6 +117,13 @@
     TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE,
     TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF,
   ]);
+  const GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN = "require_even";
+  const GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL = "allow_unequal";
+  const GROUPS_KO_ODD_PARTICIPANT_POLICIES = Object.freeze([
+    GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
+    GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
+  ]);
+  const GROUPS_KO_QUALIFIERS_PER_GROUP = 2;
   const LEGACY_TIE_BREAK_MODE_DRA_STRICT = "dra_strict";
   const LEGACY_TIE_BREAK_MODE_LEGACY = "legacy";
   const MATCH_SORT_MODES = Object.freeze([
@@ -1567,6 +1574,8 @@
       randomizeKoRound1: Boolean(defaultRandomize),
       enableThirdPlaceMatch: false,
       grandFinalResetMode: GRAND_FINAL_RESET_IF_NEEDED,
+      groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
+      groupsKoOddParticipantAcknowledged: false,
     };
   }
 
@@ -1616,6 +1625,11 @@
         ? rawDraft.enableThirdPlaceMatch
         : base.enableThirdPlaceMatch,
       grandFinalResetMode: sanitizeGrandFinalResetMode(rawDraft?.grandFinalResetMode),
+      groupsKoOddParticipantPolicy: sanitizeGroupsKoOddParticipantPolicy(
+        rawDraft?.groupsKoOddParticipantPolicy,
+        base.groupsKoOddParticipantPolicy,
+      ),
+      groupsKoOddParticipantAcknowledged: rawDraft?.groupsKoOddParticipantAcknowledged === true,
     };
     if (requestedPreset && matchesCreatePresetSetup(draft, requestedPreset.id)) {
       draft.x01Preset = requestedPreset.id;
@@ -1809,13 +1823,31 @@
   }
 
 
-  function normalizeTournamentRules(rawRules) {
+  function sanitizeGroupsKoOddParticipantPolicy(
+    value,
+    fallback = GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
+  ) {
+    const policy = normalizeText(value || "").toLowerCase();
+    return GROUPS_KO_ODD_PARTICIPANT_POLICIES.includes(policy) ? policy : fallback;
+  }
+
+
+  function normalizeTournamentRules(rawRules, options = {}) {
     const rules = rawRules && typeof rawRules === "object" ? rawRules : {};
     const tieBreakRaw = Object.prototype.hasOwnProperty.call(rules, "tieBreakProfile")
       ? rules.tieBreakProfile
       : rules.tieBreakMode;
+    const groupsKoPolicyFallback = sanitizeGroupsKoOddParticipantPolicy(
+      options?.groupsKoOddParticipantPolicyFallback,
+      GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
+    );
     return {
       tieBreakProfile: normalizeTieBreakProfile(tieBreakRaw, TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE),
+      groupsKoOddParticipantPolicy: sanitizeGroupsKoOddParticipantPolicy(
+        rules.groupsKoOddParticipantPolicy,
+        groupsKoPolicyFallback,
+      ),
+      groupsKoOddParticipantAcknowledged: rules.groupsKoOddParticipantAcknowledged === true,
     };
   }
 
@@ -2179,7 +2211,16 @@
 
     const fallbackStartScore = sanitizeStartScore(rawTournament.startScore);
     const x01 = normalizeTournamentX01Settings(rawTournament.x01, fallbackStartScore);
-    const rules = normalizeTournamentRules(rawTournament.rules);
+    const storedGroupSizes = groups.slice(0, 2).map((group) => group.participantIds.length);
+    const hasStoredUnequalGroups = storedGroupSizes.length === 2
+      && storedGroupSizes[0] !== storedGroupSizes[1];
+    const legacyGroupsKoPolicy = mode === "groups_ko"
+      && (participants.length % 2 === 1 || hasStoredUnequalGroups)
+      ? GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL
+      : GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN;
+    const rules = normalizeTournamentRules(rawTournament.rules, {
+      groupsKoOddParticipantPolicyFallback: legacyGroupsKoPolicy,
+    });
     const duration = normalizeTournamentDurationMeta(rawTournament.duration);
 
     return {
@@ -2336,22 +2377,11 @@
       case 3:
       case 2:
       case 1:
-        return normalizeStoreShape({
-          ...rawValue,
-          tournament: rawValue.tournament
-            ? {
-              ...rawValue.tournament,
-              rules: normalizeTournamentRules(rawValue.tournament.rules),
-            }
-            : rawValue.tournament,
-        });
+        return normalizeStoreShape(rawValue);
       default:
         if (rawValue.mode && rawValue.participants) {
           return normalizeStoreShape({
-            tournament: {
-              ...rawValue,
-              rules: normalizeTournamentRules(rawValue.rules),
-            },
+            tournament: rawValue,
           });
         }
         return createDefaultStore();
@@ -3581,6 +3611,49 @@
   }
 
 
+  function analyzeGroupsKoParticipantDistribution(rawParticipantCount, storedGroups = null) {
+    const parsedCount = Number(rawParticipantCount);
+    const participantCount = Number.isFinite(parsedCount) ? Math.max(0, Math.floor(parsedCount)) : 0;
+    const groups = Array.isArray(storedGroups) ? storedGroups : [];
+    const storedGroupA = groups.find((group) => normalizeText(group?.id || "").toUpperCase() === "A") || groups[0] || null;
+    const storedGroupB = groups.find((group) => normalizeText(group?.id || "").toUpperCase() === "B") || groups[1] || null;
+    const hasStoredDistribution = Boolean(storedGroupA && storedGroupB);
+    const groupASize = hasStoredDistribution
+      ? (Array.isArray(storedGroupA.participantIds) ? storedGroupA.participantIds.length : 0)
+      : Math.ceil(participantCount / 2);
+    const groupBSize = hasStoredDistribution
+      ? (Array.isArray(storedGroupB.participantIds) ? storedGroupB.participantIds.length : 0)
+      : Math.floor(participantCount / 2);
+    const groupAQualifierCount = Math.min(GROUPS_KO_QUALIFIERS_PER_GROUP, groupASize);
+    const groupBQualifierCount = Math.min(GROUPS_KO_QUALIFIERS_PER_GROUP, groupBSize);
+    const groupAQualificationRate = groupASize > 0 ? groupAQualifierCount / groupASize : 0;
+    const groupBQualificationRate = groupBSize > 0 ? groupBQualifierCount / groupBSize : 0;
+    const groupAAllQualify = groupASize > 0 && groupAQualifierCount === groupASize;
+    const groupBAllQualify = groupBSize > 0 && groupBQualifierCount === groupBSize;
+
+    return {
+      participantCount,
+      isOdd: participantCount % 2 === 1,
+      groupASize,
+      groupBSize,
+      groupAMatchesPerPlayer: Math.max(0, groupASize - 1),
+      groupBMatchesPerPlayer: Math.max(0, groupBSize - 1),
+      qualifiersPerGroup: GROUPS_KO_QUALIFIERS_PER_GROUP,
+      groupAQualifierCount,
+      groupBQualifierCount,
+      groupAQualificationRate,
+      groupBQualificationRate,
+      hasUnequalGroupSizes: groupASize !== groupBSize,
+      hasUnequalQualificationRates: groupAQualificationRate !== groupBQualificationRate,
+      groupAAllQualify,
+      groupBAllQualify,
+      hasTwoPlayerGroup: groupASize === GROUPS_KO_QUALIFIERS_PER_GROUP
+        || groupBSize === GROUPS_KO_QUALIFIERS_PER_GROUP,
+      hasFullyQualifiedGroup: groupAAllQualify || groupBAllQualify,
+    };
+  }
+
+
   function buildGroups(participantIds) {
     const groupA = [];
     const groupB = [];
@@ -3652,21 +3725,66 @@
   }
 
 
-  function validateCreateConfig(config) {
+  function validateGroupsKoOddParticipantPolicy(config) {
+    if (config?.mode !== "groups_ko") {
+      return { ok: true, reasonCode: "", message: "" };
+    }
+
+    const participantCount = Array.isArray(config?.participants) ? config.participants.length : 0;
+    const analysis = analyzeGroupsKoParticipantDistribution(participantCount);
+    if (!analysis.isOdd) {
+      return { ok: true, reasonCode: "", message: "", analysis };
+    }
+
+    const policy = sanitizeGroupsKoOddParticipantPolicy(config?.groupsKoOddParticipantPolicy);
+    if (policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN) {
+      return {
+        ok: false,
+        reasonCode: "groups_ko_odd_participants_blocked",
+        message: "Gruppenphase + KO benötigt für zwei gleich große Gruppen eine gerade Teilnehmerzahl. Alternativ können ungleiche Gruppengrößen ausdrücklich als Veranstalterregel gewählt werden.",
+        analysis,
+      };
+    }
+    if (config?.groupsKoOddParticipantAcknowledged !== true) {
+      return {
+        ok: false,
+        reasonCode: "groups_ko_unequal_groups_not_acknowledged",
+        message: "Bitte bestätigen, dass die ungleichen Gruppengrößen und Qualifikationsquoten der verwendeten Turnierordnung entsprechen.",
+        analysis,
+      };
+    }
+    return { ok: true, reasonCode: "", message: "", analysis };
+  }
+
+
+  function validateCreateConfigDetails(config) {
     const errors = [];
 
     if (!normalizeText(config.name)) {
-      errors.push("Bitte einen Turniernamen eingeben.");
+      errors.push({ reasonCode: "tournament_name_required", message: "Bitte einen Turniernamen eingeben." });
     }
     if (!["ko", "double_ko", "league", "groups_ko"].includes(config.mode)) {
-      errors.push("Ungültiger Modus.");
+      errors.push({ reasonCode: "tournament_mode_invalid", message: "Ungültiger Modus." });
     }
-    const participantCountError = getParticipantCountError(config.mode, config.participants.length);
+    const participantCount = Array.isArray(config?.participants) ? config.participants.length : 0;
+    const participantCountError = getParticipantCountError(config.mode, participantCount);
     if (participantCountError) {
-      errors.push(participantCountError);
+      errors.push({ reasonCode: "participant_count_invalid", message: participantCountError });
+    }
+    const groupsKoPolicyValidation = validateGroupsKoOddParticipantPolicy(config);
+    if (!groupsKoPolicyValidation.ok) {
+      errors.push({
+        reasonCode: groupsKoPolicyValidation.reasonCode,
+        message: groupsKoPolicyValidation.message,
+      });
     }
 
     return errors;
+  }
+
+
+  function validateCreateConfig(config) {
+    return validateCreateConfigDetails(config).map((entry) => entry.message);
   }
 
 
@@ -3745,7 +3863,11 @@
       bestOfLegs: sanitizeBestOf(config.bestOfLegs),
       startScore: x01.baseScore,
       x01,
-      rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
+      rules: normalizeTournamentRules({
+        tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE,
+        groupsKoOddParticipantPolicy: sanitizeGroupsKoOddParticipantPolicy(config.groupsKoOddParticipantPolicy),
+        groupsKoOddParticipantAcknowledged: config.groupsKoOddParticipantAcknowledged === true,
+      }),
       duration: {
         boardCount: sanitizeTournamentBoardCount(
           config?.boardCount,
@@ -6150,6 +6272,58 @@
   });
 
 
+  test("Scenario Groups+KO Legacy odd: migriertes 7er-Feld bleibt bis zum Finale spielbar", () => {
+    const legacy = createTournament({
+      name: "GroupsKO Legacy Odd",
+      mode: "groups_ko",
+      bestOfLegs: 3,
+      startScore: 501,
+      x01Preset: X01_PRESET_CUSTOM,
+      x01InMode: "Straight",
+      x01OutMode: "Double",
+      x01BullMode: "25/50",
+      x01MaxRounds: 50,
+      x01BullOffMode: "Normal",
+      lobbyVisibility: "private",
+      randomizeKoRound1: false,
+      groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
+      groupsKoOddParticipantAcknowledged: true,
+      participants: participantList(7, "LG"),
+    });
+    delete legacy.rules.groupsKoOddParticipantPolicy;
+    delete legacy.rules.groupsKoOddParticipantAcknowledged;
+    const tournament = normalizeTournament(cloneSerializable(legacy));
+
+    tournament.matches
+      .filter((match) => match.stage === MATCH_STAGE_GROUP)
+      .forEach((match) => {
+        const playerNumber = (participantId) => Number(normalizeText(participantId).replace(/\D/g, ""));
+        const winnerId = playerNumber(match.player1Id) < playerNumber(match.player2Id)
+          ? match.player1Id
+          : match.player2Id;
+        completeMatchByWinner(tournament, match, winnerId);
+      });
+    runGroupsKoDerivations(tournament);
+
+    const semi1 = findMatch(tournament, "ko-r1-m1");
+    const semi2 = findMatch(tournament, "ko-r1-m2");
+    assert(Boolean(semi1.player1Id && semi1.player2Id));
+    assert(Boolean(semi2.player1Id && semi2.player2Id));
+    completeMatchByWinner(tournament, semi1, semi1.player1Id);
+    completeMatchByWinner(tournament, semi2, semi2.player1Id);
+    runGroupsKoDerivations(tournament);
+
+    const final = findMatch(tournament, "ko-r2-m1");
+    assert(Boolean(final.player1Id && final.player2Id));
+    completeMatchByWinner(tournament, final, final.player1Id);
+    runGroupsKoDerivations(tournament);
+
+    assertEqual(tournament.rules.groupsKoOddParticipantPolicy, GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL);
+    assertEqual(tournament.rules.groupsKoOddParticipantAcknowledged, false);
+    assertEqual(final.status, STATUS_COMPLETED);
+  });
+
+
   test("Scenario Groups+KO Deadlock: playoff_required blockiert KO-Belegung", () => {
     const tournament = createTournament({
       name: "GroupsKO Deadlock",
@@ -6225,6 +6399,209 @@
     assertEqual(blocked.ok, false);
     assertEqual(blocked.reasonCode, "tie_break_locked");
     assertEqual(tournament.rules.tieBreakProfile, TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF);
+  });
+
+  function groupsKoConfig(participantCount, overrides = {}) {
+    return {
+      name: "Groups KO Policy Test",
+      mode: "groups_ko",
+      bestOfLegs: 3,
+      startScore: 501,
+      x01Preset: X01_PRESET_CUSTOM,
+      x01InMode: "Straight",
+      x01OutMode: "Double",
+      x01BullMode: "25/50",
+      x01MaxRounds: 50,
+      x01BullOffMode: "Normal",
+      lobbyVisibility: "private",
+      randomizeKoRound1: false,
+      enableThirdPlaceMatch: false,
+      koDrawLocked: true,
+      participants: participantList(participantCount, "GK"),
+      groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
+      groupsKoOddParticipantAcknowledged: false,
+      ...overrides,
+    };
+  }
+
+
+  test("Groups KO analysis: 4 Teilnehmer ergeben zwei Zweiergruppen mit voller Qualifikation", () => {
+    const analysis = analyzeGroupsKoParticipantDistribution(4);
+
+    assertEqual(analysis.participantCount, 4);
+    assertEqual(analysis.isOdd, false);
+    assertEqual(analysis.groupASize, 2);
+    assertEqual(analysis.groupBSize, 2);
+    assertEqual(analysis.groupAMatchesPerPlayer, 1);
+    assertEqual(analysis.groupBMatchesPerPlayer, 1);
+    assertEqual(analysis.groupAQualificationRate, 1);
+    assertEqual(analysis.groupBQualificationRate, 1);
+    assertEqual(analysis.hasTwoPlayerGroup, true);
+    assertEqual(analysis.hasFullyQualifiedGroup, true);
+  });
+
+
+  test("Groups KO analysis: 5 Teilnehmer zeigen 3/2-Verteilung und unterschiedliche Quoten", () => {
+    const analysis = analyzeGroupsKoParticipantDistribution(5);
+
+    assertEqual(analysis.groupASize, 3);
+    assertEqual(analysis.groupBSize, 2);
+    assertEqual(analysis.groupAMatchesPerPlayer, 2);
+    assertEqual(analysis.groupBMatchesPerPlayer, 1);
+    assertEqual(analysis.groupAQualificationRate, 2 / 3);
+    assertEqual(analysis.groupBQualificationRate, 1);
+    assertEqual(analysis.hasUnequalGroupSizes, true);
+    assertEqual(analysis.hasUnequalQualificationRates, true);
+    assertEqual(analysis.groupBAllQualify, true);
+  });
+
+
+  test("Groups KO analysis: 7 Teilnehmer zeigen unveraendert die deterministische 4/3-Verteilung", () => {
+    const analysis = analyzeGroupsKoParticipantDistribution(7);
+
+    assertEqual(analysis.groupASize, 4);
+    assertEqual(analysis.groupBSize, 3);
+    assertEqual(analysis.groupAMatchesPerPlayer, 3);
+    assertEqual(analysis.groupBMatchesPerPlayer, 2);
+    assertEqual(analysis.groupAQualificationRate, 1 / 2);
+    assertEqual(analysis.groupBQualificationRate, 2 / 3);
+    assertEqual(analysis.qualifiersPerGroup, 2);
+  });
+
+
+  test("Groups KO validation: gerade Teilnehmer sind mit Default-Policy erlaubt", () => {
+    const config = groupsKoConfig(6);
+    assertDeepEqual(validateCreateConfig(config), []);
+    assertDeepEqual(validateCreateConfigDetails(config), []);
+  });
+
+
+  test("Groups KO validation: require_even blockiert ungerade Teilnehmer mit stabilem Code", () => {
+    const details = validateCreateConfigDetails(groupsKoConfig(7));
+    assertEqual(details.length, 1);
+    assertEqual(details[0].reasonCode, "groups_ko_odd_participants_blocked");
+    assert(validateCreateConfig(groupsKoConfig(7))[0].includes("gerade Teilnehmerzahl"));
+  });
+
+
+  test("Groups KO validation: allow_unequal erfordert bei ungerader Anzahl eine Bestaetigung", () => {
+    const details = validateCreateConfigDetails(groupsKoConfig(7, {
+      groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
+    }));
+    assertEqual(details.length, 1);
+    assertEqual(details[0].reasonCode, "groups_ko_unequal_groups_not_acknowledged");
+  });
+
+
+  test("Groups KO validation: allow_unequal mit Bestaetigung erlaubt ungerade Teilnehmer", () => {
+    const config = groupsKoConfig(7, {
+      groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
+      groupsKoOddParticipantAcknowledged: true,
+    });
+    assertDeepEqual(validateCreateConfigDetails(config), []);
+    const tournament = createTournament(config);
+    assertEqual(tournament.rules.groupsKoOddParticipantPolicy, GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL);
+    assertEqual(tournament.rules.groupsKoOddParticipantAcknowledged, true);
+  });
+
+
+  test("Groups KO validation: andere Modi bleiben von der Policy unberuehrt", () => {
+    const config = groupsKoConfig(5, {
+      mode: "league",
+      groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
+    });
+    assertDeepEqual(validateCreateConfigDetails(config), []);
+  });
+
+
+  test("Groups KO creation: alternierende A/B-Zuordnung bleibt unveraendert", () => {
+    const tournament = createTournament(groupsKoConfig(7, {
+      groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
+      groupsKoOddParticipantAcknowledged: true,
+    }));
+    assertDeepEqual(tournament.groups[0].participantIds, ["GK1", "GK3", "GK5", "GK7"]);
+    assertDeepEqual(tournament.groups[1].participantIds, ["GK2", "GK4", "GK6"]);
+  });
+
+
+  test("Groups KO draft normalization: Default und ungueltige Policy werden sicher normalisiert", () => {
+    const defaultDraft = normalizeCreateDraft(null);
+    const invalidDraft = normalizeCreateDraft({
+      mode: "groups_ko",
+      groupsKoOddParticipantPolicy: "automatic",
+      groupsKoOddParticipantAcknowledged: true,
+    });
+    assertEqual(defaultDraft.groupsKoOddParticipantPolicy, GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN);
+    assertEqual(defaultDraft.groupsKoOddParticipantAcknowledged, false);
+    assertEqual(invalidDraft.groupsKoOddParticipantPolicy, GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN);
+    assertEqual(invalidDraft.groupsKoOddParticipantAcknowledged, true);
+  });
+
+
+  test("Groups KO migration: gerade Legacy-Turniere bleiben strukturell unveraendert", () => {
+    const legacy = createTournament(groupsKoConfig(6));
+    delete legacy.rules.groupsKoOddParticipantPolicy;
+    delete legacy.rules.groupsKoOddParticipantAcknowledged;
+    const groupsBefore = cloneSerializable(legacy.groups);
+    const matchesBefore = cloneSerializable(legacy.matches);
+    const normalized = normalizeTournament(cloneSerializable(legacy));
+
+    assertEqual(normalized.rules.groupsKoOddParticipantPolicy, GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN);
+    assertEqual(normalized.rules.groupsKoOddParticipantAcknowledged, false);
+    assertDeepEqual(normalized.groups, groupsBefore);
+    assertDeepEqual(normalized.matches, matchesBefore);
+  });
+
+
+  test("Groups KO migration: ungerade Legacy-Turniere behalten Gruppen und Matches ohne erfundene Bestaetigung", () => {
+    const legacy = createTournament(groupsKoConfig(7, {
+      groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
+      groupsKoOddParticipantAcknowledged: true,
+    }));
+    delete legacy.rules.groupsKoOddParticipantPolicy;
+    delete legacy.rules.groupsKoOddParticipantAcknowledged;
+    const groupsBefore = cloneSerializable(legacy.groups);
+    const matchesBefore = cloneSerializable(legacy.matches);
+    const normalized = normalizeTournament(cloneSerializable(legacy));
+
+    assertEqual(normalized.rules.groupsKoOddParticipantPolicy, GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL);
+    assertEqual(normalized.rules.groupsKoOddParticipantAcknowledged, false);
+    assertDeepEqual(normalized.groups, groupsBefore);
+    assertDeepEqual(normalized.matches, matchesBefore);
+    assertEqual(getMatchesByStage(normalized, MATCH_STAGE_GROUP).length, 9);
+  });
+
+
+  test("Groups KO migration: gespeicherte ungleiche Gruppen sind auch bei gerader Gesamtzahl Legacy-Verhalten", () => {
+    const legacy = createTournament(groupsKoConfig(6));
+    legacy.groups[0].participantIds = ["GK1", "GK3", "GK5", "GK2"];
+    legacy.groups[1].participantIds = ["GK4", "GK6"];
+    delete legacy.rules.groupsKoOddParticipantPolicy;
+    delete legacy.rules.groupsKoOddParticipantAcknowledged;
+    const normalized = normalizeTournament(cloneSerializable(legacy));
+
+    assertEqual(normalized.rules.groupsKoOddParticipantPolicy, GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL);
+    assertEqual(normalized.rules.groupsKoOddParticipantAcknowledged, false);
+    assertDeepEqual(normalized.groups, legacy.groups);
+  });
+
+
+  test("Groups KO persistence: Storage v4 und JSON-Roundtrip erhalten die neuen Regeln", () => {
+    const tournament = createTournament(groupsKoConfig(7, {
+      groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
+      groupsKoOddParticipantAcknowledged: true,
+    }));
+    const roundTripped = normalizeTournament(JSON.parse(JSON.stringify(tournament)));
+    const migratedStore = migrateStorage({
+      schemaVersion: 4,
+      tournament: JSON.parse(JSON.stringify(tournament)),
+    });
+
+    assertEqual(roundTripped.rules.groupsKoOddParticipantPolicy, GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL);
+    assertEqual(roundTripped.rules.groupsKoOddParticipantAcknowledged, true);
+    assertEqual(migratedStore.schemaVersion, 4);
+    assertEqual(migratedStore.tournament.rules.groupsKoOddParticipantPolicy, GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL);
+    assertEqual(migratedStore.tournament.rules.groupsKoOddParticipantAcknowledged, true);
   });
 
   test("KO engine: 9 Teilnehmer erzeugen genau ein offenes Match in Runde 1", () => {

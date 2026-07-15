@@ -1,4 +1,80 @@
 ﻿// Auto-generated module split from dist source.
+  function renderGroupsKoOddParticipantPolicyFields(draft) {
+    if (draft?.mode !== "groups_ko") {
+      return "";
+    }
+
+    const participants = parseParticipantLines(draft.participantsText);
+    const analysis = analyzeGroupsKoParticipantDistribution(participants.length);
+    const policy = sanitizeGroupsKoOddParticipantPolicy(draft.groupsKoOddParticipantPolicy);
+    const acknowledgementRequired = analysis.isOdd
+      && policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL;
+    const analysisHtml = analysis.isOdd
+      ? `
+        <div class="ata-small ata-create-help" data-role="groups-ko-odd-analysis">
+          <p><strong>Auswirkung der ungeraden Teilnehmerzahl:</strong></p>
+          <p>Gruppe A: ${analysis.groupASize} Spieler, ${analysis.groupAMatchesPerPlayer} Spiele je Spieler, ${analysis.groupAQualifierCount} von ${analysis.groupASize} qualifizieren sich.</p>
+          <p>Gruppe B: ${analysis.groupBSize} Spieler, ${analysis.groupBMatchesPerPlayer} Spiele je Spieler, ${analysis.groupBQualifierCount} von ${analysis.groupBSize} qualifizieren sich.</p>
+        </div>
+      `
+      : "";
+    const twoPlayerWarning = analysis.hasTwoPlayerGroup && participants.length >= MODE_PARTICIPANT_LIMITS.groups_ko.min
+      ? `<p class="ata-small ata-create-help" data-role="groups-ko-two-player-warning"><strong>Hinweis:</strong> In einer Zweiergruppe qualifizieren sich bei Top 2 beide Spieler automatisch für die KO-Phase.</p>`
+      : "";
+    const acknowledgementHtml = acknowledgementRequired
+      ? `
+        <label class="ata-toggle ata-toggle-compact" data-role="groups-ko-odd-acknowledgement">
+          <span>Ich bestätige, dass ungleiche Gruppengrößen und die daraus entstehenden unterschiedlichen Qualifikationsquoten der verwendeten Turnierordnung entsprechen.</span>
+          <input name="groupsKoOddParticipantAcknowledged" type="checkbox" ${draft.groupsKoOddParticipantAcknowledged ? "checked" : ""}>
+        </label>
+      `
+      : "";
+
+    return `
+      <section class="ata-field" data-role="groups-ko-odd-policy">
+        <label for="ata-groups-ko-odd-policy">Ungerade Teilnehmerzahl</label>
+        <select id="ata-groups-ko-odd-policy" name="groupsKoOddParticipantPolicy">
+          <option value="${GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN}" ${policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN ? "selected" : ""}>Nur gerade Teilnehmerzahl zulassen (empfohlen)</option>
+          <option value="${GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL}" ${policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL ? "selected" : ""}>Ungleiche Gruppengrößen zulassen (Veranstalterregel)</option>
+        </select>
+        <p class="ata-small ata-create-help">Der sichere Produktstandard ist keine DRA-Universalregel. Ungleiche Gruppen sind nur zulässig, wenn diese Veranstalterregel zur konkreten Turnierordnung passt.</p>
+        ${analysisHtml}
+        ${twoPlayerWarning}
+        ${acknowledgementHtml}
+        <p class="ata-small ata-create-help" data-role="groups-ko-format-scope">Unterstützt werden genau zwei Gruppen mit vollständigem Round Robin und Top 2 je Gruppe. Andere offizielle Formate werden nicht automatisch angenähert.</p>
+      </section>
+    `;
+  }
+
+
+  function renderActiveGroupsKoPolicyNotice(tournament) {
+    if (tournament?.mode !== "groups_ko") {
+      return "";
+    }
+    const analysis = analyzeGroupsKoParticipantDistribution(
+      tournament.participants.length,
+      tournament.groups,
+    );
+    const policy = sanitizeGroupsKoOddParticipantPolicy(tournament?.rules?.groupsKoOddParticipantPolicy);
+    const policyLabel = policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL
+      ? "Ungleiche Gruppengrößen zugelassen (Veranstalterregel)"
+      : "Gerade Teilnehmerzahl erforderlich (sicherer Produktstandard)";
+    const legacyWarning = analysis.hasUnequalGroupSizes
+      && policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL
+      && tournament?.rules?.groupsKoOddParticipantAcknowledged !== true
+      ? `<p class="ata-small ata-create-help" data-role="groups-ko-legacy-warning"><strong>Bestandshinweis:</strong> Dieses Turnier verwendet migriertes Verhalten mit ungleichen Gruppen, jedoch ohne gespeicherte Bestätigung der zugrunde liegenden Turnierordnung. Das laufende Turnier bleibt unverändert nutzbar.</p>`
+      : "";
+    return `
+      <div class="ata-meta-block" data-role="groups-ko-active-policy">
+        <div class="ata-meta-heading">Gruppenregel</div>
+        <div class="ata-info-tag-cloud"><span class="ata-info-tag">${escapeHtml(policyLabel)}</span></div>
+        ${legacyWarning}
+        <p class="ata-small">Dieses Format bildet zwei Gruppen mit vollständigem Round Robin und Top 2 je Gruppe ab; die Auswahl behauptet keine allgemeine offizielle Regelkonformität.</p>
+      </div>
+    `;
+  }
+
+
   function renderTournamentTab() {
     const tournament = state.store.tournament;
     const durationEstimateVisible = state.store?.ui?.durationEstimateVisible !== false;
@@ -142,6 +218,9 @@
                       <span class="ata-preset-pill">${escapeHtml(presetStatusLabel)}</span>
                     </div>
                   </div>
+                </div>
+                <div id="ata-groups-ko-odd-policy-host">
+                  ${renderGroupsKoOddParticipantPolicyFields(draft)}
                 </div>
                 <div class="ata-toggle ata-toggle-compact">
                   <div>
@@ -297,6 +376,7 @@
             <div class="ata-meta-heading">Teilnehmerfeld <span class="ata-player-chip-count">(${participantsCount})</span></div>
             <div class="ata-player-chip-cloud">${participantsHtml}</div>
           </div>
+          ${renderActiveGroupsKoPolicyNotice(tournament)}
         </div>
       </section>
       <section class="ata-card tournamentCard">

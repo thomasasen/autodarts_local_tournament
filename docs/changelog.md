@@ -1,6 +1,19 @@
 ﻿# Changelog
 
 ## Unreleased
+
+## 0.4.1
+- `groups_ko` behandelt ungerade Teilnehmerzahlen jetzt explizit und auditierbar:
+  - sicherer Produktstandard `require_even` blockiert neue ungerade Felder mit stabilem Fehlercode
+  - `allow_unequal` bleibt als ausdrücklich bestätigte Veranstalterregel verfügbar
+  - Live-Analyse zeigt Gruppengrößen, Spiele je Spieler und Qualifikationsverhältnisse
+  - Legacy-Turniere werden ohne Neuauslosung oder erfundene Bestätigung weitergeführt
+  - nicht abbildbare offizielle Formate werden weder angenähert noch als allgemein regelkonform bezeichnet
+- Compliance-Wording präzisiert:
+  - DRA 6.16.1 wird als Veranstalterermessen statt universeller Tie-Break-Reihenfolge beschrieben
+  - das projektinterne Seed-Placement für Byes wird konkret benannt statt pauschal als PDC/DRA-konform bezeichnet
+
+## 0.4.0
 - KO-Phasen fachlich sauber benannt:
   - KO-Ansicht und Matchkarten zeigen jetzt offizielle Endphasenbezeichnungen (`Achtelfinale`, `Viertelfinale`, `Halbfinale`, `Finale`).
   - Frühere große KO-Stufen bleiben als `Letzte 32`, `Letzte 64` usw. statt künstlicher `...finale`-Labels benannt.
@@ -234,7 +247,7 @@
   - Hybrid-Draw für neue KO-Turniere:
     - `randomize ON` -> `open_draw`
     - `randomize OFF` -> `seeded`
-  - PDC/DRA-konforme Bye-Verteilung über Standard-Seed-Placement
+  - deterministische Bye-Verteilung über das projektinterne Standard-Seed-Placement
   - Fehlerfall bei 9 Teilnehmern behoben (kein `Seed 1 vs Seed 2` in Runde 1 mehr).
 - Legacy-KO-Turniere werden beim Laden auf Engine v2 migriert:
   - vor Migration wird automatisch ein Backup geschrieben (`ata:tournament:ko-migration-backups:v2`).

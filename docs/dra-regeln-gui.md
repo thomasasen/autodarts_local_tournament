@@ -33,8 +33,9 @@ Screenshot-Kontext:
 - `6.8.1`: Das Grundprinzip ist KO (Straight Knockout).
 - `6.8.2`: Round Robin ist ebenfalls zulässig.
 - In der App bedeutet das:
-  - `KO`, `Liga` und `Gruppenphase + KO` sind regelkonforme Turniermodelle.
+  - `KO`, `Liga` und `Gruppenphase + KO` sind technisch unterstützte Turniermodelle; die konkrete Turnierordnung bestimmt, ob die gewählte Konfiguration für eine Veranstaltung passt.
   - Der Modus steuert automatisch Spielplan, Fortschrittslogik und Turnieransicht.
+  - `groups_ko` bildet genau zwei Round-Robin-Gruppen mit Top 2 und anschließender Kreuz-KO-Phase ab. Andere offizielle Formate werden nicht automatisch angenähert.
 
 ### Warum wichtig
 - Spieler sehen früh, wie sie weiterkommen (KO) oder wie gewertet wird (Liga).
@@ -44,6 +45,14 @@ Screenshot-Kontext:
 - [DRA-RULE_BOOK.pdf#page=17](DRA-RULE_BOOK.pdf#page=17)
 
 ![Turnieranlage mit Moduswahl](../assets/ss_Turnier_anlage-neu.png)
+
+### Ungerade Teilnehmerzahl in `groups_ko`
+
+- Die konkrete Behandlung ist eine Turnier- beziehungsweise Veranstalterregel; das DRA-Regelwerk gibt dafür keine universelle Policy vor.
+- `require_even` ist der sichere Produktstandard der Anwendung und verlangt gleich große Gruppen.
+- `allow_unequal` erhält die deterministische A/B-Aufteilung als ausdrücklich gewählte Veranstalterregel. Bei ungerader Teilnehmerzahl muss bestätigt werden, dass unterschiedliche Gruppengrößen und Qualifikationsquoten der konkreten Turnierordnung entsprechen.
+- Eine Auswahl macht ein Format nicht automatisch offiziell oder allgemein DRA-konform.
+- Nicht durch zwei Gruppen, vollständiges Round Robin und Top 2 abbildbare Formate liegen außerhalb des unterstützten Scopes.
 
 <a id="dra-gui-rule-open-draw"></a>
 ## Open Draw
@@ -164,7 +173,7 @@ Screenshot-Kontext:
 
 ### Warum wichtig
 - Verhindert Missverständnis "Ghost-Spieler" vs. echtes Freilos.
-- Sichert faire Bracket-Mathematik bei Teilnehmerzahlen ohne 2er-Potenz.
+- Sichert die deterministische Bracket-Mathematik des im Projekt verwendeten Seed-Placements bei Teilnehmerzahlen ohne 2er-Potenz.
 
 ### Nachprüfen im PDF
 - [DRA-RULE_BOOK.pdf#page=4](DRA-RULE_BOOK.pdf#page=4)
@@ -184,10 +193,10 @@ Screenshot-Kontext:
 - `6.16.1`, Seite `20`
 
 ### Deutsche Erklärung
-- DRA erlaubt Tie-Breaks nach Ermessen des Veranstalters.
+- DRA `6.16.1` schreibt keine konkrete universelle Tie-Break-Reihenfolge vor, sondern überlässt diese dem Veranstalter.
 - Die App bildet dieses Ermessen als wählbares Profil ab:
-  - `Promoter H2H + Mini-Tabelle` (empfohlen)
-  - `Promoter Punkte + LegDiff`
+  - `Veranstalterprofil: Direktvergleich und Minitabelle` (empfohlen)
+  - `Veranstalterprofil: Punkte und Leg-Differenz`
 - Nach dem ersten abgeschlossenen Gruppen-/Liga-Ergebnis ist das Profil gesperrt (keine nachträgliche Umstellung).
 - Falls ein Gleichstand damit nicht auflösbar ist:
   - Status `Playoff erforderlich`

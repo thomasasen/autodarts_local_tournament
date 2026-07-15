@@ -496,6 +496,127 @@
     }
 
     try {
+      const baseDraft = normalizeCreateDraft({
+        mode: "groups_ko",
+        participantsText: "A\nB\nC\nD\nE\nF\nG",
+        groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
+      });
+      const requireEvenHtml = renderGroupsKoOddParticipantPolicyFields(baseDraft);
+      const allowUnequalHtml = renderGroupsKoOddParticipantPolicyFields({
+        ...baseDraft,
+        groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
+      });
+      const otherModeHtml = renderGroupsKoOddParticipantPolicyFields({ ...baseDraft, mode: "league" });
+      record(
+        "Groups+KO odd UI: Policy, Live-Analyse und Bestaetigung sind kontextabhaengig",
+        requireEvenHtml.includes('name="groupsKoOddParticipantPolicy"')
+          && requireEvenHtml.includes("Gruppe A: 4 Spieler, 3 Spiele je Spieler, 2 von 4 qualifizieren sich.")
+          && requireEvenHtml.includes("Gruppe B: 3 Spieler, 2 Spiele je Spieler, 2 von 3 qualifizieren sich.")
+          && !requireEvenHtml.includes('name="groupsKoOddParticipantAcknowledged"')
+          && allowUnequalHtml.includes('name="groupsKoOddParticipantAcknowledged"')
+          && allowUnequalHtml.includes("Andere offizielle Formate werden nicht automatisch angenähert")
+          && otherModeHtml === "",
+        `require=${requireEvenHtml.length}, allow=${allowUnequalHtml.length}, other=${otherModeHtml.length}`,
+      );
+    } catch (error) {
+      record("Groups+KO odd UI: Policy, Live-Analyse und Bestaetigung sind kontextabhaengig", false, String(error?.message || error));
+    }
+
+    try {
+      const tournamentBefore = state.store.tournament;
+      const blocked = createTournamentSession({
+        name: "GroupsKoBlocked",
+        mode: "groups_ko",
+        bestOfLegs: 3,
+        startScore: 501,
+        x01Preset: X01_PRESET_CUSTOM,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
+        groupsKoOddParticipantAcknowledged: false,
+        participants: participantList(5, "BL"),
+      });
+      record(
+        "Groups+KO odd start: blockierter Start liefert stabilen Code und klare Meldung",
+        blocked?.ok === false
+          && blocked?.reasonCode === "groups_ko_odd_participants_blocked"
+          && normalizeText(blocked?.message).includes("gerade Teilnehmerzahl")
+          && state.store.tournament === tournamentBefore,
+        `reason=${blocked?.reasonCode || "-"}, stable=${state.store.tournament === tournamentBefore}`,
+      );
+    } catch (error) {
+      record("Groups+KO odd start: blockierter Start liefert stabilen Code und klare Meldung", false, String(error?.message || error));
+    }
+
+    try {
+      const legacy = createTournament({
+        name: "GroupsKoLegacyUi",
+        mode: "groups_ko",
+        bestOfLegs: 3,
+        startScore: 501,
+        x01Preset: X01_PRESET_CUSTOM,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        participants: participantList(5, "LU"),
+      });
+      delete legacy.rules.groupsKoOddParticipantPolicy;
+      delete legacy.rules.groupsKoOddParticipantAcknowledged;
+      const normalized = normalizeTournament(legacy);
+      const noticeHtml = renderActiveGroupsKoPolicyNotice(normalized);
+      record(
+        "Groups+KO Legacy UI: fehlende historische Bestaetigung bleibt sichtbar und nutzbar",
+        normalized.rules.groupsKoOddParticipantPolicy === GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL
+          && normalized.rules.groupsKoOddParticipantAcknowledged === false
+          && noticeHtml.includes("Bestandshinweis")
+          && noticeHtml.includes("bleibt unverändert nutzbar")
+          && noticeHtml.includes("keine allgemeine offizielle Regelkonformität"),
+        `policy=${normalized.rules.groupsKoOddParticipantPolicy}, ack=${normalized.rules.groupsKoOddParticipantAcknowledged}`,
+      );
+    } catch (error) {
+      record("Groups+KO Legacy UI: fehlende historische Bestaetigung bleibt sichtbar und nutzbar", false, String(error?.message || error));
+    }
+
+    {
+      const previousDraft = state.store.ui.createDraft;
+      try {
+        const form = document.createElement("form");
+        state.store.ui.createDraft = normalizeCreateDraft({
+          mode: "groups_ko",
+          participantsText: "A\nB\nC\nD\nE",
+          groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
+          groupsKoOddParticipantAcknowledged: true,
+        }, state.store.settings);
+        form.innerHTML = `
+          <select name="mode"><option value="groups_ko" selected>groups_ko</option></select>
+          <textarea name="participants">A\nB\nC\nD\nE\nF\nG</textarea>
+          <select name="groupsKoOddParticipantPolicy"><option value="allow_unequal" selected>allow_unequal</option></select>
+          <input name="groupsKoOddParticipantAcknowledged" type="checkbox" checked>
+        `;
+        resetGroupsKoOddParticipantAcknowledgementIfBasisChanged(form);
+        const acknowledgement = form.elements.namedItem("groupsKoOddParticipantAcknowledged");
+        record(
+          "Groups+KO odd UI: Bestaetigung wird bei geaenderter Teilnehmerzahl zurueckgesetzt",
+          acknowledgement instanceof HTMLInputElement && acknowledgement.checked === false,
+          `checked=${acknowledgement instanceof HTMLInputElement ? acknowledgement.checked : "missing"}`,
+        );
+      } catch (error) {
+        record("Groups+KO odd UI: Bestaetigung wird bei geaenderter Teilnehmerzahl zurueckgesetzt", false, String(error?.message || error));
+      } finally {
+        state.store.ui.createDraft = previousDraft;
+      }
+    }
+
+    try {
       const tournament = createTournament({
         name: "GroupsKoTieBreakLock",
         mode: "groups_ko",

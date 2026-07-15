@@ -31,22 +31,11 @@
       case 3:
       case 2:
       case 1:
-        return normalizeStoreShape({
-          ...rawValue,
-          tournament: rawValue.tournament
-            ? {
-              ...rawValue.tournament,
-              rules: normalizeTournamentRules(rawValue.tournament.rules),
-            }
-            : rawValue.tournament,
-        });
+        return normalizeStoreShape(rawValue);
       default:
         if (rawValue.mode && rawValue.participants) {
           return normalizeStoreShape({
-            tournament: {
-              ...rawValue,
-              rules: normalizeTournamentRules(rawValue.rules),
-            },
+            tournament: rawValue,
           });
         }
         return createDefaultStore();

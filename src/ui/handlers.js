@@ -135,6 +135,7 @@
     if (createForm instanceof HTMLFormElement) {
       syncCreateFormDependencies(createForm);
       refreshCreateFormDurationEstimate(createForm);
+      refreshCreateFormGroupsKoPolicy(createForm);
       const handleDraftInputChange = (event) => {
         const target = event?.target;
         const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
@@ -153,9 +154,11 @@
         if (isCreateDraftPresetField(fieldName)) {
           setCreateFormPresetValue(createForm, X01_PRESET_CUSTOM);
         }
+        resetGroupsKoOddParticipantAcknowledgementIfBasisChanged(createForm);
         syncCreateFormDependencies(createForm);
         updateCreateDraftFromForm(createForm, true);
         refreshCreateFormDurationEstimate(createForm);
+        refreshCreateFormGroupsKoPolicy(createForm);
       };
       createForm.addEventListener("input", handleDraftInputChange);
       createForm.addEventListener("change", handleDraftInputChange);
@@ -630,6 +633,40 @@
   }
 
 
+  function resetGroupsKoOddParticipantAcknowledgementIfBasisChanged(form) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const currentDraft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store.settings);
+    const nextDraft = normalizeCreateDraft(readCreateDraftInput(new FormData(form)), state.store.settings);
+    const currentParticipantCount = parseParticipantLines(currentDraft.participantsText).length;
+    const nextParticipantCount = parseParticipantLines(nextDraft.participantsText).length;
+    const basisChanged = currentDraft.mode !== nextDraft.mode
+      || currentDraft.groupsKoOddParticipantPolicy !== nextDraft.groupsKoOddParticipantPolicy
+      || currentParticipantCount !== nextParticipantCount;
+    if (!basisChanged) {
+      return;
+    }
+    const acknowledgement = form.elements.namedItem("groupsKoOddParticipantAcknowledged");
+    if (acknowledgement instanceof HTMLInputElement) {
+      acknowledgement.checked = false;
+    }
+  }
+
+
+  function refreshCreateFormGroupsKoPolicy(form) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const host = form.querySelector("#ata-groups-ko-odd-policy-host");
+    if (!(host instanceof HTMLElement)) {
+      return;
+    }
+    const draft = normalizeCreateDraft(readCreateDraftInput(new FormData(form)), state.store.settings);
+    host.innerHTML = renderGroupsKoOddParticipantPolicyFields(draft);
+  }
+
+
   function applySelectedPresetToCreateForm(form) {
     if (!(form instanceof HTMLFormElement)) {
       return;
@@ -668,9 +705,11 @@
     });
 
     setCreateFormPresetValue(form, preset.id);
+    resetGroupsKoOddParticipantAcknowledgementIfBasisChanged(form);
     syncCreateFormDependencies(form);
     updateCreateDraftFromForm(form, true);
     refreshCreateFormDurationEstimate(form);
+    refreshCreateFormGroupsKoPolicy(form);
     setNotice("info", `Preset „${preset.label}“ wurde auf alle Turnierfelder angewendet.`, 2600);
   }
 
@@ -692,6 +731,8 @@
       randomizeKoRound1: formData.get("randomizeKoRound1") !== null,
       enableThirdPlaceMatch: formData.get("enableThirdPlaceMatch") !== null,
       grandFinalResetMode: formData.get("grandFinalResetMode"),
+      groupsKoOddParticipantPolicy: formData.get("groupsKoOddParticipantPolicy"),
+      groupsKoOddParticipantAcknowledged: formData.get("groupsKoOddParticipantAcknowledged") !== null,
     };
   }
 
@@ -748,6 +789,7 @@
     participantField.value = shuffledNames.join("\n");
     updateCreateDraftFromForm(form, true);
     refreshCreateFormDurationEstimate(form);
+    refreshCreateFormGroupsKoPolicy(form);
     setNotice("success", "Teilnehmer wurden zuf\u00e4llig gemischt.", 1800);
   }
 
@@ -774,6 +816,8 @@
       randomizeKoRound1: draft.randomizeKoRound1,
       enableThirdPlaceMatch: draft.enableThirdPlaceMatch,
       grandFinalResetMode: draft.grandFinalResetMode,
+      groupsKoOddParticipantPolicy: draft.groupsKoOddParticipantPolicy,
+      groupsKoOddParticipantAcknowledged: draft.groupsKoOddParticipantAcknowledged,
       koDrawLocked: state.store.settings.featureFlags.koDrawLockDefault !== false,
       participants,
     };

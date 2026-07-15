@@ -233,7 +233,7 @@
             ${renderSectionHeading("Gruppenentscheidung offen", [
               { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
             ])}
-            <p class="ata-small">KO-Qualifikation ist blockiert, bis folgende DRA-Entscheidungen geklärt sind:</p>
+            <p class="ata-small">KO-Qualifikation ist blockiert, bis folgende Veranstalterentscheidungen geklärt sind:</p>
             <ul class="ata-small">
               ${blockedGroups.map((text) => `<li>${escapeHtml(text)}</li>`).join("")}
             </ul>

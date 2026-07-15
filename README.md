@@ -123,7 +123,7 @@ Nach Installation ist links im Hauptmenü der neue Eintrag sichtbar. Darüber ö
 - Die Option ist draw-stabil:
   - wirksam bei Anlage/Import,
   - nicht als Live-Toggle im aktiven Turnier vorgesehen.
-- Bye-Verteilung ist PDC/DRA-konform für gesetzte Draws:
+- Das Projekt verwendet für gesetzte Draws ein festes Seed-Placement zur Bye-Verteilung:
   - Bei nicht voller 2er-Potenz erhalten Top-Seeds Freilose.
   - Beispiel mit 9 Spielern im 16er-Baum: Nur Seed 8 vs Seed 9 spielt in Runde 1.
 - KO-Matches werden pro Turnierast freigeschaltet:
@@ -165,8 +165,8 @@ Kurz gesagt: Single-KO ist schnell und hart, Doppel-KO ist fairer für lockere R
 - Vollständiger Round-Robin-Spielplan.
 - Tabelle basiert auf:
   - Punkte
-  - Direktvergleich (bei 2 Punktgleichen, DRA strict)
-  - Teilgruppen-Leg-Differenz (bei 3+ Punktgleichen, DRA strict)
+  - Direktvergleich (bei 2 Punktgleichen, Veranstalterprofil)
+  - Teilgruppen-Leg-Differenz (bei 3+ Punktgleichen, Veranstalterprofil mit Minitabelle)
   - Leg-Differenz gesamt
   - Legs For gesamt
   - Bei weiterem Gleichstand: `Playoff erforderlich`
@@ -174,6 +174,10 @@ Kurz gesagt: Single-KO ist schnell und hart, Doppel-KO ist fairer für lockere R
 ### Gruppenphase + KO (`groups_ko`)
 - Zwei Gruppen (`A`, `B`).
 - Top-2 jeder Gruppe qualifizieren sich für KO.
+- Neue Turniere verwenden standardmäßig `require_even`: Dieser sichere Produktstandard verlangt zwei gleich große Gruppen, ist aber keine universelle DRA-Regel.
+- Mit `allow_unequal` können ungleiche Gruppengrößen ausdrücklich als Veranstalterregel zugelassen werden. Bei ungerader Teilnehmerzahl ist eine zusätzliche Bestätigung der konkreten Turnierordnung erforderlich.
+- Vor dem Start zeigt die App Gruppengrößen, Spiele je Spieler und Qualifikationsverhältnisse. Eine Zweiergruppe wird ausdrücklich markiert, weil dort bei Top 2 beide Spieler weiterkommen.
+- Unterstützt werden genau zwei Gruppen mit vollständigem Round Robin und Top 2 je Gruppe. Andere offizielle Formate mit ungeraden Feldern werden nicht angenähert und nicht als durch diesen Modus regelkonform abgebildet bezeichnet.
 - Kreuz-Halbfinale:
   - `A1 vs B2`
   - `B1 vs A2`
@@ -429,6 +433,7 @@ Tab: `Import/Export`
 - Legacy-KO-Turniere werden auf KO-Engine v3 migriert.
 - Vor KO-Migration wird ein Backup unter `ata:tournament:ko-migration-backups:v2` abgelegt.
 - Legacy-Daten ohne `tournament.ko.enableThirdPlaceMatch` bleiben kompatibel und werden als `false` behandelt.
+- Legacy-`groups_ko`-Turniere mit ungerader oder bereits ungleicher Gruppenverteilung werden ohne Neuauslosung als bestehendes `allow_unequal`-Verhalten geladen; eine fehlende historische Bestätigung wird nicht erfunden.
 - Bestehende Turniere werden auf
   `tournament.rules.tieBreakProfile = promoter_h2h_minitable` normalisiert.
 
@@ -506,19 +511,19 @@ Legende für die eingeblendeten Hilfelinks:
   - `Boards für Zeitprognose` (im Tab `Turnier`)
 - Warum: lokale Felder spielen unterschiedlich schnell; das Profil erlaubt eine saubere Anpassung, ohne die eigentliche Turnierlogik zu verändern.
 
-### Promoter Tie-Break-Profil
-- `Promoter H2H + Mini-Tabelle` (empfohlen):
+### Veranstalter-Tie-Break-Profil
+- `Veranstalterprofil: Direktvergleich und Minitabelle` (empfohlen):
   - Punkte (`2` Sieg, `1` Unentschieden, `0` Niederlage)
   - Direktvergleich bei genau 2 Punktgleichen
   - Teilgruppen-Leg-Differenz bei 3+ Punktgleichen
   - danach Gesamt-Leg-Differenz und Legs gewonnen
   - bei weiterem Gleichstand: `Playoff erforderlich`
-- `Promoter Punkte + LegDiff`:
+- `Veranstalterprofil: Punkte und Leg-Differenz`:
   - vereinfachte, legacy-kompatible Sortierung
   - Reihenfolge: Punkte -> Gesamt-Leg-Differenz -> Legs gewonnen
 
 Warum dieses Feld wichtig ist:
-- DRA `6.16.1` erlaubt Tie-Breaks nach Ermessen des Veranstalters.
+- DRA `6.16.1` schreibt keine universelle Tie-Break-Reihenfolge vor, sondern überlässt diese dem Veranstalter.
 - Das Profil erzwingt eine klare, reproduzierbare Reihenfolge statt Ad-hoc-Entscheidung.
 - Nach dem ersten abgeschlossenen Gruppen-/Liga-Ergebnis ist das Profil gesperrt.
 

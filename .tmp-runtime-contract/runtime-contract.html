@@ -41,7 +41,7 @@ const GLOBALS_CONTRACT = Object.freeze({
 // ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.4.0
+// @version      0.4.1
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -62,7 +62,7 @@ const GLOBALS_CONTRACT = Object.freeze({
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.4.0";
+  const APP_VERSION = "0.4.1";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 4;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
@@ -1776,6 +1776,13 @@ const GLOBALS_CONTRACT = Object.freeze({
     TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE,
     TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF,
   ]);
+  const GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN = "require_even";
+  const GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL = "allow_unequal";
+  const GROUPS_KO_ODD_PARTICIPANT_POLICIES = Object.freeze([
+    GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
+    GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
+  ]);
+  const GROUPS_KO_QUALIFIERS_PER_GROUP = 2;
   const LEGACY_TIE_BREAK_MODE_DRA_STRICT = "dra_strict";
   const LEGACY_TIE_BREAK_MODE_LEGACY = "legacy";
   const MATCH_SORT_MODES = Object.freeze([
@@ -2899,6 +2906,8 @@ const GLOBALS_CONTRACT = Object.freeze({
       randomizeKoRound1: Boolean(defaultRandomize),
       enableThirdPlaceMatch: false,
       grandFinalResetMode: GRAND_FINAL_RESET_IF_NEEDED,
+      groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
+      groupsKoOddParticipantAcknowledged: false,
     };
   }
 
@@ -2948,6 +2957,11 @@ const GLOBALS_CONTRACT = Object.freeze({
         ? rawDraft.enableThirdPlaceMatch
         : base.enableThirdPlaceMatch,
       grandFinalResetMode: sanitizeGrandFinalResetMode(rawDraft?.grandFinalResetMode),
+      groupsKoOddParticipantPolicy: sanitizeGroupsKoOddParticipantPolicy(
+        rawDraft?.groupsKoOddParticipantPolicy,
+        base.groupsKoOddParticipantPolicy,
+      ),
+      groupsKoOddParticipantAcknowledged: rawDraft?.groupsKoOddParticipantAcknowledged === true,
     };
     if (requestedPreset && matchesCreatePresetSetup(draft, requestedPreset.id)) {
       draft.x01Preset = requestedPreset.id;
@@ -3141,13 +3155,31 @@ const GLOBALS_CONTRACT = Object.freeze({
   }
 
 
-  function normalizeTournamentRules(rawRules) {
+  function sanitizeGroupsKoOddParticipantPolicy(
+    value,
+    fallback = GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
+  ) {
+    const policy = normalizeText(value || "").toLowerCase();
+    return GROUPS_KO_ODD_PARTICIPANT_POLICIES.includes(policy) ? policy : fallback;
+  }
+
+
+  function normalizeTournamentRules(rawRules, options = {}) {
     const rules = rawRules && typeof rawRules === "object" ? rawRules : {};
     const tieBreakRaw = Object.prototype.hasOwnProperty.call(rules, "tieBreakProfile")
       ? rules.tieBreakProfile
       : rules.tieBreakMode;
+    const groupsKoPolicyFallback = sanitizeGroupsKoOddParticipantPolicy(
+      options?.groupsKoOddParticipantPolicyFallback,
+      GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
+    );
     return {
       tieBreakProfile: normalizeTieBreakProfile(tieBreakRaw, TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE),
+      groupsKoOddParticipantPolicy: sanitizeGroupsKoOddParticipantPolicy(
+        rules.groupsKoOddParticipantPolicy,
+        groupsKoPolicyFallback,
+      ),
+      groupsKoOddParticipantAcknowledged: rules.groupsKoOddParticipantAcknowledged === true,
     };
   }
 
@@ -3511,7 +3543,16 @@ const GLOBALS_CONTRACT = Object.freeze({
 
     const fallbackStartScore = sanitizeStartScore(rawTournament.startScore);
     const x01 = normalizeTournamentX01Settings(rawTournament.x01, fallbackStartScore);
-    const rules = normalizeTournamentRules(rawTournament.rules);
+    const storedGroupSizes = groups.slice(0, 2).map((group) => group.participantIds.length);
+    const hasStoredUnequalGroups = storedGroupSizes.length === 2
+      && storedGroupSizes[0] !== storedGroupSizes[1];
+    const legacyGroupsKoPolicy = mode === "groups_ko"
+      && (participants.length % 2 === 1 || hasStoredUnequalGroups)
+      ? GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL
+      : GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN;
+    const rules = normalizeTournamentRules(rawTournament.rules, {
+      groupsKoOddParticipantPolicyFallback: legacyGroupsKoPolicy,
+    });
     const duration = normalizeTournamentDurationMeta(rawTournament.duration);
 
     return {
@@ -3668,22 +3709,11 @@ const GLOBALS_CONTRACT = Object.freeze({
       case 3:
       case 2:
       case 1:
-        return normalizeStoreShape({
-          ...rawValue,
-          tournament: rawValue.tournament
-            ? {
-              ...rawValue.tournament,
-              rules: normalizeTournamentRules(rawValue.tournament.rules),
-            }
-            : rawValue.tournament,
-        });
+        return normalizeStoreShape(rawValue);
       default:
         if (rawValue.mode && rawValue.participants) {
           return normalizeStoreShape({
-            tournament: {
-              ...rawValue,
-              rules: normalizeTournamentRules(rawValue.rules),
-            },
+            tournament: rawValue,
           });
         }
         return createDefaultStore();
@@ -4558,6 +4588,49 @@ const GLOBALS_CONTRACT = Object.freeze({
   }
 
 
+  function analyzeGroupsKoParticipantDistribution(rawParticipantCount, storedGroups = null) {
+    const parsedCount = Number(rawParticipantCount);
+    const participantCount = Number.isFinite(parsedCount) ? Math.max(0, Math.floor(parsedCount)) : 0;
+    const groups = Array.isArray(storedGroups) ? storedGroups : [];
+    const storedGroupA = groups.find((group) => normalizeText(group?.id || "").toUpperCase() === "A") || groups[0] || null;
+    const storedGroupB = groups.find((group) => normalizeText(group?.id || "").toUpperCase() === "B") || groups[1] || null;
+    const hasStoredDistribution = Boolean(storedGroupA && storedGroupB);
+    const groupASize = hasStoredDistribution
+      ? (Array.isArray(storedGroupA.participantIds) ? storedGroupA.participantIds.length : 0)
+      : Math.ceil(participantCount / 2);
+    const groupBSize = hasStoredDistribution
+      ? (Array.isArray(storedGroupB.participantIds) ? storedGroupB.participantIds.length : 0)
+      : Math.floor(participantCount / 2);
+    const groupAQualifierCount = Math.min(GROUPS_KO_QUALIFIERS_PER_GROUP, groupASize);
+    const groupBQualifierCount = Math.min(GROUPS_KO_QUALIFIERS_PER_GROUP, groupBSize);
+    const groupAQualificationRate = groupASize > 0 ? groupAQualifierCount / groupASize : 0;
+    const groupBQualificationRate = groupBSize > 0 ? groupBQualifierCount / groupBSize : 0;
+    const groupAAllQualify = groupASize > 0 && groupAQualifierCount === groupASize;
+    const groupBAllQualify = groupBSize > 0 && groupBQualifierCount === groupBSize;
+
+    return {
+      participantCount,
+      isOdd: participantCount % 2 === 1,
+      groupASize,
+      groupBSize,
+      groupAMatchesPerPlayer: Math.max(0, groupASize - 1),
+      groupBMatchesPerPlayer: Math.max(0, groupBSize - 1),
+      qualifiersPerGroup: GROUPS_KO_QUALIFIERS_PER_GROUP,
+      groupAQualifierCount,
+      groupBQualifierCount,
+      groupAQualificationRate,
+      groupBQualificationRate,
+      hasUnequalGroupSizes: groupASize !== groupBSize,
+      hasUnequalQualificationRates: groupAQualificationRate !== groupBQualificationRate,
+      groupAAllQualify,
+      groupBAllQualify,
+      hasTwoPlayerGroup: groupASize === GROUPS_KO_QUALIFIERS_PER_GROUP
+        || groupBSize === GROUPS_KO_QUALIFIERS_PER_GROUP,
+      hasFullyQualifiedGroup: groupAAllQualify || groupBAllQualify,
+    };
+  }
+
+
   function buildGroups(participantIds) {
     const groupA = [];
     const groupB = [];
@@ -4629,21 +4702,66 @@ const GLOBALS_CONTRACT = Object.freeze({
   }
 
 
-  function validateCreateConfig(config) {
+  function validateGroupsKoOddParticipantPolicy(config) {
+    if (config?.mode !== "groups_ko") {
+      return { ok: true, reasonCode: "", message: "" };
+    }
+
+    const participantCount = Array.isArray(config?.participants) ? config.participants.length : 0;
+    const analysis = analyzeGroupsKoParticipantDistribution(participantCount);
+    if (!analysis.isOdd) {
+      return { ok: true, reasonCode: "", message: "", analysis };
+    }
+
+    const policy = sanitizeGroupsKoOddParticipantPolicy(config?.groupsKoOddParticipantPolicy);
+    if (policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN) {
+      return {
+        ok: false,
+        reasonCode: "groups_ko_odd_participants_blocked",
+        message: "Gruppenphase + KO benötigt für zwei gleich große Gruppen eine gerade Teilnehmerzahl. Alternativ können ungleiche Gruppengrößen ausdrücklich als Veranstalterregel gewählt werden.",
+        analysis,
+      };
+    }
+    if (config?.groupsKoOddParticipantAcknowledged !== true) {
+      return {
+        ok: false,
+        reasonCode: "groups_ko_unequal_groups_not_acknowledged",
+        message: "Bitte bestätigen, dass die ungleichen Gruppengrößen und Qualifikationsquoten der verwendeten Turnierordnung entsprechen.",
+        analysis,
+      };
+    }
+    return { ok: true, reasonCode: "", message: "", analysis };
+  }
+
+
+  function validateCreateConfigDetails(config) {
     const errors = [];
 
     if (!normalizeText(config.name)) {
-      errors.push("Bitte einen Turniernamen eingeben.");
+      errors.push({ reasonCode: "tournament_name_required", message: "Bitte einen Turniernamen eingeben." });
     }
     if (!["ko", "double_ko", "league", "groups_ko"].includes(config.mode)) {
-      errors.push("Ungültiger Modus.");
+      errors.push({ reasonCode: "tournament_mode_invalid", message: "Ungültiger Modus." });
     }
-    const participantCountError = getParticipantCountError(config.mode, config.participants.length);
+    const participantCount = Array.isArray(config?.participants) ? config.participants.length : 0;
+    const participantCountError = getParticipantCountError(config.mode, participantCount);
     if (participantCountError) {
-      errors.push(participantCountError);
+      errors.push({ reasonCode: "participant_count_invalid", message: participantCountError });
+    }
+    const groupsKoPolicyValidation = validateGroupsKoOddParticipantPolicy(config);
+    if (!groupsKoPolicyValidation.ok) {
+      errors.push({
+        reasonCode: groupsKoPolicyValidation.reasonCode,
+        message: groupsKoPolicyValidation.message,
+      });
     }
 
     return errors;
+  }
+
+
+  function validateCreateConfig(config) {
+    return validateCreateConfigDetails(config).map((entry) => entry.message);
   }
 
 
@@ -4722,7 +4840,11 @@ const GLOBALS_CONTRACT = Object.freeze({
       bestOfLegs: sanitizeBestOf(config.bestOfLegs),
       startScore: x01.baseScore,
       x01,
-      rules: normalizeTournamentRules({ tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE }),
+      rules: normalizeTournamentRules({
+        tieBreakProfile: TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE,
+        groupsKoOddParticipantPolicy: sanitizeGroupsKoOddParticipantPolicy(config.groupsKoOddParticipantPolicy),
+        groupsKoOddParticipantAcknowledged: config.groupsKoOddParticipantAcknowledged === true,
+      }),
       duration: {
         boardCount: sanitizeTournamentBoardCount(
           config?.boardCount,
@@ -7532,9 +7654,14 @@ const GLOBALS_CONTRACT = Object.freeze({
 
 
   function createTournamentSession(config) {
-    const errors = validateCreateConfig(config);
-    if (errors.length) {
-      return { ok: false, message: errors.join(" ") };
+    const validationDetails = validateCreateConfigDetails(config);
+    if (validationDetails.length) {
+      return {
+        ok: false,
+        reasonCode: validationDetails[0].reasonCode,
+        validationDetails,
+        message: validationDetails.map((entry) => entry.message).join(" "),
+      };
     }
 
     const tournament = createTournament(config);
@@ -8464,6 +8591,127 @@ const GLOBALS_CONTRACT = Object.freeze({
       );
     } catch (error) {
       record("Groups+KO Regression: Finale wird korrekt aus Semis belegt", false, String(error?.message || error));
+    }
+
+    try {
+      const baseDraft = normalizeCreateDraft({
+        mode: "groups_ko",
+        participantsText: "A\nB\nC\nD\nE\nF\nG",
+        groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
+      });
+      const requireEvenHtml = renderGroupsKoOddParticipantPolicyFields(baseDraft);
+      const allowUnequalHtml = renderGroupsKoOddParticipantPolicyFields({
+        ...baseDraft,
+        groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
+      });
+      const otherModeHtml = renderGroupsKoOddParticipantPolicyFields({ ...baseDraft, mode: "league" });
+      record(
+        "Groups+KO odd UI: Policy, Live-Analyse und Bestaetigung sind kontextabhaengig",
+        requireEvenHtml.includes('name="groupsKoOddParticipantPolicy"')
+          && requireEvenHtml.includes("Gruppe A: 4 Spieler, 3 Spiele je Spieler, 2 von 4 qualifizieren sich.")
+          && requireEvenHtml.includes("Gruppe B: 3 Spieler, 2 Spiele je Spieler, 2 von 3 qualifizieren sich.")
+          && !requireEvenHtml.includes('name="groupsKoOddParticipantAcknowledged"')
+          && allowUnequalHtml.includes('name="groupsKoOddParticipantAcknowledged"')
+          && allowUnequalHtml.includes("Andere offizielle Formate werden nicht automatisch angenähert")
+          && otherModeHtml === "",
+        `require=${requireEvenHtml.length}, allow=${allowUnequalHtml.length}, other=${otherModeHtml.length}`,
+      );
+    } catch (error) {
+      record("Groups+KO odd UI: Policy, Live-Analyse und Bestaetigung sind kontextabhaengig", false, String(error?.message || error));
+    }
+
+    try {
+      const tournamentBefore = state.store.tournament;
+      const blocked = createTournamentSession({
+        name: "GroupsKoBlocked",
+        mode: "groups_ko",
+        bestOfLegs: 3,
+        startScore: 501,
+        x01Preset: X01_PRESET_CUSTOM,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
+        groupsKoOddParticipantAcknowledged: false,
+        participants: participantList(5, "BL"),
+      });
+      record(
+        "Groups+KO odd start: blockierter Start liefert stabilen Code und klare Meldung",
+        blocked?.ok === false
+          && blocked?.reasonCode === "groups_ko_odd_participants_blocked"
+          && normalizeText(blocked?.message).includes("gerade Teilnehmerzahl")
+          && state.store.tournament === tournamentBefore,
+        `reason=${blocked?.reasonCode || "-"}, stable=${state.store.tournament === tournamentBefore}`,
+      );
+    } catch (error) {
+      record("Groups+KO odd start: blockierter Start liefert stabilen Code und klare Meldung", false, String(error?.message || error));
+    }
+
+    try {
+      const legacy = createTournament({
+        name: "GroupsKoLegacyUi",
+        mode: "groups_ko",
+        bestOfLegs: 3,
+        startScore: 501,
+        x01Preset: X01_PRESET_CUSTOM,
+        x01InMode: "Straight",
+        x01OutMode: "Double",
+        x01BullMode: "25/50",
+        x01MaxRounds: 50,
+        x01BullOffMode: "Normal",
+        lobbyVisibility: "private",
+        randomizeKoRound1: false,
+        participants: participantList(5, "LU"),
+      });
+      delete legacy.rules.groupsKoOddParticipantPolicy;
+      delete legacy.rules.groupsKoOddParticipantAcknowledged;
+      const normalized = normalizeTournament(legacy);
+      const noticeHtml = renderActiveGroupsKoPolicyNotice(normalized);
+      record(
+        "Groups+KO Legacy UI: fehlende historische Bestaetigung bleibt sichtbar und nutzbar",
+        normalized.rules.groupsKoOddParticipantPolicy === GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL
+          && normalized.rules.groupsKoOddParticipantAcknowledged === false
+          && noticeHtml.includes("Bestandshinweis")
+          && noticeHtml.includes("bleibt unverändert nutzbar")
+          && noticeHtml.includes("keine allgemeine offizielle Regelkonformität"),
+        `policy=${normalized.rules.groupsKoOddParticipantPolicy}, ack=${normalized.rules.groupsKoOddParticipantAcknowledged}`,
+      );
+    } catch (error) {
+      record("Groups+KO Legacy UI: fehlende historische Bestaetigung bleibt sichtbar und nutzbar", false, String(error?.message || error));
+    }
+
+    {
+      const previousDraft = state.store.ui.createDraft;
+      try {
+        const form = document.createElement("form");
+        state.store.ui.createDraft = normalizeCreateDraft({
+          mode: "groups_ko",
+          participantsText: "A\nB\nC\nD\nE",
+          groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
+          groupsKoOddParticipantAcknowledged: true,
+        }, state.store.settings);
+        form.innerHTML = `
+          <select name="mode"><option value="groups_ko" selected>groups_ko</option></select>
+          <textarea name="participants">A\nB\nC\nD\nE\nF\nG</textarea>
+          <select name="groupsKoOddParticipantPolicy"><option value="allow_unequal" selected>allow_unequal</option></select>
+          <input name="groupsKoOddParticipantAcknowledged" type="checkbox" checked>
+        `;
+        resetGroupsKoOddParticipantAcknowledgementIfBasisChanged(form);
+        const acknowledgement = form.elements.namedItem("groupsKoOddParticipantAcknowledged");
+        record(
+          "Groups+KO odd UI: Bestaetigung wird bei geaenderter Teilnehmerzahl zurueckgesetzt",
+          acknowledgement instanceof HTMLInputElement && acknowledgement.checked === false,
+          `checked=${acknowledgement instanceof HTMLInputElement ? acknowledgement.checked : "missing"}`,
+        );
+      } catch (error) {
+        record("Groups+KO odd UI: Bestaetigung wird bei geaenderter Teilnehmerzahl zurueckgesetzt", false, String(error?.message || error));
+      } finally {
+        state.store.ui.createDraft = previousDraft;
+      }
     }
 
     try {
@@ -13439,6 +13687,82 @@ const GLOBALS_CONTRACT = Object.freeze({
     }
   }
 
+  function renderGroupsKoOddParticipantPolicyFields(draft) {
+    if (draft?.mode !== "groups_ko") {
+      return "";
+    }
+
+    const participants = parseParticipantLines(draft.participantsText);
+    const analysis = analyzeGroupsKoParticipantDistribution(participants.length);
+    const policy = sanitizeGroupsKoOddParticipantPolicy(draft.groupsKoOddParticipantPolicy);
+    const acknowledgementRequired = analysis.isOdd
+      && policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL;
+    const analysisHtml = analysis.isOdd
+      ? `
+        <div class="ata-small ata-create-help" data-role="groups-ko-odd-analysis">
+          <p><strong>Auswirkung der ungeraden Teilnehmerzahl:</strong></p>
+          <p>Gruppe A: ${analysis.groupASize} Spieler, ${analysis.groupAMatchesPerPlayer} Spiele je Spieler, ${analysis.groupAQualifierCount} von ${analysis.groupASize} qualifizieren sich.</p>
+          <p>Gruppe B: ${analysis.groupBSize} Spieler, ${analysis.groupBMatchesPerPlayer} Spiele je Spieler, ${analysis.groupBQualifierCount} von ${analysis.groupBSize} qualifizieren sich.</p>
+        </div>
+      `
+      : "";
+    const twoPlayerWarning = analysis.hasTwoPlayerGroup && participants.length >= MODE_PARTICIPANT_LIMITS.groups_ko.min
+      ? `<p class="ata-small ata-create-help" data-role="groups-ko-two-player-warning"><strong>Hinweis:</strong> In einer Zweiergruppe qualifizieren sich bei Top 2 beide Spieler automatisch für die KO-Phase.</p>`
+      : "";
+    const acknowledgementHtml = acknowledgementRequired
+      ? `
+        <label class="ata-toggle ata-toggle-compact" data-role="groups-ko-odd-acknowledgement">
+          <span>Ich bestätige, dass ungleiche Gruppengrößen und die daraus entstehenden unterschiedlichen Qualifikationsquoten der verwendeten Turnierordnung entsprechen.</span>
+          <input name="groupsKoOddParticipantAcknowledged" type="checkbox" ${draft.groupsKoOddParticipantAcknowledged ? "checked" : ""}>
+        </label>
+      `
+      : "";
+
+    return `
+      <section class="ata-field" data-role="groups-ko-odd-policy">
+        <label for="ata-groups-ko-odd-policy">Ungerade Teilnehmerzahl</label>
+        <select id="ata-groups-ko-odd-policy" name="groupsKoOddParticipantPolicy">
+          <option value="${GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN}" ${policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN ? "selected" : ""}>Nur gerade Teilnehmerzahl zulassen (empfohlen)</option>
+          <option value="${GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL}" ${policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL ? "selected" : ""}>Ungleiche Gruppengrößen zulassen (Veranstalterregel)</option>
+        </select>
+        <p class="ata-small ata-create-help">Der sichere Produktstandard ist keine DRA-Universalregel. Ungleiche Gruppen sind nur zulässig, wenn diese Veranstalterregel zur konkreten Turnierordnung passt.</p>
+        ${analysisHtml}
+        ${twoPlayerWarning}
+        ${acknowledgementHtml}
+        <p class="ata-small ata-create-help" data-role="groups-ko-format-scope">Unterstützt werden genau zwei Gruppen mit vollständigem Round Robin und Top 2 je Gruppe. Andere offizielle Formate werden nicht automatisch angenähert.</p>
+      </section>
+    `;
+  }
+
+
+  function renderActiveGroupsKoPolicyNotice(tournament) {
+    if (tournament?.mode !== "groups_ko") {
+      return "";
+    }
+    const analysis = analyzeGroupsKoParticipantDistribution(
+      tournament.participants.length,
+      tournament.groups,
+    );
+    const policy = sanitizeGroupsKoOddParticipantPolicy(tournament?.rules?.groupsKoOddParticipantPolicy);
+    const policyLabel = policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL
+      ? "Ungleiche Gruppengrößen zugelassen (Veranstalterregel)"
+      : "Gerade Teilnehmerzahl erforderlich (sicherer Produktstandard)";
+    const legacyWarning = analysis.hasUnequalGroupSizes
+      && policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL
+      && tournament?.rules?.groupsKoOddParticipantAcknowledged !== true
+      ? `<p class="ata-small ata-create-help" data-role="groups-ko-legacy-warning"><strong>Bestandshinweis:</strong> Dieses Turnier verwendet migriertes Verhalten mit ungleichen Gruppen, jedoch ohne gespeicherte Bestätigung der zugrunde liegenden Turnierordnung. Das laufende Turnier bleibt unverändert nutzbar.</p>`
+      : "";
+    return `
+      <div class="ata-meta-block" data-role="groups-ko-active-policy">
+        <div class="ata-meta-heading">Gruppenregel</div>
+        <div class="ata-info-tag-cloud"><span class="ata-info-tag">${escapeHtml(policyLabel)}</span></div>
+        ${legacyWarning}
+        <p class="ata-small">Dieses Format bildet zwei Gruppen mit vollständigem Round Robin und Top 2 je Gruppe ab; die Auswahl behauptet keine allgemeine offizielle Regelkonformität.</p>
+      </div>
+    `;
+  }
+
+
   function renderTournamentTab() {
     const tournament = state.store.tournament;
     const durationEstimateVisible = state.store?.ui?.durationEstimateVisible !== false;
@@ -13582,6 +13906,9 @@ const GLOBALS_CONTRACT = Object.freeze({
                       <span class="ata-preset-pill">${escapeHtml(presetStatusLabel)}</span>
                     </div>
                   </div>
+                </div>
+                <div id="ata-groups-ko-odd-policy-host">
+                  ${renderGroupsKoOddParticipantPolicyFields(draft)}
                 </div>
                 <div class="ata-toggle ata-toggle-compact">
                   <div>
@@ -13737,6 +14064,7 @@ const GLOBALS_CONTRACT = Object.freeze({
             <div class="ata-meta-heading">Teilnehmerfeld <span class="ata-player-chip-count">(${participantsCount})</span></div>
             <div class="ata-player-chip-cloud">${participantsHtml}</div>
           </div>
+          ${renderActiveGroupsKoPolicyNotice(tournament)}
         </div>
       </section>
       <section class="ata-card tournamentCard">
@@ -14259,7 +14587,7 @@ const GLOBALS_CONTRACT = Object.freeze({
             ${renderSectionHeading("Gruppenentscheidung offen", [
               { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
             ])}
-            <p class="ata-small">KO-Qualifikation ist blockiert, bis folgende DRA-Entscheidungen geklärt sind:</p>
+            <p class="ata-small">KO-Qualifikation ist blockiert, bis folgende Veranstalterentscheidungen geklärt sind:</p>
             <ul class="ata-small">
               ${blockedGroups.map((text) => `<li>${escapeHtml(text)}</li>`).join("")}
             </ul>
@@ -14515,18 +14843,19 @@ const GLOBALS_CONTRACT = Object.freeze({
         <p class="ata-small">Nur f\u00fcr den Modus KO (Straight Knockout) verf\u00fcgbar. Entsperren erfordert einen expliziten Promoter-Override mit Best\u00e4tigung (DRA 6.12.1).</p>
       </section>
       <section class="ata-card tournamentCard">
-        ${renderSectionHeading("Promoter Tie-Break-Profil", [
+        ${renderSectionHeading("Veranstalter-Tie-Break-Profil", [
           { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zum Tie-Break \u00f6ffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
         ])}
         <div class="ata-field">
           <label for="ata-setting-tiebreak">Profil pro Turnier</label>
           <select id="ata-setting-tiebreak" data-action="set-tiebreak-mode" ${tieBreakDisabledAttr}>
-            <option value="${TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE ? "selected" : ""}>Promoter H2H + Mini-Tabelle (empfohlen)</option>
-            <option value="${TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF ? "selected" : ""}>Promoter Punkte + LegDiff</option>
+            <option value="${TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE ? "selected" : ""}>Veranstalterprofil: Direktvergleich und Minitabelle (empfohlen)</option>
+            <option value="${TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF ? "selected" : ""}>Veranstalterprofil: Punkte und Leg-Differenz</option>
           </select>
         </div>
-        <p class="ata-small"><strong>Promoter H2H + Mini-Tabelle:</strong> Punkte (2/1/0), danach Direktvergleich (2er-Gleichstand), Teilgruppen-Leg-Differenz (3+), Gesamt-Leg-Differenz, Legs gewonnen; verbleibender Gleichstand = &bdquo;Playoff erforderlich&ldquo;.</p>
-        <p class="ata-small"><strong>Promoter Punkte + LegDiff:</strong> vereinfachte Sortierung \u00fcber Punkte, Gesamt-Leg-Differenz und Legs gewonnen (legacy-kompatibel).</p>
+        <p class="ata-small"><strong>Direktvergleich und Minitabelle:</strong> Punkte (2/1/0), danach Direktvergleich (2er-Gleichstand), Teilgruppen-Leg-Differenz (3+), Gesamt-Leg-Differenz, Legs gewonnen; verbleibender Gleichstand = &bdquo;Playoff erforderlich&ldquo;.</p>
+        <p class="ata-small"><strong>Punkte und Leg-Differenz:</strong> vereinfachte Sortierung \u00fcber Punkte, Gesamt-Leg-Differenz und Legs gewonnen (legacy-kompatibel).</p>
+        <p class="ata-small">DRA 6.16.1 schreibt keine universelle Reihenfolge vor; das ausgewählte Profil dokumentiert die Veranstalterregel.</p>
         ${tieBreakLocked ? `<p class="ata-small">Profil gesperrt: Nach dem ersten abgeschlossenen Gruppen-/Liga-Ergebnis ist keine Profil\u00e4nderung mehr zul\u00e4ssig (DRA 6.16.1).</p>` : ""}
       </section>
       <section class="ata-card tournamentCard">
@@ -14692,6 +15021,7 @@ const GLOBALS_CONTRACT = Object.freeze({
     if (createForm instanceof HTMLFormElement) {
       syncCreateFormDependencies(createForm);
       refreshCreateFormDurationEstimate(createForm);
+      refreshCreateFormGroupsKoPolicy(createForm);
       const handleDraftInputChange = (event) => {
         const target = event?.target;
         const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
@@ -14710,9 +15040,11 @@ const GLOBALS_CONTRACT = Object.freeze({
         if (isCreateDraftPresetField(fieldName)) {
           setCreateFormPresetValue(createForm, X01_PRESET_CUSTOM);
         }
+        resetGroupsKoOddParticipantAcknowledgementIfBasisChanged(createForm);
         syncCreateFormDependencies(createForm);
         updateCreateDraftFromForm(createForm, true);
         refreshCreateFormDurationEstimate(createForm);
+        refreshCreateFormGroupsKoPolicy(createForm);
       };
       createForm.addEventListener("input", handleDraftInputChange);
       createForm.addEventListener("change", handleDraftInputChange);
@@ -15187,6 +15519,40 @@ const GLOBALS_CONTRACT = Object.freeze({
   }
 
 
+  function resetGroupsKoOddParticipantAcknowledgementIfBasisChanged(form) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const currentDraft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store.settings);
+    const nextDraft = normalizeCreateDraft(readCreateDraftInput(new FormData(form)), state.store.settings);
+    const currentParticipantCount = parseParticipantLines(currentDraft.participantsText).length;
+    const nextParticipantCount = parseParticipantLines(nextDraft.participantsText).length;
+    const basisChanged = currentDraft.mode !== nextDraft.mode
+      || currentDraft.groupsKoOddParticipantPolicy !== nextDraft.groupsKoOddParticipantPolicy
+      || currentParticipantCount !== nextParticipantCount;
+    if (!basisChanged) {
+      return;
+    }
+    const acknowledgement = form.elements.namedItem("groupsKoOddParticipantAcknowledged");
+    if (acknowledgement instanceof HTMLInputElement) {
+      acknowledgement.checked = false;
+    }
+  }
+
+
+  function refreshCreateFormGroupsKoPolicy(form) {
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const host = form.querySelector("#ata-groups-ko-odd-policy-host");
+    if (!(host instanceof HTMLElement)) {
+      return;
+    }
+    const draft = normalizeCreateDraft(readCreateDraftInput(new FormData(form)), state.store.settings);
+    host.innerHTML = renderGroupsKoOddParticipantPolicyFields(draft);
+  }
+
+
   function applySelectedPresetToCreateForm(form) {
     if (!(form instanceof HTMLFormElement)) {
       return;
@@ -15225,9 +15591,11 @@ const GLOBALS_CONTRACT = Object.freeze({
     });
 
     setCreateFormPresetValue(form, preset.id);
+    resetGroupsKoOddParticipantAcknowledgementIfBasisChanged(form);
     syncCreateFormDependencies(form);
     updateCreateDraftFromForm(form, true);
     refreshCreateFormDurationEstimate(form);
+    refreshCreateFormGroupsKoPolicy(form);
     setNotice("info", `Preset „${preset.label}“ wurde auf alle Turnierfelder angewendet.`, 2600);
   }
 
@@ -15249,6 +15617,8 @@ const GLOBALS_CONTRACT = Object.freeze({
       randomizeKoRound1: formData.get("randomizeKoRound1") !== null,
       enableThirdPlaceMatch: formData.get("enableThirdPlaceMatch") !== null,
       grandFinalResetMode: formData.get("grandFinalResetMode"),
+      groupsKoOddParticipantPolicy: formData.get("groupsKoOddParticipantPolicy"),
+      groupsKoOddParticipantAcknowledged: formData.get("groupsKoOddParticipantAcknowledged") !== null,
     };
   }
 
@@ -15305,6 +15675,7 @@ const GLOBALS_CONTRACT = Object.freeze({
     participantField.value = shuffledNames.join("\n");
     updateCreateDraftFromForm(form, true);
     refreshCreateFormDurationEstimate(form);
+    refreshCreateFormGroupsKoPolicy(form);
     setNotice("success", "Teilnehmer wurden zuf\u00e4llig gemischt.", 1800);
   }
 
@@ -15331,6 +15702,8 @@ const GLOBALS_CONTRACT = Object.freeze({
       randomizeKoRound1: draft.randomizeKoRound1,
       enableThirdPlaceMatch: draft.enableThirdPlaceMatch,
       grandFinalResetMode: draft.grandFinalResetMode,
+      groupsKoOddParticipantPolicy: draft.groupsKoOddParticipantPolicy,
+      groupsKoOddParticipantAcknowledged: draft.groupsKoOddParticipantAcknowledged,
       koDrawLocked: state.store.settings.featureFlags.koDrawLockDefault !== false,
       participants,
     };

@@ -77,9 +77,14 @@
 
 
   function createTournamentSession(config) {
-    const errors = validateCreateConfig(config);
-    if (errors.length) {
-      return { ok: false, message: errors.join(" ") };
+    const validationDetails = validateCreateConfigDetails(config);
+    if (validationDetails.length) {
+      return {
+        ok: false,
+        reasonCode: validationDetails[0].reasonCode,
+        validationDetails,
+        message: validationDetails.map((entry) => entry.message).join(" "),
+      };
     }
 
     const tournament = createTournament(config);

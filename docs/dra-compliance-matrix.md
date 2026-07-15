@@ -13,6 +13,7 @@ Statuswerte:
 | 6.8.1, p.17 | Straight Knockout als Grundprinzip | enforced | `src/domain/tournament-create.js` (KO-Default mit genau einem Finale), `src/bracket/payload.js` (single elimination payload) |
 | 1.2 / 6.8.4 | Separate Tournament-/Promoter-Rules möglich | enforced / assisted | Optionales `enableThirdPlaceMatch` fuer `ko` und eigenstaendiges `double_ko` mit Grand-Final-Regel in `src/domain/tournament-create.js` und `src/domain/ko-engine.js`; Standards bleiben unveraendert, Zusatzformate nur explizit aktiviert |
 | 6.8.2, p.17 | Round Robin zulässig | enforced | `src/domain/tournament-create.js` (`buildLeagueMatches`, Gruppenmatches), `src/domain/standings-dra.js` |
+| 1.2 / 6.8.4 / Veranstalterregeln | Ungerade Teilnehmerzahl im bestehenden `groups_ko` | assisted / enforced | `require_even` ist sicherer Produktstandard; `allow_unequal` erfordert bei ungerader Anzahl eine ausdrückliche Bestätigung. Die Anwendung analysiert nur zwei Round-Robin-Gruppen mit Top 2 und behauptet keine universelle DRA-Regel oder Unterstützung anderer offizieller Formate. |
 | 6.10.1 / 6.10.5.2, p.17-18 | Promoter-Discretion / organisatorische Limits | assisted | Projektlimits + Hinweise in `src/ui/render-settings.js`, `README.md` |
 | 6.12.1, p.18 | Draw bleibt bestehen | enforced / assisted | `drawLocked` je Turnier in `src/domain/ko-engine.js`, Entsperren nur als expliziter Promoter-Override in `src/domain/rules-config.js` + `src/app/tournament-actions.js`; Platz-3-Option ist als Anlage/Import-Regel ausgelegt (kein Live-Toggle im laufenden Turnier) |
 | 6.16.1, p.20 | Tie-Break im Ermessen des Promoters | enforced | Profilmodell `tieBreakProfile` in `src/data/normalization.js`, Ranking in `src/domain/standings-dra.js`, Profilsperre nach erstem relevanten Ergebnis in `src/domain/rules-config.js` |
@@ -30,4 +31,5 @@ Statuswerte:
 - Legacy `tournament.rules.tieBreakMode` wird auf `tieBreakProfile` gemappt:
   - `dra_strict -> promoter_h2h_minitable`
   - `legacy -> promoter_points_legdiff`
+- Legacy-`groups_ko` ohne neue Policy werden bei ungerader oder gespeicherter ungleicher Gruppenverteilung als bestehendes `allow_unequal`-Verhalten normalisiert. Gruppen und Matches bleiben unverändert; eine Bestätigung wird nicht abgeleitet.
 - Storage ist auf `schemaVersion: 4`.

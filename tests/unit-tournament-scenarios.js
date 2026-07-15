@@ -299,6 +299,58 @@
   });
 
 
+  test("Scenario Groups+KO Legacy odd: migriertes 7er-Feld bleibt bis zum Finale spielbar", () => {
+    const legacy = createTournament({
+      name: "GroupsKO Legacy Odd",
+      mode: "groups_ko",
+      bestOfLegs: 3,
+      startScore: 501,
+      x01Preset: X01_PRESET_CUSTOM,
+      x01InMode: "Straight",
+      x01OutMode: "Double",
+      x01BullMode: "25/50",
+      x01MaxRounds: 50,
+      x01BullOffMode: "Normal",
+      lobbyVisibility: "private",
+      randomizeKoRound1: false,
+      groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
+      groupsKoOddParticipantAcknowledged: true,
+      participants: participantList(7, "LG"),
+    });
+    delete legacy.rules.groupsKoOddParticipantPolicy;
+    delete legacy.rules.groupsKoOddParticipantAcknowledged;
+    const tournament = normalizeTournament(cloneSerializable(legacy));
+
+    tournament.matches
+      .filter((match) => match.stage === MATCH_STAGE_GROUP)
+      .forEach((match) => {
+        const playerNumber = (participantId) => Number(normalizeText(participantId).replace(/\D/g, ""));
+        const winnerId = playerNumber(match.player1Id) < playerNumber(match.player2Id)
+          ? match.player1Id
+          : match.player2Id;
+        completeMatchByWinner(tournament, match, winnerId);
+      });
+    runGroupsKoDerivations(tournament);
+
+    const semi1 = findMatch(tournament, "ko-r1-m1");
+    const semi2 = findMatch(tournament, "ko-r1-m2");
+    assert(Boolean(semi1.player1Id && semi1.player2Id));
+    assert(Boolean(semi2.player1Id && semi2.player2Id));
+    completeMatchByWinner(tournament, semi1, semi1.player1Id);
+    completeMatchByWinner(tournament, semi2, semi2.player1Id);
+    runGroupsKoDerivations(tournament);
+
+    const final = findMatch(tournament, "ko-r2-m1");
+    assert(Boolean(final.player1Id && final.player2Id));
+    completeMatchByWinner(tournament, final, final.player1Id);
+    runGroupsKoDerivations(tournament);
+
+    assertEqual(tournament.rules.groupsKoOddParticipantPolicy, GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL);
+    assertEqual(tournament.rules.groupsKoOddParticipantAcknowledged, false);
+    assertEqual(final.status, STATUS_COMPLETED);
+  });
+
+
   test("Scenario Groups+KO Deadlock: playoff_required blockiert KO-Belegung", () => {
     const tournament = createTournament({
       name: "GroupsKO Deadlock",
