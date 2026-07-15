@@ -402,7 +402,7 @@ Hier liegt die eigentliche Turnierlogik. Wenn sich eine fachliche Regel ändert,
 | `src/app/bracket-controller.js` | Bracket-Orchestrierung | Render-Queue, Timeout, Height-Sync, Fallback-Sichtbarkeit und Fehlermeldungen | `src/bracket/frame-bridge.js`, `src/bracket/payload.js`, `src/ui/render-view.js` |
 | `src/app/browser-lifecycle.js` | Browser-Lifecycle | Cleanup, Event-Bridge und Runtime-nahe UI-Helfer | `src/infra/history-import.js`, `src/app/bracket-controller.js`, `src/runtime/bootstrap.js` |
 | `src/app/update-status.js` | Update-Status-Orchestrierung | hält den GitHub-Versionsstatus im Runtime-State und spiegelt ihn in UI und Loader-Menü | `src/infra/update-check.js`, `src/ui/render-settings.js`, `src/ui/handlers.js`, `src/runtime/bootstrap.js` |
-| `src/app/diagnostics.js` | Runtime-Diagnostik | `runSelfTests()` für Browser-Konsole und Contract-Test | `src/domain/*`, `src/infra/*`, `src/app/public-api.js`, `scripts/test-runtime-contract.ps1` |
+| `src/app/diagnostics.js` | Runtime-Diagnostik | `runSelfTests()` für Browser-Konsole und Contract-Test, einschließlich stabiler Turnieranlage-Hooks und Draft-/Shuffle-Verhalten | `src/domain/*`, `src/infra/*`, `src/ui/*`, `src/app/public-api.js`, `scripts/test-runtime-contract.ps1` |
 | `src/app/public-api.js` | Public Runtime API | veröffentlicht `window.__ATA_RUNTIME` und bindet Cleanup daran | `src/app/diagnostics.js`, `src/runtime/bootstrap.js`, Browser-Konsole |
 
 ### Infra
@@ -423,7 +423,7 @@ Hier liegt die eigentliche Turnierlogik. Wenn sich eine fachliche Regel ändert,
 | `src/ui/render-shell.js` | äußerer Drawer-Rahmen | rendert Shadow-DOM-Shell, Tabs, Notices und Runtime-Status-Bar | `src/ui/render-tabs.js`, `src/infra/api-client.js`, `src/ui/handlers.js` |
 | `src/ui/render-tabs.js` | Tab-Verteiler | entscheidet, welcher Tab-Renderer für den aktiven Tab ausgeführt wird | `src/ui/render-tournament.js`, `src/ui/render-matches.js`, `src/ui/render-view.js`, `src/ui/render-io.js`, `src/ui/render-settings.js` |
 | `src/ui/render-helpers.js` | UI-Helfer | `renderInfoLinks()`, Abschnitts- und Turnierzeit-Helfer für wiederverwendbare HTML-Bausteine | `src/ui/render-*.js` |
-| `src/ui/render-tournament.js` | Turnieranlage und Turnierübersicht | rendert Neues-Turnier-Formular, Preset-Auswahl mit ehrlichen PDC-Hinweisen, Live-Zeitprognose, aktives Turnier und Reset-Bereich | `src/data/normalization.js`, `src/domain/tournament-duration.js`, `src/ui/render-helpers.js`, `src/ui/handlers.js` |
+| `src/ui/render-tournament.js` | Turnieranlage und Turnierübersicht | rendert die fünf Bereiche `Turnierformat`, `Teilnehmer`, `Zusätzliche Turnierregeln`, `Spielregeln` und `Turnierübersicht`, dazu unveränderte Preset-Auswahl, Live-Zeitprognose, aktives Turnier und Reset-Bereich | `src/data/normalization.js`, `src/domain/tournament-duration.js`, `src/ui/render-helpers.js`, `src/ui/handlers.js` |
 | `src/ui/render-matches.js` | Matchliste und Matchaktionen | rendert Editoren, Status und API-Start-Buttons; Sortierung und `Nächstes Match` kommen aus `src/app/match-view-models.js` | `src/app/match-view-models.js`, `src/domain/results.js`, `src/infra/api-automation.js` |
 | `src/ui/render-view.js` | Tabellen- und Bracket-Ansicht | rendert Liga-/Gruppentabellen, Fallback-Bracket und den Einstieg ins iframe-Bracket | `src/domain/standings-dra.js`, `src/domain/groups.js`, `src/domain/ko-engine.js`, `src/bracket/*` |
 | `src/ui/render-io.js` | Import/Export-Tab | rendert Export- und Import-Oberfläche | `src/ui/handlers.js`, `src/data/storage.js` |
@@ -451,7 +451,7 @@ Hier liegt die eigentliche Turnierlogik. Wenn sich eine fachliche Regel ändert,
 ## Unterstützende Dateien und Referenzmaterial
 
 ### `src/ui/styles/main.css`
-- enthält das komplette Shadow-DOM-Styling der UI
+- enthält das komplette Shadow-DOM-Styling der UI, einschließlich der responsiven fünfteiligen Turnieranlage
 - wird nicht separat ausgeliefert, sondern durch `scripts/build.ps1` in das Bundle eingebettet
 - ist deshalb Quellmaterial, aber kein eigener Runtime-Ladepunkt
 

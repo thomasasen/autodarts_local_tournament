@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.6.0
+- Die Turnieranlage ist ohne Änderung der Fachlogik in fünf klar erkennbare Bereiche gegliedert: `Turnierformat`, `Teilnehmer`, `Zusätzliche Turnierregeln`, `Spielregeln` und `Turnierübersicht`.
+- Die unveränderbaren Angaben `Spielmodus` und `Lobby` erscheinen nicht mehr als schreibgeschützte Fake-Eingabefelder, sondern als kompakte Zusammenfassung des festen Setups (`X01 · Legs / First to N · Private Lobby`).
+- Modusabhängige Regelgruppen besitzen stabile Render-Gruppen; alle bisherigen Optionen und alle fünf vorhandenen Turniermodi bleiben erhalten.
+- Boardzahl, Zeitprofil, bestehende Live-Zeitprognose und primäre Anlegeaktion sind in der Turnierübersicht gebündelt. Draft-Erhalt, Preset-Auswahl mit separatem Apply-Button und Teilnehmer-Mischen funktionieren unverändert.
+- Responsive Layout für große Desktops, `1366 × 768`, Tablet und schmale Ansichten ergänzt; nicht interaktive Karten reagieren nicht länger mit einem irreführenden Hover-Effekt.
+- Runtime-Selftests und Runtime-Contract prüfen die Bereichsreihenfolge, bestehende Formular-Hooks, alle Modusoptionen, das feste Setup, Draft-/Shuffle-Verhalten und zentrale Responsive-Styles.
+- Keine neuen Hilfe-Elemente, Preset-Karten, Live-Validierung oder fachlichen Regelbehauptungen; diese späteren UX-Releases bleiben bewusst außerhalb des Scopes.
+
 ## 0.5.0
 - Neuer eigenständiger Modus `preliminary_final` (`Vorrunde + Finalphase`):
   - deterministischer regulärer Paarungsgraph mit exakt `4..8` verschiedenen Gegnern je Teilnehmer, ohne Selbst- oder Doppelbegegnungen

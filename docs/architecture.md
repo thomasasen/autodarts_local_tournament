@@ -70,7 +70,7 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
   - erwartete Legs pro Match aus `Best of`
   - X01-Setup (`Startscore`, `In`, `Out`, `Bull-off`, `Bull-Modus`, `Max Runden`)
   - globales Zeitprofil (`fast | normal | slow`)
-- Die UI rendert daraus einen Live-Block im Turnierformular.
+- Die UI rendert daraus einen Live-Block im Bereich `Turnierübersicht` des fünfstufig gegliederten Turnierformulars. Die Abschnittsstruktur bleibt reine Darstellung; bestehende Feld-IDs und Handler-Verträge tragen weiterhin Draft-, Preset- und Submit-Verhalten.
 - Bei `preliminary_final` werden Vorrunde und abhängige KO-/Doppel-KO-Finalphase als getrennte Tasks mit eigenen Leg-Erwartungen modelliert.
 - `src/ui/handlers.js` aktualisiert diesen Block gezielt bei jedem Formular-Input, ohne die gesamte Shell neu zu rendern.
 
@@ -103,7 +103,7 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
 - `scripts/qa-encoding.ps1`: UTF-8/Umlaute/Mojibake
 - `scripts/qa-regelcheck.ps1`: Regelpunkt-zu-Code-Mapping
 - `scripts/test-domain.ps1`: isolierter Domain-Harness ohne npm und ohne Mock-DOM
-- `scripts/test-runtime-contract.ps1`: Runtime-API- und Selftest-Contract gegen `dist/*`
+- `scripts/test-runtime-contract.ps1`: Runtime-API-, Selftest- und Turnieranlage-DOM-Contract gegen `dist/*`
 - `scripts/qa-build-discipline.ps1`: Versionsquelle und generiertes `dist/*`
 - `tests/unit-update-check.js`: Regressionen für Versionvergleich, TTL, Fallback und Cache-Busting
 - Runtime-Selbsttests: `window.__ATA_RUNTIME.runSelfTests()`

@@ -2,7 +2,7 @@
 
 Lokales Turniermanagement direkt in `https://play.autodarts.io` als Userscript.
 
-Aktuelle Releaseversion: `0.5.0`.
+Aktuelle Releaseversion: `0.6.0`.
 
 [![Installieren](https://img.shields.io/badge/Installieren-Autodarts%20Tournament%20Assistant%20Loader-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js)
 
@@ -96,7 +96,7 @@ Nach Installation ist links im Hauptmenü der neue Eintrag sichtbar. Darüber ö
 - Turnieranlage:
   - KO-Erstrunde als Hybrid-Draw (`seeded` oder `open_draw`)
   - Preset-Auswahl mit offiziellem European-Tour-Format, Basic-Kompatibilitätsprofil und Custom-Status
-  - Kompaktes Formular-Layout (Konfiguration + Teilnehmerbereich)
+  - Klar gegliedertes Formular mit `Turnierformat`, `Teilnehmer`, `Zusätzliche Turnierregeln`, `Spielregeln` und `Turnierübersicht`
   - Live-Prognose für die voraussichtliche Turnierzeit
   - Teilnehmerliste kann per Button gemischt werden
   - Formularentwurf bleibt erhalten (z. B. beim Moduswechsel)
@@ -204,6 +204,8 @@ Tab: `Turnier`
 
 ![Neues Turnier erstellen](assets/ss_Turnier_anlage-neu.png)
 
+Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten bis zum Anlegen. Auf breiten Ansichten steht die `Turnierübersicht` mit Boardzahl, Zeitprofil und Live-Prognose rechts neben dem Formular; auf schmalen Ansichten folgt sie ohne horizontale Überbreite darunter. Die bestehende Preset-Auswahl mit separatem Button bleibt im Bereich `Spielregeln` unverändert.
+
 ### Pflichtfelder
 - Turniername
 - Modus
@@ -224,8 +226,7 @@ Tab: `Turnier`
 | `Bull-off` | `Off`, `Normal`, `Official` | Startreihenfolge-/Bull-off-Verhalten für Lobby | Legt fest, wie Anstöße entschieden werden |
 | `Bull-Modus` | `25/50`, `50/50` | Wertung der Bull-Segmente | Muss mit Hausregeln/Turnierkontext konsistent sein |
 | `Max Runden` | `15`, `20`, `50`, `80` | Upper bound für Matchdauer in der Lobby | Verhindert hängende/zu lange Matches |
-| `Spielmodus` | fix `Legs (First to N aus Best of)` | Nicht umstellbar in der UI | Verhindert inkonsistente Kombinationen im lokalen Flow |
-| `Lobby` | fix `Privat` | Sichtbarkeit der API-Lobby | Lokales Turnier bleibt bewusst privat/sicher |
+| `Festes Setup` | kompakte Anzeige `X01 · Legs / First to N · Private Lobby` | Technisches Match-Setup; nicht umstellbar in der UI | Verhindert inkonsistente Kombinationen und stellt unveränderbare Werte nicht als Eingabefelder dar |
 | `Preset` | Auswahlfeld + Button `Preset anwenden` | Setzt alle Preset-relevanten Turnierfelder konsistent | Offizielle und kompatible Profile bleiben klar getrennt |
 | `KO-Erstrunde zufällig mischen` | Checkbox `ON/OFF` | `open_draw` oder `seeded` in Runde 1 | Transparente Entscheidung zwischen deterministischer Open-Draw-Reihenfolge und Setzlogik |
 | `Spiel um Platz 3 (optional)` | Checkbox `ON/OFF` | Fügt im KO-Modus ein separates Bronze-Match (Halbfinal-Verlierer) hinzu | Default bleibt klassisches KO mit genau einem Finale; zusätzliche Platzierung nur als explizite Tournament Rule |
@@ -263,7 +264,7 @@ Tab: `Turnier`
 
 ### Voraussichtliche Turnierzeit
 - Details zur Formel, zu den Faktoren und zur Benchmark-Basis: [docs/tournament-duration.md](docs/tournament-duration.md)
-- In der rechten Spalte unter `Teilnehmer` wird eine Live-Prognose angezeigt.
+- Im Bereich `Turnierübersicht` wird eine Live-Prognose angezeigt; auf breiten Ansichten rechts, auf schmalen Ansichten unter dem Formular.
 - Die Berechnung aktualisiert sich bei jeder Änderung im Formular:
   - Teilnehmerzahl und Modus
   - `Best of Legs`
@@ -711,7 +712,7 @@ powershell -ExecutionPolicy Bypass -File scripts/test-runtime-contract.ps1
 - Technisches Hard-Cap: `128` Teilnehmer
 - API-Halbautomatik basiert auf in der Praxis verwendeten Endpunkten (Inference), siehe [docs/autodarts-api-capabilities.md](docs/autodarts-api-capabilities.md)
 - DOM-Autodetect bleibt best-effort
-- MultiBoard ist nicht Bestandteil von Version `0.5.0`. `Boards für Zeitprognose` ist ausschließlich ein Kapazitätsparameter der Schätzung. Board-Zuweisung, parallele Lobbyverwaltung, mehrere gleichzeitig gestartete Matches, Mehrgeräte-Synchronisierung und Mehrbrowser-Bearbeitung sind nicht implementiert.
+- MultiBoard ist nicht Bestandteil von Version `0.6.0`. `Boards für Zeitprognose` ist ausschließlich ein Kapazitätsparameter der Schätzung. Board-Zuweisung, parallele Lobbyverwaltung, mehrere gleichzeitig gestartete Matches, Mehrgeräte-Synchronisierung und Mehrbrowser-Bearbeitung sind nicht implementiert.
 
 ## Quellen
 - Turnierdauer-Benchmarks:

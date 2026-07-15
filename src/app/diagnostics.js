@@ -166,6 +166,106 @@
       const previousDraft = cloneSerializable(state.store.ui?.createDraft);
       const previousActiveTab = state.activeTab;
       const previousStoredActiveTab = state.store.ui.activeTab;
+      try {
+        state.store.tournament = null;
+        state.activeTab = "tournament";
+        state.store.ui.activeTab = "tournament";
+        state.store.ui.createDraft = createDefaultCreateDraft(state.store.settings);
+        renderShell();
+
+        const createForm = state.shadowRoot?.getElementById("ata-create-form");
+        if (!(createForm instanceof HTMLFormElement)) {
+          throw new Error("Create form missing.");
+        }
+        const sectionOrder = Array.from(createForm.querySelectorAll("[data-create-section]"))
+          .map((section) => section.getAttribute("data-create-section"));
+        const expectedSectionOrder = ["format", "participants", "additional-rules", "game-rules", "overview"];
+        const sectionHeadings = Array.from(createForm.querySelectorAll("[data-create-section] > .ata-create-section-head h4"))
+          .map((heading) => normalizeText(heading.textContent));
+        const expectedHeadings = [
+          "Turnierformat",
+          "Teilnehmer",
+          "Zusätzliche Turnierregeln",
+          "Spielregeln",
+          "Turnierübersicht",
+        ];
+        const requiredSelectors = [
+          "#ata-name",
+          "#ata-mode",
+          "#ata-bestof",
+          "#ata-startscore",
+          "#ata-x01-inmode",
+          "#ata-x01-outmode",
+          "#ata-x01-bulloff",
+          "#ata-x01-bullmode",
+          "#ata-x01-maxrounds",
+          "#ata-preset-select",
+          "#ata-apply-preset",
+          "#ata-participants",
+          "#ata-randomize-ko",
+          "#ata-enable-third-place",
+          "#ata-grand-final-reset-mode",
+          "#ata-board-count",
+          "#ata-create-time-profile",
+          "#ata-create-duration-estimate",
+          "button[type='submit']",
+          "[data-action='shuffle-participants']",
+        ];
+        const hooksPreserved = requiredSelectors.every((selector) => createForm.querySelectorAll(selector).length === 1);
+        const modeValues = Array.from(createForm.querySelectorAll("#ata-mode option")).map((option) => option.value);
+        const fixedSummary = createForm.querySelector("[data-role='fixed-match-setup']");
+        const fixedSummaryText = normalizeText(fixedSummary?.textContent || "");
+        const fixedSummaryOk = fixedSummary instanceof HTMLElement
+          && fixedSummary.querySelector("input, select, textarea, button") === null
+          && fixedSummaryText.includes("X01")
+          && fixedSummaryText.includes("Legs")
+          && fixedSummaryText.includes("Private Lobby");
+        const structureOk = JSON.stringify(sectionOrder) === JSON.stringify(expectedSectionOrder)
+          && JSON.stringify(sectionHeadings) === JSON.stringify(expectedHeadings)
+          && hooksPreserved
+          && JSON.stringify(modeValues) === JSON.stringify(["ko", "double_ko", "league", "groups_ko", "preliminary_final"])
+          && createForm.querySelector("#ata-match-mode") === null
+          && createForm.querySelector("#ata-lobby-fixed") === null
+          && fixedSummaryOk;
+        record(
+          "Create-UI: fünf klar benannte Bereiche und kompaktes festes Setup",
+          structureOk,
+          `sections=${sectionOrder.join("/")}, hooks=${hooksPreserved}, modes=${modeValues.join("/")}, fixed=${fixedSummaryOk}`,
+        );
+
+        const participantsField = createForm.querySelector("#ata-participants");
+        const shuffleButton = createForm.querySelector("[data-action='shuffle-participants']");
+        if (!(participantsField instanceof HTMLTextAreaElement) || !(shuffleButton instanceof HTMLButtonElement)) {
+          throw new Error("Participant shuffle controls missing.");
+        }
+        participantsField.value = "Ada\nBerta\nClara\nDora";
+        participantsField.dispatchEvent(new Event("input", { bubbles: true }));
+        shuffleButton.click();
+        const shuffledDraft = normalizeCreateDraft(state.store.ui.createDraft, state.store.settings);
+        const shuffledNames = parseParticipantLines(shuffledDraft.participantsText).map((participant) => participant.name).sort();
+        const shuffleOk = JSON.stringify(shuffledNames) === JSON.stringify(["Ada", "Berta", "Clara", "Dora"])
+          && state.shadowRoot?.querySelector("#ata-create-duration-estimate") instanceof HTMLElement;
+        record(
+          "Create-UI: Teilnehmer-Mischen erhält das Teilnehmerfeld und aktualisiert den Draft",
+          shuffleOk,
+          `participants=${shuffledNames.join("/")}, forecast=${Boolean(state.shadowRoot?.querySelector("#ata-create-duration-estimate"))}`,
+        );
+      } catch (error) {
+        record("Create-UI: Struktur- und Shuffle-Vertrag", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+        state.store.ui.createDraft = previousDraft || createDefaultCreateDraft(state.store.settings);
+        state.activeTab = previousActiveTab;
+        state.store.ui.activeTab = previousStoredActiveTab;
+        renderShell();
+      }
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      const previousDraft = cloneSerializable(state.store.ui?.createDraft);
+      const previousActiveTab = state.activeTab;
+      const previousStoredActiveTab = state.store.ui.activeTab;
       const participantNames = Array.from({ length: 7 }, (_, index) => `UI Spieler ${index + 1}`).join("\n");
       try {
         ["ko", "double_ko", "league", "groups_ko"].forEach((sourceMode) => {

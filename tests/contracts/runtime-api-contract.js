@@ -17,4 +17,41 @@ const RUNTIME_API_CONTRACT = Object.freeze({
     "getDebugReport",
     "runSelfTests",
   ]),
+  createUi: Object.freeze({
+    hostId: "ata-ui-host",
+    formSelector: "#ata-create-form",
+    sectionSelector: "[data-create-section]",
+    sectionOrder: Object.freeze([
+      "format",
+      "participants",
+      "additional-rules",
+      "game-rules",
+      "overview",
+    ]),
+    requiredSelectors: Object.freeze([
+      "#ata-name",
+      "#ata-mode",
+      "#ata-preset-select",
+      "#ata-apply-preset",
+      "#ata-participants",
+      "[data-action='shuffle-participants']",
+      "#ata-create-duration-estimate",
+      "button[type='submit']",
+      "[data-role='fixed-match-setup']",
+    ]),
+    forbiddenSelectors: Object.freeze([
+      "#ata-match-mode",
+      "#ata-lobby-fixed",
+    ]),
+    forbiddenStyleFragments: Object.freeze([
+      ".ata-card:hover",
+      ".tournamentCard:hover",
+    ]),
+    requiredStyleFragments: Object.freeze([
+      ".ata-create-layout",
+      ".ata-create-overview",
+      "@media (max-width: 1250px)",
+      "@media (max-width: 480px)",
+    ]),
+  }),
 });

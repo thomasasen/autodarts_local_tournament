@@ -72,4 +72,4 @@
 - Bei vollständigem Deadlock wird keine automatische Entscheidung getroffen.
 - Der Systemstatus ist `playoff_required` und erfordert eine manuelle Turnierentscheidung.
 - `PDC World Championship` wird nicht als offizielles Preset behauptet, weil das reale Format `Sets` benötigt und die AutoDarts-/ATA-Integration hier nur `Legs / First to N` abbilden kann.
-- MultiBoard ist nicht Bestandteil von Version `0.5.0`. Die Board-Anzahl ist ausschließlich ein Kapazitätsparameter der Zeitprognose; Board-Zuweisung, parallele Lobbyverwaltung und mehrere gleichzeitig gestartete Matches bleiben außerhalb des Scopes.
+- MultiBoard ist nicht Bestandteil von Version `0.6.0`. Die Board-Anzahl ist ausschließlich ein Kapazitätsparameter der Zeitprognose; Board-Zuweisung, parallele Lobbyverwaltung und mehrere gleichzeitig gestartete Matches bleiben außerhalb des Scopes.

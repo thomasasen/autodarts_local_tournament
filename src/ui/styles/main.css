@@ -295,13 +295,6 @@
         border-radius: var(--ata-radius-lg);
         padding: var(--ata-space-4);
         margin-bottom: var(--ata-space-4);
-        transition: background 150ms ease, border-color 150ms ease;
-      }
-
-      .ata-card:hover,
-      .tournamentCard:hover {
-        background: rgba(255, 255, 255, 0.12);
-        border-color: rgba(255, 255, 255, 0.34);
       }
 
       .ata-card h3 {
@@ -468,6 +461,11 @@
         gap: var(--ata-space-3);
       }
 
+      .ata-grid-2 > *,
+      .ata-grid-3 > * {
+        min-width: 0;
+      }
+
       .ata-grid-3-tight {
         gap: 10px;
       }
@@ -478,27 +476,153 @@
 
       .ata-create-form {
         display: grid;
-        gap: 10px;
+        gap: var(--ata-space-2);
       }
 
       .ata-create-layout {
         display: grid;
-        grid-template-columns: minmax(0, 2.35fr) minmax(300px, 1fr);
-        gap: 12px;
+        grid-template-columns: minmax(0, 1.75fr) minmax(320px, 0.75fr);
+        gap: var(--ata-space-4);
         align-items: start;
       }
 
-      .ata-create-main,
-      .ata-create-side {
+      .ata-create-main {
         display: grid;
-        gap: 10px;
+        gap: var(--ata-space-3);
+        min-width: 0;
       }
 
-      .ata-create-side {
+      .ata-create-section,
+      .ata-create-overview {
+        min-width: 0;
         border: 1px solid var(--ata-color-border);
         border-radius: var(--ata-radius-md);
-        padding: 10px;
         background: rgba(255, 255, 255, 0.05);
+        overflow: hidden;
+      }
+
+      .ata-create-overview {
+        border-color: rgba(90, 210, 153, 0.34);
+        background:
+          radial-gradient(circle at 100% 0%, rgba(90, 210, 153, 0.11), transparent 38%),
+          rgba(255, 255, 255, 0.055);
+      }
+
+      .ata-create-section-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 12px 14px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.13);
+        background: rgba(255, 255, 255, 0.035);
+      }
+
+      .ata-create-section-step {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 30px;
+        width: 30px;
+        height: 30px;
+        border: 1px solid rgba(90, 210, 153, 0.5);
+        border-radius: 999px;
+        background: rgba(90, 210, 153, 0.14);
+        color: #c9f8e2;
+        font-size: 14px;
+        font-weight: 800;
+      }
+
+      .ata-create-section-title {
+        min-width: 0;
+      }
+
+      .ata-create-section-title h4 {
+        margin: 0;
+        color: var(--ata-color-text);
+        font-size: 20px;
+        line-height: 1.2;
+      }
+
+      .ata-create-section-title p {
+        margin: 2px 0 0;
+        color: var(--ata-color-muted);
+        font-size: 13px;
+        line-height: 1.35;
+      }
+
+      .ata-create-section-body,
+      .ata-create-overview-body {
+        display: grid;
+        gap: 10px;
+        min-width: 0;
+        padding: 12px 14px 14px;
+      }
+
+      .ata-create-overview-controls {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .ata-create-rule-stack,
+      .ata-create-rule-notes {
+        display: grid;
+        gap: var(--ata-space-2);
+      }
+
+      .ata-create-rule-notes {
+        margin-top: 2px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.12);
+        color: var(--ata-color-muted);
+      }
+
+      .ata-create-section-actions {
+        display: flex;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: var(--ata-space-2);
+      }
+
+      .ata-create-fixed-summary {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 2px;
+        padding: 9px 10px;
+        border-left: 3px solid rgba(90, 210, 153, 0.72);
+        border-radius: 0 var(--ata-radius-sm) var(--ata-radius-sm) 0;
+        background: rgba(90, 210, 153, 0.08);
+        color: rgba(240, 249, 255, 0.92);
+        font-size: 13px;
+      }
+
+      .ata-create-fixed-summary > span:not(.ata-create-fixed-summary-label) {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.17);
+        border-radius: 999px;
+        padding: 2px 8px;
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .ata-create-fixed-summary-label {
+        margin-right: 2px;
+        color: #baf5da;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .ata-create-primary-actions .ata-btn-primary {
+        width: 100%;
+        min-height: 46px;
+      }
+
+      .ata-create-form-footnote {
+        margin: 0;
+        padding: 0 2px;
       }
 
       .ata-estimate-card {
@@ -630,7 +754,7 @@
       }
 
       .ata-create-form #ata-participants {
-        min-height: clamp(190px, 30vh, 320px);
+        min-height: clamp(150px, 22vh, 240px);
       }
 
       .ata-field-readonly {
@@ -657,7 +781,7 @@
 
       .ata-form-inline-actions #ata-preset-select {
         flex: 1 1 320px;
-        min-width: 240px;
+        min-width: 0;
       }
 
       .ata-preset-pill {
@@ -670,7 +794,9 @@
         color: #ffe39a;
         font-size: 14px;
         line-height: 1.1;
-        white-space: nowrap;
+        max-width: 100%;
+        white-space: normal;
+        text-align: center;
       }
 
       .ata-score-grid select,
@@ -1573,6 +1699,39 @@
           grid-template-columns: 1fr;
         }
 
+        .ata-content {
+          padding: var(--ata-space-3);
+        }
+
+        .ata-card,
+        .tournamentCard {
+          padding: var(--ata-space-3);
+          margin-bottom: var(--ata-space-3);
+          border-radius: var(--ata-radius-md);
+        }
+
+        .ata-create-section-head {
+          padding: 11px 12px;
+        }
+
+        .ata-create-section-body,
+        .ata-create-overview-body {
+          padding: 11px 12px 12px;
+        }
+
+        .ata-create-preset-field .ata-form-inline-actions {
+          align-items: stretch;
+        }
+
+        .ata-create-preset-field .ata-form-inline-actions #ata-preset-select,
+        .ata-create-preset-field .ata-form-inline-actions .ata-btn,
+        .ata-create-preset-field .ata-preset-pill {
+          flex: 1 1 100%;
+          width: 100%;
+          box-sizing: border-box;
+          justify-content: center;
+        }
+
         .ata-runtime-statusbar {
           padding: 10px 14px;
         }
@@ -1625,5 +1784,64 @@
           width: 100%;
         }
 
+      }
+
+      @media (max-width: 480px) {
+        .ata-content {
+          padding: var(--ata-space-2);
+        }
+
+        .ata-card,
+        .tournamentCard {
+          padding: var(--ata-space-2);
+        }
+
+        .ata-create-layout,
+        .ata-create-main {
+          gap: var(--ata-space-2);
+        }
+
+        .ata-create-section-head {
+          gap: 8px;
+          padding: 10px;
+        }
+
+        .ata-create-section-step {
+          flex-basis: 27px;
+          width: 27px;
+          height: 27px;
+          font-size: 13px;
+        }
+
+        .ata-create-section-title h4 {
+          font-size: 18px;
+        }
+
+        .ata-create-section-body,
+        .ata-create-overview-body {
+          padding: 10px;
+        }
+
+        .ata-create-fixed-summary-label {
+          flex-basis: 100%;
+        }
+
+        .ata-create-fixed-summary > span:not(.ata-create-fixed-summary-label) {
+          max-width: 100%;
+          overflow-wrap: anywhere;
+        }
+
+        .ata-create-section-actions .ata-btn {
+          width: 100%;
+        }
+
+        .ata-toggle {
+          align-items: flex-start;
+        }
+
+        .ata-toggle input {
+          flex: 0 0 auto;
+          margin-top: 2px;
+        }
       }
     

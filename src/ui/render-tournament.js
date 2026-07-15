@@ -124,6 +124,227 @@
   }
 
 
+  function renderCreateFormSectionHeading(step, title, description, headingId) {
+    return `
+      <header class="ata-create-section-head">
+        <span class="ata-create-section-step" aria-hidden="true">${escapeHtml(String(step))}</span>
+        <div class="ata-create-section-title">
+          <h4 id="${escapeHtml(headingId)}">${escapeHtml(title)}</h4>
+          <p>${escapeHtml(description)}</p>
+        </div>
+      </header>
+    `;
+  }
+
+
+  function renderCreateTournamentFormatSection(draft, modeHelpLinks) {
+    return `
+      <section class="ata-create-section" data-create-section="format" aria-labelledby="ata-create-format-heading">
+        ${renderCreateFormSectionHeading(1, "Turnierformat", "Name und grundlegenden Turnierablauf festlegen.", "ata-create-format-heading")}
+        <div class="ata-create-section-body ata-grid-2">
+          <div class="ata-field">
+            <label for="ata-name">Turniername</label>
+            <input id="ata-name" name="name" type="text" placeholder="z. B. Freitagsturnier" value="${escapeHtml(draft.name)}" required>
+          </div>
+          <div class="ata-field">
+            <label for="ata-mode">Modus ${modeHelpLinks}</label>
+            <select id="ata-mode" name="mode">
+              <option value="ko" ${draft.mode === "ko" ? "selected" : ""}>KO</option>
+              <option value="double_ko" ${draft.mode === "double_ko" ? "selected" : ""}>Doppel-KO</option>
+              <option value="league" ${draft.mode === "league" ? "selected" : ""}>Liga</option>
+              <option value="groups_ko" ${draft.mode === "groups_ko" ? "selected" : ""}>Gruppenphase + KO</option>
+              <option value="preliminary_final" ${draft.mode === "preliminary_final" ? "selected" : ""}>Vorrunde + Finalphase</option>
+            </select>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+
+  function renderCreateParticipantsSection(draft) {
+    return `
+      <section class="ata-create-section" data-create-section="participants" aria-labelledby="ata-create-participants-heading">
+        ${renderCreateFormSectionHeading(2, "Teilnehmer", "Eine Person pro Zeile; die Reihenfolge bleibt für gesetzte Draws erhalten.", "ata-create-participants-heading")}
+        <div class="ata-create-section-body">
+          <div class="ata-field">
+            <label for="ata-participants">Teilnehmer (eine Zeile pro Person)</label>
+            <textarea id="ata-participants" name="participants" placeholder="Max Mustermann&#10;Erika Musterfrau">${escapeHtml(draft.participantsText)}</textarea>
+          </div>
+          <div class="ata-create-section-actions">
+            <button type="button" class="ata-btn ata-btn-sm" data-action="shuffle-participants">Teilnehmer mischen</button>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+
+  function renderCreateAdditionalRulesSection(draft, drawHelpLinks) {
+    const randomizeChecked = draft.randomizeKoRound1 ? "checked" : "";
+    const thirdPlaceChecked = draft.enableThirdPlaceMatch ? "checked" : "";
+    const grandFinalResetMode = sanitizeGrandFinalResetMode(draft.grandFinalResetMode);
+    return `
+      <section class="ata-create-section" data-create-section="additional-rules" aria-labelledby="ata-create-additional-rules-heading">
+        ${renderCreateFormSectionHeading(3, "Zusätzliche Turnierregeln", "Hier erscheinen die bereits unterstützten Zusatzregeln des gewählten Modus.", "ata-create-additional-rules-heading")}
+        <div class="ata-create-section-body ata-create-rule-stack" data-role="mode-specific-rules">
+          <div id="ata-groups-ko-odd-policy-host" data-mode-rule-group="groups_ko">
+            ${renderGroupsKoOddParticipantPolicyFields(draft)}
+          </div>
+          <div id="ata-preliminary-final-fields-host" data-mode-rule-group="preliminary_final">${renderPreliminaryFinalFields(draft)}</div>
+          <div class="ata-toggle ata-toggle-compact" data-role="ko-draw-field" data-mode-rule-group="ko double_ko">
+            <div>
+              <strong>KO-Erstrunde zuf\u00e4llig mischen ${drawHelpLinks}</strong>
+              <div class="ata-small">Open Draw bei aktivem Schalter, sonst gesetzter Draw.</div>
+            </div>
+            <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
+          </div>
+          <div class="ata-toggle ata-toggle-compact" data-role="third-place-field" data-mode-rule-group="ko">
+            <div>
+              <strong>Spiel um Platz 3 (optional)</strong>
+              <div class="ata-small">Nur im KO-Modus: Halbfinal-Verlierer spielen um Platz 3. Ohne Option bleibt klassischer Single-Elimination-Baum.</div>
+            </div>
+            <input id="ata-enable-third-place" name="enableThirdPlaceMatch" type="checkbox" ${thirdPlaceChecked}>
+          </div>
+          <div class="ata-field" data-role="grand-final-field" data-mode-rule-group="double_ko">
+            <label for="ata-grand-final-reset-mode">Doppel-KO Grand Final</label>
+            <select id="ata-grand-final-reset-mode" name="grandFinalResetMode">
+              <option value="${GRAND_FINAL_RESET_IF_NEEDED}" ${grandFinalResetMode === GRAND_FINAL_RESET_IF_NEEDED ? "selected" : ""}>Reset-Finale falls nötig (empfohlen)</option>
+              <option value="${GRAND_FINAL_RESET_SINGLE_MATCH}" ${grandFinalResetMode === GRAND_FINAL_RESET_SINGLE_MATCH ? "selected" : ""}>Ein einzelnes Grand Final</option>
+            </select>
+            <p class="ata-small ata-create-help">Gilt für Doppel-KO: Beim Reset-Finale darf der Winners-Bracket-Sieger das erste Grand Final verlieren; dann entscheidet ein zweites Finale. Ein einzelnes Grand Final ist schneller, aber kein vollständiges klassisches Doppel-KO.</p>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+
+  function renderCreateGameRulesSection(options) {
+    const {
+      draft,
+      startScoreOptions,
+      bullModeDisabledAttr,
+      bullModeHiddenInput,
+      presetOptions,
+      presetStatusLabel,
+    } = options;
+    return `
+      <section class="ata-create-section" data-create-section="game-rules" aria-labelledby="ata-create-game-rules-heading">
+        ${renderCreateFormSectionHeading(4, "Spielregeln", "Matchlänge und X01-Einstellungen prüfen oder anpassen.", "ata-create-game-rules-heading")}
+        <div class="ata-create-section-body">
+          <div class="ata-grid-3 ata-grid-3-tight">
+            <div class="ata-field" data-role="standard-bestof-field">
+              <label for="ata-bestof">Best of Legs</label>
+              <input id="ata-bestof" name="bestOfLegs" type="number" min="1" max="21" step="2" value="${draft.bestOfLegs}">
+            </div>
+            <div class="ata-field">
+              <label for="ata-startscore">Startpunkte</label>
+              <select id="ata-startscore" name="startScore">${startScoreOptions}</select>
+            </div>
+            <div class="ata-field">
+              <label for="ata-x01-inmode">In-Modus</label>
+              <select id="ata-x01-inmode" name="x01InMode">
+                <option value="Straight" ${draft.x01InMode === "Straight" ? "selected" : ""}>Straight</option>
+                <option value="Double" ${draft.x01InMode === "Double" ? "selected" : ""}>Double</option>
+                <option value="Master" ${draft.x01InMode === "Master" ? "selected" : ""}>Master</option>
+              </select>
+            </div>
+            <div class="ata-field">
+              <label for="ata-x01-outmode">Out-Modus</label>
+              <select id="ata-x01-outmode" name="x01OutMode">
+                <option value="Straight" ${draft.x01OutMode === "Straight" ? "selected" : ""}>Straight</option>
+                <option value="Double" ${draft.x01OutMode === "Double" ? "selected" : ""}>Double</option>
+                <option value="Master" ${draft.x01OutMode === "Master" ? "selected" : ""}>Master</option>
+              </select>
+            </div>
+            <div class="ata-field">
+              <label for="ata-x01-bulloff">Bull-off</label>
+              <select id="ata-x01-bulloff" name="x01BullOffMode">
+                <option value="Off" ${draft.x01BullOffMode === "Off" ? "selected" : ""}>Off</option>
+                <option value="Normal" ${draft.x01BullOffMode === "Normal" ? "selected" : ""}>Normal</option>
+                <option value="Official" ${draft.x01BullOffMode === "Official" ? "selected" : ""}>Official</option>
+              </select>
+            </div>
+            <div class="ata-field">
+              <label for="ata-x01-bullmode">Bull-Modus</label>
+              <select id="ata-x01-bullmode" name="x01BullMode" ${bullModeDisabledAttr}>
+                <option value="25/50" ${draft.x01BullMode === "25/50" ? "selected" : ""}>25/50</option>
+                <option value="50/50" ${draft.x01BullMode === "50/50" ? "selected" : ""}>50/50</option>
+              </select>
+              ${bullModeHiddenInput}
+            </div>
+            <div class="ata-field">
+              <label for="ata-x01-maxrounds">Max Runden</label>
+              <select id="ata-x01-maxrounds" name="x01MaxRounds">
+                <option value="15" ${draft.x01MaxRounds === 15 ? "selected" : ""}>15</option>
+                <option value="20" ${draft.x01MaxRounds === 20 ? "selected" : ""}>20</option>
+                <option value="50" ${draft.x01MaxRounds === 50 ? "selected" : ""}>50</option>
+                <option value="80" ${draft.x01MaxRounds === 80 ? "selected" : ""}>80</option>
+              </select>
+            </div>
+            <div class="ata-field ata-field-span-3 ata-create-preset-field">
+              <label for="ata-preset-select">Preset</label>
+              <div class="ata-form-inline-actions">
+                <select id="ata-preset-select" data-role="preset-select" aria-label="Preset auswählen">${presetOptions}</select>
+                <button id="ata-apply-preset" type="button" class="ata-btn ata-btn-sm" data-action="apply-selected-preset">Preset anwenden</button>
+                <span class="ata-preset-pill">${escapeHtml(presetStatusLabel)}</span>
+              </div>
+            </div>
+          </div>
+          <div class="ata-create-fixed-summary" data-role="fixed-match-setup" role="group" aria-label="Festes technisches Spiel-Setup">
+            <span class="ata-create-fixed-summary-label">Festes Setup</span>
+            <span>X01</span>
+            <span>Legs · First to N aus Best of</span>
+            <span>Private Lobby</span>
+          </div>
+          <div class="ata-create-rule-notes">
+            <p class="ata-small ata-create-help">PDC European Tour (Official): KO, Best of 11 Legs (First to 6), 501, Straight In, Double Out, Bull 25/50. Bull-off Normal und Max Runden 50 bleiben technische AutoDarts-Werte.</p>
+            <p class="ata-small ata-create-help">PDC 501 / Double Out (Basic): kompatibler Ersatz für das frühere irreführende „PDC-Standard“-Preset. Ehrlich benannt, aber kein offizielles PDC-Eventformat.</p>
+            <p class="ata-small ata-create-help">PDC World Championship im echten Set-Format wird bewusst nicht als offizielles Preset angeboten, weil AutoDarts hier nur Legs / First to N unterstützt.</p>
+            <p class="ata-small ata-create-help">Bull-off = Off deaktiviert Bull-Modus automatisch (schreibgeschützt).</p>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+
+  function renderCreateTournamentOverview(options) {
+    const {
+      draft,
+      tournamentTimeProfileOptions,
+      durationEstimate,
+      durationEstimateVisible,
+      modeLimitHelpLinks,
+      modeLimitSummary,
+    } = options;
+    return `
+      <aside class="ata-create-overview" data-create-section="overview" aria-labelledby="ata-create-overview-heading">
+        ${renderCreateFormSectionHeading(5, "Turnierübersicht", "Zeitbedarf prüfen und das Turnier anlegen.", "ata-create-overview-heading")}
+        <div class="ata-create-overview-body">
+          <div class="ata-grid-2 ata-create-overview-controls">
+            <div class="ata-field">
+              <label for="ata-board-count">Boards für Zeitprognose</label>
+              <input id="ata-board-count" name="boardCount" type="number" min="1" max="${TOURNAMENT_DURATION_MAX_BOARD_COUNT}" step="1" value="${draft.boardCount}">
+            </div>
+            <div class="ata-field">
+              <label for="ata-create-time-profile">Zeitprofil</label>
+              <select id="ata-create-time-profile" name="tournamentTimeProfile" data-action="set-duration-time-profile">${tournamentTimeProfileOptions}</select>
+            </div>
+          </div>
+          <p class="ata-small">Die Board-Zahl ist ausschließlich ein Kapazitätsparameter der Turnierzeitprognose. Es werden keine Boards oder parallelen Lobbys verwaltet.</p>
+          <div id="ata-create-duration-estimate">${renderTournamentDurationEstimate(durationEstimate, { visible: durationEstimateVisible })}</div>
+          <p class="ata-small">Modus-Limits ${modeLimitHelpLinks}: ${escapeHtml(modeLimitSummary)}.</p>
+          <div class="ata-actions ata-create-primary-actions">
+            <button type="submit" class="ata-btn ata-btn-primary">Turnier anlegen</button>
+          </div>
+        </div>
+      </aside>
+    `;
+  }
+
+
   function renderTournamentTab() {
     const tournament = state.store.tournament;
     const durationEstimateVisible = state.store?.ui?.durationEstimateVisible !== false;
@@ -141,9 +362,6 @@
     }).join("");
     if (!tournament) {
       const draft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store?.settings);
-      const randomizeChecked = draft.randomizeKoRound1 ? "checked" : "";
-      const thirdPlaceChecked = draft.enableThirdPlaceMatch ? "checked" : "";
-      const grandFinalResetMode = sanitizeGrandFinalResetMode(draft.grandFinalResetMode);
       const modeLimitSummary = buildModeParticipantLimitSummary();
       const startScoreOptions = X01_START_SCORE_OPTIONS.map((score) => (
         `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${score}</option>`
@@ -178,165 +396,34 @@
         { href: DRA_GUI_RULE_PARTICIPANT_LIMITS_URL, kind: "rule", label: "DRA-Regelerklärung zu Limits öffnen", title: "DRA-Regeln in der GUI: Teilnehmerlimits" },
       ]);
       return `
-        <section class="ata-card tournamentCard">
+        <section class="ata-card tournamentCard ata-create-card">
           ${renderSectionHeading("Neues Turnier erstellen", createHeadingLinks)}
           <form id="ata-create-form" class="ata-create-form">
             <input type="hidden" id="ata-x01-preset" name="x01Preset" value="${escapeHtml(draft.x01Preset)}">
             <div class="ata-create-layout">
               <div class="ata-create-main">
-                <div class="ata-grid-3 ata-grid-3-tight">
-                  <div class="ata-field">
-                    <label for="ata-name">Turniername</label>
-                    <input id="ata-name" name="name" type="text" placeholder="z. B. Freitagsturnier" value="${escapeHtml(draft.name)}" required>
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-mode">Modus ${modeHelpLinks}</label>
-                    <select id="ata-mode" name="mode">
-                      <option value="ko" ${draft.mode === "ko" ? "selected" : ""}>KO</option>
-                      <option value="double_ko" ${draft.mode === "double_ko" ? "selected" : ""}>Doppel-KO</option>
-                      <option value="league" ${draft.mode === "league" ? "selected" : ""}>Liga</option>
-                      <option value="groups_ko" ${draft.mode === "groups_ko" ? "selected" : ""}>Gruppenphase + KO</option>
-                      <option value="preliminary_final" ${draft.mode === "preliminary_final" ? "selected" : ""}>Vorrunde + Finalphase</option>
-                    </select>
-                  </div>
-                  <div class="ata-field" data-role="standard-bestof-field">
-                    <label for="ata-bestof">Best of Legs</label>
-                    <input id="ata-bestof" name="bestOfLegs" type="number" min="1" max="21" step="2" value="${draft.bestOfLegs}">
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-startscore">Startpunkte</label>
-                    <select id="ata-startscore" name="startScore">
-                      ${startScoreOptions}
-                    </select>
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-x01-inmode">In-Modus</label>
-                    <select id="ata-x01-inmode" name="x01InMode">
-                      <option value="Straight" ${draft.x01InMode === "Straight" ? "selected" : ""}>Straight</option>
-                      <option value="Double" ${draft.x01InMode === "Double" ? "selected" : ""}>Double</option>
-                      <option value="Master" ${draft.x01InMode === "Master" ? "selected" : ""}>Master</option>
-                    </select>
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-x01-outmode">Out-Modus</label>
-                    <select id="ata-x01-outmode" name="x01OutMode">
-                      <option value="Straight" ${draft.x01OutMode === "Straight" ? "selected" : ""}>Straight</option>
-                      <option value="Double" ${draft.x01OutMode === "Double" ? "selected" : ""}>Double</option>
-                      <option value="Master" ${draft.x01OutMode === "Master" ? "selected" : ""}>Master</option>
-                    </select>
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-x01-bulloff">Bull-off</label>
-                    <select id="ata-x01-bulloff" name="x01BullOffMode">
-                      <option value="Off" ${draft.x01BullOffMode === "Off" ? "selected" : ""}>Off</option>
-                      <option value="Normal" ${draft.x01BullOffMode === "Normal" ? "selected" : ""}>Normal</option>
-                      <option value="Official" ${draft.x01BullOffMode === "Official" ? "selected" : ""}>Official</option>
-                    </select>
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-x01-bullmode">Bull-Modus</label>
-                    <select id="ata-x01-bullmode" name="x01BullMode" ${bullModeDisabledAttr}>
-                      <option value="25/50" ${draft.x01BullMode === "25/50" ? "selected" : ""}>25/50</option>
-                      <option value="50/50" ${draft.x01BullMode === "50/50" ? "selected" : ""}>50/50</option>
-                    </select>
-                    ${bullModeHiddenInput}
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-x01-maxrounds">Max Runden</label>
-                    <select id="ata-x01-maxrounds" name="x01MaxRounds">
-                      <option value="15" ${draft.x01MaxRounds === 15 ? "selected" : ""}>15</option>
-                      <option value="20" ${draft.x01MaxRounds === 20 ? "selected" : ""}>20</option>
-                      <option value="50" ${draft.x01MaxRounds === 50 ? "selected" : ""}>50</option>
-                      <option value="80" ${draft.x01MaxRounds === 80 ? "selected" : ""}>80</option>
-                    </select>
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-match-mode">Spielmodus</label>
-                    <span id="ata-match-mode" class="ata-field-readonly">Legs (First to N aus Best of)</span>
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-lobby-fixed">Lobby</label>
-                    <span id="ata-lobby-fixed" class="ata-field-readonly">Privat</span>
-                  </div>
-                  <div class="ata-field ata-field-span-3">
-                    <label for="ata-preset-select">Preset</label>
-                    <div class="ata-form-inline-actions">
-                      <select id="ata-preset-select" data-role="preset-select" aria-label="Preset auswählen">
-                        ${presetOptions}
-                      </select>
-                      <button id="ata-apply-preset" type="button" class="ata-btn ata-btn-sm" data-action="apply-selected-preset">Preset anwenden</button>
-                      <span class="ata-preset-pill">${escapeHtml(presetStatusLabel)}</span>
-                    </div>
-                  </div>
-                </div>
-                <div id="ata-groups-ko-odd-policy-host">
-                  ${renderGroupsKoOddParticipantPolicyFields(draft)}
-                </div>
-                <div id="ata-preliminary-final-fields-host">${renderPreliminaryFinalFields(draft)}</div>
-                <div class="ata-toggle ata-toggle-compact" data-role="ko-draw-field">
-                  <div>
-                    <strong>KO-Erstrunde zuf\u00e4llig mischen ${drawHelpLinks}</strong>
-                    <div class="ata-small">Open Draw bei aktivem Schalter, sonst gesetzter Draw.</div>
-                  </div>
-                  <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
-                </div>
-                <div class="ata-toggle ata-toggle-compact" data-role="third-place-field">
-                  <div>
-                    <strong>Spiel um Platz 3 (optional)</strong>
-                    <div class="ata-small">Nur im KO-Modus: Halbfinal-Verlierer spielen um Platz 3. Ohne Option bleibt klassischer Single-Elimination-Baum.</div>
-                  </div>
-                  <input id="ata-enable-third-place" name="enableThirdPlaceMatch" type="checkbox" ${thirdPlaceChecked}>
-                </div>
-                <div class="ata-field" data-role="grand-final-field">
-                  <label for="ata-grand-final-reset-mode">Doppel-KO Grand Final</label>
-                  <select id="ata-grand-final-reset-mode" name="grandFinalResetMode">
-                    <option value="${GRAND_FINAL_RESET_IF_NEEDED}" ${grandFinalResetMode === GRAND_FINAL_RESET_IF_NEEDED ? "selected" : ""}>Reset-Finale falls nötig (empfohlen)</option>
-                    <option value="${GRAND_FINAL_RESET_SINGLE_MATCH}" ${grandFinalResetMode === GRAND_FINAL_RESET_SINGLE_MATCH ? "selected" : ""}>Ein einzelnes Grand Final</option>
-                  </select>
-                  <p class="ata-small ata-create-help">Gilt für Doppel-KO: Beim Reset-Finale darf der Winners-Bracket-Sieger das erste Grand Final verlieren; dann entscheidet ein zweites Finale. Ein einzelnes Grand Final ist schneller, aber kein vollständiges klassisches Doppel-KO.</p>
-                </div>
-                <p class="ata-small ata-create-help">PDC European Tour (Official): KO, Best of 11 Legs (First to 6), 501, Straight In, Double Out, Bull 25/50. Bull-off Normal und Max Runden 50 bleiben technische AutoDarts-Werte.</p>
-                <p class="ata-small ata-create-help">PDC 501 / Double Out (Basic): kompatibler Ersatz für das frühere irreführende „PDC-Standard“-Preset. Ehrlich benannt, aber kein offizielles PDC-Eventformat.</p>
-                <p class="ata-small ata-create-help">PDC World Championship im echten Set-Format wird bewusst nicht als offizielles Preset angeboten, weil AutoDarts hier nur Legs / First to N unterstützt.</p>
-                <p class="ata-small ata-create-help">Bull-off = Off deaktiviert Bull-Modus automatisch (schreibgesch\u00fctzt).</p>
+                ${renderCreateTournamentFormatSection(draft, modeHelpLinks)}
+                ${renderCreateParticipantsSection(draft)}
+                ${renderCreateAdditionalRulesSection(draft, drawHelpLinks)}
+                ${renderCreateGameRulesSection({
+                  draft,
+                  startScoreOptions,
+                  bullModeDisabledAttr,
+                  bullModeHiddenInput,
+                  presetOptions,
+                  presetStatusLabel,
+                })}
               </div>
-              <aside class="ata-create-side">
-                <div class="ata-field">
-                  <label for="ata-participants">Teilnehmer (eine Zeile pro Person)</label>
-                  <textarea id="ata-participants" name="participants" placeholder="Max Mustermann&#10;Erika Musterfrau">${escapeHtml(draft.participantsText)}</textarea>
-                </div>
-                <div class="ata-grid-2">
-                  <div class="ata-field">
-                    <label for="ata-board-count">Boards für Zeitprognose</label>
-                    <input
-                      id="ata-board-count"
-                      name="boardCount"
-                      type="number"
-                      min="1"
-                      max="${TOURNAMENT_DURATION_MAX_BOARD_COUNT}"
-                      step="1"
-                      value="${draft.boardCount}"
-                    >
-                  </div>
-                  <div class="ata-field">
-                    <label for="ata-create-time-profile">Zeitprofil</label>
-                    <select id="ata-create-time-profile" name="tournamentTimeProfile" data-action="set-duration-time-profile">
-                      ${tournamentTimeProfileOptions}
-                    </select>
-                  </div>
-                </div>
-                <p class="ata-small">Die Board-Zahl ist ausschließlich ein Kapazitätsparameter der Turnierzeitprognose. Es werden keine Boards oder parallelen Lobbys verwaltet.</p>
-                <div id="ata-create-duration-estimate">
-                  ${renderTournamentDurationEstimate(durationEstimate, { visible: durationEstimateVisible })}
-                </div>
-                <div class="ata-actions">
-                  <button type="button" class="ata-btn ata-btn-sm" data-action="shuffle-participants">Teilnehmer mischen</button>
-                  <button type="submit" class="ata-btn ata-btn-primary">Turnier anlegen</button>
-                </div>
-                <p class="ata-small">Modus-Limits ${modeLimitHelpLinks}: ${escapeHtml(modeLimitSummary)}.</p>
-              </aside>
+              ${renderCreateTournamentOverview({
+                draft,
+                tournamentTimeProfileOptions,
+                durationEstimate,
+                durationEstimateVisible,
+                modeLimitHelpLinks,
+                modeLimitSummary,
+              })}
             </div>
-            <p class="ata-small">Bei Moduswechsel gelten die jeweiligen Grenzen sofort.</p>
+            <p class="ata-small ata-create-form-footnote">Bei Moduswechsel gelten die jeweiligen Grenzen sofort.</p>
           </form>
         </section>
       `;

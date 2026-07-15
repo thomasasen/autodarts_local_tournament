@@ -47,6 +47,7 @@ $globalsContract = ($globalsContract -replace '^\uFEFF', '') -replace '</script>
 $checkScript = @'
 (async function () {
   const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+  const normalizeContractText = (value) => String(value || "").replace(/\s+/g, " ").trim();
   let api = null;
   for (let attempt = 0; attempt < 80; attempt += 1) {
     api = window[RUNTIME_API_CONTRACT.globalKey] || null;
@@ -96,6 +97,75 @@ $checkScript = @'
     }
   }
 
+  const createUiContract = RUNTIME_API_CONTRACT.createUi;
+  if (api && createUiContract) {
+    api.openDrawer();
+    await wait(0);
+    const host = document.getElementById(createUiContract.hostId);
+    const shadowRoot = host?.shadowRoot || null;
+    const createForm = shadowRoot?.querySelector(createUiContract.formSelector) || null;
+    const sectionOrder = createForm
+      ? Array.from(createForm.querySelectorAll(createUiContract.sectionSelector))
+        .map((section) => section.getAttribute("data-create-section"))
+      : [];
+    const styleText = normalizeContractText(shadowRoot?.querySelector("style")?.textContent || "");
+    const missingSelectors = createForm
+      ? createUiContract.requiredSelectors.filter((selector) => createForm.querySelectorAll(selector).length !== 1)
+      : Array.from(createUiContract.requiredSelectors);
+    const presentForbiddenSelectors = createForm
+      ? createUiContract.forbiddenSelectors.filter((selector) => createForm.querySelector(selector))
+      : [];
+    const presentForbiddenStyles = createUiContract.forbiddenStyleFragments
+      .filter((fragment) => styleText.includes(fragment));
+    const missingRequiredStyles = createUiContract.requiredStyleFragments
+      .filter((fragment) => !styleText.includes(fragment));
+    const fixedSummary = createForm?.querySelector("[data-role='fixed-match-setup']") || null;
+    const fixedSummaryText = normalizeContractText(fixedSummary?.textContent || "");
+    const fixedSummaryOk = Boolean(fixedSummary)
+      && fixedSummary.querySelector("input, select, textarea, button") === null
+      && fixedSummaryText.includes("X01")
+      && fixedSummaryText.includes("Legs")
+      && fixedSummaryText.includes("Private Lobby");
+    const sectionOrderOk = JSON.stringify(sectionOrder) === JSON.stringify(createUiContract.sectionOrder);
+
+    result.createUi = {
+      sectionOrder,
+      missingSelectors,
+      presentForbiddenSelectors,
+      presentForbiddenStyles,
+      missingRequiredStyles,
+      fixedSummaryOk,
+    };
+    if (!createForm) {
+      result.ok = false;
+      result.failures.push("Create-UI-Formular wurde nicht gerendert.");
+    }
+    if (!sectionOrderOk) {
+      result.ok = false;
+      result.failures.push(`Create-UI-Bereichsreihenfolge ungültig: ${sectionOrder.join("/")}.`);
+    }
+    if (missingSelectors.length) {
+      result.ok = false;
+      result.failures.push(`Create-UI-Selektoren fehlen oder sind doppelt: ${missingSelectors.join(", ")}.`);
+    }
+    if (presentForbiddenSelectors.length) {
+      result.ok = false;
+      result.failures.push(`Veraltete Fake-Felder vorhanden: ${presentForbiddenSelectors.join(", ")}.`);
+    }
+    if (presentForbiddenStyles.length) {
+      result.ok = false;
+      result.failures.push(`Nicht interaktive Card-Hover-Stile vorhanden: ${presentForbiddenStyles.join(", ")}.`);
+    }
+    if (missingRequiredStyles.length) {
+      result.ok = false;
+      result.failures.push(`Responsive Create-UI-Stile fehlen: ${missingRequiredStyles.join(", ")}.`);
+    }
+    if (!fixedSummaryOk) {
+      result.ok = false;
+      result.failures.push("Kompakte Zusammenfassung für X01, Legs und private Lobby fehlt oder enthält Formfelder.");
+    }
+  }
+
   for (const key of GLOBALS_CONTRACT.requiredKeys) {
     if (!(key in window)) {
       result.ok = false;
@@ -123,6 +193,17 @@ $html = @"
     <title>ATA Runtime Contract</title>
   </head>
   <body>
+    <script>
+      try {
+        [
+          "ata:tournament:v1",
+          "ata:tournament:ko-migration-backups:v2",
+          "ata:update-status:v1",
+        ].forEach((key) => window.localStorage.removeItem(key));
+      } catch (error) {
+        /* best effort test isolation */
+      }
+    </script>
     <script>
 $runtimeContract
 $globalsContract
