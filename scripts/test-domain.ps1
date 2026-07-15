@@ -133,3 +133,4 @@ if (-not $result.ok) {
 }
 
 Write-Host ("Domain tests successful: {0} passed." -f $result.passed)
+Remove-Item -LiteralPath $tempRoot -Recurse -Force

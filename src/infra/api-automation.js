@@ -365,8 +365,11 @@
   }
 
 
-  function buildLobbyCreatePayload(tournament) {
-    const legsToWin = getLegsToWin(tournament.bestOfLegs);
+  function buildLobbyCreatePayload(tournament, match = null) {
+    if (isFixedLegsPreliminaryMatch(tournament, match) || (tournament?.mode === "preliminary_final" && !match)) {
+      throw Object.assign(new Error("Zwei feste Legs k\u00f6nnen nicht exakt als AutoDarts-First-to-N-Lobby gestartet werden."), { reasonCode: "fixed_legs_api_unsupported" });
+    }
+    const legsToWin = getLegsToWin(getMatchBestOfLegs(tournament, match));
     const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
     const bullOffMode = sanitizeX01BullOffMode(x01Settings.bullOffMode);
     const settings = {
@@ -750,6 +753,14 @@
         title: "\u00d6ffnet das bereits gestartete Match.",
       };
     }
+    if (isFixedLegsPreliminaryMatch(tournament, match)) {
+      return {
+        label: "Manuell erfassen",
+        disabled: true,
+        reasonCode: "fixed_legs_api_unsupported",
+        title: "API-Start gesperrt: AutoDarts bildet zwei feste Legs mit geregeltem Anwurf derzeit nicht exakt ab.",
+      };
+    }
 
     if (!state.store.settings.featureFlags.autoLobbyStart) {
       return {
@@ -857,6 +868,10 @@
     if (!match) {
       setNotice("error", "Match nicht gefunden.");
       return;
+    }
+    if (isFixedLegsPreliminaryMatch(tournament, match)) {
+      setNotice("error", "API-Start gesperrt: Zwei feste Legs werden nicht durch First to 2 oder Best of 3 angen\u00e4hert.");
+      return { ok: false, reasonCode: "fixed_legs_api_unsupported" };
     }
 
     const auto = ensureMatchAutoMeta(match);
@@ -1084,7 +1099,7 @@
       return;
     }
 
-    const initialLobbyPayload = buildLobbyCreatePayload(tournament);
+    const initialLobbyPayload = buildLobbyCreatePayload(tournament, match);
     if (debugSession) {
       debugSession.context.initialPayload = cloneSerializable(initialLobbyPayload) || {};
     }

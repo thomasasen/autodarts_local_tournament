@@ -18,3 +18,16 @@
     return { ok: true };
   }
 
+
+  function updateFixedLegMatchResult(matchId, entries) {
+    const tournament = state.store.tournament;
+    if (!tournament) return { ok: false, message: "Kein aktives Turnier vorhanden." };
+    const result = applyFixedLegEntriesToTournament(tournament, matchId, entries, "manual");
+    if (!result.ok) return result;
+    refreshDerivedMatches(tournament);
+    tournament.updatedAt = nowIso();
+    schedulePersist();
+    renderShell();
+    return result;
+  }
+

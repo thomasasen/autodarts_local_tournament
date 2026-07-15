@@ -172,3 +172,4 @@ if (-not $result.ok) {
 }
 
 Write-Host "Runtime contract successful."
+Remove-Item -LiteralPath $tempRoot -Recurse -Force

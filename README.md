@@ -2,10 +2,12 @@
 
 Lokales Turniermanagement direkt in `https://play.autodarts.io` als Userscript.
 
+Aktuelle Releaseversion: `0.5.0`.
+
 [![Installieren](https://img.shields.io/badge/Installieren-Autodarts%20Tournament%20Assistant%20Loader-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js)
 
 Der Assistent erweitert die Autodarts-Oberfläche um einen eigenen Bereich für:
-- Turnieranlage (KO, Doppel-KO, Liga, Gruppenphase + KO)
+- Turnieranlage (KO, Doppel-KO, Liga, Gruppenphase + KO, Vorrunde + Finalphase)
 - Ergebnisführung
 - Turnieransicht (Tabelle + Bracket)
 - Import/Export
@@ -81,6 +83,7 @@ Nach Installation ist links im Hauptmenü der neue Eintrag sichtbar. Darüber ö
   - `double_ko`
   - `league`
   - `groups_ko`
+  - `preliminary_final`
 - Ergebnisführung:
   - Manuelles Speichern pro Match
   - API-Matchstart per Klick
@@ -109,6 +112,7 @@ Nach Installation ist links im Hauptmenü der neue Eintrag sichtbar. Darüber ö
 | `double_ko` <span style="display:inline-block;background:#1f883d;color:#fff;border-radius:999px;padding:1px 7px;font-size:0.78em;font-weight:700;">Neu</span><br><small>hinzugefügt am 25.06.2026</small> | Doppel-KO mit Winners Bracket, Losers Bracket und Grand Final | Private Freundschaftsspiele und kleine lokale Felder, bei denen eine Niederlage noch nicht ausscheiden soll |
 | `league` | Jeder gegen jeden (Round Robin) | Kleine Gruppe mit kompletter Tabelle |
 | `groups_ko` | 2 Gruppen, danach KO-Phase | Kombination aus Gruppenphase und Finalrunde |
+| `preliminary_final` | Gleich viele Vorrundenmatches für alle, danach KO oder Doppel-KO | Faire verkürzte Vorrunde auch für ungerade Felder |
 
 ### KO (`ko`)
 - Hybrid-Draw:
@@ -183,6 +187,18 @@ Kurz gesagt: Single-KO ist schnell und hart, Doppel-KO ist fairer für lockere R
   - `B1 vs A2`
 - Das Finale folgt nach den Halbfinals.
 
+### Vorrunde + Finalphase (`preliminary_final`)
+- Eigenständiges Veranstalterformat für `5..16` Teilnehmer; `groups_ko` bleibt unverändert.
+- Konfiguriert werden `4..8` **Vorrundenspiele je Teilnehmer**, nicht zeitliche Spielrunden. Jeder Teilnehmer erhält exakt diese Anzahl verschiedener Gegner; Freilose zählen nicht.
+- Zulässig ist eine Kombination nur, wenn `k < n` und `n * k` gerade ist. Die UI zeigt die innerhalb `4..8` zulässigen Alternativen und korrigiert nichts still.
+- Der deterministische Paarungsplan enthält keine Selbst- oder Doppelbegegnungen. Scheduling-Runden ordnen die Spiele lediglich kollisionsfrei.
+- Vorrundenformat: `2 Legs fest – beide Legs werden gespielt, 1:1 möglich`. Gültig sind nur `2:0`, `1:1` und `0:2`.
+- Standardwertung: Sieg `2`, Unentschieden `1`, Niederlage `0`; konfigurierbar als ganze Zahlen `0..10` mit `Sieg > Unentschieden >= Niederlage`.
+- Rangfolge: Punkte, Leg-Differenz, gewonnene Legs. Ein weiterer Gleichstand wird als `playoff_required` sichtbar und blockiert die Qualifikation am Cutoff.
+- Erst nach vollständiger und eindeutig aufgelöster Vorrunde entsteht die Finalphase. Tabellenplatz 1 wird Seed 1 usw.; eine zufällige Neuauslosung findet nicht statt.
+- Finalphase: KO oder Doppel-KO mit eigenem ungeradem `Best of Legs`. Vor ihrem Start kann eine Vorrundenkorrektur nur explizit unter Verwerfen des erzeugten Brackets erfolgen; danach ist sie gesperrt.
+- Das Profil speichert Paarung, Punktevergabe, Qualifikation und Tie-Break als Veranstalterregeln. Es behauptet keine universelle DRA-, PDC-, WDF- oder Verbandskonformität.
+
 ## Turnier anlegen
 Tab: `Turnier`
 
@@ -197,7 +213,10 @@ Tab: `Turnier`
 | Feld | Optionen / Eingaben | Was es steuert | Warum das wichtig ist |
 |---|---|---|---|
 | `Turniername` | Freitext | Name für aktive Sitzung/Export | Erleichtert Zuordnung bei mehreren lokalen Events |
-| `Modus` | `KO`, `Doppel-KO`, `Liga`, `Gruppenphase + KO` | Spielplanlogik, Tabellenlogik, KO-Pfade | Falscher Modus führt zu falscher Matchanzahl/Fortschrittslogik |
+| `Modus` | `KO`, `Doppel-KO`, `Liga`, `Gruppenphase + KO`, `Vorrunde + Finalphase` | Spielplanlogik, Tabellenlogik, KO-Pfade | Falscher Modus führt zu falscher Matchanzahl/Fortschrittslogik |
+| `Vorrundenspiele je Teilnehmer` | `4..8`, nur im neuen Modus | Grad des regulären Paarungsplans | Ist ausdrücklich nicht die Anzahl der Scheduling-Runden |
+| `Vorrundenwertung` | Punkte für Sieg/Unentschieden/Niederlage | Gemeinsame Vorrundentabelle | Veranstalterprofil wird validiert und gespeichert |
+| `Finalphase` | KO oder Doppel-KO, Qualifikantenzahl, ungerades Best-of | Qualifikation und Matchlänge nach der Vorrunde | Vorrunden-Fixed-Legs werden nicht auf die Finalphase übertragen |
 | `Best of Legs` | Ungerade `1..21` | Matchlänge; intern `First to N` | Definiert Siegbedingung pro Match und Turnierdauer |
 | `Startpunkte` | `121`, `170`, `301`, `501`, `701`, `901` | X01-Basis für jedes Match | Beeinflusst Matchdauer und Schwierigkeitsprofil |
 | `In-Modus` | `Straight`, `Double`, `Master` | Wie ein Leg gestartet wird | Regelt Einstiegsanforderung je Spielstil/Regelwerk |
@@ -212,7 +231,7 @@ Tab: `Turnier`
 | `Spiel um Platz 3 (optional)` | Checkbox `ON/OFF` | Fügt im KO-Modus ein separates Bronze-Match (Halbfinal-Verlierer) hinzu | Default bleibt klassisches KO mit genau einem Finale; zusätzliche Platzierung nur als explizite Tournament Rule |
 | `Doppel-KO Grand Final` | `Reset-Finale falls nötig`, `Ein einzelnes Grand Final` | Legt fest, ob bei Sieg des Losers-Bracket-Siegers im Grand Final ein Reset-Finale entsteht | Default bildet klassisches Doppel-KO ab; Einzelmatch ist eine bewusst schnellere Turnierregel |
 | `Teilnehmer` | Je Spieler eine Zeile | Teilnehmerliste inkl. Reihenfolge | Reihenfolge ist bei `seeded` zugleich Seed-Reihenfolge |
-| `Boards für Zeitprognose` | Zahl `1..32` | Parallele Match-Slots in der Dauerberechnung | Verhindert naive Vollauslastungsannahmen und macht Warteeffekte sichtbar |
+| `Boards für Zeitprognose` | Zahl `1..32` | Ausschließlich Kapazitätsparameter der Turnierzeitprognose | Verhindert naive Vollauslastungsannahmen und macht Warteeffekte sichtbar; keine Board-Zuweisung oder Lobbyverwaltung |
 | `Teilnehmer mischen` | Button | Mischt Teilnehmertextliste | Praktisch für spontane Auslosung vor Start |
 
 ### Preset-Katalog
@@ -334,6 +353,7 @@ Auf `/history/matches/{id}` kann das Tool ein Ergebnis direkt aus der Statistik 
 - Ungültige Ergebnisse werden abgewiesen.
 - Wenn ein Matchstart vor dem eigentlichen `start` scheitert, wird eine bereits erstellte, aber noch ungestartete Lobby vorsichtig gelöscht.
 - Bei mehrdeutigen Zuordnungen wird absichtlich nicht automatisch übernommen.
+- Fixed-2-Legs-Vorrunden werden manuell je Leg erfasst. Der API-Start ist mit `fixed_legs_api_unsupported` gesperrt, weil die belegbare API keine exakte Abbildung aus zwei First-to-1-Lobbys samt geregeltem Anwurf garantiert; First to 2 oder Best of 3 werden nicht als Ersatz verwendet.
 
 ## Statusmeldungen
 Diese Referenz deckt die aktuell implementierten klickbaren Statusmeldungen rund um API-Halbautomatik, Matchfreigabe und Statistik-Import ab. Wenn dieselbe Formulierung als kurzes Notice-Banner erscheint, verweist sie auf denselben Abschnitt.
@@ -401,6 +421,7 @@ Tab: `Turnierbaum`
   - `KO`: klassischer Turnierbaum mit offenen Slots, Freilosen und Finale (optional zusätzlich Platz-3-Spiel).
   - `Liga`: Tabelle und vollständiger Spielplan in einer gemeinsamen Ansicht.
   - `Gruppenphase + KO`: Gruppentabellen oben, KO-Turnierbaum darunter.
+  - `Vorrunde + Finalphase`: gemeinsame Vorrundentabelle und nach Erzeugung der gesetzte KO-/Doppel-KO-Baum.
 
 ![Turnierbaum direkt nach dem Start](assets/ss_Turnierbaum_neu-gestartet.png)
 ![Turnierbaum nach übernommenen Matchdaten](assets/Turnierbaum_aktualisierter-turnierbaum-nach-uebernahme-der-matchdaten.png)
@@ -428,7 +449,7 @@ Tab: `Import/Export`
 - JSON-Text direkt einfügen
 
 ### Daten- und Migrationshinweise
-- Persistenzschema: `schemaVersion: 4`
+- Persistenzschema: `schemaVersion: 5`
 - Beim Import werden Daten defensiv normalisiert.
 - Legacy-KO-Turniere werden auf KO-Engine v3 migriert.
 - Vor KO-Migration wird ein Backup unter `ata:tournament:ko-migration-backups:v2` abgelegt.
@@ -555,6 +576,7 @@ Priorisierung für Limits in diesem Projekt:
 | `double_ko` | `2..32` | Doppel-KO erzeugt bis zu `2n - 1` Matches; 32 ist v1-Leitplanke für lokale Board-Abende und stabile Darstellung. |
 | `league` | `2..16` | Round Robin wächst quadratisch (`n*(n-1)/2`); oberhalb 16 wird Dauer und Bedienung für lokale Events schnell unpraktisch. |
 | `groups_ko` | `4..16` | Mindestens 4 für zwei Gruppen mit anschliessender KO-Phase; Obergrenze aus Spielanzahl/Bedienbarkeit. |
+| `preliminary_final` | `5..16` | Mindestens 5, damit wenigstens 4 verschiedene Gegner möglich sind; Obergrenze aus lokaler Bedienbarkeit. |
 
 Hinweise:
 - Zusätzliches technisches Hard-Cap: `128` Teilnehmer.
@@ -685,9 +707,11 @@ powershell -ExecutionPolicy Bypass -File scripts/test-runtime-contract.ps1
   - `double_ko`: `2..32`
   - `league`: `2..16`
   - `groups_ko`: `4..16`
+  - `preliminary_final`: `5..16`
 - Technisches Hard-Cap: `128` Teilnehmer
 - API-Halbautomatik basiert auf in der Praxis verwendeten Endpunkten (Inference), siehe [docs/autodarts-api-capabilities.md](docs/autodarts-api-capabilities.md)
 - DOM-Autodetect bleibt best-effort
+- MultiBoard ist nicht Bestandteil von Version `0.5.0`. `Boards für Zeitprognose` ist ausschließlich ein Kapazitätsparameter der Schätzung. Board-Zuweisung, parallele Lobbyverwaltung, mehrere gleichzeitig gestartete Matches, Mehrgeräte-Synchronisierung und Mehrbrowser-Bearbeitung sind nicht implementiert.
 
 ## Quellen
 - Turnierdauer-Benchmarks:

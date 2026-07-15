@@ -183,7 +183,7 @@
   });
 
 
-  test("Groups KO persistence: Storage v4 und JSON-Roundtrip erhalten die neuen Regeln", () => {
+  test("Groups KO persistence: Storage v5 und JSON-Roundtrip erhalten die Regeln", () => {
     const tournament = createTournament(groupsKoConfig(7, {
       groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
       groupsKoOddParticipantAcknowledged: true,
@@ -196,7 +196,7 @@
 
     assertEqual(roundTripped.rules.groupsKoOddParticipantPolicy, GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL);
     assertEqual(roundTripped.rules.groupsKoOddParticipantAcknowledged, true);
-    assertEqual(migratedStore.schemaVersion, 4);
+    assertEqual(migratedStore.schemaVersion, 5);
     assertEqual(migratedStore.tournament.rules.groupsKoOddParticipantPolicy, GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL);
     assertEqual(migratedStore.tournament.rules.groupsKoOddParticipantAcknowledged, true);
   });

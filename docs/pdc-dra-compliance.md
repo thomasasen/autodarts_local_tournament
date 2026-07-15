@@ -44,7 +44,13 @@
 - Entsperren ist nur als expliziter Promoter-Override mit Bestätigung zulässig.
 - Referenz: DRA Rulebook `6.8.1` (Seite 17), `6.12.1` (Seite 18), sowie `1.2`/`6.8.4` für explizite Tournament-/Promoter-Rules; PDF-Link: [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
 
-4. **Terminologie (PDC-konform)**
+3a. **Vorrunde + Finalphase als Veranstalterprofil**
+- `preliminary_final` erzeugt deterministisch einen einfachen regulären Paarungsgraphen mit gleicher realer Matchanzahl für alle Teilnehmer.
+- Das gespeicherte Profil regelt zwei feste Legs, Punkte, Rangfolge, Qualifikantenzahl und KO-/Doppel-KO-Finalphase. Diese Details werden nicht als universelle DRA-/PDC-/WDF-Regel bezeichnet.
+- Bei weiterem Gleichstand am Cutoff bleibt der Status `playoff_required`; die gespeicherte Veranstalterentscheidung braucht sichtbare Reihenfolge und Begründung.
+- Fixed-2-Legs wird mangels belegbarer exakter AutoDarts-Anwurfabbildung nur manuell erfasst. Der API-Start ist gesperrt; First to 2 und Best of 3 sind keine Ersatzregeln.
+
+4. **Regelbezogene Terminologie mit technischer Abgrenzung**
 - Die UI nutzt deutsche Begriffe mit PDC-Bezug, z. B.:
   - `Freilos (Bye)`
   - `KO (Straight Knockout)`
@@ -66,3 +72,4 @@
 - Bei vollständigem Deadlock wird keine automatische Entscheidung getroffen.
 - Der Systemstatus ist `playoff_required` und erfordert eine manuelle Turnierentscheidung.
 - `PDC World Championship` wird nicht als offizielles Preset behauptet, weil das reale Format `Sets` benötigt und die AutoDarts-/ATA-Integration hier nur `Legs / First to N` abbilden kann.
+- MultiBoard ist nicht Bestandteil von Version `0.5.0`. Die Board-Anzahl ist ausschließlich ein Kapazitätsparameter der Zeitprognose; Board-Zuweisung, parallele Lobbyverwaltung und mehrere gleichzeitig gestartete Matches bleiben außerhalb des Scopes.

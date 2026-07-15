@@ -5,11 +5,18 @@
       return null;
     }
 
-    const isDoubleKo = tournament.mode === "double_ko";
+    const isPreliminaryFinal = tournament.mode === "preliminary_final";
+    const effectiveFinalType = isPreliminaryFinal ? tournament?.finalStage?.type : tournament.mode;
+    const effectiveKoMeta = isPreliminaryFinal ? tournament?.finalStage?.ko : tournament?.ko;
+    const isDoubleKo = effectiveFinalType === "double_ko";
     const bracketSize = tournament.mode === "groups_ko"
       ? 4
-      : nextPowerOfTwo(clampInt(tournament?.ko?.bracketSize, tournament.participants.length, 2, TECHNICAL_PARTICIPANT_HARD_MAX));
+      : nextPowerOfTwo(clampInt(effectiveKoMeta?.bracketSize, tournament.participants.length, 2, TECHNICAL_PARTICIPANT_HARD_MAX));
+    const finalParticipantIds = isPreliminaryFinal
+      ? new Set((Array.isArray(tournament?.finalStage?.seeding) ? tournament.finalStage.seeding : []).map((entry) => normalizeText(entry?.participantId || entry)).filter(Boolean))
+      : null;
     const participants = tournament.participants
+      .filter((participant) => !finalParticipantIds || finalParticipantIds.has(normalizeText(participant?.id)))
       .map((participant) => {
         const participantId = normalizeText(participant?.id);
         if (!participantId) {
@@ -93,13 +100,13 @@
       stages: [{
         id: 1,
         tournament_id: 1,
-        name: isDoubleKo ? "Doppel-KO" : (tournament.mode === "groups_ko" ? "KO-Phase" : "KO"),
+        name: isDoubleKo ? "Doppel-KO" : ((tournament.mode === "groups_ko" || isPreliminaryFinal) ? "Finalphase" : "KO"),
         type: isDoubleKo ? "double_elimination" : "single_elimination",
         settings: {
           size: bracketSize,
           consolationFinal: !isDoubleKo && hasThirdPlaceMatch,
           grandFinal: isDoubleKo
-            ? (sanitizeGrandFinalResetMode(tournament?.ko?.grandFinalResetMode) === GRAND_FINAL_RESET_IF_NEEDED ? "double" : "simple")
+            ? (sanitizeGrandFinalResetMode(effectiveKoMeta?.grandFinalResetMode) === GRAND_FINAL_RESET_IF_NEEDED ? "double" : "simple")
             : undefined,
         },
         number: 1,

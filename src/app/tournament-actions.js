@@ -113,6 +113,33 @@
   }
 
 
+  function generateActivePreliminaryFinalStage() {
+    const tournament = state.store.tournament;
+    const result = generatePreliminaryFinalStage(tournament);
+    if (!result.ok) return result;
+    finalizeTournamentMutation(tournament, "view");
+    return result;
+  }
+
+
+  function saveActiveQualificationResolution(orderedParticipantIds, reason) {
+    const tournament = state.store.tournament;
+    const result = recordPreliminaryQualificationResolution(tournament, orderedParticipantIds, reason);
+    if (!result.ok) return result;
+    finalizeTournamentMutation(tournament, "view");
+    return result;
+  }
+
+
+  function resetActivePreliminaryMatchForCorrection(matchId) {
+    const tournament = state.store.tournament;
+    const result = resetPreliminaryMatchForCorrection(tournament, matchId);
+    if (!result.ok) return result;
+    finalizeTournamentMutation(tournament, "matches");
+    return result;
+  }
+
+
   function importTournamentPayload(rawObject) {
     if (!rawObject || typeof rawObject !== "object") {
       return { ok: false, message: "JSON ist leer oder ungültig." };
@@ -121,6 +148,19 @@
     let tournament = rawObject.tournament || null;
     if (!tournament && rawObject.mode && rawObject.participants) {
       tournament = rawObject;
+    }
+    if (tournament?.mode === "preliminary_final") {
+      const participantCount = Array.isArray(tournament.participants) ? tournament.participants.length : 0;
+      const scheduleValidation = validatePreliminaryScheduleConfig(participantCount, tournament?.preliminary?.matchesPerParticipant);
+      const scoringValidation = validatePreliminaryScoring(tournament?.preliminary?.scoring);
+      const qualifierCount = Number(tournament?.finalStage?.qualifierCount);
+      const finalBestOf = Number(tournament?.finalStage?.bestOfLegs);
+      const finalTypeValid = FINAL_STAGE_TYPES.includes(tournament?.finalStage?.type);
+      if (!scheduleValidation.ok) return { ok: false, reasonCode: scheduleValidation.reasonCode, message: scheduleValidation.message };
+      if (!scoringValidation.ok) return { ok: false, reasonCode: scoringValidation.reasonCode, message: scoringValidation.message };
+      if (!finalTypeValid) return { ok: false, reasonCode: "final_stage_type_invalid", message: "Ung\u00fcltiger Finalphasentyp im Import." };
+      if (!Number.isInteger(qualifierCount) || qualifierCount < 2 || qualifierCount > participantCount) return { ok: false, reasonCode: "final_stage_qualifier_count_invalid", message: "Ung\u00fcltige Qualifikantenzahl im Import." };
+      if (!Number.isInteger(finalBestOf) || finalBestOf < 1 || finalBestOf > 21 || finalBestOf % 2 === 0) return { ok: false, reasonCode: "final_stage_best_of_invalid", message: "Ung\u00fcltiges Finalphasen-Best-of im Import." };
     }
 
     const normalizedTournament = normalizeTournament(

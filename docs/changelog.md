@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.5.0
+- Neuer eigenständiger Modus `preliminary_final` (`Vorrunde + Finalphase`):
+  - deterministischer regulärer Paarungsgraph mit exakt `4..8` verschiedenen Gegnern je Teilnehmer, ohne Selbst- oder Doppelbegegnungen
+  - mathematisch unmögliche Kombinationen werden mit stabilen Reason Codes und zulässigen Alternativen blockiert; Scheduling-Runden bleiben klar von Matches je Teilnehmer getrennt
+  - Vorrundenformat `2 Legs fest` erlaubt ausschließlich `2:0`, `1:1` und `0:2`; Zwischenstände nach Leg 1 bleiben persistierbar
+  - konfigurierbare Veranstalterwertung mit Punkten, Leg-Differenz und gewonnenen Legs; ungeklärte Cutoff-Gleichstände verlangen eine sichtbare, begründete Veranstalterentscheidung
+  - Finalphase entsteht erst nach vollständiger Vorrunde aus der Tabellenreihenfolge und nutzt die bestehenden KO- oder Doppel-KO-Engines mit eigenem ungeradem Best-of
+- AutoDarts-Sicherheitsgrenze: Fixed-2-Legs wird mangels belegbarer exakter Zwei-Lobby-/Anwurfabbildung mit `fixed_legs_api_unsupported` für den API-Start gesperrt und sicher manuell erfasst. Es gibt keine Annäherung als First to 2 oder Best of 3.
+- Persistenzschema auf `schemaVersion: 5` angehoben; Draft, Import, Export, Migration und JSON-Roundtrip erhalten Vorrunden-, Finalphasen- und Leg-Zwischenstandsdaten.
+- Der bestehende Modus `groups_ko` bleibt unverändert verfügbar; das faire verkürzte Vorrundenformat wird ausschließlich durch `preliminary_final` ergänzt.
+- Statischer Bracket-Fallback korrigiert: Nur Matches mit Status `completed` und zugleich gültigem Ergebnis erscheinen abgeschlossen; offene und unvollständig belegte Matches bleiben sichtbar offen.
+- Dauerprognose berücksichtigt Vorrunde und abhängige Finalphase. MultiBoard ist nicht Bestandteil dieses Releases; die Board-Zahl ist ausschließlich ein Kapazitätsparameter der Turnierzeitprognose.
+- Release-, README- und Compliance-Texte beschreiben das Format als deterministische technische Abbildung eines gespeicherten Veranstalterprofils. Es ist nur regelkonform, wenn die Konfiguration der konkreten Turnierordnung entspricht; eine allgemeine Verbandskonformität wird nicht behauptet.
+
 ## 0.4.1
 - `groups_ko` behandelt ungerade Teilnehmerzahlen jetzt explizit und auditierbar:
   - sicherer Produktstandard `require_even` blockiert neue ungerade Felder mit stabilem Fehlercode
@@ -9,9 +23,11 @@
   - Live-Analyse zeigt Gruppengrößen, Spiele je Spieler und Qualifikationsverhältnisse
   - Legacy-Turniere werden ohne Neuauslosung oder erfundene Bestätigung weitergeführt
   - nicht abbildbare offizielle Formate werden weder angenähert noch als allgemein regelkonform bezeichnet
+  - diese Absicherung löst Issue #7 noch nicht vollständig: `groups_ko` bleibt bei zwei vollständigen Round-Robin-Gruppen, und `allow_unequal` beseitigt die unterschiedlichen Matchanzahlen je Spieler nicht
+  - `0.4.1` sichert damit ungerade `groups_ko`-Felder ab, löst aber nicht das faire Vorrundenformat mit gleicher Matchanzahl; die funktionale Lösung folgt mit `0.5.0`
 - Compliance-Wording präzisiert:
   - DRA 6.16.1 wird als Veranstalterermessen statt universeller Tie-Break-Reihenfolge beschrieben
-  - das projektinterne Seed-Placement für Byes wird konkret benannt statt pauschal als PDC/DRA-konform bezeichnet
+  - das projektinterne Seed-Placement für Byes wird konkret benannt statt pauschal als allgemein verbandskonform bezeichnet
 
 ## 0.4.0
 - KO-Phasen fachlich sauber benannt:
@@ -38,7 +54,7 @@
   - `.meta.js`-Artefakt für leichtgewichtigen Versionsabgleich ergänzt
   - verfügbare Updates werden zusätzlich am Sidebar-Menüeintrag `xLokales Turnier` markiert
   - bei aktivem Loader reicht ein Reload; bei direkter Runtime-Installation öffnet der Assistent die veröffentlichte Userscript-Datei
-- Regelhärtung für DRA-konforme Entscheidungszeitpunkte:
+- Regelhärtung für dokumentierte Entscheidungszeitpunkte:
   - Tie-Break-Profil ist nach dem ersten abgeschlossenen Gruppen-/Liga-Ergebnis gesperrt (`DRA 6.16.1`).
   - Draw-Lock-Entsperren wurde auf expliziten Promoter-Override mit Bestätigung und Zeitfenster umgestellt (`DRA 6.12.1`).
 - KO optional um Platz-3-Spiel erweitert:
@@ -85,7 +101,7 @@
   - Zeitprofil beeinflusst jetzt auch Match-/Phasenübergänge statt nur die Leg-Geschwindigkeit
   - Score-Faktoren für kurze und lange X01-Distanzen näher an externen Richtwerten ausgerichtet
   - neue Dokumentation `docs/tournament-duration.md` mit Formel, Parametern und Benchmark-Basis
-- Turnierzeit-Prognose um Multi-Board-Scheduling erweitert:
+- Turnierzeit-Prognose um ein Kapazitätsmodell erweitert:
   - neues Eingabefeld `Boards für Zeitprognose` im Turnierformular (`1..32`)
   - Berechnung nutzt jetzt einen abhängigkeitssensitiven Scheduler (Board-Limit, Spieler-Konflikte, KO-/Phasenabhängigkeiten)
   - Ausgabe ergänzt um Match-Wellen, Peak-Parallelität und Board-Auslastung
@@ -181,7 +197,7 @@
   - Gesamt-Legs+
   - danach `playoff_required`.
 - Gruppen-zu-KO-Auflösung blockiert bei `playoff_required`.
-- PDC-konforme Terminologie in der UI ergänzt:
+- Regelbezogene Fachterminologie in der UI ergänzt:
   - `Freilos (Bye)`
   - `KO (Straight Knockout)`
   - `Liga (Round Robin)`

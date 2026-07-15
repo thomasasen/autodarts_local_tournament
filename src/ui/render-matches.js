@@ -14,7 +14,6 @@
     ];
 
     const matches = sortMatchesForDisplay(tournament, sortMode);
-    const legsToWin = getLegsToWin(tournament.bestOfLegs);
     const suggestedNextMatch = findSuggestedNextMatch(tournament);
     const suggestedNextMatchId = suggestedNextMatch?.id || "";
     const koFinalRound = getMatchesByStage(tournament, MATCH_STAGE_KO).reduce((maxRound, koMatch) => {
@@ -35,6 +34,8 @@
       const editable = playability.editable;
       const auto = ensureMatchAutoMeta(match);
       const isCompleted = match.status === STATUS_COMPLETED;
+      const isFixedPreliminary = isFixedLegsPreliminaryMatch(tournament, match);
+      const matchLegsToWin = getLegsToWin(getMatchBestOfLegs(tournament, match));
       const isByeCompletion = isCompleted && isByeMatchResult(match);
       const isAutoStarted = match.status === STATUS_PENDING && auto.status === "started" && Boolean(auto.lobbyId);
       const isBlockedPending = match.status === STATUS_PENDING && !editable;
@@ -43,7 +44,8 @@
       const isThirdPlaceMatch = normalizeText(match?.meta?.bracket?.matchRole || "") === "third_place";
       const bracketSide = normalizeText(match?.meta?.bracket?.bracketSide || "");
       const sectionRound = clampInt(match?.meta?.bracket?.sectionRound, match.round, 1, 64);
-      const isDoubleKo = tournament.mode === "double_ko";
+      const isDoubleKo = tournament.mode === "double_ko"
+        || (tournament.mode === "preliminary_final" && tournament?.finalStage?.type === FINAL_STAGE_TYPE_DOUBLE_KO);
       const isGrandFinal = isDoubleKo && bracketSide === "finals" && sectionRound === 1;
       const isResetFinal = isDoubleKo && bracketSide === "finals" && sectionRound === 2;
       const isKoFinal = match.stage === MATCH_STAGE_KO
@@ -58,6 +60,8 @@
         ? `Gruppe ${match.groupId || "?"}`
         : match.stage === MATCH_STAGE_LEAGUE
           ? "Liga (Round Robin)"
+          : match.stage === MATCH_STAGE_PRELIMINARY
+            ? "Vorrunde"
           : isDoubleKo
             ? (bracketSide === "losers"
               ? "Losers Bracket"
@@ -99,9 +103,9 @@
           : match.stage === MATCH_STAGE_KO
             ? `KO-Phase = ${koRoundLabel} bzw. bei großen Feldern Letzte N, Spiel = Paarung innerhalb dieser Phase.`
             : "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
-      const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
-      const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
-      const saveHelpText = `Speichert Legs f\u00fcr ${player1} vs ${player2}. Sieger wird automatisch aus den Legs bestimmt. Sieger muss ${legsToWin} Legs erreichen.`;
+      const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${matchLegsToWin} Legs f\u00fcr den Matchgewinn.`;
+      const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${matchLegsToWin} Legs f\u00fcr den Matchgewinn.`;
+      const saveHelpText = `Speichert Legs f\u00fcr ${player1} vs ${player2}. Sieger wird automatisch aus den Legs bestimmt. Sieger muss ${matchLegsToWin} Legs erreichen.`;
       const rowClasses = [
         "ata-match-card",
         isCompleted ? "ata-row-completed" : "",
@@ -125,7 +129,7 @@
             ? `Champion: ${winner} (${match.legs.p1}:${match.legs.p2})`
             : (isThirdPlaceMatch
               ? `Platz 3: ${winner} (${match.legs.p1}:${match.legs.p2})`
-              : `Sieger: ${winner} (${match.legs.p1}:${match.legs.p2})`)))
+              : (match.winnerId ? `Sieger: ${winner} (${match.legs.p1}:${match.legs.p2})` : `Unentschieden: ${match.legs.p1}:${match.legs.p2}`))))
         : "";
       const advanceClasses = [
         "ata-match-advance-pill",
@@ -155,14 +159,21 @@
       const player1PairingHtml = buildPairingPlayerHtml(player1, match.player1Id);
       const player2PairingHtml = buildPairingPlayerHtml(player2, match.player2Id);
 
-      const editorHtml = editable
+      const fixedEntries = Array.isArray(match?.meta?.fixedLegs?.entries) ? match.meta.fixedLegs.entries : [];
+      const fixedWinnerForLeg = (legIndex) => fixedEntries.find((entry) => entry.legIndex === legIndex)?.winnerId || "";
+      const fixedEditorHtml = editable && isFixedPreliminary
+        ? `<div class="ata-match-editor"><div class="ata-grid-2">
+            ${[1, 2].map((legIndex) => `<div class="ata-field"><label>Leg ${legIndex} gewonnen von</label><select data-field="fixed-leg-${legIndex}" data-match-id="${escapeHtml(match.id)}"><option value="">Noch offen</option><option value="${escapeHtml(match.player1Id)}" ${fixedWinnerForLeg(legIndex) === match.player1Id ? "selected" : ""}>${escapeHtml(player1)}</option><option value="${escapeHtml(match.player2Id)}" ${fixedWinnerForLeg(legIndex) === match.player2Id ? "selected" : ""}>${escapeHtml(player2)}</option></select></div>`).join("")}
+          </div><div class="ata-editor-actions"><button type="button" class="ata-btn" data-action="save-fixed-match" data-match-id="${escapeHtml(match.id)}">Leg-Stand speichern</button><button type="button" class="ata-btn ata-btn-primary" disabled title="API-Start gesperrt: keine exakte Fixed-2-Legs-Abbildung.">Manuell erfassen</button></div></div>`
+        : "";
+      const regularEditorHtml = editable && !isFixedPreliminary
         ? `
           <div class="ata-match-editor">
             <div class="ata-score-grid">
               <input
                 type="number"
                 min="0"
-                max="${legsToWin}"
+                max="${matchLegsToWin}"
                 data-field="legs-p1"
                 data-match-id="${escapeHtml(match.id)}"
                 value="${match.legs.p1}"
@@ -172,7 +183,7 @@
               <input
                 type="number"
                 min="0"
-                max="${legsToWin}"
+                max="${matchLegsToWin}"
                 data-field="legs-p2"
                 data-match-id="${escapeHtml(match.id)}"
                 value="${match.legs.p2}"
@@ -187,6 +198,10 @@
           </div>
         `
         : "";
+      const correctionHtml = isCompleted && isFixedPreliminary && tournament?.finalStage?.status !== "started" && tournament?.finalStage?.status !== "completed"
+        ? `<div class="ata-editor-actions"><button type="button" class="ata-btn" data-action="correct-preliminary-match" data-match-id="${escapeHtml(match.id)}">Vorrundenergebnis korrigieren</button></div>`
+        : "";
+      const editorHtml = fixedEditorHtml || regularEditorHtml;
 
       const summaryHtml = summaryText
         ? `<span class="${escapeHtml(advanceClasses)}">${escapeHtml(summaryText)}</span>`
@@ -218,6 +233,7 @@
             ${summaryHtml}
           </div>
           ${editorHtml}
+          ${correctionHtml}
           ${statusLineHtml}
         </article>
       `;

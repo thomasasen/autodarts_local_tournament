@@ -268,7 +268,36 @@
       grandFinalResetMode: GRAND_FINAL_RESET_IF_NEEDED,
       groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
       groupsKoOddParticipantAcknowledged: false,
+      preliminaryMatchesPerParticipant: 4,
+      preliminaryWinPoints: 2,
+      preliminaryDrawPoints: 1,
+      preliminaryLossPoints: 0,
+      finalStageType: FINAL_STAGE_TYPE_KO,
+      finalStageQualifierCount: 4,
+      finalStageBestOfLegs: 5,
     };
+  }
+
+
+  function normalizeCreateDraftInteger(value, fallback, { min, max, odd = false } = {}) {
+    if (
+      value === null
+      || value === undefined
+      || (typeof value === "string" && !value.trim())
+    ) {
+      return fallback;
+    }
+    const parsed = Number(value);
+    if (
+      !Number.isFinite(parsed)
+      || !Number.isInteger(parsed)
+      || (Number.isFinite(min) && parsed < min)
+      || (Number.isFinite(max) && parsed > max)
+      || (odd && parsed % 2 === 0)
+    ) {
+      return fallback;
+    }
+    return parsed;
   }
 
 
@@ -283,7 +312,7 @@
     const presetApply = requestedPreset?.apply || null;
     const modeFallback = presetApply?.mode || base.mode;
     const modeRaw = normalizeText(rawDraft?.mode ?? modeFallback);
-    const mode = ["ko", "double_ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : modeFallback;
+    const mode = ["ko", "double_ko", "league", "groups_ko", "preliminary_final"].includes(modeRaw) ? modeRaw : modeFallback;
     const bestOfFallback = presetApply?.bestOfLegs ?? base.bestOfLegs;
     const startScoreFallback = presetApply?.startScore ?? base.startScore;
     const x01Settings = normalizeTournamentX01Settings({
@@ -322,6 +351,39 @@
         base.groupsKoOddParticipantPolicy,
       ),
       groupsKoOddParticipantAcknowledged: rawDraft?.groupsKoOddParticipantAcknowledged === true,
+      preliminaryMatchesPerParticipant: normalizeCreateDraftInteger(
+        rawDraft?.preliminaryMatchesPerParticipant,
+        base.preliminaryMatchesPerParticipant,
+        { min: 4, max: 8 },
+      ),
+      preliminaryWinPoints: normalizeCreateDraftInteger(
+        rawDraft?.preliminaryWinPoints,
+        base.preliminaryWinPoints,
+        { min: 0, max: 10 },
+      ),
+      preliminaryDrawPoints: normalizeCreateDraftInteger(
+        rawDraft?.preliminaryDrawPoints,
+        base.preliminaryDrawPoints,
+        { min: 0, max: 10 },
+      ),
+      preliminaryLossPoints: normalizeCreateDraftInteger(
+        rawDraft?.preliminaryLossPoints,
+        base.preliminaryLossPoints,
+        { min: 0, max: 10 },
+      ),
+      finalStageType: FINAL_STAGE_TYPES.includes(normalizeText(rawDraft?.finalStageType || "").toLowerCase())
+        ? normalizeText(rawDraft.finalStageType).toLowerCase()
+        : base.finalStageType,
+      finalStageQualifierCount: normalizeCreateDraftInteger(
+        rawDraft?.finalStageQualifierCount,
+        base.finalStageQualifierCount,
+        { min: 2, max: MODE_PARTICIPANT_LIMITS.preliminary_final.max },
+      ),
+      finalStageBestOfLegs: normalizeCreateDraftInteger(
+        rawDraft?.finalStageBestOfLegs,
+        base.finalStageBestOfLegs,
+        { min: 1, max: 21, odd: true },
+      ),
     };
     if (requestedPreset && matchesCreatePresetSetup(draft, requestedPreset.id)) {
       draft.x01Preset = requestedPreset.id;
@@ -383,7 +445,7 @@
 
   function normalizeMatchResultKind(value) {
     const normalized = normalizeText(value || "").toLowerCase();
-    return normalized === "bye" ? "bye" : null;
+    return normalized === "bye" || normalized === "draw" ? normalized : null;
   }
 
 
@@ -515,6 +577,22 @@
   }
 
 
+  function isFixedLegsPreliminaryMatch(tournament, match) {
+    return tournament?.mode === "preliminary_final"
+      && match?.stage === MATCH_STAGE_PRELIMINARY
+      && tournament?.preliminary?.matchFormat === PRELIMINARY_MATCH_FORMAT_FIXED_LEGS
+      && tournament?.preliminary?.fixedLegCount === PRELIMINARY_FIXED_LEG_COUNT;
+  }
+
+
+  function getMatchBestOfLegs(tournament, match = null) {
+    if (tournament?.mode === "preliminary_final" && match?.stage === MATCH_STAGE_KO) {
+      return sanitizeBestOf(tournament?.finalStage?.bestOfLegs);
+    }
+    return sanitizeBestOf(tournament?.bestOfLegs);
+  }
+
+
   function sanitizeGroupsKoOddParticipantPolicy(
     value,
     fallback = GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
@@ -614,6 +692,19 @@
   }
 
 
+  function normalizeFixedLegEntries(rawFixedLegs) {
+    const source = Array.isArray(rawFixedLegs?.entries) ? rawFixedLegs.entries : [];
+    const seen = new Set();
+    return source.map((entry) => {
+      const legIndex = clampInt(entry?.legIndex, 0, 1, PRELIMINARY_FIXED_LEG_COUNT);
+      const winnerId = normalizeText(entry?.winnerId || "");
+      if (!legIndex || !winnerId || seen.has(legIndex)) return null;
+      seen.add(legIndex);
+      return { legIndex, winnerId, source: entry?.source === "auto" ? "auto" : "manual", recordedAt: normalizeText(entry?.recordedAt || nowIso()) };
+    }).filter(Boolean).sort((left, right) => left.legIndex - right.legIndex);
+  }
+
+
   function normalizeStoredMatchAverage(value) {
     if (value === null || value === undefined || value === "") {
       return null;
@@ -671,6 +762,13 @@
       ...meta,
       resultKind,
       auto: normalizeAutomationMeta(meta.auto),
+      fixedLegs: meta.fixedLegs && typeof meta.fixedLegs === "object"
+        ? {
+          count: PRELIMINARY_FIXED_LEG_COUNT,
+          entries: normalizeFixedLegEntries(meta.fixedLegs),
+          syncStatus: "manual_only",
+        }
+        : null,
     };
   }
 
@@ -823,10 +921,61 @@
   }
 
 
+  function normalizeTournamentPreliminary(rawPreliminary) {
+    const preliminary = rawPreliminary && typeof rawPreliminary === "object" ? rawPreliminary : {};
+    const scoringValidation = validatePreliminaryScoring(preliminary.scoring);
+    return {
+      pairingMethod: PRELIMINARY_PAIRING_METHOD_BALANCED_REGULAR,
+      matchesPerParticipant: clampInt(preliminary.matchesPerParticipant, 4, 4, 8),
+      matchFormat: PRELIMINARY_MATCH_FORMAT_FIXED_LEGS,
+      fixedLegCount: PRELIMINARY_FIXED_LEG_COUNT,
+      scoring: scoringValidation.ok ? scoringValidation.scoring : normalizePreliminaryScoring(null),
+      scheduleRoundCount: clampInt(preliminary.scheduleRoundCount, 0, 0, 64),
+      completedAt: normalizeText(preliminary.completedAt || "") || null,
+    };
+  }
+
+
+  function normalizeQualificationResolution(rawResolution) {
+    if (!rawResolution || typeof rawResolution !== "object") return null;
+    const orderedParticipantIds = (Array.isArray(rawResolution.orderedParticipantIds) ? rawResolution.orderedParticipantIds : [])
+      .map((id) => normalizeText(id || "")).filter(Boolean);
+    if (!orderedParticipantIds.length) return null;
+    return {
+      orderedParticipantIds,
+      reason: normalizeText(rawResolution.reason || ""),
+      confirmedAt: normalizeText(rawResolution.confirmedAt || "") || null,
+    };
+  }
+
+
+  function normalizeTournamentFinalStage(rawFinalStage) {
+    const finalStage = rawFinalStage && typeof rawFinalStage === "object" ? rawFinalStage : {};
+    const type = FINAL_STAGE_TYPES.includes(normalizeText(finalStage.type || "").toLowerCase())
+      ? normalizeText(finalStage.type).toLowerCase()
+      : FINAL_STAGE_TYPE_KO;
+    const status = ["pending", "generated", "started", "completed"].includes(finalStage.status)
+      ? finalStage.status
+      : "pending";
+    return {
+      type,
+      qualifierCount: clampInt(finalStage.qualifierCount, 4, 2, TECHNICAL_PARTICIPANT_HARD_MAX),
+      bestOfLegs: sanitizeBestOf(finalStage.bestOfLegs),
+      status,
+      generatedAt: normalizeText(finalStage.generatedAt || "") || null,
+      seeding: (Array.isArray(finalStage.seeding) ? finalStage.seeding : []).map((id) => normalizeText(id || "")).filter(Boolean),
+      qualificationResolution: normalizeQualificationResolution(finalStage.qualificationResolution),
+      ko: finalStage.ko && typeof finalStage.ko === "object"
+        ? normalizeTournamentKoMeta(finalStage.ko, KO_DRAW_MODE_SEEDED, true)
+        : null,
+    };
+  }
+
+
   function normalizeTournamentResultEntry(rawResult, indexFallback) {
     return {
       matchId: normalizeText(rawResult?.matchId || rawResult?.id || `result-${indexFallback}`),
-      stage: [MATCH_STAGE_KO, MATCH_STAGE_GROUP, MATCH_STAGE_LEAGUE].includes(rawResult?.stage)
+      stage: [MATCH_STAGE_KO, MATCH_STAGE_GROUP, MATCH_STAGE_LEAGUE, MATCH_STAGE_PRELIMINARY].includes(rawResult?.stage)
         ? rawResult.stage
         : MATCH_STAGE_KO,
       round: clampInt(rawResult?.round, 1, 1, 64),
@@ -850,7 +999,7 @@
       return null;
     }
 
-    const mode = ["ko", "double_ko", "league", "groups_ko"].includes(rawTournament.mode) ? rawTournament.mode : "ko";
+    const mode = ["ko", "double_ko", "league", "groups_ko", "preliminary_final"].includes(rawTournament.mode) ? rawTournament.mode : "ko";
     const modeLimits = getModeParticipantLimits(mode);
     const participantsRaw = Array.isArray(rawTournament.participants) ? rawTournament.participants : [];
     const participants = participantsRaw
@@ -881,7 +1030,7 @@
     const matchesRaw = Array.isArray(rawTournament.matches) ? rawTournament.matches : [];
     const matches = matchesRaw.map((match, index) => ({
       id: normalizeText(match?.id || `match-${index + 1}`),
-      stage: [MATCH_STAGE_KO, MATCH_STAGE_GROUP, MATCH_STAGE_LEAGUE].includes(match?.stage) ? match.stage : MATCH_STAGE_KO,
+      stage: [MATCH_STAGE_KO, MATCH_STAGE_GROUP, MATCH_STAGE_LEAGUE, MATCH_STAGE_PRELIMINARY].includes(match?.stage) ? match.stage : MATCH_STAGE_KO,
       round: clampInt(match?.round, 1, 1, 64),
       number: clampInt(match?.number, index + 1, 1, 256),
       groupId: match?.groupId ? normalizeText(match.groupId) : null,
@@ -922,6 +1071,8 @@
       ko: mode === "ko" || mode === "double_ko"
         ? normalizeTournamentKoMeta(rawTournament.ko, KO_DRAW_MODE_SEEDED, fallbackKoDrawLocked)
         : null,
+      preliminary: mode === "preliminary_final" ? normalizeTournamentPreliminary(rawTournament.preliminary) : null,
+      finalStage: mode === "preliminary_final" ? normalizeTournamentFinalStage(rawTournament.finalStage) : null,
       bestOfLegs: sanitizeBestOf(rawTournament.bestOfLegs),
       startScore: x01.baseScore,
       x01,

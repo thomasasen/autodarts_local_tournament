@@ -496,6 +496,31 @@
   }
 
 
+  function buildPreliminaryMatches(schedule) {
+    const matches = [];
+    (schedule?.rounds || []).forEach((pairs, roundIndex) => {
+      pairs.forEach((pair, pairIndex) => {
+        matches.push(createMatch({
+          id: `preliminary-r${roundIndex + 1}-m${pairIndex + 1}`,
+          stage: MATCH_STAGE_PRELIMINARY,
+          round: roundIndex + 1,
+          number: pairIndex + 1,
+          player1Id: pair.player1Id,
+          player2Id: pair.player2Id,
+          meta: {
+            fixedLegs: {
+              count: PRELIMINARY_FIXED_LEG_COUNT,
+              entries: [],
+              syncStatus: "manual_only",
+            },
+          },
+        }));
+      });
+    });
+    return matches;
+  }
+
+
   function buildDoubleKoWinnersBracket(players, seeds, options = {}) {
     const normalizedParticipants = normalizeSeedParticipants(players);
     const seeded = Array.isArray(seeds) && seeds.length
@@ -924,7 +949,7 @@
     if (!normalizeText(config.name)) {
       errors.push({ reasonCode: "tournament_name_required", message: "Bitte einen Turniernamen eingeben." });
     }
-    if (!["ko", "double_ko", "league", "groups_ko"].includes(config.mode)) {
+    if (!["ko", "double_ko", "league", "groups_ko", "preliminary_final"].includes(config.mode)) {
       errors.push({ reasonCode: "tournament_mode_invalid", message: "Ungültiger Modus." });
     }
     const participantCount = Array.isArray(config?.participants) ? config.participants.length : 0;
@@ -938,6 +963,29 @@
         reasonCode: groupsKoPolicyValidation.reasonCode,
         message: groupsKoPolicyValidation.message,
       });
+    }
+    if (config.mode === "preliminary_final") {
+      const scheduleValidation = validatePreliminaryScheduleConfig(participantCount, config.preliminaryMatchesPerParticipant);
+      if (!scheduleValidation.ok) {
+        errors.push({ reasonCode: scheduleValidation.reasonCode, message: scheduleValidation.message, allowedMatchCounts: scheduleValidation.allowedMatchCounts });
+      }
+      const scoringValidation = validatePreliminaryScoring({
+        winPoints: config.preliminaryWinPoints,
+        drawPoints: config.preliminaryDrawPoints,
+        lossPoints: config.preliminaryLossPoints,
+      });
+      if (!scoringValidation.ok) errors.push({ reasonCode: scoringValidation.reasonCode, message: scoringValidation.message });
+      if (!FINAL_STAGE_TYPES.includes(config.finalStageType)) {
+        errors.push({ reasonCode: "final_stage_type_invalid", message: "Finalphase muss KO oder Doppel-KO sein." });
+      }
+      const qualifierCount = Number(config.finalStageQualifierCount);
+      if (!Number.isInteger(qualifierCount) || qualifierCount < 2 || qualifierCount > participantCount) {
+        errors.push({ reasonCode: "final_stage_qualifier_count_invalid", message: `Anzahl Qualifikanten muss zwischen 2 und ${participantCount} liegen.` });
+      }
+      const finalBestOf = Number(config.finalStageBestOfLegs);
+      if (!Number.isInteger(finalBestOf) || finalBestOf < 1 || finalBestOf > 21 || finalBestOf % 2 === 0) {
+        errors.push({ reasonCode: "final_stage_best_of_invalid", message: "Finalphasen-Best-of muss eine ungerade ganze Zahl zwischen 1 und 21 sein." });
+      }
     }
 
     return errors;
@@ -977,9 +1025,37 @@
     let groups = [];
     let matches = [];
     let koMeta = null;
+    let preliminaryMeta = null;
+    let finalStageMeta = null;
 
     if (config.mode === "league") {
       matches = buildLeagueMatches(participantIds);
+    } else if (config.mode === "preliminary_final") {
+      const schedule = buildBalancedRegularPairings(participantIds, config.preliminaryMatchesPerParticipant);
+      matches = buildPreliminaryMatches(schedule);
+      preliminaryMeta = {
+        pairingMethod: PRELIMINARY_PAIRING_METHOD_BALANCED_REGULAR,
+        matchesPerParticipant: schedule.matchCount,
+        matchFormat: PRELIMINARY_MATCH_FORMAT_FIXED_LEGS,
+        fixedLegCount: PRELIMINARY_FIXED_LEG_COUNT,
+        scoring: normalizePreliminaryScoring({
+          winPoints: config.preliminaryWinPoints,
+          drawPoints: config.preliminaryDrawPoints,
+          lossPoints: config.preliminaryLossPoints,
+        }),
+        scheduleRoundCount: schedule.scheduleRoundCount,
+        completedAt: null,
+      };
+      finalStageMeta = {
+        type: config.finalStageType,
+        qualifierCount: Number(config.finalStageQualifierCount),
+        bestOfLegs: Number(config.finalStageBestOfLegs),
+        status: "pending",
+        generatedAt: null,
+        seeding: [],
+        qualificationResolution: null,
+        ko: null,
+      };
     } else if (config.mode === "groups_ko") {
       groups = buildGroups(participantIds);
       matches = buildGroupMatches(groups).concat(buildGroupsKoMatches());
@@ -1021,7 +1097,11 @@
       name: normalizeText(config.name),
       mode: config.mode,
       ko: koMeta,
-      bestOfLegs: sanitizeBestOf(config.bestOfLegs),
+      preliminary: preliminaryMeta,
+      finalStage: finalStageMeta,
+      bestOfLegs: config.mode === "preliminary_final"
+        ? sanitizeBestOf(config.finalStageBestOfLegs)
+        : sanitizeBestOf(config.bestOfLegs),
       startScore: x01.baseScore,
       x01,
       rules: normalizeTournamentRules({

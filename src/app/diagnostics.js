@@ -161,6 +161,99 @@
       }
     }
 
+    {
+      const previousTournament = state.store.tournament;
+      const previousDraft = cloneSerializable(state.store.ui?.createDraft);
+      const previousActiveTab = state.activeTab;
+      const previousStoredActiveTab = state.store.ui.activeTab;
+      const participantNames = Array.from({ length: 7 }, (_, index) => `UI Spieler ${index + 1}`).join("\n");
+      try {
+        ["ko", "double_ko", "league", "groups_ko"].forEach((sourceMode) => {
+          state.store.tournament = null;
+          state.activeTab = "tournament";
+          state.store.ui.activeTab = "tournament";
+          state.store.ui.createDraft = normalizeCreateDraft({
+            ...createDefaultCreateDraft(state.store.settings),
+            name: `UI Default ${sourceMode}`,
+            mode: sourceMode,
+            participantsText: participantNames,
+          }, state.store.settings);
+          renderShell();
+          const createForm = state.shadowRoot?.getElementById("ata-create-form");
+          const modeSelect = createForm?.querySelector("#ata-mode");
+          if (!(createForm instanceof HTMLFormElement) || !(modeSelect instanceof HTMLSelectElement)) {
+            throw new Error(`Create form fehlt f\u00fcr ${sourceMode}.`);
+          }
+          modeSelect.value = "preliminary_final";
+          modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+          const draft = normalizeCreateDraft(readCreateDraftInput(new FormData(createForm)), state.store.settings);
+          const summaryText = normalizeText(createForm.querySelector("[data-role='preliminary-live-summary']")?.textContent || "");
+          const defaultsOk = draft.mode === "preliminary_final"
+            && draft.preliminaryMatchesPerParticipant === 4
+            && draft.preliminaryWinPoints === 2
+            && draft.preliminaryDrawPoints === 1
+            && draft.preliminaryLossPoints === 0
+            && draft.finalStageType === "ko"
+            && draft.finalStageQualifierCount === 4
+            && draft.finalStageBestOfLegs === 5;
+          const summaryOk = summaryText.includes("7 Teilnehmer")
+            && summaryText.includes("4 Vorrundenspiele je Teilnehmer")
+            && summaryText.includes("14 Vorrundenmatches insgesamt")
+            && summaryText.includes("exakt 4 verschiedene Gegner")
+            && summaryText.includes("Keine doppelte Paarung")
+            && summaryText.includes("Top 4 qualifizieren sich f\u00fcr KO");
+
+          createForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+          const created = state.store.tournament;
+          const preliminaryMatches = getPreliminaryMatches(created);
+          const opponentsByParticipant = new Map((created?.participants || []).map((participant) => [participant.id, new Set()]));
+          preliminaryMatches.forEach((match) => {
+            opponentsByParticipant.get(match.player1Id)?.add(match.player2Id);
+            opponentsByParticipant.get(match.player2Id)?.add(match.player1Id);
+          });
+          const creationOk = created?.mode === "preliminary_final"
+            && preliminaryMatches.length === 14
+            && Array.from(opponentsByParticipant.values()).every((opponents) => opponents.size === 4)
+            && created?.finalStage?.qualifierCount === 4;
+          record(
+            `Preliminary UI defaults: ${sourceMode} -> preliminary_final`,
+            defaultsOk && summaryOk && creationOk,
+            `defaults=${defaultsOk}, summary=${summaryOk}, created=${creationOk}, matches=${preliminaryMatches.length}`,
+          );
+        });
+
+        state.store.tournament = null;
+        state.activeTab = "tournament";
+        state.store.ui.activeTab = "tournament";
+        state.store.ui.createDraft = normalizeCreateDraft({
+          ...createDefaultCreateDraft(state.store.settings),
+          name: "UI 7 durch 5",
+          mode: "preliminary_final",
+          participantsText: participantNames,
+          preliminaryMatchesPerParticipant: 5,
+        }, state.store.settings);
+        renderShell();
+        const invalidForm = state.shadowRoot?.getElementById("ata-create-form");
+        if (!(invalidForm instanceof HTMLFormElement)) throw new Error("Create form f\u00fcr 7/5 fehlt.");
+        const invalidSummary = normalizeText(invalidForm.querySelector("[data-role='preliminary-live-summary']")?.textContent || "");
+        invalidForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        record(
+          "Preliminary UI validation: 7 Teilnehmer / 5 Spiele wird blockiert",
+          state.store.tournament === null && invalidSummary.includes("gleiche Verteilung"),
+          `blocked=${state.store.tournament === null}, summary=${invalidSummary}`,
+        );
+      } catch (error) {
+        record("Preliminary UI defaults: realer Moduswechsel- und Anlageflow", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+        state.store.ui.createDraft = previousDraft || createDefaultCreateDraft(state.store.settings);
+        state.activeTab = previousActiveTab;
+        state.store.ui.activeTab = previousStoredActiveTab;
+        renderShell();
+      }
+    }
+
     try {
       const tournament = createTournament({
         name: "PayloadMapping",
@@ -221,6 +314,33 @@
       );
     } catch (error) {
       record("Bull-off Off: Matchstart-Payload setzt top-level bullOffMode + bullMode", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
+        name: "FixedLegsSafety",
+        mode: "preliminary_final",
+        preliminaryMatchesPerParticipant: 4,
+        preliminaryScoring: { win: 2, draw: 1, loss: 0 },
+        finalStageType: "ko",
+        finalStageQualifierCount: 4,
+        finalStageBestOfLegs: 5,
+        participants: participantList(5, "FL"),
+      });
+      const match = tournament.matches.find((entry) => entry.stage === MATCH_STAGE_PRELIMINARY);
+      let reasonCode = "";
+      try {
+        buildLobbyCreatePayload(tournament, match);
+      } catch (error) {
+        reasonCode = normalizeText(error?.reasonCode);
+      }
+      record(
+        "Fixed 2 Legs: API-Start wird ohne exakte Abbildung explizit gesperrt",
+        reasonCode === "fixed_legs_api_unsupported",
+        `reasonCode=${reasonCode || "-"}`,
+      );
+    } catch (error) {
+      record("Fixed 2 Legs: API-Start wird ohne exakte Abbildung explizit gesperrt", false, String(error?.message || error));
     }
 
     try {
@@ -1289,15 +1409,15 @@
       };
       const migrated = migrateStorage(rawStoreV2);
       record(
-        "Migration: v2 -> v4 setzt Tie-Break-Profil",
-        migrated.schemaVersion === 4
+        "Migration: v2 -> v5 setzt Tie-Break-Profil",
+        migrated.schemaVersion === 5
           && migrated.tournament?.rules?.tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE
           && migrated.settings?.tournamentTimeProfile === TOURNAMENT_TIME_PROFILE_NORMAL
           && migrated.settings?.featureFlags?.koDrawLockDefault === true,
         `schema=${migrated.schemaVersion}, profile=${migrated.tournament?.rules?.tieBreakProfile}`,
       );
     } catch (error) {
-      record("Migration: v2 -> v4 setzt Tie-Break-Profil", false, String(error?.message || error));
+      record("Migration: v2 -> v5 setzt Tie-Break-Profil", false, String(error?.message || error));
     }
 
     const passed = results.filter((entry) => entry.ok).length;

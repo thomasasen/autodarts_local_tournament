@@ -48,6 +48,7 @@
       changed = synchronizeKoBracketState(tournament) || changed;
       changed = normalizeCompletedMatchResults(tournament) || changed;
       changed = synchronizeKoBracketState(tournament) || changed;
+      changed = refreshPreliminaryFinalStageStatus(tournament) || changed;
       if (tournament.mode === "groups_ko") {
         changed = advanceKoWinners(tournament) || changed;
       }

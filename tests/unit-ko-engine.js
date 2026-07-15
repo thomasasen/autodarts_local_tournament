@@ -233,3 +233,62 @@
     synchronizeKoBracketState(tournament);
     assertEqual(Boolean(findMatch(tournament, "gf-r2-m1")), false);
   });
+
+
+  test("Static bracket fallback: visible completion requires completed status and valid result", () => {
+    const tournament = createKoTournament(participantList(4, "SF"));
+    const matches = getMatchesByStage(tournament, MATCH_STAGE_KO);
+    const openMatch = matches.find((match) => match.status === STATUS_PENDING && match.player1Id && match.player2Id);
+    const futureMatch = matches.find((match) => !match.player1Id || !match.player2Id);
+    assert(Boolean(openMatch && futureMatch));
+
+    const openHtml = renderStaticBracketFallbackMatches(tournament, [openMatch]);
+    assert(openHtml.includes("ata-match-status-open"));
+    assert(openHtml.includes("Noch nicht abgeschlossen."));
+    assertEqual(openHtml.includes("ata-match-status-completed"), false);
+
+    const completedMatch = cloneSerializable(openMatch);
+    completedMatch.status = STATUS_COMPLETED;
+    completedMatch.winnerId = completedMatch.player1Id;
+    completedMatch.legs = { p1: 2, p2: 0 };
+    const completedHtml = renderStaticBracketFallbackMatches(tournament, [completedMatch]);
+    assert(completedHtml.includes("ata-match-status-completed"));
+    assert(completedHtml.includes("Gewinner:"));
+
+    const invalidCompletedMatch = cloneSerializable(completedMatch);
+    invalidCompletedMatch.winnerId = null;
+    invalidCompletedMatch.legs = { p1: 1, p2: 1 };
+    const invalidHtml = renderStaticBracketFallbackMatches(tournament, [invalidCompletedMatch]);
+    assert(invalidHtml.includes("ata-match-status-open"));
+    assertEqual(invalidHtml.includes("ata-match-status-completed"), false);
+
+    const futureHtml = renderStaticBracketFallbackMatches(tournament, [futureMatch]);
+    assert(futureHtml.includes("ata-match-status-open"));
+  });
+
+
+  test("Static bracket fallback: structural bye and fixed-leg draw are visibly completed", () => {
+    const byeTournament = createKoTournament(participantList(3, "SB"));
+    const byeMatch = getMatchesByStage(byeTournament, MATCH_STAGE_KO).find((match) => isByeMatchResult(match));
+    const byeHtml = renderStaticBracketFallbackMatches(byeTournament, [byeMatch]);
+    assert(byeHtml.includes("ata-match-status-bye"));
+    assert(byeHtml.includes("Freilos (Bye)"));
+
+    const drawTournament = createTournament({
+      name: "Fallback Draw",
+      mode: "preliminary_final",
+      participants: participantList(5, "SD"),
+      preliminaryMatchesPerParticipant: 4,
+      preliminaryWinPoints: 2,
+      preliminaryDrawPoints: 1,
+      preliminaryLossPoints: 0,
+      finalStageType: "ko",
+      finalStageQualifierCount: 4,
+      finalStageBestOfLegs: 5,
+    });
+    const drawMatch = getPreliminaryMatches(drawTournament)[0];
+    assert(applyMatchResultToTournament(drawTournament, drawMatch.id, null, { p1: 1, p2: 1 }, "manual").ok);
+    const drawHtml = renderStaticBracketFallbackMatches(drawTournament, [drawMatch]);
+    assert(drawHtml.includes("ata-match-status-completed"));
+    assert(drawHtml.includes("1:1"));
+  });

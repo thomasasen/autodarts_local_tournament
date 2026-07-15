@@ -47,6 +47,55 @@
   }
 
 
+  function renderPreliminaryFinalFields(draft) {
+    if (draft?.mode !== "preliminary_final") return "";
+    const participants = parseParticipantLines(draft.participantsText);
+    const participantIds = participants.map((participant) => participant.id);
+    const analysis = analyzePreliminaryFinalConfiguration(
+      participantIds,
+      draft.preliminaryMatchesPerParticipant,
+      draft.finalStageType,
+      draft.finalStageQualifierCount,
+    );
+    const allowedText = analysis.allowedMatchCounts?.length ? analysis.allowedMatchCounts.join(" oder ") : "keine";
+    const summary = analysis.ok
+      ? `<div class="ata-meta-block" data-role="preliminary-live-summary">
+          <div class="ata-meta-heading">Live-Zusammenfassung</div>
+          <p>${analysis.participantCount} Teilnehmer</p>
+          <p>${analysis.matchCount} Vorrundenspiele je Teilnehmer</p>
+          <p>${analysis.totalMatches} Vorrundenmatches insgesamt</p>
+          <p>Jeder Teilnehmer hat exakt ${analysis.matchCount} verschiedene Gegner</p>
+          <p>Keine doppelte Paarung</p>
+          <p>${analysis.scheduleRoundCount} Scheduling-Runden</p>
+          <p>Top ${analysis.qualifierCount} qualifizieren sich f\u00fcr ${escapeHtml(analysis.finalStageLabel)}</p>
+        </div>`
+      : `<div class="ata-meta-block" data-role="preliminary-live-summary"><p><strong>Konfiguration nicht zul\u00e4ssig:</strong> ${escapeHtml(analysis.message)}</p><p>Zul\u00e4ssig innerhalb 4\u20138: ${escapeHtml(allowedText)}.</p></div>`;
+    return `
+      <section data-role="preliminary-final-fields">
+        <div class="ata-grid-3 ata-grid-3-tight">
+          <div class="ata-field">
+            <label for="ata-preliminary-match-count">Vorrundenspiele je Teilnehmer</label>
+            <input id="ata-preliminary-match-count" name="preliminaryMatchesPerParticipant" type="number" min="4" max="8" step="1" value="${draft.preliminaryMatchesPerParticipant}">
+            <p class="ata-small ata-create-help">Dies ist die Zahl real gespielter Matches je Teilnehmer, nicht die Zahl zeitlicher Scheduling-Runden.</p>
+          </div>
+          <div class="ata-field ata-field-span-3">
+            <label>Vorrundenformat</label>
+            <span class="ata-field-readonly">2 Legs fest \u2013 beide Legs werden gespielt, 1:1 m\u00f6glich</span>
+          </div>
+          <div class="ata-field"><label for="ata-preliminary-win-points">Punkte f\u00fcr Sieg</label><input id="ata-preliminary-win-points" name="preliminaryWinPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryWinPoints}"></div>
+          <div class="ata-field"><label for="ata-preliminary-draw-points">Punkte f\u00fcr Unentschieden</label><input id="ata-preliminary-draw-points" name="preliminaryDrawPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryDrawPoints}"></div>
+          <div class="ata-field"><label for="ata-preliminary-loss-points">Punkte f\u00fcr Niederlage</label><input id="ata-preliminary-loss-points" name="preliminaryLossPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryLossPoints}"></div>
+          <div class="ata-field"><label for="ata-final-stage-type">Finalphase</label><select id="ata-final-stage-type" name="finalStageType"><option value="ko" ${draft.finalStageType === "ko" ? "selected" : ""}>KO</option><option value="double_ko" ${draft.finalStageType === "double_ko" ? "selected" : ""}>Doppel-KO</option></select></div>
+          <div class="ata-field"><label for="ata-final-stage-qualifiers">Anzahl Qualifikanten</label><input id="ata-final-stage-qualifiers" name="finalStageQualifierCount" type="number" min="2" max="${Math.max(2, participants.length)}" step="1" value="${draft.finalStageQualifierCount}"></div>
+          <div class="ata-field"><label for="ata-final-stage-bestof">Best of Legs der Finalphase</label><input id="ata-final-stage-bestof" name="finalStageBestOfLegs" type="number" min="1" max="21" step="2" value="${draft.finalStageBestOfLegs}"></div>
+        </div>
+        ${summary}
+        <p class="ata-small ata-create-help">Veranstalterprofil: Punkte, Leg-Differenz, Legs gewonnen. Keine allgemeine DRA-, PDC-, WDF- oder Verbandskonformit\u00e4t wird behauptet.</p>
+      </section>
+    `;
+  }
+
+
   function renderActiveGroupsKoPolicyNotice(tournament) {
     if (tournament?.mode !== "groups_ko") {
       return "";
@@ -147,9 +196,10 @@
                       <option value="double_ko" ${draft.mode === "double_ko" ? "selected" : ""}>Doppel-KO</option>
                       <option value="league" ${draft.mode === "league" ? "selected" : ""}>Liga</option>
                       <option value="groups_ko" ${draft.mode === "groups_ko" ? "selected" : ""}>Gruppenphase + KO</option>
+                      <option value="preliminary_final" ${draft.mode === "preliminary_final" ? "selected" : ""}>Vorrunde + Finalphase</option>
                     </select>
                   </div>
-                  <div class="ata-field">
+                  <div class="ata-field" data-role="standard-bestof-field">
                     <label for="ata-bestof">Best of Legs</label>
                     <input id="ata-bestof" name="bestOfLegs" type="number" min="1" max="21" step="2" value="${draft.bestOfLegs}">
                   </div>
@@ -222,21 +272,22 @@
                 <div id="ata-groups-ko-odd-policy-host">
                   ${renderGroupsKoOddParticipantPolicyFields(draft)}
                 </div>
-                <div class="ata-toggle ata-toggle-compact">
+                <div id="ata-preliminary-final-fields-host">${renderPreliminaryFinalFields(draft)}</div>
+                <div class="ata-toggle ata-toggle-compact" data-role="ko-draw-field">
                   <div>
                     <strong>KO-Erstrunde zuf\u00e4llig mischen ${drawHelpLinks}</strong>
                     <div class="ata-small">Open Draw bei aktivem Schalter, sonst gesetzter Draw.</div>
                   </div>
                   <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
                 </div>
-                <div class="ata-toggle ata-toggle-compact">
+                <div class="ata-toggle ata-toggle-compact" data-role="third-place-field">
                   <div>
                     <strong>Spiel um Platz 3 (optional)</strong>
                     <div class="ata-small">Nur im KO-Modus: Halbfinal-Verlierer spielen um Platz 3. Ohne Option bleibt klassischer Single-Elimination-Baum.</div>
                   </div>
                   <input id="ata-enable-third-place" name="enableThirdPlaceMatch" type="checkbox" ${thirdPlaceChecked}>
                 </div>
-                <div class="ata-field">
+                <div class="ata-field" data-role="grand-final-field">
                   <label for="ata-grand-final-reset-mode">Doppel-KO Grand Final</label>
                   <select id="ata-grand-final-reset-mode" name="grandFinalResetMode">
                     <option value="${GRAND_FINAL_RESET_IF_NEEDED}" ${grandFinalResetMode === GRAND_FINAL_RESET_IF_NEEDED ? "selected" : ""}>Reset-Finale falls nötig (empfohlen)</option>
@@ -274,7 +325,7 @@
                     </select>
                   </div>
                 </div>
-                <p class="ata-small">Boards + Zeitprofil steuern die Planung. Parallelisierung berücksichtigt Match-Abhängigkeiten und blockierte Spieler-Slots.</p>
+                <p class="ata-small">Die Board-Zahl ist ausschließlich ein Kapazitätsparameter der Turnierzeitprognose. Es werden keine Boards oder parallelen Lobbys verwaltet.</p>
                 <div id="ata-create-duration-estimate">
                   ${renderTournamentDurationEstimate(durationEstimate, { visible: durationEstimateVisible })}
                 </div>
@@ -297,7 +348,9 @@
         ? "Doppel-KO (Double Elimination)"
       : tournament.mode === "league"
         ? "Liga (Round Robin)"
-        : "Gruppenphase + KO (Round Robin + Straight Knockout)";
+        : tournament.mode === "groups_ko"
+          ? "Gruppenphase + KO (Round Robin + Straight Knockout)"
+          : "Vorrunde + Finalphase";
 
     const participantsHtml = tournament.participants.map((participant) => (
       `<span class="ata-player-chip">${escapeHtml(participant.name)}</span>`
@@ -309,7 +362,7 @@
     const x01BullModeLabel = x01Settings.bullOffMode === "Off"
       ? "Bull-Modus deaktiviert"
       : `Bull-Modus ${x01Settings.bullMode}`;
-    const legsToWin = getLegsToWin(tournament.bestOfLegs);
+    const legsToWin = getLegsToWin(tournament.mode === "preliminary_final" ? tournament.finalStage.bestOfLegs : tournament.bestOfLegs);
     const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED);
     const drawModeLabel = drawMode === KO_DRAW_MODE_OPEN_DRAW ? "Open Draw" : "Gesetzter Draw";
     const drawLockLabel = tournament?.ko?.drawLocked !== false ? "Draw-Lock aktiv" : "Draw-Lock aus";
@@ -320,8 +373,17 @@
       ? "Grand Final: Reset falls nötig"
       : "Grand Final: Einzelmatch";
     const primaryTags = [
-      { text: `Best of ${tournament.bestOfLegs} Legs`, cls: "ata-info-tag ata-info-tag-key" },
-      { text: `First to ${legsToWin} Legs`, cls: "ata-info-tag" },
+      ...(tournament.mode === "preliminary_final"
+        ? [
+          { text: `${tournament.preliminary.matchesPerParticipant} Vorrundenspiele je Teilnehmer`, cls: "ata-info-tag ata-info-tag-key" },
+          { text: "2 Legs fest (1:1 m\u00f6glich)", cls: "ata-info-tag" },
+          { text: `Top ${tournament.finalStage.qualifierCount} \u2192 ${tournament.finalStage.type === "double_ko" ? "Doppel-KO" : "KO"}`, cls: "ata-info-tag" },
+          { text: `Finalphase Best of ${tournament.finalStage.bestOfLegs}`, cls: "ata-info-tag" },
+        ]
+        : [
+          { text: `Best of ${tournament.bestOfLegs} Legs`, cls: "ata-info-tag ata-info-tag-key" },
+          { text: `First to ${legsToWin} Legs`, cls: "ata-info-tag" },
+        ]),
       { text: `Startpunkte ${tournament.startScore}`, cls: "ata-info-tag" },
       ...(tournament.mode === "ko" || tournament.mode === "double_ko"
         ? [

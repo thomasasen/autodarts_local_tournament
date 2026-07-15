@@ -33,7 +33,7 @@ Screenshot-Kontext:
 - `6.8.1`: Das Grundprinzip ist KO (Straight Knockout).
 - `6.8.2`: Round Robin ist ebenfalls zulässig.
 - In der App bedeutet das:
-  - `KO`, `Liga` und `Gruppenphase + KO` sind technisch unterstützte Turniermodelle; die konkrete Turnierordnung bestimmt, ob die gewählte Konfiguration für eine Veranstaltung passt.
+  - `KO`, `Doppel-KO`, `Liga`, `Gruppenphase + KO` und `Vorrunde + Finalphase` sind technisch unterstützte Turniermodelle; die konkrete Turnierordnung bestimmt, ob die gewählte Konfiguration für eine Veranstaltung passt.
   - Der Modus steuert automatisch Spielplan, Fortschrittslogik und Turnieransicht.
   - `groups_ko` bildet genau zwei Round-Robin-Gruppen mit Top 2 und anschließender Kreuz-KO-Phase ab. Andere offizielle Formate werden nicht automatisch angenähert.
 
@@ -51,8 +51,17 @@ Screenshot-Kontext:
 - Die konkrete Behandlung ist eine Turnier- beziehungsweise Veranstalterregel; das DRA-Regelwerk gibt dafür keine universelle Policy vor.
 - `require_even` ist der sichere Produktstandard der Anwendung und verlangt gleich große Gruppen.
 - `allow_unequal` erhält die deterministische A/B-Aufteilung als ausdrücklich gewählte Veranstalterregel. Bei ungerader Teilnehmerzahl muss bestätigt werden, dass unterschiedliche Gruppengrößen und Qualifikationsquoten der konkreten Turnierordnung entsprechen.
-- Eine Auswahl macht ein Format nicht automatisch offiziell oder allgemein DRA-konform.
+- Eine Auswahl begründet weder offiziellen Status noch eine allgemeine Verbandskonformität.
 - Nicht durch zwei Gruppen, vollständiges Round Robin und Top 2 abbildbare Formate liegen außerhalb des unterstützten Scopes.
+
+### `Vorrunde + Finalphase` als Veranstalterprofil
+
+- Der neue Modus verteilt deterministisch exakt gleich viele reale Vorrundenmatches auf alle Teilnehmer. Die konfigurierten `4..8` bedeuten Matches je Teilnehmer; Scheduling-Runden sind nur eine kollisionsfreie Ablaufgruppierung.
+- Das Vorrundenformat spielt immer genau zwei Legs und erlaubt `1:1`. Punktevergabe, Rangfolge `Punkte -> Leg-Differenz -> gewonnene Legs`, Qualifikantenzahl und Finalphasentyp werden als Veranstalterregeln gespeichert.
+- Ein Gleichstand am Qualifikations-Cutoff wird nicht zufällig entschieden. Die Finalphase bleibt bis zu einer sichtbaren, begründeten Veranstalterentscheidung gesperrt.
+- Die Finalphase verwendet Tabellenplatz 1 als Seed 1 usw. und wird nicht neu ausgelost.
+- Weil die belegbare AutoDarts-API keine exakte Abbildung zweier einzelner Legs samt geregeltem Anwurf garantiert, bleibt der API-Start für dieses Vorrundenformat gesperrt. Die Anwendung verwendet weder First to 2 noch Best of 3 als Näherung.
+- Diese konkrete Paarung, Wertung und Qualifikation ist kein allgemeines DRA-, PDC-, WDF- oder Verbandsformat. Ein offizielles Turnier ist nur korrekt abgebildet, wenn das gespeicherte Profil der veröffentlichten Turnierordnung entspricht.
 
 <a id="dra-gui-rule-open-draw"></a>
 ## Open Draw
@@ -146,6 +155,7 @@ Screenshot-Kontext:
   - `double_ko`: `2..32`
   - `league`: `2..16`
   - `groups_ko`: `4..16`
+  - `preliminary_final`: `5..16`
 
 ### Warum wichtig
 - Schützt vor Formaten, die lokal organisatorisch kaum sauber zu spielen sind.

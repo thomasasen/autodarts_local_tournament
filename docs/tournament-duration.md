@@ -3,7 +3,7 @@
 Diese Dokumentation beschreibt die Berechnungsgrundlage der Live-Prognose in `src/domain/tournament-duration.js`.
 
 ## Ziel und Geltungsbereich
-- Die Schätzung ist eine deterministische Planungsprognose für lokale Turniere mit konfigurierbarer Board-Anzahl.
+- Die Schätzung ist eine deterministische Planungsprognose für lokale Turniere. Die konfigurierbare Board-Anzahl ist ausschließlich ihr Kapazitätsparameter und keine MultiBoard-Funktion.
 - Während eines laufenden Turniers wird zusätzlich eine statische Restzeit-Prognose aus offenem Matchplan und abgeschlossenen Matches berechnet.
 - Sie ist bewusst nicht normativ: DRA/PDC definieren kein allgemeines Minutenmodell für lokale Turnierdauer.
 - Ziel ist eine belastbare Vorab-Planung, keine sekundengenaue Laufzeitvorhersage.
@@ -11,7 +11,7 @@ Diese Dokumentation beschreibt die Berechnungsgrundlage der Live-Prognose in `sr
 ## Verwendete Turnier-Parameter
 | Parameter | Wird genutzt | Warum |
 |---|---|---|
-| `mode` | Ja | Steuert Matchanzahl und Phasenlogik (`ko`, `double_ko`, `league`, `groups_ko`). |
+| `mode` | Ja | Steuert Matchanzahl und Phasenlogik (`ko`, `double_ko`, `league`, `groups_ko`, `preliminary_final`). |
 | `participants.length` | Ja | Steuert Matchanzahl direkt. |
 | `bestOfLegs` | Ja | Daraus werden `legsToWin` und die erwartete Leg-Anzahl je Match berechnet. |
 | `startScore` | Ja | Modelliert den X01-Abstand (`121` bis `901`). |
@@ -71,11 +71,13 @@ matchMinutes = expectedLegs * legMinutes + matchOverheadMinutes
 - `double_ko`: maximal `2n - 1` mit Reset-Finale, `2n - 2` bei einzelnem Grand Final; Freilose werden im Taskgraphen berücksichtigt
 - `league`: `n * (n - 1) / 2`
 - `groups_ko`: Round Robin in zwei Gruppen plus festes KO mit zwei Halbfinals und einem Finale
+- `preliminary_final`: `n * k / 2` feste Zwei-Leg-Vorrundenmatches plus KO- oder Doppel-KO-Taskgraph der konfigurierten Qualifikanten
 
 7. Phasen-Overhead:
 - `ko`: kleine Zusatzzeit je Rundenwechsel
 - `double_ko`: KO-Rundenwechsel plus Zusatzpuffer für Wechsel zwischen Winners Bracket, Losers Bracket und Grand Final
 - `groups_ko`: fixer Zusatzblock für Gruppenabschluss und Start des KO-Teils
+- `preliminary_final`: Zusatzblock für Tabellenabschluss, gegebenenfalls Veranstalterentscheidung und Start der Finalphase
 - `league`: kein eigener Phasenblock, weil alle Paarungen direkt planbar sind
 
 8. Scheduling-Wellen mit Board-Limit:

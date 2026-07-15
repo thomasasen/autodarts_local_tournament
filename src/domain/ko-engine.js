@@ -45,7 +45,7 @@
     if (!match?.player1Id || !match?.player2Id) {
       return null;
     }
-    const legsToWin = getLegsToWin(tournament?.bestOfLegs);
+    const legsToWin = getLegsToWin(getMatchBestOfLegs(tournament, match));
     const p1Legs = clampInt(match.legs?.p1, 0, 0, 99);
     const p2Legs = clampInt(match.legs?.p2, 0, 0, 99);
     if (p1Legs === p2Legs) {
@@ -210,6 +210,24 @@
   }
 
 
+  function getKoEngineContext(tournament) {
+    if (!tournament) return null;
+    if (tournament.mode === "ko" || tournament.mode === "double_ko") {
+      return { mode: tournament.mode, ko: tournament.ko, participants: tournament.participants || [], writeKo: (ko) => { tournament.ko = ko; } };
+    }
+    if (tournament.mode === "preliminary_final" && tournament?.finalStage?.ko) {
+      const qualifierIds = new Set(tournament.finalStage.seeding || []);
+      return {
+        mode: tournament.finalStage.type,
+        ko: tournament.finalStage.ko,
+        participants: (tournament.participants || []).filter((participant) => qualifierIds.has(participant.id)),
+        writeKo: (ko) => { tournament.finalStage.ko = ko; },
+      };
+    }
+    return null;
+  }
+
+
   function isDynamicallyResolvedByeWithSet(tournament, virtualMatch, p1, p2, resolvedVirtualMatchIds) {
     const hasP1 = Boolean(p1);
     const hasP2 = Boolean(p2);
@@ -221,10 +239,11 @@
 
 
   function shouldIncludeDoubleKoResetFinal(tournament) {
-    if (!tournament || tournament.mode !== "double_ko") {
+    const context = getKoEngineContext(tournament);
+    if (!context || context.mode !== "double_ko") {
       return false;
     }
-    if (sanitizeGrandFinalResetMode(tournament?.ko?.grandFinalResetMode) !== GRAND_FINAL_RESET_IF_NEEDED) {
+    if (sanitizeGrandFinalResetMode(context.ko?.grandFinalResetMode) !== GRAND_FINAL_RESET_IF_NEEDED) {
       return false;
     }
     const grandFinal = findKoMatchById(tournament, "gf-r1-m1");
@@ -294,16 +313,17 @@
 
 
   function synchronizeKoBracketState(tournament) {
-    if (!tournament || (tournament.mode !== "ko" && tournament.mode !== "double_ko")) {
+    const context = getKoEngineContext(tournament);
+    if (!context) {
       return false;
     }
 
     let changed = false;
-    const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED);
-    const drawLocked = tournament?.ko?.drawLocked !== false;
-    const enableThirdPlaceMatch = tournament?.ko?.enableThirdPlaceMatch === true;
-    const grandFinalResetMode = sanitizeGrandFinalResetMode(tournament?.ko?.grandFinalResetMode);
-    const participants = (Array.isArray(tournament.participants) ? tournament.participants : [])
+    const drawMode = normalizeKoDrawMode(context.ko?.drawMode, KO_DRAW_MODE_SEEDED);
+    const drawLocked = context.ko?.drawLocked !== false;
+    const enableThirdPlaceMatch = context.ko?.enableThirdPlaceMatch === true;
+    const grandFinalResetMode = sanitizeGrandFinalResetMode(context.ko?.grandFinalResetMode);
+    const participants = (Array.isArray(context.participants) ? context.participants : [])
       .map((participant) => ({
         id: normalizeText(participant?.id || ""),
         name: normalizeText(participant?.name || participant?.id || ""),
@@ -311,11 +331,11 @@
       }))
       .filter((participant) => participant.id);
 
-    const generatedStructure = tournament.mode === "double_ko"
+    const generatedStructure = context.mode === "double_ko"
       ? buildDoubleKoBracketStructure(
         participants,
-        drawLocked && Array.isArray(tournament?.ko?.seeding) && tournament.ko.seeding.length
-          ? tournament.ko.seeding
+        drawLocked && Array.isArray(context.ko?.seeding) && context.ko.seeding.length
+          ? context.ko.seeding
           : generateSeeds(participants, drawMode),
         {
           grandFinalResetMode,
@@ -327,11 +347,12 @@
         generateSeeds(participants, drawMode),
         { enableThirdPlaceMatch },
       );
-    const lockedStructure = drawLocked && tournament.mode === "ko" ? buildKoStructureFromMeta(tournament?.ko, drawMode) : null;
+    const lockedStructure = drawLocked && context.mode === "ko" ? buildKoStructureFromMeta(context.ko, drawMode) : null;
     const structure = lockedStructure || generatedStructure;
     const nextKoMeta = buildKoMetaSnapshot(drawMode, drawLocked, structure);
-    if (!isSerializableEqual(tournament.ko, nextKoMeta)) {
-      tournament.ko = nextKoMeta;
+    if (!isSerializableEqual(context.ko, nextKoMeta)) {
+      context.writeKo(nextKoMeta);
+      context.ko = nextKoMeta;
       changed = true;
     }
 
@@ -526,6 +547,15 @@
         && p2Legs === 0;
     }
 
+    if (isFixedLegsPreliminaryMatch(tournament, match)) {
+      const p1Legs = clampInt(match.legs?.p1, 0, 0, PRELIMINARY_FIXED_LEG_COUNT);
+      const p2Legs = clampInt(match.legs?.p2, 0, 0, PRELIMINARY_FIXED_LEG_COUNT);
+      if (p1Legs + p2Legs !== PRELIMINARY_FIXED_LEG_COUNT) return false;
+      if (p1Legs === p2Legs) return !match.winnerId && normalizeMatchResultKind(match?.meta?.resultKind) === "draw";
+      const expectedWinner = p1Legs > p2Legs ? match.player1Id : match.player2Id;
+      return match.winnerId === expectedWinner;
+    }
+
     if (!match.player1Id || !match.player2Id) {
       return false;
     }
@@ -563,6 +593,20 @@
         return;
       }
 
+      if (isFixedLegsPreliminaryMatch(tournament, match)) {
+        const p1Legs = clampInt(match.legs?.p1, 0, 0, PRELIMINARY_FIXED_LEG_COUNT);
+        const p2Legs = clampInt(match.legs?.p2, 0, 0, PRELIMINARY_FIXED_LEG_COUNT);
+        if (p1Legs + p2Legs !== PRELIMINARY_FIXED_LEG_COUNT) {
+          clearMatchResult(match);
+          changed = true;
+          return;
+        }
+        const expectedWinner = p1Legs === p2Legs ? null : (p1Legs > p2Legs ? match.player1Id : match.player2Id);
+        if (match.winnerId !== expectedWinner) { match.winnerId = expectedWinner; changed = true; }
+        changed = setMatchResultKind(match, expectedWinner ? null : "draw") || changed;
+        return;
+      }
+
       const derivedWinnerId = deriveWinnerIdFromLegs(tournament, match);
       if (!derivedWinnerId || !match.player1Id || !match.player2Id) {
         clearMatchResult(match);
@@ -583,6 +627,7 @@
     const stageOrder = new Map([
       [MATCH_STAGE_GROUP, 1],
       [MATCH_STAGE_LEAGUE, 2],
+      [MATCH_STAGE_PRELIMINARY, 2],
       [MATCH_STAGE_KO, 3],
     ]);
 

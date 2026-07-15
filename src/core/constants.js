@@ -25,7 +25,7 @@
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
   const APP_VERSION = "__ATA_APP_VERSION__";
   const STORAGE_KEY = "ata:tournament:v1";
-  const STORAGE_SCHEMA_VERSION = 4;
+  const STORAGE_SCHEMA_VERSION = 5;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
   const SAVE_DEBOUNCE_MS = 150;
   const UI_HOST_ID = "ata-ui-host";
@@ -75,6 +75,13 @@
   const MATCH_STAGE_KO = "ko";
   const MATCH_STAGE_GROUP = "group";
   const MATCH_STAGE_LEAGUE = "league";
+  const MATCH_STAGE_PRELIMINARY = "preliminary";
+  const PRELIMINARY_PAIRING_METHOD_BALANCED_REGULAR = "balanced_regular";
+  const PRELIMINARY_MATCH_FORMAT_FIXED_LEGS = "fixed_legs";
+  const PRELIMINARY_FIXED_LEG_COUNT = 2;
+  const FINAL_STAGE_TYPE_KO = "ko";
+  const FINAL_STAGE_TYPE_DOUBLE_KO = "double_ko";
+  const FINAL_STAGE_TYPES = Object.freeze([FINAL_STAGE_TYPE_KO, FINAL_STAGE_TYPE_DOUBLE_KO]);
   const KO_ENGINE_VERSION = 3;
   const KO_DRAW_MODE_SEEDED = "seeded";
   const KO_DRAW_MODE_OPEN_DRAW = "open_draw";
@@ -140,6 +147,7 @@
     double_ko: Object.freeze({ label: "Doppel-KO", min: 2, max: 32 }),
     league: Object.freeze({ label: "Liga", min: 2, max: 16 }),
     groups_ko: Object.freeze({ label: "Gruppenphase + KO", min: 4, max: 16 }),
+    preliminary_final: Object.freeze({ label: "Vorrunde + Finalphase", min: 5, max: 16 }),
   });
   const BYE_PLACEHOLDER_TOKENS = new Set([
     "bye",

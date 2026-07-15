@@ -136,6 +136,7 @@
       syncCreateFormDependencies(createForm);
       refreshCreateFormDurationEstimate(createForm);
       refreshCreateFormGroupsKoPolicy(createForm);
+      refreshCreateFormPreliminaryFinal(createForm);
       const handleDraftInputChange = (event) => {
         const target = event?.target;
         const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
@@ -159,6 +160,18 @@
         updateCreateDraftFromForm(createForm, true);
         refreshCreateFormDurationEstimate(createForm);
         refreshCreateFormGroupsKoPolicy(createForm);
+        const preliminarySummaryFields = [
+          "preliminaryMatchesPerParticipant",
+          "finalStageType",
+          "finalStageQualifierCount",
+        ];
+        if (
+          fieldName === "mode"
+          || fieldName === "participants"
+          || (event.type === "change" && preliminarySummaryFields.includes(fieldName))
+        ) {
+          refreshCreateFormPreliminaryFinal(createForm);
+        }
       };
       createForm.addEventListener("input", handleDraftInputChange);
       createForm.addEventListener("change", handleDraftInputChange);
@@ -245,6 +258,16 @@
         }
       });
     });
+    shadow.querySelectorAll("[data-action='save-fixed-match']").forEach((button) => {
+      button.addEventListener("click", () => { const matchId = button.getAttribute("data-match-id"); if (matchId) handleSaveFixedLegResult(matchId); });
+    });
+    shadow.querySelectorAll("[data-action='correct-preliminary-match']").forEach((button) => {
+      button.addEventListener("click", () => { const matchId = button.getAttribute("data-match-id"); if (matchId) handleCorrectPreliminaryMatch(matchId); });
+    });
+    const generateFinalStageButton = shadow.querySelector("[data-action='generate-final-stage']");
+    if (generateFinalStageButton) generateFinalStageButton.addEventListener("click", handleGenerateFinalStage);
+    const saveQualificationButton = shadow.querySelector("[data-action='save-qualification-resolution']");
+    if (saveQualificationButton) saveQualificationButton.addEventListener("click", handleSaveQualificationResolution);
 
     shadow.querySelectorAll("[data-action='start-match']").forEach((button) => {
       button.addEventListener("click", () => {
@@ -598,6 +621,15 @@
     const bullModeSelect = form.querySelector("#ata-x01-bullmode");
     const modeSelect = form.querySelector("#ata-mode");
     const grandFinalSelect = form.querySelector("#ata-grand-final-reset-mode");
+    const mode = modeSelect instanceof HTMLSelectElement ? normalizeText(modeSelect.value) : "ko";
+    const toggleDisplay = (selector, visible) => {
+      const element = form.querySelector(selector);
+      if (element instanceof HTMLElement) element.style.display = visible ? "" : "none";
+    };
+    toggleDisplay("[data-role='standard-bestof-field']", mode !== "preliminary_final");
+    toggleDisplay("[data-role='ko-draw-field']", mode === "ko" || mode === "double_ko");
+    toggleDisplay("[data-role='third-place-field']", mode === "ko");
+    toggleDisplay("[data-role='grand-final-field']", mode === "double_ko");
     if (modeSelect instanceof HTMLSelectElement && grandFinalSelect instanceof HTMLSelectElement) {
       const grandFinalField = grandFinalSelect.closest(".ata-field");
       if (grandFinalField instanceof HTMLElement) {
@@ -667,6 +699,15 @@
   }
 
 
+  function refreshCreateFormPreliminaryFinal(form) {
+    if (!(form instanceof HTMLFormElement)) return;
+    const host = form.querySelector("#ata-preliminary-final-fields-host");
+    if (!(host instanceof HTMLElement)) return;
+    const draft = normalizeCreateDraft(readCreateDraftInput(new FormData(form)), state.store.settings);
+    host.innerHTML = renderPreliminaryFinalFields(draft);
+  }
+
+
   function applySelectedPresetToCreateForm(form) {
     if (!(form instanceof HTMLFormElement)) {
       return;
@@ -710,6 +751,7 @@
     updateCreateDraftFromForm(form, true);
     refreshCreateFormDurationEstimate(form);
     refreshCreateFormGroupsKoPolicy(form);
+    refreshCreateFormPreliminaryFinal(form);
     setNotice("info", `Preset „${preset.label}“ wurde auf alle Turnierfelder angewendet.`, 2600);
   }
 
@@ -733,6 +775,13 @@
       grandFinalResetMode: formData.get("grandFinalResetMode"),
       groupsKoOddParticipantPolicy: formData.get("groupsKoOddParticipantPolicy"),
       groupsKoOddParticipantAcknowledged: formData.get("groupsKoOddParticipantAcknowledged") !== null,
+      preliminaryMatchesPerParticipant: formData.get("preliminaryMatchesPerParticipant"),
+      preliminaryWinPoints: formData.get("preliminaryWinPoints"),
+      preliminaryDrawPoints: formData.get("preliminaryDrawPoints"),
+      preliminaryLossPoints: formData.get("preliminaryLossPoints"),
+      finalStageType: formData.get("finalStageType"),
+      finalStageQualifierCount: formData.get("finalStageQualifierCount"),
+      finalStageBestOfLegs: formData.get("finalStageBestOfLegs"),
     };
   }
 
@@ -790,6 +839,7 @@
     updateCreateDraftFromForm(form, true);
     refreshCreateFormDurationEstimate(form);
     refreshCreateFormGroupsKoPolicy(form);
+    refreshCreateFormPreliminaryFinal(form);
     setNotice("success", "Teilnehmer wurden zuf\u00e4llig gemischt.", 1800);
   }
 
@@ -818,6 +868,13 @@
       grandFinalResetMode: draft.grandFinalResetMode,
       groupsKoOddParticipantPolicy: draft.groupsKoOddParticipantPolicy,
       groupsKoOddParticipantAcknowledged: draft.groupsKoOddParticipantAcknowledged,
+      preliminaryMatchesPerParticipant: draft.preliminaryMatchesPerParticipant,
+      preliminaryWinPoints: draft.preliminaryWinPoints,
+      preliminaryDrawPoints: draft.preliminaryDrawPoints,
+      preliminaryLossPoints: draft.preliminaryLossPoints,
+      finalStageType: draft.finalStageType,
+      finalStageQualifierCount: draft.finalStageQualifierCount,
+      finalStageBestOfLegs: draft.finalStageBestOfLegs,
       koDrawLocked: state.store.settings.featureFlags.koDrawLockDefault !== false,
       participants,
     };
@@ -882,6 +939,63 @@
     } else {
       setNotice("error", result.message || "Match konnte nicht gespeichert werden.");
     }
+  }
+
+
+  function handleSaveFixedLegResult(matchId) {
+    const shadow = state.shadowRoot;
+    const leg1 = getMatchFieldElement(shadow, "fixed-leg-1", matchId);
+    const leg2 = getMatchFieldElement(shadow, "fixed-leg-2", matchId);
+    if (!(leg1 instanceof HTMLSelectElement) || !(leg2 instanceof HTMLSelectElement)) return;
+    const entries = [];
+    if (normalizeText(leg1.value)) entries.push({ legIndex: 1, winnerId: leg1.value });
+    if (normalizeText(leg2.value)) entries.push({ legIndex: 2, winnerId: leg2.value });
+    const result = updateFixedLegMatchResult(matchId, entries);
+    if (result.ok) setNotice("success", result.completed ? "Vorrundenmatch abgeschlossen." : "Zwischenstand nach Leg 1 gespeichert.", 2200);
+    else setNotice("error", result.message || "Fixed-Legs-Ergebnis konnte nicht gespeichert werden.");
+  }
+
+
+  function handleCorrectPreliminaryMatch(matchId) {
+    const tournament = state.store.tournament;
+    const hasGeneratedFinal = getMatchesByStage(tournament, MATCH_STAGE_KO).length > 0;
+    const message = hasGeneratedFinal
+      ? "Die erzeugte Finalphase wird verworfen und muss nach der Korrektur explizit regeneriert werden. Fortfahren?"
+      : "Vorrundenergebnis zur Korrektur wieder \u00f6ffnen?";
+    if (!window.confirm(message)) return;
+    const result = resetActivePreliminaryMatchForCorrection(matchId);
+    if (result.ok) setNotice("success", result.discardedFinalStage ? "Ergebnis ge\u00f6ffnet; Finalphase wurde kontrolliert verworfen." : "Ergebnis zur Korrektur ge\u00f6ffnet.");
+    else setNotice("error", result.message || "Korrektur wurde blockiert.");
+  }
+
+
+  function handleGenerateFinalStage() {
+    if (!window.confirm("Finalphase jetzt aus der gespeicherten Tabellenreihenfolge erzeugen?")) return;
+    const result = generateActivePreliminaryFinalStage();
+    if (result.ok) setNotice("success", "Finalphase wurde aus den Tabellen-Seeds erzeugt.");
+    else setNotice("error", result.message || "Finalphase konnte nicht erzeugt werden.");
+  }
+
+
+  function handleSaveQualificationResolution() {
+    const shadow = state.shadowRoot;
+    if (!shadow) return;
+    const orderEntries = Array.from(shadow.querySelectorAll("[data-field='qualification-order']")).map((input) => ({
+      participantId: input.getAttribute("data-participant-id"),
+      order: Number(input.value),
+    }));
+    const orders = orderEntries.map((entry) => entry.order);
+    if (orders.some((order) => !Number.isInteger(order)) || new Set(orders).size !== orders.length) {
+      setNotice("error", "Jede Reihenfolgeposition muss eine eindeutige ganze Zahl sein.");
+      return;
+    }
+    orderEntries.sort((left, right) => left.order - right.order);
+    const reasonInput = shadow.getElementById("ata-qualification-reason");
+    const reason = reasonInput instanceof HTMLInputElement ? reasonInput.value : "";
+    if (!window.confirm("Diese Veranstalterentscheidung sichtbar speichern? Sie ist nach Start der Finalphase gesperrt.")) return;
+    const result = saveActiveQualificationResolution(orderEntries.map((entry) => entry.participantId), reason);
+    if (result.ok) setNotice("success", "Veranstalterentscheidung gespeichert. Die Finalphase kann jetzt erzeugt werden.");
+    else setNotice("error", result.message || "Reihenfolge konnte nicht gespeichert werden.");
   }
 
 

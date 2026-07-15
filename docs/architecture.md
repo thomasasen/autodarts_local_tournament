@@ -45,7 +45,7 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
 
 ## Datenmodell
 - Storage-Key: `ata:tournament:v1`
-- `schemaVersion: 4`
+- `schemaVersion: 5`
 - Neues Regelobjekt pro Turnier:
   - `tournament.rules.tieBreakProfile: "promoter_h2h_minitable" | "promoter_points_legdiff"`
 - Neues globales Settings-Feld:
@@ -58,6 +58,9 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
   - `settings.featureFlags.koDrawLockDefault: boolean`
   - `tournament.ko.drawLocked: boolean`
   - `tournament.ko.placement: number[]`
+- Vorrunde + Finalphase:
+  - `tournament.preliminary` hält den deterministischen regulären Paarungsplan, Fixed-2-Legs-Format und das Veranstalter-Punkteprofil
+  - `tournament.finalStage` hält Qualifikantenzahl, unabhängiges Best-of, Status, Tabellen-Seeds und wiederverwendete KO-Metadaten
 
 ## Zeitprognose
 - Details zur Formel und zur externen Kalibrierung stehen in `docs/tournament-duration.md`.
@@ -68,6 +71,7 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
   - X01-Setup (`Startscore`, `In`, `Out`, `Bull-off`, `Bull-Modus`, `Max Runden`)
   - globales Zeitprofil (`fast | normal | slow`)
 - Die UI rendert daraus einen Live-Block im Turnierformular.
+- Bei `preliminary_final` werden Vorrunde und abhängige KO-/Doppel-KO-Finalphase als getrennte Tasks mit eigenen Leg-Erwartungen modelliert.
 - `src/ui/handlers.js` aktualisiert diesen Block gezielt bei jedem Formular-Input, ohne die gesamte Shell neu zu rendern.
 
 ## Regelmodell (DRA/PDC)

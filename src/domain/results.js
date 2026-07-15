@@ -35,6 +35,76 @@
   }
 
 
+  function applyFixedLegAggregateResult(tournament, match, winnerId, legs, source) {
+    if (hasPreliminaryFinalStageStarted(tournament)) {
+      return { ok: false, reasonCode: "final_stage_already_started", message: "Nach Beginn der Finalphase sind Vorrundenergebnisse gesperrt." };
+    }
+    const p1Legs = Number(legs?.p1);
+    const p2Legs = Number(legs?.p2);
+    const validScore = Number.isInteger(p1Legs) && Number.isInteger(p2Legs)
+      && p1Legs >= 0 && p2Legs >= 0
+      && p1Legs + p2Legs === PRELIMINARY_FIXED_LEG_COUNT;
+    if (!validScore) {
+      return { ok: false, reasonCode: "fixed_legs_result_invalid", message: "Zul\u00e4ssig sind nur 2:0, 1:1 oder 0:2 nach zwei fest gespielten Legs." };
+    }
+    const derivedWinnerId = p1Legs === p2Legs ? null : (p1Legs > p2Legs ? match.player1Id : match.player2Id);
+    if (winnerId && winnerId !== derivedWinnerId) {
+      return { ok: false, reasonCode: "fixed_legs_winner_invalid", message: "Gewinner und Leg-Ergebnis widersprechen sich." };
+    }
+    match.status = STATUS_COMPLETED;
+    match.winnerId = derivedWinnerId;
+    match.source = source === "auto" ? "auto" : "manual";
+    match.legs = { p1: p1Legs, p2: p2Legs };
+    setMatchResultKind(match, derivedWinnerId ? null : "draw");
+    match.updatedAt = nowIso();
+    return { ok: true, completed: true, resultKind: derivedWinnerId ? null : "draw" };
+  }
+
+
+  function applyFixedLegEntriesToTournament(tournament, matchId, rawEntries, source = "manual") {
+    if (!tournament) return { ok: false, reasonCode: "tournament_missing", message: "Kein aktives Turnier vorhanden." };
+    const match = findMatch(tournament, matchId);
+    if (!match) return { ok: false, reasonCode: "match_not_found", message: "Match nicht gefunden." };
+    if (!isFixedLegsPreliminaryMatch(tournament, match)) return { ok: false, reasonCode: "fixed_legs_format_required", message: "Dieses Match verwendet kein Fixed-Legs-Format." };
+    if (hasPreliminaryFinalStageStarted(tournament)) return { ok: false, reasonCode: "final_stage_already_started", message: "Nach Beginn der Finalphase sind Vorrundenergebnisse gesperrt." };
+    if (!match.player1Id || !match.player2Id) return { ok: false, reasonCode: "match_participants_missing", message: "Match hat noch keine zwei Teilnehmer." };
+    const entries = (Array.isArray(rawEntries) ? rawEntries : []).map((entry) => ({ legIndex: Number(entry?.legIndex), winnerId: normalizeText(entry?.winnerId || "") }));
+    const indexes = new Set();
+    for (const entry of entries) {
+      if (!Number.isInteger(entry.legIndex) || entry.legIndex < 1 || entry.legIndex > PRELIMINARY_FIXED_LEG_COUNT || indexes.has(entry.legIndex)) {
+        return { ok: false, reasonCode: "fixed_leg_duplicate_or_invalid", message: "Jeder Leg-Index darf genau einmal erfasst werden." };
+      }
+      if (entry.winnerId !== match.player1Id && entry.winnerId !== match.player2Id) {
+        return { ok: false, reasonCode: "fixed_leg_winner_invalid", message: "Leg-Sieger passt nicht zur Paarung." };
+      }
+      indexes.add(entry.legIndex);
+    }
+    entries.sort((left, right) => left.legIndex - right.legIndex);
+    if (entries.length && entries[0].legIndex !== 1) {
+      return { ok: false, reasonCode: "fixed_leg_sequence_invalid", message: "Leg 1 muss vor Leg 2 erfasst werden." };
+    }
+    const now = nowIso();
+    const fixedLegs = {
+      count: PRELIMINARY_FIXED_LEG_COUNT,
+      entries: entries.map((entry) => ({ ...entry, source: source === "auto" ? "auto" : "manual", recordedAt: now })),
+      syncStatus: "manual_only",
+    };
+    match.meta = normalizeMatchMeta({ ...(match.meta || {}), fixedLegs });
+    const p1Legs = entries.filter((entry) => entry.winnerId === match.player1Id).length;
+    const p2Legs = entries.filter((entry) => entry.winnerId === match.player2Id).length;
+    match.legs = { p1: p1Legs, p2: p2Legs };
+    match.source = entries.length ? "manual" : null;
+    if (entries.length < PRELIMINARY_FIXED_LEG_COUNT) {
+      match.status = STATUS_PENDING;
+      match.winnerId = null;
+      setMatchResultKind(match, null);
+      match.updatedAt = now;
+      return { ok: true, completed: false, legs: match.legs };
+    }
+    return applyFixedLegAggregateResult(tournament, match, null, match.legs, source);
+  }
+
+
   function applyMatchResultToTournament(tournament, matchId, winnerId, legs, source, stats = null) {
     if (!tournament) {
       return { ok: false, message: "Kein aktives Turnier vorhanden." };
@@ -51,7 +121,12 @@
       return { ok: false, message: "Gewinner passt nicht zum Match." };
     }
 
-    const legsToWin = getLegsToWin(tournament.bestOfLegs);
+    if (isFixedLegsPreliminaryMatch(tournament, match)) {
+      return applyFixedLegAggregateResult(tournament, match, winnerId, legs, source);
+    }
+
+    const matchBestOfLegs = getMatchBestOfLegs(tournament, match);
+    const legsToWin = getLegsToWin(matchBestOfLegs);
     const p1Legs = clampInt(legs?.p1, 0, 0, 99);
     const p2Legs = clampInt(legs?.p2, 0, 0, 99);
     const derivedWinnerId = deriveWinnerIdFromLegInput(match, p1Legs, p2Legs, legsToWin);
@@ -59,7 +134,7 @@
     if (p1Legs > legsToWin || p2Legs > legsToWin) {
       return {
         ok: false,
-        message: `Ung\u00fcltiges Ergebnis: Pro Spieler sind maximal ${legsToWin} Legs m\u00f6glich (Best-of ${sanitizeBestOf(tournament.bestOfLegs)}).`,
+        message: `Ung\u00fcltiges Ergebnis: Pro Spieler sind maximal ${legsToWin} Legs m\u00f6glich (Best-of ${matchBestOfLegs}).`,
       };
     }
 
@@ -70,7 +145,7 @@
     if (!derivedWinnerId) {
       return {
         ok: false,
-        message: `Ung\u00fcltiges Ergebnis: Ein Spieler muss genau ${legsToWin} Legs erreichen (Best-of ${sanitizeBestOf(tournament.bestOfLegs)}).`,
+        message: `Ung\u00fcltiges Ergebnis: Ein Spieler muss genau ${legsToWin} Legs erreichen (Best-of ${matchBestOfLegs}).`,
       };
     }
 

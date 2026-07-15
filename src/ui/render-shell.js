@@ -26,7 +26,7 @@
           <header class="ata-header">
             <div class="ata-title-wrap">
               <h2>Turnier Assistent</h2>
-              <p>Lokales Management f\u00fcr KO, Liga und Gruppenphase <span class="ata-version">v${escapeHtml(APP_VERSION)}</span></p>
+              <p>Lokales Management f\u00fcr KO, Liga, Gruppen- und Vorrundenformate <span class="ata-version">v${escapeHtml(APP_VERSION)}</span></p>
             </div>
             <button type="button" class="ata-close-btn" data-action="close-drawer" aria-label="Schlie\u00dfen">Schlie\u00dfen</button>
           </header>

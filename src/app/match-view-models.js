@@ -1,7 +1,7 @@
 // App layer: runtime orchestration, persistence scheduling and user feedback.
 
   function compareMatchesByRound(left, right) {
-    const stageOrder = { group: 1, league: 2, ko: 3 };
+    const stageOrder = { preliminary: 1, group: 1, league: 2, ko: 3 };
     const leftOrder = stageOrder[left.stage] || 99;
     const rightOrder = stageOrder[right.stage] || 99;
     if (leftOrder !== rightOrder) {

@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.4.1
+// @version      0.5.0
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -22,9 +22,9 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.4.1";
+  const APP_VERSION = "0.5.0";
   const STORAGE_KEY = "ata:tournament:v1";
-  const STORAGE_SCHEMA_VERSION = 4;
+  const STORAGE_SCHEMA_VERSION = 5;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
   const SAVE_DEBOUNCE_MS = 150;
   const UI_HOST_ID = "ata-ui-host";
@@ -1701,6 +1701,13 @@
   const MATCH_STAGE_KO = "ko";
   const MATCH_STAGE_GROUP = "group";
   const MATCH_STAGE_LEAGUE = "league";
+  const MATCH_STAGE_PRELIMINARY = "preliminary";
+  const PRELIMINARY_PAIRING_METHOD_BALANCED_REGULAR = "balanced_regular";
+  const PRELIMINARY_MATCH_FORMAT_FIXED_LEGS = "fixed_legs";
+  const PRELIMINARY_FIXED_LEG_COUNT = 2;
+  const FINAL_STAGE_TYPE_KO = "ko";
+  const FINAL_STAGE_TYPE_DOUBLE_KO = "double_ko";
+  const FINAL_STAGE_TYPES = Object.freeze([FINAL_STAGE_TYPE_KO, FINAL_STAGE_TYPE_DOUBLE_KO]);
   const KO_ENGINE_VERSION = 3;
   const KO_DRAW_MODE_SEEDED = "seeded";
   const KO_DRAW_MODE_OPEN_DRAW = "open_draw";
@@ -1766,6 +1773,7 @@
     double_ko: Object.freeze({ label: "Doppel-KO", min: 2, max: 32 }),
     league: Object.freeze({ label: "Liga", min: 2, max: 16 }),
     groups_ko: Object.freeze({ label: "Gruppenphase + KO", min: 4, max: 16 }),
+    preliminary_final: Object.freeze({ label: "Vorrunde + Finalphase", min: 5, max: 16 }),
   });
   const BYE_PLACEHOLDER_TOKENS = new Set([
     "bye",
@@ -2868,7 +2876,36 @@
       grandFinalResetMode: GRAND_FINAL_RESET_IF_NEEDED,
       groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
       groupsKoOddParticipantAcknowledged: false,
+      preliminaryMatchesPerParticipant: 4,
+      preliminaryWinPoints: 2,
+      preliminaryDrawPoints: 1,
+      preliminaryLossPoints: 0,
+      finalStageType: FINAL_STAGE_TYPE_KO,
+      finalStageQualifierCount: 4,
+      finalStageBestOfLegs: 5,
     };
+  }
+
+
+  function normalizeCreateDraftInteger(value, fallback, { min, max, odd = false } = {}) {
+    if (
+      value === null
+      || value === undefined
+      || (typeof value === "string" && !value.trim())
+    ) {
+      return fallback;
+    }
+    const parsed = Number(value);
+    if (
+      !Number.isFinite(parsed)
+      || !Number.isInteger(parsed)
+      || (Number.isFinite(min) && parsed < min)
+      || (Number.isFinite(max) && parsed > max)
+      || (odd && parsed % 2 === 0)
+    ) {
+      return fallback;
+    }
+    return parsed;
   }
 
 
@@ -2883,7 +2920,7 @@
     const presetApply = requestedPreset?.apply || null;
     const modeFallback = presetApply?.mode || base.mode;
     const modeRaw = normalizeText(rawDraft?.mode ?? modeFallback);
-    const mode = ["ko", "double_ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : modeFallback;
+    const mode = ["ko", "double_ko", "league", "groups_ko", "preliminary_final"].includes(modeRaw) ? modeRaw : modeFallback;
     const bestOfFallback = presetApply?.bestOfLegs ?? base.bestOfLegs;
     const startScoreFallback = presetApply?.startScore ?? base.startScore;
     const x01Settings = normalizeTournamentX01Settings({
@@ -2922,6 +2959,39 @@
         base.groupsKoOddParticipantPolicy,
       ),
       groupsKoOddParticipantAcknowledged: rawDraft?.groupsKoOddParticipantAcknowledged === true,
+      preliminaryMatchesPerParticipant: normalizeCreateDraftInteger(
+        rawDraft?.preliminaryMatchesPerParticipant,
+        base.preliminaryMatchesPerParticipant,
+        { min: 4, max: 8 },
+      ),
+      preliminaryWinPoints: normalizeCreateDraftInteger(
+        rawDraft?.preliminaryWinPoints,
+        base.preliminaryWinPoints,
+        { min: 0, max: 10 },
+      ),
+      preliminaryDrawPoints: normalizeCreateDraftInteger(
+        rawDraft?.preliminaryDrawPoints,
+        base.preliminaryDrawPoints,
+        { min: 0, max: 10 },
+      ),
+      preliminaryLossPoints: normalizeCreateDraftInteger(
+        rawDraft?.preliminaryLossPoints,
+        base.preliminaryLossPoints,
+        { min: 0, max: 10 },
+      ),
+      finalStageType: FINAL_STAGE_TYPES.includes(normalizeText(rawDraft?.finalStageType || "").toLowerCase())
+        ? normalizeText(rawDraft.finalStageType).toLowerCase()
+        : base.finalStageType,
+      finalStageQualifierCount: normalizeCreateDraftInteger(
+        rawDraft?.finalStageQualifierCount,
+        base.finalStageQualifierCount,
+        { min: 2, max: MODE_PARTICIPANT_LIMITS.preliminary_final.max },
+      ),
+      finalStageBestOfLegs: normalizeCreateDraftInteger(
+        rawDraft?.finalStageBestOfLegs,
+        base.finalStageBestOfLegs,
+        { min: 1, max: 21, odd: true },
+      ),
     };
     if (requestedPreset && matchesCreatePresetSetup(draft, requestedPreset.id)) {
       draft.x01Preset = requestedPreset.id;
@@ -2983,7 +3053,7 @@
 
   function normalizeMatchResultKind(value) {
     const normalized = normalizeText(value || "").toLowerCase();
-    return normalized === "bye" ? "bye" : null;
+    return normalized === "bye" || normalized === "draw" ? normalized : null;
   }
 
 
@@ -3115,6 +3185,22 @@
   }
 
 
+  function isFixedLegsPreliminaryMatch(tournament, match) {
+    return tournament?.mode === "preliminary_final"
+      && match?.stage === MATCH_STAGE_PRELIMINARY
+      && tournament?.preliminary?.matchFormat === PRELIMINARY_MATCH_FORMAT_FIXED_LEGS
+      && tournament?.preliminary?.fixedLegCount === PRELIMINARY_FIXED_LEG_COUNT;
+  }
+
+
+  function getMatchBestOfLegs(tournament, match = null) {
+    if (tournament?.mode === "preliminary_final" && match?.stage === MATCH_STAGE_KO) {
+      return sanitizeBestOf(tournament?.finalStage?.bestOfLegs);
+    }
+    return sanitizeBestOf(tournament?.bestOfLegs);
+  }
+
+
   function sanitizeGroupsKoOddParticipantPolicy(
     value,
     fallback = GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN,
@@ -3214,6 +3300,19 @@
   }
 
 
+  function normalizeFixedLegEntries(rawFixedLegs) {
+    const source = Array.isArray(rawFixedLegs?.entries) ? rawFixedLegs.entries : [];
+    const seen = new Set();
+    return source.map((entry) => {
+      const legIndex = clampInt(entry?.legIndex, 0, 1, PRELIMINARY_FIXED_LEG_COUNT);
+      const winnerId = normalizeText(entry?.winnerId || "");
+      if (!legIndex || !winnerId || seen.has(legIndex)) return null;
+      seen.add(legIndex);
+      return { legIndex, winnerId, source: entry?.source === "auto" ? "auto" : "manual", recordedAt: normalizeText(entry?.recordedAt || nowIso()) };
+    }).filter(Boolean).sort((left, right) => left.legIndex - right.legIndex);
+  }
+
+
   function normalizeStoredMatchAverage(value) {
     if (value === null || value === undefined || value === "") {
       return null;
@@ -3271,6 +3370,13 @@
       ...meta,
       resultKind,
       auto: normalizeAutomationMeta(meta.auto),
+      fixedLegs: meta.fixedLegs && typeof meta.fixedLegs === "object"
+        ? {
+          count: PRELIMINARY_FIXED_LEG_COUNT,
+          entries: normalizeFixedLegEntries(meta.fixedLegs),
+          syncStatus: "manual_only",
+        }
+        : null,
     };
   }
 
@@ -3423,10 +3529,61 @@
   }
 
 
+  function normalizeTournamentPreliminary(rawPreliminary) {
+    const preliminary = rawPreliminary && typeof rawPreliminary === "object" ? rawPreliminary : {};
+    const scoringValidation = validatePreliminaryScoring(preliminary.scoring);
+    return {
+      pairingMethod: PRELIMINARY_PAIRING_METHOD_BALANCED_REGULAR,
+      matchesPerParticipant: clampInt(preliminary.matchesPerParticipant, 4, 4, 8),
+      matchFormat: PRELIMINARY_MATCH_FORMAT_FIXED_LEGS,
+      fixedLegCount: PRELIMINARY_FIXED_LEG_COUNT,
+      scoring: scoringValidation.ok ? scoringValidation.scoring : normalizePreliminaryScoring(null),
+      scheduleRoundCount: clampInt(preliminary.scheduleRoundCount, 0, 0, 64),
+      completedAt: normalizeText(preliminary.completedAt || "") || null,
+    };
+  }
+
+
+  function normalizeQualificationResolution(rawResolution) {
+    if (!rawResolution || typeof rawResolution !== "object") return null;
+    const orderedParticipantIds = (Array.isArray(rawResolution.orderedParticipantIds) ? rawResolution.orderedParticipantIds : [])
+      .map((id) => normalizeText(id || "")).filter(Boolean);
+    if (!orderedParticipantIds.length) return null;
+    return {
+      orderedParticipantIds,
+      reason: normalizeText(rawResolution.reason || ""),
+      confirmedAt: normalizeText(rawResolution.confirmedAt || "") || null,
+    };
+  }
+
+
+  function normalizeTournamentFinalStage(rawFinalStage) {
+    const finalStage = rawFinalStage && typeof rawFinalStage === "object" ? rawFinalStage : {};
+    const type = FINAL_STAGE_TYPES.includes(normalizeText(finalStage.type || "").toLowerCase())
+      ? normalizeText(finalStage.type).toLowerCase()
+      : FINAL_STAGE_TYPE_KO;
+    const status = ["pending", "generated", "started", "completed"].includes(finalStage.status)
+      ? finalStage.status
+      : "pending";
+    return {
+      type,
+      qualifierCount: clampInt(finalStage.qualifierCount, 4, 2, TECHNICAL_PARTICIPANT_HARD_MAX),
+      bestOfLegs: sanitizeBestOf(finalStage.bestOfLegs),
+      status,
+      generatedAt: normalizeText(finalStage.generatedAt || "") || null,
+      seeding: (Array.isArray(finalStage.seeding) ? finalStage.seeding : []).map((id) => normalizeText(id || "")).filter(Boolean),
+      qualificationResolution: normalizeQualificationResolution(finalStage.qualificationResolution),
+      ko: finalStage.ko && typeof finalStage.ko === "object"
+        ? normalizeTournamentKoMeta(finalStage.ko, KO_DRAW_MODE_SEEDED, true)
+        : null,
+    };
+  }
+
+
   function normalizeTournamentResultEntry(rawResult, indexFallback) {
     return {
       matchId: normalizeText(rawResult?.matchId || rawResult?.id || `result-${indexFallback}`),
-      stage: [MATCH_STAGE_KO, MATCH_STAGE_GROUP, MATCH_STAGE_LEAGUE].includes(rawResult?.stage)
+      stage: [MATCH_STAGE_KO, MATCH_STAGE_GROUP, MATCH_STAGE_LEAGUE, MATCH_STAGE_PRELIMINARY].includes(rawResult?.stage)
         ? rawResult.stage
         : MATCH_STAGE_KO,
       round: clampInt(rawResult?.round, 1, 1, 64),
@@ -3450,7 +3607,7 @@
       return null;
     }
 
-    const mode = ["ko", "double_ko", "league", "groups_ko"].includes(rawTournament.mode) ? rawTournament.mode : "ko";
+    const mode = ["ko", "double_ko", "league", "groups_ko", "preliminary_final"].includes(rawTournament.mode) ? rawTournament.mode : "ko";
     const modeLimits = getModeParticipantLimits(mode);
     const participantsRaw = Array.isArray(rawTournament.participants) ? rawTournament.participants : [];
     const participants = participantsRaw
@@ -3481,7 +3638,7 @@
     const matchesRaw = Array.isArray(rawTournament.matches) ? rawTournament.matches : [];
     const matches = matchesRaw.map((match, index) => ({
       id: normalizeText(match?.id || `match-${index + 1}`),
-      stage: [MATCH_STAGE_KO, MATCH_STAGE_GROUP, MATCH_STAGE_LEAGUE].includes(match?.stage) ? match.stage : MATCH_STAGE_KO,
+      stage: [MATCH_STAGE_KO, MATCH_STAGE_GROUP, MATCH_STAGE_LEAGUE, MATCH_STAGE_PRELIMINARY].includes(match?.stage) ? match.stage : MATCH_STAGE_KO,
       round: clampInt(match?.round, 1, 1, 64),
       number: clampInt(match?.number, index + 1, 1, 256),
       groupId: match?.groupId ? normalizeText(match.groupId) : null,
@@ -3522,6 +3679,8 @@
       ko: mode === "ko" || mode === "double_ko"
         ? normalizeTournamentKoMeta(rawTournament.ko, KO_DRAW_MODE_SEEDED, fallbackKoDrawLocked)
         : null,
+      preliminary: mode === "preliminary_final" ? normalizeTournamentPreliminary(rawTournament.preliminary) : null,
+      finalStage: mode === "preliminary_final" ? normalizeTournamentFinalStage(rawTournament.finalStage) : null,
       bestOfLegs: sanitizeBestOf(rawTournament.bestOfLegs),
       startScore: x01.baseScore,
       x01,
@@ -3665,6 +3824,7 @@
 
     const version = Number(rawValue.schemaVersion || 0);
     switch (version) {
+      case 5:
       case 4:
       case 3:
       case 2:
@@ -3689,6 +3849,13 @@
     match.stats = normalizeMatchStats(null);
     setMatchResultKind(match, null);
     resetMatchAutomationMeta(match);
+    if (match?.meta?.fixedLegs) {
+      match.meta.fixedLegs = {
+        count: PRELIMINARY_FIXED_LEG_COUNT,
+        entries: [],
+        syncStatus: "manual_only",
+      };
+    }
     match.updatedAt = nowIso();
   }
 
@@ -3773,6 +3940,159 @@
       drawLocked: nextDrawLocked,
     }, normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED), nextDrawLocked);
     return { ok: true, changed: true };
+  }
+
+// Pure domain logic for balanced preliminary schedules.
+
+  function getAllowedPreliminaryMatchCounts(rawParticipantCount) {
+    const participantCount = clampInt(rawParticipantCount, 0, 0, TECHNICAL_PARTICIPANT_HARD_MAX);
+    const allowed = [];
+    for (let matchCount = 4; matchCount <= 8; matchCount += 1) {
+      if (matchCount < participantCount && (participantCount * matchCount) % 2 === 0) {
+        allowed.push(matchCount);
+      }
+    }
+    return allowed;
+  }
+
+  function validatePreliminaryScheduleConfig(rawParticipantCount, rawMatchCount) {
+    const participantCount = clampInt(rawParticipantCount, 0, 0, TECHNICAL_PARTICIPANT_HARD_MAX);
+    const parsedMatchCount = Number(rawMatchCount);
+    const matchCount = Number.isInteger(parsedMatchCount) ? parsedMatchCount : null;
+    const allowedMatchCounts = getAllowedPreliminaryMatchCounts(participantCount);
+    if (matchCount === null || matchCount < 4 || matchCount > 8) {
+      return { ok: false, reasonCode: "preliminary_match_count_out_of_range", message: "Vorrundenspiele je Teilnehmer m\u00fcssen als ganze Zahl zwischen 4 und 8 angegeben werden.", participantCount, matchCount, allowedMatchCounts };
+    }
+    if (matchCount >= participantCount) {
+      return { ok: false, reasonCode: "preliminary_match_count_exceeds_unique_opponents", message: `Mit ${participantCount} Teilnehmern sind h\u00f6chstens ${Math.max(0, participantCount - 1)} verschiedene Gegner m\u00f6glich.`, participantCount, matchCount, allowedMatchCounts };
+    }
+    if ((participantCount * matchCount) % 2 !== 0) {
+      return { ok: false, reasonCode: "preliminary_equal_distribution_impossible", message: `Mit ${participantCount} Teilnehmern ist eine gleiche Verteilung von ${matchCount} Matches mathematisch nicht m\u00f6glich.`, participantCount, matchCount, allowedMatchCounts };
+    }
+    return { ok: true, reasonCode: "", message: "", participantCount, matchCount, allowedMatchCounts };
+  }
+
+  function createCanonicalPreliminaryEdge(leftIndex, rightIndex, participantIds) {
+    const low = Math.min(leftIndex, rightIndex);
+    const high = Math.max(leftIndex, rightIndex);
+    return { key: `${low}:${high}`, leftIndex: low, rightIndex: high, player1Id: participantIds[low], player2Id: participantIds[high] };
+  }
+
+  function colorPreliminaryEdges(edges, colorCount, attemptLimit = 25000) {
+    const adjacent = edges.map(() => []);
+    for (let left = 0; left < edges.length; left += 1) {
+      for (let right = left + 1; right < edges.length; right += 1) {
+        if (
+          edges[left].leftIndex === edges[right].leftIndex
+          || edges[left].leftIndex === edges[right].rightIndex
+          || edges[left].rightIndex === edges[right].leftIndex
+          || edges[left].rightIndex === edges[right].rightIndex
+        ) {
+          adjacent[left].push(right);
+          adjacent[right].push(left);
+        }
+      }
+    }
+    const colors = edges.map(() => -1);
+    const selectNext = () => {
+      let selected = null;
+      for (let index = 0; index < edges.length; index += 1) {
+        if (colors[index] !== -1) continue;
+        const used = new Set(adjacent[index].map((neighbor) => colors[neighbor]).filter((color) => color >= 0));
+        const available = Array.from({ length: colorCount }, (_, color) => color).filter((color) => !used.has(color));
+        const coloredNeighbors = adjacent[index].filter((neighbor) => colors[neighbor] >= 0).length;
+        if (!selected || available.length < selected.available.length || (available.length === selected.available.length && coloredNeighbors > selected.coloredNeighbors)) {
+          selected = { index, available, coloredNeighbors };
+        }
+      }
+      return selected;
+    };
+    let attempts = 0;
+    const assign = (count) => {
+      if (count === edges.length) return true;
+      if (attempts >= attemptLimit) return false;
+      attempts += 1;
+      const next = selectNext();
+      if (!next || !next.available.length) return false;
+      for (const color of next.available) {
+        colors[next.index] = color;
+        if (assign(count + 1)) return true;
+        colors[next.index] = -1;
+      }
+      return false;
+    };
+    if (edges.length) colors[0] = 0;
+    return assign(edges.length ? 1 : 0) ? colors : null;
+  }
+
+  function buildPreliminaryRoundRobinFallback(edges, participantCount) {
+    const edgeByKey = new Map(edges.map((edge) => [edge.key, edge]));
+    const slots = Array.from({ length: participantCount }, (_, index) => index);
+    if (participantCount % 2 !== 0) slots.push(-1);
+    const rounds = [];
+    for (let roundIndex = 0; roundIndex < slots.length - 1; roundIndex += 1) {
+      const round = [];
+      for (let pairIndex = 0; pairIndex < slots.length / 2; pairIndex += 1) {
+        const leftIndex = slots[pairIndex];
+        const rightIndex = slots[slots.length - 1 - pairIndex];
+        if (leftIndex < 0 || rightIndex < 0) continue;
+        const key = `${Math.min(leftIndex, rightIndex)}:${Math.max(leftIndex, rightIndex)}`;
+        const edge = edgeByKey.get(key);
+        if (edge) round.push(edge);
+      }
+      if (round.length) rounds.push(round.sort((left, right) => left.leftIndex - right.leftIndex || left.rightIndex - right.rightIndex));
+      const last = slots.pop();
+      slots.splice(1, 0, last);
+    }
+    return rounds;
+  }
+
+  function assignPreliminarySchedulingRounds(edges, participantCount, matchCount) {
+    const lowerBound = participantCount % 2 === 0 ? matchCount : matchCount + 1;
+    let colors = null;
+    let colorCount = lowerBound;
+    for (; colorCount <= matchCount + 1; colorCount += 1) {
+      colors = colorPreliminaryEdges(edges, colorCount);
+      if (colors) break;
+    }
+    if (!colors) return buildPreliminaryRoundRobinFallback(edges, participantCount);
+    const rounds = Array.from({ length: colorCount }, () => []);
+    edges.forEach((edge, index) => rounds[colors[index]].push(edge));
+    return rounds.filter((round) => round.length).map((round) => round.slice().sort((left, right) => left.leftIndex - right.leftIndex || left.rightIndex - right.rightIndex));
+  }
+
+  function buildBalancedRegularPairings(rawParticipantIds, rawMatchCount) {
+    const participantIds = (Array.isArray(rawParticipantIds) ? rawParticipantIds : []).map((id) => normalizeText(id || "")).filter(Boolean);
+    const validation = validatePreliminaryScheduleConfig(participantIds.length, rawMatchCount);
+    if (!validation.ok) return { ...validation, edges: [], rounds: [], totalMatches: 0, scheduleRoundCount: 0 };
+    const participantCount = participantIds.length;
+    const matchCount = validation.matchCount;
+    const edgeByKey = new Map();
+    const symmetricDistanceCount = Math.floor(matchCount / 2);
+    for (let index = 0; index < participantCount; index += 1) {
+      for (let distance = 1; distance <= symmetricDistanceCount; distance += 1) {
+        const edge = createCanonicalPreliminaryEdge(index, (index + distance) % participantCount, participantIds);
+        edgeByKey.set(edge.key, edge);
+      }
+      if (matchCount % 2 === 1) {
+        const edge = createCanonicalPreliminaryEdge(index, (index + (participantCount / 2)) % participantCount, participantIds);
+        edgeByKey.set(edge.key, edge);
+      }
+    }
+    const edges = Array.from(edgeByKey.values()).sort((left, right) => left.leftIndex - right.leftIndex || left.rightIndex - right.rightIndex);
+    const degreeByIndex = Array.from({ length: participantCount }, () => 0);
+    edges.forEach((edge) => { degreeByIndex[edge.leftIndex] += 1; degreeByIndex[edge.rightIndex] += 1; });
+    if (edges.length !== (participantCount * matchCount) / 2 || degreeByIndex.some((degree) => degree !== matchCount)) {
+      throw new Error("preliminary_regular_graph_invariant_failed");
+    }
+    const rounds = assignPreliminarySchedulingRounds(edges, participantCount, matchCount);
+    return { ...validation, edges, rounds, totalMatches: edges.length, scheduleRoundCount: rounds.length, degreeByParticipantId: Object.fromEntries(participantIds.map((id, index) => [id, degreeByIndex[index]])) };
+  }
+
+  function analyzePreliminaryFinalConfiguration(rawParticipantIds, rawMatchCount, finalStageType, rawQualifierCount) {
+    const schedule = buildBalancedRegularPairings(rawParticipantIds, rawMatchCount);
+    const normalizedFinalStageType = FINAL_STAGE_TYPES.includes(finalStageType) ? finalStageType : FINAL_STAGE_TYPE_KO;
+    return { ...schedule, participantCount: Array.isArray(rawParticipantIds) ? rawParticipantIds.length : 0, qualifierCount: Number(rawQualifierCount), finalStageType: normalizedFinalStageType, finalStageLabel: normalizedFinalStageType === FINAL_STAGE_TYPE_DOUBLE_KO ? "Doppel-KO" : "KO" };
   }
 
   /**
@@ -4272,6 +4592,31 @@
   }
 
 
+  function buildPreliminaryMatches(schedule) {
+    const matches = [];
+    (schedule?.rounds || []).forEach((pairs, roundIndex) => {
+      pairs.forEach((pair, pairIndex) => {
+        matches.push(createMatch({
+          id: `preliminary-r${roundIndex + 1}-m${pairIndex + 1}`,
+          stage: MATCH_STAGE_PRELIMINARY,
+          round: roundIndex + 1,
+          number: pairIndex + 1,
+          player1Id: pair.player1Id,
+          player2Id: pair.player2Id,
+          meta: {
+            fixedLegs: {
+              count: PRELIMINARY_FIXED_LEG_COUNT,
+              entries: [],
+              syncStatus: "manual_only",
+            },
+          },
+        }));
+      });
+    });
+    return matches;
+  }
+
+
   function buildDoubleKoWinnersBracket(players, seeds, options = {}) {
     const normalizedParticipants = normalizeSeedParticipants(players);
     const seeded = Array.isArray(seeds) && seeds.length
@@ -4700,7 +5045,7 @@
     if (!normalizeText(config.name)) {
       errors.push({ reasonCode: "tournament_name_required", message: "Bitte einen Turniernamen eingeben." });
     }
-    if (!["ko", "double_ko", "league", "groups_ko"].includes(config.mode)) {
+    if (!["ko", "double_ko", "league", "groups_ko", "preliminary_final"].includes(config.mode)) {
       errors.push({ reasonCode: "tournament_mode_invalid", message: "Ungültiger Modus." });
     }
     const participantCount = Array.isArray(config?.participants) ? config.participants.length : 0;
@@ -4714,6 +5059,29 @@
         reasonCode: groupsKoPolicyValidation.reasonCode,
         message: groupsKoPolicyValidation.message,
       });
+    }
+    if (config.mode === "preliminary_final") {
+      const scheduleValidation = validatePreliminaryScheduleConfig(participantCount, config.preliminaryMatchesPerParticipant);
+      if (!scheduleValidation.ok) {
+        errors.push({ reasonCode: scheduleValidation.reasonCode, message: scheduleValidation.message, allowedMatchCounts: scheduleValidation.allowedMatchCounts });
+      }
+      const scoringValidation = validatePreliminaryScoring({
+        winPoints: config.preliminaryWinPoints,
+        drawPoints: config.preliminaryDrawPoints,
+        lossPoints: config.preliminaryLossPoints,
+      });
+      if (!scoringValidation.ok) errors.push({ reasonCode: scoringValidation.reasonCode, message: scoringValidation.message });
+      if (!FINAL_STAGE_TYPES.includes(config.finalStageType)) {
+        errors.push({ reasonCode: "final_stage_type_invalid", message: "Finalphase muss KO oder Doppel-KO sein." });
+      }
+      const qualifierCount = Number(config.finalStageQualifierCount);
+      if (!Number.isInteger(qualifierCount) || qualifierCount < 2 || qualifierCount > participantCount) {
+        errors.push({ reasonCode: "final_stage_qualifier_count_invalid", message: `Anzahl Qualifikanten muss zwischen 2 und ${participantCount} liegen.` });
+      }
+      const finalBestOf = Number(config.finalStageBestOfLegs);
+      if (!Number.isInteger(finalBestOf) || finalBestOf < 1 || finalBestOf > 21 || finalBestOf % 2 === 0) {
+        errors.push({ reasonCode: "final_stage_best_of_invalid", message: "Finalphasen-Best-of muss eine ungerade ganze Zahl zwischen 1 und 21 sein." });
+      }
     }
 
     return errors;
@@ -4753,9 +5121,37 @@
     let groups = [];
     let matches = [];
     let koMeta = null;
+    let preliminaryMeta = null;
+    let finalStageMeta = null;
 
     if (config.mode === "league") {
       matches = buildLeagueMatches(participantIds);
+    } else if (config.mode === "preliminary_final") {
+      const schedule = buildBalancedRegularPairings(participantIds, config.preliminaryMatchesPerParticipant);
+      matches = buildPreliminaryMatches(schedule);
+      preliminaryMeta = {
+        pairingMethod: PRELIMINARY_PAIRING_METHOD_BALANCED_REGULAR,
+        matchesPerParticipant: schedule.matchCount,
+        matchFormat: PRELIMINARY_MATCH_FORMAT_FIXED_LEGS,
+        fixedLegCount: PRELIMINARY_FIXED_LEG_COUNT,
+        scoring: normalizePreliminaryScoring({
+          winPoints: config.preliminaryWinPoints,
+          drawPoints: config.preliminaryDrawPoints,
+          lossPoints: config.preliminaryLossPoints,
+        }),
+        scheduleRoundCount: schedule.scheduleRoundCount,
+        completedAt: null,
+      };
+      finalStageMeta = {
+        type: config.finalStageType,
+        qualifierCount: Number(config.finalStageQualifierCount),
+        bestOfLegs: Number(config.finalStageBestOfLegs),
+        status: "pending",
+        generatedAt: null,
+        seeding: [],
+        qualificationResolution: null,
+        ko: null,
+      };
     } else if (config.mode === "groups_ko") {
       groups = buildGroups(participantIds);
       matches = buildGroupMatches(groups).concat(buildGroupsKoMatches());
@@ -4797,7 +5193,11 @@
       name: normalizeText(config.name),
       mode: config.mode,
       ko: koMeta,
-      bestOfLegs: sanitizeBestOf(config.bestOfLegs),
+      preliminary: preliminaryMeta,
+      finalStage: finalStageMeta,
+      bestOfLegs: config.mode === "preliminary_final"
+        ? sanitizeBestOf(config.finalStageBestOfLegs)
+        : sanitizeBestOf(config.bestOfLegs),
       startScore: x01.baseScore,
       x01,
       rules: normalizeTournamentRules({
@@ -4959,7 +5359,7 @@
 
   function getTournamentDurationPhaseOverheadMinutes(mode, participantCount) {
     const count = clampInt(participantCount, 0, 0, TECHNICAL_PARTICIPANT_HARD_MAX);
-    if (mode === "groups_ko") {
+    if (mode === "groups_ko" || mode === "preliminary_final") {
       return 4;
     }
     if ((mode !== "ko" && mode !== "double_ko") || count < 2) {
@@ -5382,6 +5782,29 @@
 
 
   function buildTournamentDurationTasks(mode, participants, participantCount, options = {}) {
+    if (mode === "preliminary_final") {
+      const participantIds = normalizeTournamentDurationParticipants(participants);
+      const schedule = buildBalancedRegularPairings(participantIds, options?.preliminaryMatchesPerParticipant);
+      if (!schedule.ok) return [];
+      const preliminaryTasks = [];
+      schedule.rounds.forEach((round, roundIndex) => {
+        round.forEach((pair, pairIndex) => preliminaryTasks.push({
+          id: `preliminary-r${roundIndex + 1}-m${pairIndex + 1}`,
+          participants: [`p:${pair.player1Id}`, `p:${pair.player2Id}`],
+          dependsOn: [],
+        }));
+      });
+      const preliminaryIds = preliminaryTasks.map((task) => task.id);
+      const qualifierCount = clampInt(options?.finalStageQualifierCount, 2, 2, participantIds.length);
+      const qualifierPlaceholders = Array.from({ length: qualifierCount }, (_, index) => ({ id: `seed-${index + 1}` }));
+      const finalTasks = options?.finalStageType === FINAL_STAGE_TYPE_DOUBLE_KO
+        ? buildDoubleKoTournamentDurationTasks(qualifierPlaceholders, GRAND_FINAL_RESET_IF_NEEDED)
+        : buildKoTournamentDurationTasks(qualifierCount, false);
+      finalTasks.forEach((task) => {
+        if (!Array.isArray(task.dependsOn) || !task.dependsOn.length) task.dependsOn = preliminaryIds.slice();
+      });
+      return preliminaryTasks.concat(finalTasks);
+    }
     if (mode === "league") {
       return buildLeagueTournamentDurationTasks(participants);
     }
@@ -5439,6 +5862,9 @@
     const tasks = buildTournamentDurationTasks(mode, participants, participants.length, {
       enableThirdPlaceMatch: tournament?.ko?.enableThirdPlaceMatch === true,
       grandFinalResetMode: tournament?.ko?.grandFinalResetMode,
+      preliminaryMatchesPerParticipant: tournament?.preliminary?.matchesPerParticipant,
+      finalStageQualifierCount: tournament?.finalStage?.qualifierCount,
+      finalStageType: tournament?.finalStage?.type,
     });
     if (!tasks.length) {
       return progress;
@@ -5482,7 +5908,7 @@
 
   function estimateTournamentDuration(rawInput, settings = null) {
     const modeRaw = normalizeText(rawInput?.mode || "ko");
-    const mode = ["ko", "double_ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : "ko";
+    const mode = ["ko", "double_ko", "league", "groups_ko", "preliminary_final"].includes(modeRaw) ? modeRaw : "ko";
     const participants = (Array.isArray(rawInput?.participants) ? rawInput.participants : [])
       .filter((entry) => normalizeText(entry?.id || entry?.name || entry || ""));
     const participantCount = participants.length;
@@ -5500,7 +5926,7 @@
       bullOffMode: rawInput?.x01BullOffMode,
       lobbyVisibility: rawInput?.lobbyVisibility,
     }, rawInput?.startScore);
-    const bestOfLegs = sanitizeBestOf(rawInput?.bestOfLegs);
+    const bestOfLegs = sanitizeBestOf(mode === "preliminary_final" ? rawInput?.finalStageBestOfLegs : rawInput?.bestOfLegs);
     const boardCount = sanitizeTournamentBoardCount(
       rawInput?.boardCount,
       TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
@@ -5540,7 +5966,21 @@
       return estimate;
     }
 
-    const expectedLegs = getExpectedLegsForBestOf(bestOfLegs);
+    if (mode === "preliminary_final") {
+      const scheduleValidation = validatePreliminaryScheduleConfig(participantCount, rawInput?.preliminaryMatchesPerParticipant);
+      if (!scheduleValidation.ok) {
+        estimate.reason = scheduleValidation.message;
+        return estimate;
+      }
+    }
+
+    let expectedLegs = getExpectedLegsForBestOf(bestOfLegs);
+    if (mode === "preliminary_final") {
+      const preliminaryCount = (participantCount * Number(rawInput.preliminaryMatchesPerParticipant)) / 2;
+      const qualifierCount = clampInt(rawInput?.finalStageQualifierCount, 2, 2, participantCount);
+      const finalCount = rawInput?.finalStageType === FINAL_STAGE_TYPE_DOUBLE_KO ? Math.max(0, (2 * qualifierCount) - 1) : Math.max(0, qualifierCount - 1);
+      expectedLegs = ((preliminaryCount * PRELIMINARY_FIXED_LEG_COUNT) + (finalCount * expectedLegs)) / Math.max(1, preliminaryCount + finalCount);
+    }
     const bullModeFactor = x01Settings.bullOffMode === "Off"
       ? 1
       : (TOURNAMENT_DURATION_BULL_FACTORS[x01Settings.bullMode] || 1);
@@ -5558,6 +5998,9 @@
     const durationTasks = buildTournamentDurationTasks(mode, participants, participantCount, {
       enableThirdPlaceMatch: rawInput?.enableThirdPlaceMatch === true,
       grandFinalResetMode: rawInput?.grandFinalResetMode,
+      preliminaryMatchesPerParticipant: rawInput?.preliminaryMatchesPerParticipant,
+      finalStageQualifierCount: rawInput?.finalStageQualifierCount,
+      finalStageType: rawInput?.finalStageType,
     });
     const fallbackMatchCount = getTournamentDurationMatchCount(mode, participantCount);
     const matchCount = durationTasks.length || fallbackMatchCount;
@@ -5616,6 +6059,10 @@
       boardCount: draft.boardCount,
       enableThirdPlaceMatch: draft.enableThirdPlaceMatch,
       grandFinalResetMode: draft.grandFinalResetMode,
+      preliminaryMatchesPerParticipant: draft.preliminaryMatchesPerParticipant,
+      finalStageQualifierCount: draft.finalStageQualifierCount,
+      finalStageType: draft.finalStageType,
+      finalStageBestOfLegs: draft.finalStageBestOfLegs,
       participants,
       tournamentTimeProfile: settings?.tournamentTimeProfile,
     }, settings);
@@ -5641,6 +6088,10 @@
       boardCount: tournament?.duration?.boardCount,
       enableThirdPlaceMatch: tournament?.ko?.enableThirdPlaceMatch === true,
       grandFinalResetMode: tournament?.ko?.grandFinalResetMode,
+      preliminaryMatchesPerParticipant: tournament?.preliminary?.matchesPerParticipant,
+      finalStageQualifierCount: tournament?.finalStage?.qualifierCount,
+      finalStageType: tournament?.finalStage?.type,
+      finalStageBestOfLegs: tournament?.finalStage?.bestOfLegs,
       participants: tournament.participants,
       tournamentTimeProfile: settings?.tournamentTimeProfile,
     }, settings);
@@ -5825,6 +6276,52 @@
     return rows;
   }
 
+// Pure standings for the shortened preliminary stage.
+
+  function normalizePreliminaryScoring(rawScoring) {
+    const scoring = rawScoring && typeof rawScoring === "object" ? rawScoring : {};
+    return { winPoints: Number(scoring.winPoints ?? 2), drawPoints: Number(scoring.drawPoints ?? 1), lossPoints: Number(scoring.lossPoints ?? 0) };
+  }
+
+  function validatePreliminaryScoring(rawScoring) {
+    const scoring = normalizePreliminaryScoring(rawScoring);
+    const values = [scoring.winPoints, scoring.drawPoints, scoring.lossPoints];
+    const valid = values.every((value) => Number.isInteger(value) && value >= 0 && value <= 10)
+      && scoring.winPoints > scoring.drawPoints && scoring.drawPoints >= scoring.lossPoints;
+    return valid ? { ok: true, reasonCode: "", message: "", scoring } : { ok: false, reasonCode: "preliminary_scoring_invalid", message: "Punkte m\u00fcssen ganze Zahlen von 0 bis 10 sein; Sieg > Unentschieden >= Niederlage.", scoring };
+  }
+
+  function buildPreliminaryStandings(tournament) {
+    const scoringValidation = validatePreliminaryScoring(tournament?.preliminary?.scoring);
+    const scoring = scoringValidation.ok ? scoringValidation.scoring : normalizePreliminaryScoring(null);
+    const rows = (tournament?.participants || []).map((participant, inputIndex) => ({ id: participant.id, name: participant.name, inputIndex, played: 0, wins: 0, draws: 0, losses: 0, points: 0, legsFor: 0, legsAgainst: 0, legDifference: 0, rank: 0, tiebreakState: "resolved" }));
+    const rowById = new Map(rows.map((row) => [row.id, row]));
+    getMatchesByStage(tournament, MATCH_STAGE_PRELIMINARY).filter((match) => match.status === STATUS_COMPLETED).forEach((match) => {
+      const row1 = rowById.get(match.player1Id);
+      const row2 = rowById.get(match.player2Id);
+      if (!row1 || !row2) return;
+      const p1Legs = clampInt(match.legs?.p1, 0, 0, PRELIMINARY_FIXED_LEG_COUNT);
+      const p2Legs = clampInt(match.legs?.p2, 0, 0, PRELIMINARY_FIXED_LEG_COUNT);
+      row1.played += 1; row2.played += 1;
+      row1.legsFor += p1Legs; row1.legsAgainst += p2Legs;
+      row2.legsFor += p2Legs; row2.legsAgainst += p1Legs;
+      if (match.winnerId === match.player1Id) {
+        row1.wins += 1; row2.losses += 1; row1.points += scoring.winPoints; row2.points += scoring.lossPoints;
+      } else if (match.winnerId === match.player2Id) {
+        row2.wins += 1; row1.losses += 1; row2.points += scoring.winPoints; row1.points += scoring.lossPoints;
+      } else {
+        row1.draws += 1; row2.draws += 1; row1.points += scoring.drawPoints; row2.points += scoring.drawPoints;
+      }
+    });
+    rows.forEach((row) => { row.legDifference = row.legsFor - row.legsAgainst; });
+    rows.sort((left, right) => right.points - left.points || right.legDifference - left.legDifference || right.legsFor - left.legsFor || left.inputIndex - right.inputIndex);
+    const buckets = new Map();
+    rows.forEach((row) => { const key = `${row.points}|${row.legDifference}|${row.legsFor}`; if (!buckets.has(key)) buckets.set(key, []); buckets.get(key).push(row); });
+    buckets.forEach((bucket) => { if (bucket.length > 1) bucket.forEach((row) => { row.tiebreakState = "playoff_required"; }); });
+    rows.forEach((row, index) => { row.rank = index + 1; delete row.inputIndex; });
+    return rows;
+  }
+
   function groupStandingsMap(tournament) {
     const map = new Map();
     (tournament.groups || []).forEach((group) => {
@@ -5882,6 +6379,165 @@
     return changed;
   }
 
+// Pure/domain mutations for qualification and final-stage generation.
+
+  function getPreliminaryMatches(tournament) {
+    return getMatchesByStage(tournament, MATCH_STAGE_PRELIMINARY);
+  }
+
+  function isPreliminaryComplete(tournament) {
+    const matches = getPreliminaryMatches(tournament);
+    return matches.length > 0 && matches.every((match) => match.status === STATUS_COMPLETED && isCompletedMatchResultValid(tournament, match));
+  }
+
+  function getPreliminaryStandingBucketKey(row) {
+    return `${row.points}|${row.legDifference}|${row.legsFor}`;
+  }
+
+  function analyzePreliminaryQualification(tournament) {
+    if (!tournament || tournament.mode !== "preliminary_final") {
+      return { ok: false, reasonCode: "final_stage_type_invalid", message: "Kein Vorrunde-und-Finalphase-Turnier." };
+    }
+    if (!isPreliminaryComplete(tournament)) {
+      return { ok: false, reasonCode: "preliminary_not_completed", message: "Die Finalphase kann erst nach allen Vorrundenmatches erzeugt werden." };
+    }
+    const rows = buildPreliminaryStandings(tournament);
+    const qualifierCount = clampInt(tournament?.finalStage?.qualifierCount, 0, 0, rows.length);
+    const buckets = [];
+    rows.forEach((row, index) => {
+      const key = getPreliminaryStandingBucketKey(row);
+      let bucket = buckets[buckets.length - 1];
+      if (!bucket || bucket.key !== key) {
+        bucket = { key, startIndex: index, rows: [] };
+        buckets.push(bucket);
+      }
+      bucket.rows.push(row);
+    });
+    const unresolvedBuckets = buckets.filter((bucket) => bucket.rows.length > 1 && bucket.startIndex < qualifierCount);
+    const storedResolution = tournament?.finalStage?.qualificationResolution;
+    const storedOrder = storedResolution?.orderedParticipantIds || [];
+    const bucketIndexById = new Map();
+    buckets.forEach((bucket, bucketIndex) => bucket.rows.forEach((row) => bucketIndexById.set(row.id, bucketIndex)));
+    const respectsObjectiveBuckets = storedOrder.every((participantId, index) => (
+      index === 0 || bucketIndexById.get(participantId) >= bucketIndexById.get(storedOrder[index - 1])
+    ));
+    const hasStoredResolution = storedOrder.length === rows.length
+      && new Set(storedOrder).size === rows.length
+      && rows.every((row) => storedOrder.includes(row.id))
+      && Boolean(normalizeText(storedResolution?.reason || ""))
+      && respectsObjectiveBuckets;
+    const orderedParticipantIds = unresolvedBuckets.length
+      ? (hasStoredResolution ? storedOrder.slice() : null)
+      : rows.map((row) => row.id);
+    return {
+      ok: Boolean(orderedParticipantIds),
+      reasonCode: orderedParticipantIds ? "" : "final_stage_qualification_unresolved",
+      message: orderedParticipantIds ? "" : "Gleichstand an einem Qualifikations- oder Setzplatz muss sichtbar aufgel\u00f6st werden.",
+      rows,
+      buckets,
+      unresolvedBuckets,
+      qualifierCount,
+      orderedParticipantIds,
+    };
+  }
+
+  function recordPreliminaryQualificationResolution(tournament, rawOrderedParticipantIds, rawReason) {
+    if (!tournament || tournament.mode !== "preliminary_final") return { ok: false, reasonCode: "final_stage_type_invalid", message: "Kein passender Turniermodus." };
+    if (hasPreliminaryFinalStageStarted(tournament)) return { ok: false, reasonCode: "final_stage_already_started", message: "Die Finalphase hat bereits begonnen." };
+    if (!isPreliminaryComplete(tournament)) return { ok: false, reasonCode: "preliminary_not_completed", message: "Die Vorrunde ist noch nicht abgeschlossen." };
+    const reason = normalizeText(rawReason || "");
+    if (!reason) return { ok: false, reasonCode: "qualification_resolution_reason_required", message: "Bitte eine Begr\u00fcndung f\u00fcr die Veranstalterentscheidung angeben." };
+    const rows = buildPreliminaryStandings(tournament);
+    const orderedParticipantIds = (Array.isArray(rawOrderedParticipantIds) ? rawOrderedParticipantIds : []).map((id) => normalizeText(id || "")).filter(Boolean);
+    if (orderedParticipantIds.length !== rows.length || new Set(orderedParticipantIds).size !== rows.length || rows.some((row) => !orderedParticipantIds.includes(row.id))) {
+      return { ok: false, reasonCode: "qualification_resolution_order_invalid", message: "Die Reihenfolge muss jeden Teilnehmer genau einmal enthalten." };
+    }
+    const bucketIndexById = new Map();
+    let bucketIndex = -1;
+    let lastKey = null;
+    rows.forEach((row) => {
+      const key = getPreliminaryStandingBucketKey(row);
+      if (key !== lastKey) { bucketIndex += 1; lastKey = key; }
+      bucketIndexById.set(row.id, bucketIndex);
+    });
+    for (let index = 1; index < orderedParticipantIds.length; index += 1) {
+      if (bucketIndexById.get(orderedParticipantIds[index]) < bucketIndexById.get(orderedParticipantIds[index - 1])) {
+        return { ok: false, reasonCode: "qualification_resolution_order_invalid", message: "Eindeutig getrennte Tabellenpl\u00e4tze d\u00fcrfen nicht vertauscht werden." };
+      }
+    }
+    tournament.finalStage.qualificationResolution = { orderedParticipantIds, reason, confirmedAt: nowIso() };
+    tournament.updatedAt = nowIso();
+    return { ok: true, resolution: tournament.finalStage.qualificationResolution };
+  }
+
+  function generatePreliminaryFinalStage(tournament) {
+    if (!tournament || tournament.mode !== "preliminary_final") return { ok: false, reasonCode: "final_stage_type_invalid", message: "Kein passender Turniermodus." };
+    if (!FINAL_STAGE_TYPES.includes(tournament?.finalStage?.type)) return { ok: false, reasonCode: "final_stage_type_invalid", message: "Finalphase muss KO oder Doppel-KO sein." };
+    if (hasPreliminaryFinalStageStarted(tournament)) return { ok: false, reasonCode: "final_stage_already_started", message: "Die Finalphase hat bereits begonnen." };
+    const analysis = analyzePreliminaryQualification(tournament);
+    if (!analysis.ok) return analysis;
+    const qualifierIds = analysis.orderedParticipantIds.slice(0, tournament.finalStage.qualifierCount);
+    const participantByIdMap = new Map(tournament.participants.map((participant) => [participant.id, participant]));
+    const qualifiers = qualifierIds.map((id) => participantByIdMap.get(id)).filter(Boolean);
+    if (qualifiers.length !== tournament.finalStage.qualifierCount) return { ok: false, reasonCode: "final_stage_qualifier_count_invalid", message: "Qualifikanten konnten nicht vollst\u00e4ndig zugeordnet werden." };
+    const seeds = generateSeeds(qualifiers, KO_DRAW_MODE_SEEDED);
+    const isDoubleKo = tournament.finalStage.type === FINAL_STAGE_TYPE_DOUBLE_KO;
+    const structure = isDoubleKo
+      ? buildDoubleKoBracketStructure(qualifiers, seeds, { grandFinalResetMode: GRAND_FINAL_RESET_IF_NEEDED })
+      : buildBracketStructure(qualifiers, seeds, { enableThirdPlaceMatch: false });
+    tournament.finalStage.ko = buildKoMetaSnapshot(KO_DRAW_MODE_SEEDED, true, structure);
+    tournament.finalStage.seeding = qualifierIds;
+    tournament.finalStage.generatedAt = nowIso();
+    tournament.finalStage.status = "generated";
+    const nonKoMatches = tournament.matches.filter((match) => match.stage !== MATCH_STAGE_KO);
+    tournament.matches = nonKoMatches.concat(buildKoMatchesFromStructure(structure));
+    tournament.updatedAt = nowIso();
+    return { ok: true, qualifierIds, matches: getMatchesByStage(tournament, MATCH_STAGE_KO) };
+  }
+
+  function hasPreliminaryFinalStageStarted(tournament) {
+    if (!tournament || tournament.mode !== "preliminary_final") return false;
+    return getMatchesByStage(tournament, MATCH_STAGE_KO).some((match) => {
+      if (isByeMatchResult(match)) return false;
+      const auto = ensureMatchAutoMeta(match);
+      return match.status === STATUS_COMPLETED || (auto.status === "started" && Boolean(auto.lobbyId));
+    });
+  }
+
+  function refreshPreliminaryFinalStageStatus(tournament) {
+    if (!tournament || tournament.mode !== "preliminary_final") return false;
+    let changed = false;
+    const complete = isPreliminaryComplete(tournament);
+    if (complete && !tournament.preliminary.completedAt) { tournament.preliminary.completedAt = nowIso(); changed = true; }
+    if (!complete && tournament.preliminary.completedAt) { tournament.preliminary.completedAt = null; changed = true; }
+    const finalMatches = getMatchesByStage(tournament, MATCH_STAGE_KO);
+    let nextStatus = finalMatches.length ? "generated" : "pending";
+    if (hasPreliminaryFinalStageStarted(tournament)) nextStatus = "started";
+    if (finalMatches.length && finalMatches.every((match) => match.status === STATUS_COMPLETED && isCompletedMatchResultValid(tournament, match))) nextStatus = "completed";
+    if (tournament.finalStage.status !== nextStatus) { tournament.finalStage.status = nextStatus; changed = true; }
+    return changed;
+  }
+
+  function resetPreliminaryMatchForCorrection(tournament, matchId) {
+    if (!tournament || tournament.mode !== "preliminary_final") return { ok: false, reasonCode: "final_stage_type_invalid", message: "Kein passender Turniermodus." };
+    if (hasPreliminaryFinalStageStarted(tournament)) return { ok: false, reasonCode: "final_stage_already_started", message: "Nach Beginn der Finalphase sind Vorrundenkorrekturen gesperrt." };
+    const match = findMatch(tournament, matchId);
+    if (!match || match.stage !== MATCH_STAGE_PRELIMINARY) return { ok: false, reasonCode: "match_not_found", message: "Vorrundenmatch nicht gefunden." };
+    const discardedFinalStage = getMatchesByStage(tournament, MATCH_STAGE_KO).length > 0;
+    if (discardedFinalStage) {
+      tournament.matches = tournament.matches.filter((entry) => entry.stage !== MATCH_STAGE_KO);
+      tournament.finalStage.ko = null;
+      tournament.finalStage.seeding = [];
+      tournament.finalStage.generatedAt = null;
+      tournament.finalStage.status = "pending";
+    }
+    clearMatchResult(match);
+    tournament.finalStage.qualificationResolution = null;
+    tournament.preliminary.completedAt = null;
+    tournament.updatedAt = nowIso();
+    return { ok: true, discardedFinalStage };
+  }
+
   function findKoNextMatch(tournament, match) {
     const nextRound = match.round + 1;
     const nextNumber = Math.ceil(match.number / 2);
@@ -5928,7 +6584,7 @@
     if (!match?.player1Id || !match?.player2Id) {
       return null;
     }
-    const legsToWin = getLegsToWin(tournament?.bestOfLegs);
+    const legsToWin = getLegsToWin(getMatchBestOfLegs(tournament, match));
     const p1Legs = clampInt(match.legs?.p1, 0, 0, 99);
     const p2Legs = clampInt(match.legs?.p2, 0, 0, 99);
     if (p1Legs === p2Legs) {
@@ -6093,6 +6749,24 @@
   }
 
 
+  function getKoEngineContext(tournament) {
+    if (!tournament) return null;
+    if (tournament.mode === "ko" || tournament.mode === "double_ko") {
+      return { mode: tournament.mode, ko: tournament.ko, participants: tournament.participants || [], writeKo: (ko) => { tournament.ko = ko; } };
+    }
+    if (tournament.mode === "preliminary_final" && tournament?.finalStage?.ko) {
+      const qualifierIds = new Set(tournament.finalStage.seeding || []);
+      return {
+        mode: tournament.finalStage.type,
+        ko: tournament.finalStage.ko,
+        participants: (tournament.participants || []).filter((participant) => qualifierIds.has(participant.id)),
+        writeKo: (ko) => { tournament.finalStage.ko = ko; },
+      };
+    }
+    return null;
+  }
+
+
   function isDynamicallyResolvedByeWithSet(tournament, virtualMatch, p1, p2, resolvedVirtualMatchIds) {
     const hasP1 = Boolean(p1);
     const hasP2 = Boolean(p2);
@@ -6104,10 +6778,11 @@
 
 
   function shouldIncludeDoubleKoResetFinal(tournament) {
-    if (!tournament || tournament.mode !== "double_ko") {
+    const context = getKoEngineContext(tournament);
+    if (!context || context.mode !== "double_ko") {
       return false;
     }
-    if (sanitizeGrandFinalResetMode(tournament?.ko?.grandFinalResetMode) !== GRAND_FINAL_RESET_IF_NEEDED) {
+    if (sanitizeGrandFinalResetMode(context.ko?.grandFinalResetMode) !== GRAND_FINAL_RESET_IF_NEEDED) {
       return false;
     }
     const grandFinal = findKoMatchById(tournament, "gf-r1-m1");
@@ -6177,16 +6852,17 @@
 
 
   function synchronizeKoBracketState(tournament) {
-    if (!tournament || (tournament.mode !== "ko" && tournament.mode !== "double_ko")) {
+    const context = getKoEngineContext(tournament);
+    if (!context) {
       return false;
     }
 
     let changed = false;
-    const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED);
-    const drawLocked = tournament?.ko?.drawLocked !== false;
-    const enableThirdPlaceMatch = tournament?.ko?.enableThirdPlaceMatch === true;
-    const grandFinalResetMode = sanitizeGrandFinalResetMode(tournament?.ko?.grandFinalResetMode);
-    const participants = (Array.isArray(tournament.participants) ? tournament.participants : [])
+    const drawMode = normalizeKoDrawMode(context.ko?.drawMode, KO_DRAW_MODE_SEEDED);
+    const drawLocked = context.ko?.drawLocked !== false;
+    const enableThirdPlaceMatch = context.ko?.enableThirdPlaceMatch === true;
+    const grandFinalResetMode = sanitizeGrandFinalResetMode(context.ko?.grandFinalResetMode);
+    const participants = (Array.isArray(context.participants) ? context.participants : [])
       .map((participant) => ({
         id: normalizeText(participant?.id || ""),
         name: normalizeText(participant?.name || participant?.id || ""),
@@ -6194,11 +6870,11 @@
       }))
       .filter((participant) => participant.id);
 
-    const generatedStructure = tournament.mode === "double_ko"
+    const generatedStructure = context.mode === "double_ko"
       ? buildDoubleKoBracketStructure(
         participants,
-        drawLocked && Array.isArray(tournament?.ko?.seeding) && tournament.ko.seeding.length
-          ? tournament.ko.seeding
+        drawLocked && Array.isArray(context.ko?.seeding) && context.ko.seeding.length
+          ? context.ko.seeding
           : generateSeeds(participants, drawMode),
         {
           grandFinalResetMode,
@@ -6210,11 +6886,12 @@
         generateSeeds(participants, drawMode),
         { enableThirdPlaceMatch },
       );
-    const lockedStructure = drawLocked && tournament.mode === "ko" ? buildKoStructureFromMeta(tournament?.ko, drawMode) : null;
+    const lockedStructure = drawLocked && context.mode === "ko" ? buildKoStructureFromMeta(context.ko, drawMode) : null;
     const structure = lockedStructure || generatedStructure;
     const nextKoMeta = buildKoMetaSnapshot(drawMode, drawLocked, structure);
-    if (!isSerializableEqual(tournament.ko, nextKoMeta)) {
-      tournament.ko = nextKoMeta;
+    if (!isSerializableEqual(context.ko, nextKoMeta)) {
+      context.writeKo(nextKoMeta);
+      context.ko = nextKoMeta;
       changed = true;
     }
 
@@ -6409,6 +7086,15 @@
         && p2Legs === 0;
     }
 
+    if (isFixedLegsPreliminaryMatch(tournament, match)) {
+      const p1Legs = clampInt(match.legs?.p1, 0, 0, PRELIMINARY_FIXED_LEG_COUNT);
+      const p2Legs = clampInt(match.legs?.p2, 0, 0, PRELIMINARY_FIXED_LEG_COUNT);
+      if (p1Legs + p2Legs !== PRELIMINARY_FIXED_LEG_COUNT) return false;
+      if (p1Legs === p2Legs) return !match.winnerId && normalizeMatchResultKind(match?.meta?.resultKind) === "draw";
+      const expectedWinner = p1Legs > p2Legs ? match.player1Id : match.player2Id;
+      return match.winnerId === expectedWinner;
+    }
+
     if (!match.player1Id || !match.player2Id) {
       return false;
     }
@@ -6446,6 +7132,20 @@
         return;
       }
 
+      if (isFixedLegsPreliminaryMatch(tournament, match)) {
+        const p1Legs = clampInt(match.legs?.p1, 0, 0, PRELIMINARY_FIXED_LEG_COUNT);
+        const p2Legs = clampInt(match.legs?.p2, 0, 0, PRELIMINARY_FIXED_LEG_COUNT);
+        if (p1Legs + p2Legs !== PRELIMINARY_FIXED_LEG_COUNT) {
+          clearMatchResult(match);
+          changed = true;
+          return;
+        }
+        const expectedWinner = p1Legs === p2Legs ? null : (p1Legs > p2Legs ? match.player1Id : match.player2Id);
+        if (match.winnerId !== expectedWinner) { match.winnerId = expectedWinner; changed = true; }
+        changed = setMatchResultKind(match, expectedWinner ? null : "draw") || changed;
+        return;
+      }
+
       const derivedWinnerId = deriveWinnerIdFromLegs(tournament, match);
       if (!derivedWinnerId || !match.player1Id || !match.player2Id) {
         clearMatchResult(match);
@@ -6466,6 +7166,7 @@
     const stageOrder = new Map([
       [MATCH_STAGE_GROUP, 1],
       [MATCH_STAGE_LEAGUE, 2],
+      [MATCH_STAGE_PRELIMINARY, 2],
       [MATCH_STAGE_KO, 3],
     ]);
 
@@ -6543,6 +7244,76 @@
   }
 
 
+  function applyFixedLegAggregateResult(tournament, match, winnerId, legs, source) {
+    if (hasPreliminaryFinalStageStarted(tournament)) {
+      return { ok: false, reasonCode: "final_stage_already_started", message: "Nach Beginn der Finalphase sind Vorrundenergebnisse gesperrt." };
+    }
+    const p1Legs = Number(legs?.p1);
+    const p2Legs = Number(legs?.p2);
+    const validScore = Number.isInteger(p1Legs) && Number.isInteger(p2Legs)
+      && p1Legs >= 0 && p2Legs >= 0
+      && p1Legs + p2Legs === PRELIMINARY_FIXED_LEG_COUNT;
+    if (!validScore) {
+      return { ok: false, reasonCode: "fixed_legs_result_invalid", message: "Zul\u00e4ssig sind nur 2:0, 1:1 oder 0:2 nach zwei fest gespielten Legs." };
+    }
+    const derivedWinnerId = p1Legs === p2Legs ? null : (p1Legs > p2Legs ? match.player1Id : match.player2Id);
+    if (winnerId && winnerId !== derivedWinnerId) {
+      return { ok: false, reasonCode: "fixed_legs_winner_invalid", message: "Gewinner und Leg-Ergebnis widersprechen sich." };
+    }
+    match.status = STATUS_COMPLETED;
+    match.winnerId = derivedWinnerId;
+    match.source = source === "auto" ? "auto" : "manual";
+    match.legs = { p1: p1Legs, p2: p2Legs };
+    setMatchResultKind(match, derivedWinnerId ? null : "draw");
+    match.updatedAt = nowIso();
+    return { ok: true, completed: true, resultKind: derivedWinnerId ? null : "draw" };
+  }
+
+
+  function applyFixedLegEntriesToTournament(tournament, matchId, rawEntries, source = "manual") {
+    if (!tournament) return { ok: false, reasonCode: "tournament_missing", message: "Kein aktives Turnier vorhanden." };
+    const match = findMatch(tournament, matchId);
+    if (!match) return { ok: false, reasonCode: "match_not_found", message: "Match nicht gefunden." };
+    if (!isFixedLegsPreliminaryMatch(tournament, match)) return { ok: false, reasonCode: "fixed_legs_format_required", message: "Dieses Match verwendet kein Fixed-Legs-Format." };
+    if (hasPreliminaryFinalStageStarted(tournament)) return { ok: false, reasonCode: "final_stage_already_started", message: "Nach Beginn der Finalphase sind Vorrundenergebnisse gesperrt." };
+    if (!match.player1Id || !match.player2Id) return { ok: false, reasonCode: "match_participants_missing", message: "Match hat noch keine zwei Teilnehmer." };
+    const entries = (Array.isArray(rawEntries) ? rawEntries : []).map((entry) => ({ legIndex: Number(entry?.legIndex), winnerId: normalizeText(entry?.winnerId || "") }));
+    const indexes = new Set();
+    for (const entry of entries) {
+      if (!Number.isInteger(entry.legIndex) || entry.legIndex < 1 || entry.legIndex > PRELIMINARY_FIXED_LEG_COUNT || indexes.has(entry.legIndex)) {
+        return { ok: false, reasonCode: "fixed_leg_duplicate_or_invalid", message: "Jeder Leg-Index darf genau einmal erfasst werden." };
+      }
+      if (entry.winnerId !== match.player1Id && entry.winnerId !== match.player2Id) {
+        return { ok: false, reasonCode: "fixed_leg_winner_invalid", message: "Leg-Sieger passt nicht zur Paarung." };
+      }
+      indexes.add(entry.legIndex);
+    }
+    entries.sort((left, right) => left.legIndex - right.legIndex);
+    if (entries.length && entries[0].legIndex !== 1) {
+      return { ok: false, reasonCode: "fixed_leg_sequence_invalid", message: "Leg 1 muss vor Leg 2 erfasst werden." };
+    }
+    const now = nowIso();
+    const fixedLegs = {
+      count: PRELIMINARY_FIXED_LEG_COUNT,
+      entries: entries.map((entry) => ({ ...entry, source: source === "auto" ? "auto" : "manual", recordedAt: now })),
+      syncStatus: "manual_only",
+    };
+    match.meta = normalizeMatchMeta({ ...(match.meta || {}), fixedLegs });
+    const p1Legs = entries.filter((entry) => entry.winnerId === match.player1Id).length;
+    const p2Legs = entries.filter((entry) => entry.winnerId === match.player2Id).length;
+    match.legs = { p1: p1Legs, p2: p2Legs };
+    match.source = entries.length ? "manual" : null;
+    if (entries.length < PRELIMINARY_FIXED_LEG_COUNT) {
+      match.status = STATUS_PENDING;
+      match.winnerId = null;
+      setMatchResultKind(match, null);
+      match.updatedAt = now;
+      return { ok: true, completed: false, legs: match.legs };
+    }
+    return applyFixedLegAggregateResult(tournament, match, null, match.legs, source);
+  }
+
+
   function applyMatchResultToTournament(tournament, matchId, winnerId, legs, source, stats = null) {
     if (!tournament) {
       return { ok: false, message: "Kein aktives Turnier vorhanden." };
@@ -6559,7 +7330,12 @@
       return { ok: false, message: "Gewinner passt nicht zum Match." };
     }
 
-    const legsToWin = getLegsToWin(tournament.bestOfLegs);
+    if (isFixedLegsPreliminaryMatch(tournament, match)) {
+      return applyFixedLegAggregateResult(tournament, match, winnerId, legs, source);
+    }
+
+    const matchBestOfLegs = getMatchBestOfLegs(tournament, match);
+    const legsToWin = getLegsToWin(matchBestOfLegs);
     const p1Legs = clampInt(legs?.p1, 0, 0, 99);
     const p2Legs = clampInt(legs?.p2, 0, 0, 99);
     const derivedWinnerId = deriveWinnerIdFromLegInput(match, p1Legs, p2Legs, legsToWin);
@@ -6567,7 +7343,7 @@
     if (p1Legs > legsToWin || p2Legs > legsToWin) {
       return {
         ok: false,
-        message: `Ung\u00fcltiges Ergebnis: Pro Spieler sind maximal ${legsToWin} Legs m\u00f6glich (Best-of ${sanitizeBestOf(tournament.bestOfLegs)}).`,
+        message: `Ung\u00fcltiges Ergebnis: Pro Spieler sind maximal ${legsToWin} Legs m\u00f6glich (Best-of ${matchBestOfLegs}).`,
       };
     }
 
@@ -6578,7 +7354,7 @@
     if (!derivedWinnerId) {
       return {
         ok: false,
-        message: `Ung\u00fcltiges Ergebnis: Ein Spieler muss genau ${legsToWin} Legs erreichen (Best-of ${sanitizeBestOf(tournament.bestOfLegs)}).`,
+        message: `Ung\u00fcltiges Ergebnis: Ein Spieler muss genau ${legsToWin} Legs erreichen (Best-of ${matchBestOfLegs}).`,
       };
     }
 
@@ -6697,11 +7473,18 @@
       return null;
     }
 
-    const isDoubleKo = tournament.mode === "double_ko";
+    const isPreliminaryFinal = tournament.mode === "preliminary_final";
+    const effectiveFinalType = isPreliminaryFinal ? tournament?.finalStage?.type : tournament.mode;
+    const effectiveKoMeta = isPreliminaryFinal ? tournament?.finalStage?.ko : tournament?.ko;
+    const isDoubleKo = effectiveFinalType === "double_ko";
     const bracketSize = tournament.mode === "groups_ko"
       ? 4
-      : nextPowerOfTwo(clampInt(tournament?.ko?.bracketSize, tournament.participants.length, 2, TECHNICAL_PARTICIPANT_HARD_MAX));
+      : nextPowerOfTwo(clampInt(effectiveKoMeta?.bracketSize, tournament.participants.length, 2, TECHNICAL_PARTICIPANT_HARD_MAX));
+    const finalParticipantIds = isPreliminaryFinal
+      ? new Set((Array.isArray(tournament?.finalStage?.seeding) ? tournament.finalStage.seeding : []).map((entry) => normalizeText(entry?.participantId || entry)).filter(Boolean))
+      : null;
     const participants = tournament.participants
+      .filter((participant) => !finalParticipantIds || finalParticipantIds.has(normalizeText(participant?.id)))
       .map((participant) => {
         const participantId = normalizeText(participant?.id);
         if (!participantId) {
@@ -6785,13 +7568,13 @@
       stages: [{
         id: 1,
         tournament_id: 1,
-        name: isDoubleKo ? "Doppel-KO" : (tournament.mode === "groups_ko" ? "KO-Phase" : "KO"),
+        name: isDoubleKo ? "Doppel-KO" : ((tournament.mode === "groups_ko" || isPreliminaryFinal) ? "Finalphase" : "KO"),
         type: isDoubleKo ? "double_elimination" : "single_elimination",
         settings: {
           size: bracketSize,
           consolationFinal: !isDoubleKo && hasThirdPlaceMatch,
           grandFinal: isDoubleKo
-            ? (sanitizeGrandFinalResetMode(tournament?.ko?.grandFinalResetMode) === GRAND_FINAL_RESET_IF_NEEDED ? "double" : "simple")
+            ? (sanitizeGrandFinalResetMode(effectiveKoMeta?.grandFinalResetMode) === GRAND_FINAL_RESET_IF_NEEDED ? "double" : "simple")
             : undefined,
         },
         number: 1,
@@ -7502,6 +8285,7 @@
       changed = synchronizeKoBracketState(tournament) || changed;
       changed = normalizeCompletedMatchResults(tournament) || changed;
       changed = synchronizeKoBracketState(tournament) || changed;
+      changed = refreshPreliminaryFinalStageStatus(tournament) || changed;
       if (tournament.mode === "groups_ko") {
         changed = advanceKoWinners(tournament) || changed;
       }
@@ -7533,6 +8317,19 @@
     schedulePersist();
     renderShell();
     return { ok: true };
+  }
+
+
+  function updateFixedLegMatchResult(matchId, entries) {
+    const tournament = state.store.tournament;
+    if (!tournament) return { ok: false, message: "Kein aktives Turnier vorhanden." };
+    const result = applyFixedLegEntriesToTournament(tournament, matchId, entries, "manual");
+    if (!result.ok) return result;
+    refreshDerivedMatches(tournament);
+    tournament.updatedAt = nowIso();
+    schedulePersist();
+    renderShell();
+    return result;
   }
 
 // App layer: runtime orchestration, persistence scheduling and user feedback.
@@ -7650,6 +8447,33 @@
   }
 
 
+  function generateActivePreliminaryFinalStage() {
+    const tournament = state.store.tournament;
+    const result = generatePreliminaryFinalStage(tournament);
+    if (!result.ok) return result;
+    finalizeTournamentMutation(tournament, "view");
+    return result;
+  }
+
+
+  function saveActiveQualificationResolution(orderedParticipantIds, reason) {
+    const tournament = state.store.tournament;
+    const result = recordPreliminaryQualificationResolution(tournament, orderedParticipantIds, reason);
+    if (!result.ok) return result;
+    finalizeTournamentMutation(tournament, "view");
+    return result;
+  }
+
+
+  function resetActivePreliminaryMatchForCorrection(matchId) {
+    const tournament = state.store.tournament;
+    const result = resetPreliminaryMatchForCorrection(tournament, matchId);
+    if (!result.ok) return result;
+    finalizeTournamentMutation(tournament, "matches");
+    return result;
+  }
+
+
   function importTournamentPayload(rawObject) {
     if (!rawObject || typeof rawObject !== "object") {
       return { ok: false, message: "JSON ist leer oder ungültig." };
@@ -7658,6 +8482,19 @@
     let tournament = rawObject.tournament || null;
     if (!tournament && rawObject.mode && rawObject.participants) {
       tournament = rawObject;
+    }
+    if (tournament?.mode === "preliminary_final") {
+      const participantCount = Array.isArray(tournament.participants) ? tournament.participants.length : 0;
+      const scheduleValidation = validatePreliminaryScheduleConfig(participantCount, tournament?.preliminary?.matchesPerParticipant);
+      const scoringValidation = validatePreliminaryScoring(tournament?.preliminary?.scoring);
+      const qualifierCount = Number(tournament?.finalStage?.qualifierCount);
+      const finalBestOf = Number(tournament?.finalStage?.bestOfLegs);
+      const finalTypeValid = FINAL_STAGE_TYPES.includes(tournament?.finalStage?.type);
+      if (!scheduleValidation.ok) return { ok: false, reasonCode: scheduleValidation.reasonCode, message: scheduleValidation.message };
+      if (!scoringValidation.ok) return { ok: false, reasonCode: scoringValidation.reasonCode, message: scoringValidation.message };
+      if (!finalTypeValid) return { ok: false, reasonCode: "final_stage_type_invalid", message: "Ung\u00fcltiger Finalphasentyp im Import." };
+      if (!Number.isInteger(qualifierCount) || qualifierCount < 2 || qualifierCount > participantCount) return { ok: false, reasonCode: "final_stage_qualifier_count_invalid", message: "Ung\u00fcltige Qualifikantenzahl im Import." };
+      if (!Number.isInteger(finalBestOf) || finalBestOf < 1 || finalBestOf > 21 || finalBestOf % 2 === 0) return { ok: false, reasonCode: "final_stage_best_of_invalid", message: "Ung\u00fcltiges Finalphasen-Best-of im Import." };
     }
 
     const normalizedTournament = normalizeTournament(
@@ -7746,7 +8583,7 @@
 // App layer: runtime orchestration, persistence scheduling and user feedback.
 
   function compareMatchesByRound(left, right) {
-    const stageOrder = { group: 1, league: 2, ko: 3 };
+    const stageOrder = { preliminary: 1, group: 1, league: 2, ko: 3 };
     const leftOrder = stageOrder[left.stage] || 99;
     const rightOrder = stageOrder[right.stage] || 99;
     if (leftOrder !== rightOrder) {
@@ -7852,7 +8689,7 @@
 
   function queueBracketRender(forceReload = false) {
     const tournament = state.store.tournament;
-    if (!tournament || (tournament.mode !== "ko" && tournament.mode !== "double_ko" && tournament.mode !== "groups_ko")) {
+    if (!tournament || (tournament.mode !== "ko" && tournament.mode !== "double_ko" && tournament.mode !== "groups_ko" && tournament.mode !== "preliminary_final")) {
       return;
     }
     const frame = resolveBracketFrameElement(state.shadowRoot);
@@ -8219,6 +9056,99 @@
       }
     }
 
+    {
+      const previousTournament = state.store.tournament;
+      const previousDraft = cloneSerializable(state.store.ui?.createDraft);
+      const previousActiveTab = state.activeTab;
+      const previousStoredActiveTab = state.store.ui.activeTab;
+      const participantNames = Array.from({ length: 7 }, (_, index) => `UI Spieler ${index + 1}`).join("\n");
+      try {
+        ["ko", "double_ko", "league", "groups_ko"].forEach((sourceMode) => {
+          state.store.tournament = null;
+          state.activeTab = "tournament";
+          state.store.ui.activeTab = "tournament";
+          state.store.ui.createDraft = normalizeCreateDraft({
+            ...createDefaultCreateDraft(state.store.settings),
+            name: `UI Default ${sourceMode}`,
+            mode: sourceMode,
+            participantsText: participantNames,
+          }, state.store.settings);
+          renderShell();
+          const createForm = state.shadowRoot?.getElementById("ata-create-form");
+          const modeSelect = createForm?.querySelector("#ata-mode");
+          if (!(createForm instanceof HTMLFormElement) || !(modeSelect instanceof HTMLSelectElement)) {
+            throw new Error(`Create form fehlt f\u00fcr ${sourceMode}.`);
+          }
+          modeSelect.value = "preliminary_final";
+          modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+          const draft = normalizeCreateDraft(readCreateDraftInput(new FormData(createForm)), state.store.settings);
+          const summaryText = normalizeText(createForm.querySelector("[data-role='preliminary-live-summary']")?.textContent || "");
+          const defaultsOk = draft.mode === "preliminary_final"
+            && draft.preliminaryMatchesPerParticipant === 4
+            && draft.preliminaryWinPoints === 2
+            && draft.preliminaryDrawPoints === 1
+            && draft.preliminaryLossPoints === 0
+            && draft.finalStageType === "ko"
+            && draft.finalStageQualifierCount === 4
+            && draft.finalStageBestOfLegs === 5;
+          const summaryOk = summaryText.includes("7 Teilnehmer")
+            && summaryText.includes("4 Vorrundenspiele je Teilnehmer")
+            && summaryText.includes("14 Vorrundenmatches insgesamt")
+            && summaryText.includes("exakt 4 verschiedene Gegner")
+            && summaryText.includes("Keine doppelte Paarung")
+            && summaryText.includes("Top 4 qualifizieren sich f\u00fcr KO");
+
+          createForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+          const created = state.store.tournament;
+          const preliminaryMatches = getPreliminaryMatches(created);
+          const opponentsByParticipant = new Map((created?.participants || []).map((participant) => [participant.id, new Set()]));
+          preliminaryMatches.forEach((match) => {
+            opponentsByParticipant.get(match.player1Id)?.add(match.player2Id);
+            opponentsByParticipant.get(match.player2Id)?.add(match.player1Id);
+          });
+          const creationOk = created?.mode === "preliminary_final"
+            && preliminaryMatches.length === 14
+            && Array.from(opponentsByParticipant.values()).every((opponents) => opponents.size === 4)
+            && created?.finalStage?.qualifierCount === 4;
+          record(
+            `Preliminary UI defaults: ${sourceMode} -> preliminary_final`,
+            defaultsOk && summaryOk && creationOk,
+            `defaults=${defaultsOk}, summary=${summaryOk}, created=${creationOk}, matches=${preliminaryMatches.length}`,
+          );
+        });
+
+        state.store.tournament = null;
+        state.activeTab = "tournament";
+        state.store.ui.activeTab = "tournament";
+        state.store.ui.createDraft = normalizeCreateDraft({
+          ...createDefaultCreateDraft(state.store.settings),
+          name: "UI 7 durch 5",
+          mode: "preliminary_final",
+          participantsText: participantNames,
+          preliminaryMatchesPerParticipant: 5,
+        }, state.store.settings);
+        renderShell();
+        const invalidForm = state.shadowRoot?.getElementById("ata-create-form");
+        if (!(invalidForm instanceof HTMLFormElement)) throw new Error("Create form f\u00fcr 7/5 fehlt.");
+        const invalidSummary = normalizeText(invalidForm.querySelector("[data-role='preliminary-live-summary']")?.textContent || "");
+        invalidForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        record(
+          "Preliminary UI validation: 7 Teilnehmer / 5 Spiele wird blockiert",
+          state.store.tournament === null && invalidSummary.includes("gleiche Verteilung"),
+          `blocked=${state.store.tournament === null}, summary=${invalidSummary}`,
+        );
+      } catch (error) {
+        record("Preliminary UI defaults: realer Moduswechsel- und Anlageflow", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+        state.store.ui.createDraft = previousDraft || createDefaultCreateDraft(state.store.settings);
+        state.activeTab = previousActiveTab;
+        state.store.ui.activeTab = previousStoredActiveTab;
+        renderShell();
+      }
+    }
+
     try {
       const tournament = createTournament({
         name: "PayloadMapping",
@@ -8279,6 +9209,33 @@
       );
     } catch (error) {
       record("Bull-off Off: Matchstart-Payload setzt top-level bullOffMode + bullMode", false, String(error?.message || error));
+    }
+
+    try {
+      const tournament = createTournament({
+        name: "FixedLegsSafety",
+        mode: "preliminary_final",
+        preliminaryMatchesPerParticipant: 4,
+        preliminaryScoring: { win: 2, draw: 1, loss: 0 },
+        finalStageType: "ko",
+        finalStageQualifierCount: 4,
+        finalStageBestOfLegs: 5,
+        participants: participantList(5, "FL"),
+      });
+      const match = tournament.matches.find((entry) => entry.stage === MATCH_STAGE_PRELIMINARY);
+      let reasonCode = "";
+      try {
+        buildLobbyCreatePayload(tournament, match);
+      } catch (error) {
+        reasonCode = normalizeText(error?.reasonCode);
+      }
+      record(
+        "Fixed 2 Legs: API-Start wird ohne exakte Abbildung explizit gesperrt",
+        reasonCode === "fixed_legs_api_unsupported",
+        `reasonCode=${reasonCode || "-"}`,
+      );
+    } catch (error) {
+      record("Fixed 2 Legs: API-Start wird ohne exakte Abbildung explizit gesperrt", false, String(error?.message || error));
     }
 
     try {
@@ -9347,15 +10304,15 @@
       };
       const migrated = migrateStorage(rawStoreV2);
       record(
-        "Migration: v2 -> v4 setzt Tie-Break-Profil",
-        migrated.schemaVersion === 4
+        "Migration: v2 -> v5 setzt Tie-Break-Profil",
+        migrated.schemaVersion === 5
           && migrated.tournament?.rules?.tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE
           && migrated.settings?.tournamentTimeProfile === TOURNAMENT_TIME_PROFILE_NORMAL
           && migrated.settings?.featureFlags?.koDrawLockDefault === true,
         `schema=${migrated.schemaVersion}, profile=${migrated.tournament?.rules?.tieBreakProfile}`,
       );
     } catch (error) {
-      record("Migration: v2 -> v4 setzt Tie-Break-Profil", false, String(error?.message || error));
+      record("Migration: v2 -> v5 setzt Tie-Break-Profil", false, String(error?.message || error));
     }
 
     const passed = results.filter((entry) => entry.ok).length;
@@ -10612,8 +11569,11 @@
   }
 
 
-  function buildLobbyCreatePayload(tournament) {
-    const legsToWin = getLegsToWin(tournament.bestOfLegs);
+  function buildLobbyCreatePayload(tournament, match = null) {
+    if (isFixedLegsPreliminaryMatch(tournament, match) || (tournament?.mode === "preliminary_final" && !match)) {
+      throw Object.assign(new Error("Zwei feste Legs k\u00f6nnen nicht exakt als AutoDarts-First-to-N-Lobby gestartet werden."), { reasonCode: "fixed_legs_api_unsupported" });
+    }
+    const legsToWin = getLegsToWin(getMatchBestOfLegs(tournament, match));
     const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
     const bullOffMode = sanitizeX01BullOffMode(x01Settings.bullOffMode);
     const settings = {
@@ -10997,6 +11957,14 @@
         title: "\u00d6ffnet das bereits gestartete Match.",
       };
     }
+    if (isFixedLegsPreliminaryMatch(tournament, match)) {
+      return {
+        label: "Manuell erfassen",
+        disabled: true,
+        reasonCode: "fixed_legs_api_unsupported",
+        title: "API-Start gesperrt: AutoDarts bildet zwei feste Legs mit geregeltem Anwurf derzeit nicht exakt ab.",
+      };
+    }
 
     if (!state.store.settings.featureFlags.autoLobbyStart) {
       return {
@@ -11104,6 +12072,10 @@
     if (!match) {
       setNotice("error", "Match nicht gefunden.");
       return;
+    }
+    if (isFixedLegsPreliminaryMatch(tournament, match)) {
+      setNotice("error", "API-Start gesperrt: Zwei feste Legs werden nicht durch First to 2 oder Best of 3 angen\u00e4hert.");
+      return { ok: false, reasonCode: "fixed_legs_api_unsupported" };
     }
 
     const auto = ensureMatchAutoMeta(match);
@@ -11331,7 +12303,7 @@
       return;
     }
 
-    const initialLobbyPayload = buildLobbyCreatePayload(tournament);
+    const initialLobbyPayload = buildLobbyCreatePayload(tournament, match);
     if (debugSession) {
       debugSession.context.initialPayload = cloneSerializable(initialLobbyPayload) || {};
     }
@@ -13619,7 +14591,7 @@
           <header class="ata-header">
             <div class="ata-title-wrap">
               <h2>Turnier Assistent</h2>
-              <p>Lokales Management f\u00fcr KO, Liga und Gruppenphase <span class="ata-version">v${escapeHtml(APP_VERSION)}</span></p>
+              <p>Lokales Management f\u00fcr KO, Liga, Gruppen- und Vorrundenformate <span class="ata-version">v${escapeHtml(APP_VERSION)}</span></p>
             </div>
             <button type="button" class="ata-close-btn" data-action="close-drawer" aria-label="Schlie\u00dfen">Schlie\u00dfen</button>
           </header>
@@ -13690,6 +14662,55 @@
         ${twoPlayerWarning}
         ${acknowledgementHtml}
         <p class="ata-small ata-create-help" data-role="groups-ko-format-scope">Unterstützt werden genau zwei Gruppen mit vollständigem Round Robin und Top 2 je Gruppe. Andere offizielle Formate werden nicht automatisch angenähert.</p>
+      </section>
+    `;
+  }
+
+
+  function renderPreliminaryFinalFields(draft) {
+    if (draft?.mode !== "preliminary_final") return "";
+    const participants = parseParticipantLines(draft.participantsText);
+    const participantIds = participants.map((participant) => participant.id);
+    const analysis = analyzePreliminaryFinalConfiguration(
+      participantIds,
+      draft.preliminaryMatchesPerParticipant,
+      draft.finalStageType,
+      draft.finalStageQualifierCount,
+    );
+    const allowedText = analysis.allowedMatchCounts?.length ? analysis.allowedMatchCounts.join(" oder ") : "keine";
+    const summary = analysis.ok
+      ? `<div class="ata-meta-block" data-role="preliminary-live-summary">
+          <div class="ata-meta-heading">Live-Zusammenfassung</div>
+          <p>${analysis.participantCount} Teilnehmer</p>
+          <p>${analysis.matchCount} Vorrundenspiele je Teilnehmer</p>
+          <p>${analysis.totalMatches} Vorrundenmatches insgesamt</p>
+          <p>Jeder Teilnehmer hat exakt ${analysis.matchCount} verschiedene Gegner</p>
+          <p>Keine doppelte Paarung</p>
+          <p>${analysis.scheduleRoundCount} Scheduling-Runden</p>
+          <p>Top ${analysis.qualifierCount} qualifizieren sich f\u00fcr ${escapeHtml(analysis.finalStageLabel)}</p>
+        </div>`
+      : `<div class="ata-meta-block" data-role="preliminary-live-summary"><p><strong>Konfiguration nicht zul\u00e4ssig:</strong> ${escapeHtml(analysis.message)}</p><p>Zul\u00e4ssig innerhalb 4\u20138: ${escapeHtml(allowedText)}.</p></div>`;
+    return `
+      <section data-role="preliminary-final-fields">
+        <div class="ata-grid-3 ata-grid-3-tight">
+          <div class="ata-field">
+            <label for="ata-preliminary-match-count">Vorrundenspiele je Teilnehmer</label>
+            <input id="ata-preliminary-match-count" name="preliminaryMatchesPerParticipant" type="number" min="4" max="8" step="1" value="${draft.preliminaryMatchesPerParticipant}">
+            <p class="ata-small ata-create-help">Dies ist die Zahl real gespielter Matches je Teilnehmer, nicht die Zahl zeitlicher Scheduling-Runden.</p>
+          </div>
+          <div class="ata-field ata-field-span-3">
+            <label>Vorrundenformat</label>
+            <span class="ata-field-readonly">2 Legs fest \u2013 beide Legs werden gespielt, 1:1 m\u00f6glich</span>
+          </div>
+          <div class="ata-field"><label for="ata-preliminary-win-points">Punkte f\u00fcr Sieg</label><input id="ata-preliminary-win-points" name="preliminaryWinPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryWinPoints}"></div>
+          <div class="ata-field"><label for="ata-preliminary-draw-points">Punkte f\u00fcr Unentschieden</label><input id="ata-preliminary-draw-points" name="preliminaryDrawPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryDrawPoints}"></div>
+          <div class="ata-field"><label for="ata-preliminary-loss-points">Punkte f\u00fcr Niederlage</label><input id="ata-preliminary-loss-points" name="preliminaryLossPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryLossPoints}"></div>
+          <div class="ata-field"><label for="ata-final-stage-type">Finalphase</label><select id="ata-final-stage-type" name="finalStageType"><option value="ko" ${draft.finalStageType === "ko" ? "selected" : ""}>KO</option><option value="double_ko" ${draft.finalStageType === "double_ko" ? "selected" : ""}>Doppel-KO</option></select></div>
+          <div class="ata-field"><label for="ata-final-stage-qualifiers">Anzahl Qualifikanten</label><input id="ata-final-stage-qualifiers" name="finalStageQualifierCount" type="number" min="2" max="${Math.max(2, participants.length)}" step="1" value="${draft.finalStageQualifierCount}"></div>
+          <div class="ata-field"><label for="ata-final-stage-bestof">Best of Legs der Finalphase</label><input id="ata-final-stage-bestof" name="finalStageBestOfLegs" type="number" min="1" max="21" step="2" value="${draft.finalStageBestOfLegs}"></div>
+        </div>
+        ${summary}
+        <p class="ata-small ata-create-help">Veranstalterprofil: Punkte, Leg-Differenz, Legs gewonnen. Keine allgemeine DRA-, PDC-, WDF- oder Verbandskonformit\u00e4t wird behauptet.</p>
       </section>
     `;
   }
@@ -13795,9 +14816,10 @@
                       <option value="double_ko" ${draft.mode === "double_ko" ? "selected" : ""}>Doppel-KO</option>
                       <option value="league" ${draft.mode === "league" ? "selected" : ""}>Liga</option>
                       <option value="groups_ko" ${draft.mode === "groups_ko" ? "selected" : ""}>Gruppenphase + KO</option>
+                      <option value="preliminary_final" ${draft.mode === "preliminary_final" ? "selected" : ""}>Vorrunde + Finalphase</option>
                     </select>
                   </div>
-                  <div class="ata-field">
+                  <div class="ata-field" data-role="standard-bestof-field">
                     <label for="ata-bestof">Best of Legs</label>
                     <input id="ata-bestof" name="bestOfLegs" type="number" min="1" max="21" step="2" value="${draft.bestOfLegs}">
                   </div>
@@ -13870,21 +14892,22 @@
                 <div id="ata-groups-ko-odd-policy-host">
                   ${renderGroupsKoOddParticipantPolicyFields(draft)}
                 </div>
-                <div class="ata-toggle ata-toggle-compact">
+                <div id="ata-preliminary-final-fields-host">${renderPreliminaryFinalFields(draft)}</div>
+                <div class="ata-toggle ata-toggle-compact" data-role="ko-draw-field">
                   <div>
                     <strong>KO-Erstrunde zuf\u00e4llig mischen ${drawHelpLinks}</strong>
                     <div class="ata-small">Open Draw bei aktivem Schalter, sonst gesetzter Draw.</div>
                   </div>
                   <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
                 </div>
-                <div class="ata-toggle ata-toggle-compact">
+                <div class="ata-toggle ata-toggle-compact" data-role="third-place-field">
                   <div>
                     <strong>Spiel um Platz 3 (optional)</strong>
                     <div class="ata-small">Nur im KO-Modus: Halbfinal-Verlierer spielen um Platz 3. Ohne Option bleibt klassischer Single-Elimination-Baum.</div>
                   </div>
                   <input id="ata-enable-third-place" name="enableThirdPlaceMatch" type="checkbox" ${thirdPlaceChecked}>
                 </div>
-                <div class="ata-field">
+                <div class="ata-field" data-role="grand-final-field">
                   <label for="ata-grand-final-reset-mode">Doppel-KO Grand Final</label>
                   <select id="ata-grand-final-reset-mode" name="grandFinalResetMode">
                     <option value="${GRAND_FINAL_RESET_IF_NEEDED}" ${grandFinalResetMode === GRAND_FINAL_RESET_IF_NEEDED ? "selected" : ""}>Reset-Finale falls nötig (empfohlen)</option>
@@ -13922,7 +14945,7 @@
                     </select>
                   </div>
                 </div>
-                <p class="ata-small">Boards + Zeitprofil steuern die Planung. Parallelisierung berücksichtigt Match-Abhängigkeiten und blockierte Spieler-Slots.</p>
+                <p class="ata-small">Die Board-Zahl ist ausschließlich ein Kapazitätsparameter der Turnierzeitprognose. Es werden keine Boards oder parallelen Lobbys verwaltet.</p>
                 <div id="ata-create-duration-estimate">
                   ${renderTournamentDurationEstimate(durationEstimate, { visible: durationEstimateVisible })}
                 </div>
@@ -13945,7 +14968,9 @@
         ? "Doppel-KO (Double Elimination)"
       : tournament.mode === "league"
         ? "Liga (Round Robin)"
-        : "Gruppenphase + KO (Round Robin + Straight Knockout)";
+        : tournament.mode === "groups_ko"
+          ? "Gruppenphase + KO (Round Robin + Straight Knockout)"
+          : "Vorrunde + Finalphase";
 
     const participantsHtml = tournament.participants.map((participant) => (
       `<span class="ata-player-chip">${escapeHtml(participant.name)}</span>`
@@ -13957,7 +14982,7 @@
     const x01BullModeLabel = x01Settings.bullOffMode === "Off"
       ? "Bull-Modus deaktiviert"
       : `Bull-Modus ${x01Settings.bullMode}`;
-    const legsToWin = getLegsToWin(tournament.bestOfLegs);
+    const legsToWin = getLegsToWin(tournament.mode === "preliminary_final" ? tournament.finalStage.bestOfLegs : tournament.bestOfLegs);
     const drawMode = normalizeKoDrawMode(tournament?.ko?.drawMode, KO_DRAW_MODE_SEEDED);
     const drawModeLabel = drawMode === KO_DRAW_MODE_OPEN_DRAW ? "Open Draw" : "Gesetzter Draw";
     const drawLockLabel = tournament?.ko?.drawLocked !== false ? "Draw-Lock aktiv" : "Draw-Lock aus";
@@ -13968,8 +14993,17 @@
       ? "Grand Final: Reset falls nötig"
       : "Grand Final: Einzelmatch";
     const primaryTags = [
-      { text: `Best of ${tournament.bestOfLegs} Legs`, cls: "ata-info-tag ata-info-tag-key" },
-      { text: `First to ${legsToWin} Legs`, cls: "ata-info-tag" },
+      ...(tournament.mode === "preliminary_final"
+        ? [
+          { text: `${tournament.preliminary.matchesPerParticipant} Vorrundenspiele je Teilnehmer`, cls: "ata-info-tag ata-info-tag-key" },
+          { text: "2 Legs fest (1:1 m\u00f6glich)", cls: "ata-info-tag" },
+          { text: `Top ${tournament.finalStage.qualifierCount} \u2192 ${tournament.finalStage.type === "double_ko" ? "Doppel-KO" : "KO"}`, cls: "ata-info-tag" },
+          { text: `Finalphase Best of ${tournament.finalStage.bestOfLegs}`, cls: "ata-info-tag" },
+        ]
+        : [
+          { text: `Best of ${tournament.bestOfLegs} Legs`, cls: "ata-info-tag ata-info-tag-key" },
+          { text: `First to ${legsToWin} Legs`, cls: "ata-info-tag" },
+        ]),
       { text: `Startpunkte ${tournament.startScore}`, cls: "ata-info-tag" },
       ...(tournament.mode === "ko" || tournament.mode === "double_ko"
         ? [
@@ -14073,7 +15107,6 @@
     ];
 
     const matches = sortMatchesForDisplay(tournament, sortMode);
-    const legsToWin = getLegsToWin(tournament.bestOfLegs);
     const suggestedNextMatch = findSuggestedNextMatch(tournament);
     const suggestedNextMatchId = suggestedNextMatch?.id || "";
     const koFinalRound = getMatchesByStage(tournament, MATCH_STAGE_KO).reduce((maxRound, koMatch) => {
@@ -14094,6 +15127,8 @@
       const editable = playability.editable;
       const auto = ensureMatchAutoMeta(match);
       const isCompleted = match.status === STATUS_COMPLETED;
+      const isFixedPreliminary = isFixedLegsPreliminaryMatch(tournament, match);
+      const matchLegsToWin = getLegsToWin(getMatchBestOfLegs(tournament, match));
       const isByeCompletion = isCompleted && isByeMatchResult(match);
       const isAutoStarted = match.status === STATUS_PENDING && auto.status === "started" && Boolean(auto.lobbyId);
       const isBlockedPending = match.status === STATUS_PENDING && !editable;
@@ -14102,7 +15137,8 @@
       const isThirdPlaceMatch = normalizeText(match?.meta?.bracket?.matchRole || "") === "third_place";
       const bracketSide = normalizeText(match?.meta?.bracket?.bracketSide || "");
       const sectionRound = clampInt(match?.meta?.bracket?.sectionRound, match.round, 1, 64);
-      const isDoubleKo = tournament.mode === "double_ko";
+      const isDoubleKo = tournament.mode === "double_ko"
+        || (tournament.mode === "preliminary_final" && tournament?.finalStage?.type === FINAL_STAGE_TYPE_DOUBLE_KO);
       const isGrandFinal = isDoubleKo && bracketSide === "finals" && sectionRound === 1;
       const isResetFinal = isDoubleKo && bracketSide === "finals" && sectionRound === 2;
       const isKoFinal = match.stage === MATCH_STAGE_KO
@@ -14117,6 +15153,8 @@
         ? `Gruppe ${match.groupId || "?"}`
         : match.stage === MATCH_STAGE_LEAGUE
           ? "Liga (Round Robin)"
+          : match.stage === MATCH_STAGE_PRELIMINARY
+            ? "Vorrunde"
           : isDoubleKo
             ? (bracketSide === "losers"
               ? "Losers Bracket"
@@ -14158,9 +15196,9 @@
           : match.stage === MATCH_STAGE_KO
             ? `KO-Phase = ${koRoundLabel} bzw. bei großen Feldern Letzte N, Spiel = Paarung innerhalb dieser Phase.`
             : "Runde = Turnierrunde, Spiel = Paarung innerhalb dieser Runde.";
-      const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
-      const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${legsToWin} Legs f\u00fcr den Matchgewinn.`;
-      const saveHelpText = `Speichert Legs f\u00fcr ${player1} vs ${player2}. Sieger wird automatisch aus den Legs bestimmt. Sieger muss ${legsToWin} Legs erreichen.`;
+      const legsP1HelpText = `Hier die Anzahl gewonnener Legs von ${player1} eintragen (nicht Punkte pro Wurf). Ziel: ${matchLegsToWin} Legs f\u00fcr den Matchgewinn.`;
+      const legsP2HelpText = `Hier die Anzahl gewonnener Legs von ${player2} eintragen (nicht Punkte pro Wurf). Ziel: ${matchLegsToWin} Legs f\u00fcr den Matchgewinn.`;
+      const saveHelpText = `Speichert Legs f\u00fcr ${player1} vs ${player2}. Sieger wird automatisch aus den Legs bestimmt. Sieger muss ${matchLegsToWin} Legs erreichen.`;
       const rowClasses = [
         "ata-match-card",
         isCompleted ? "ata-row-completed" : "",
@@ -14184,7 +15222,7 @@
             ? `Champion: ${winner} (${match.legs.p1}:${match.legs.p2})`
             : (isThirdPlaceMatch
               ? `Platz 3: ${winner} (${match.legs.p1}:${match.legs.p2})`
-              : `Sieger: ${winner} (${match.legs.p1}:${match.legs.p2})`)))
+              : (match.winnerId ? `Sieger: ${winner} (${match.legs.p1}:${match.legs.p2})` : `Unentschieden: ${match.legs.p1}:${match.legs.p2}`))))
         : "";
       const advanceClasses = [
         "ata-match-advance-pill",
@@ -14214,14 +15252,21 @@
       const player1PairingHtml = buildPairingPlayerHtml(player1, match.player1Id);
       const player2PairingHtml = buildPairingPlayerHtml(player2, match.player2Id);
 
-      const editorHtml = editable
+      const fixedEntries = Array.isArray(match?.meta?.fixedLegs?.entries) ? match.meta.fixedLegs.entries : [];
+      const fixedWinnerForLeg = (legIndex) => fixedEntries.find((entry) => entry.legIndex === legIndex)?.winnerId || "";
+      const fixedEditorHtml = editable && isFixedPreliminary
+        ? `<div class="ata-match-editor"><div class="ata-grid-2">
+            ${[1, 2].map((legIndex) => `<div class="ata-field"><label>Leg ${legIndex} gewonnen von</label><select data-field="fixed-leg-${legIndex}" data-match-id="${escapeHtml(match.id)}"><option value="">Noch offen</option><option value="${escapeHtml(match.player1Id)}" ${fixedWinnerForLeg(legIndex) === match.player1Id ? "selected" : ""}>${escapeHtml(player1)}</option><option value="${escapeHtml(match.player2Id)}" ${fixedWinnerForLeg(legIndex) === match.player2Id ? "selected" : ""}>${escapeHtml(player2)}</option></select></div>`).join("")}
+          </div><div class="ata-editor-actions"><button type="button" class="ata-btn" data-action="save-fixed-match" data-match-id="${escapeHtml(match.id)}">Leg-Stand speichern</button><button type="button" class="ata-btn ata-btn-primary" disabled title="API-Start gesperrt: keine exakte Fixed-2-Legs-Abbildung.">Manuell erfassen</button></div></div>`
+        : "";
+      const regularEditorHtml = editable && !isFixedPreliminary
         ? `
           <div class="ata-match-editor">
             <div class="ata-score-grid">
               <input
                 type="number"
                 min="0"
-                max="${legsToWin}"
+                max="${matchLegsToWin}"
                 data-field="legs-p1"
                 data-match-id="${escapeHtml(match.id)}"
                 value="${match.legs.p1}"
@@ -14231,7 +15276,7 @@
               <input
                 type="number"
                 min="0"
-                max="${legsToWin}"
+                max="${matchLegsToWin}"
                 data-field="legs-p2"
                 data-match-id="${escapeHtml(match.id)}"
                 value="${match.legs.p2}"
@@ -14246,6 +15291,10 @@
           </div>
         `
         : "";
+      const correctionHtml = isCompleted && isFixedPreliminary && tournament?.finalStage?.status !== "started" && tournament?.finalStage?.status !== "completed"
+        ? `<div class="ata-editor-actions"><button type="button" class="ata-btn" data-action="correct-preliminary-match" data-match-id="${escapeHtml(match.id)}">Vorrundenergebnis korrigieren</button></div>`
+        : "";
+      const editorHtml = fixedEditorHtml || regularEditorHtml;
 
       const summaryHtml = summaryText
         ? `<span class="${escapeHtml(advanceClasses)}">${escapeHtml(summaryText)}</span>`
@@ -14277,6 +15326,7 @@
             ${summaryHtml}
           </div>
           ${editorHtml}
+          ${correctionHtml}
           ${statusLineHtml}
         </article>
       `;
@@ -14323,7 +15373,7 @@
         <td>${row.draws || 0}</td>
         <td>${row.losses}</td>
         <td>${row.points}</td>
-        <td>${row.legDiff}</td>
+        <td>${row.legDifference ?? row.legDiff}</td>
         <td>${row.legsFor}</td>
         <td>${row.tiebreakState === "playoff_required" ? "Playoff" : "-"}</td>
       </tr>
@@ -14397,7 +15447,8 @@
     return matches
       .sort((a, b) => a.number - b.number)
       .map((match) => {
-        const isCompleted = isCompletedMatchResultValid(tournament, match);
+        const isCompleted = match?.status === STATUS_COMPLETED
+          && isCompletedMatchResultValid(tournament, match);
         const isBye = isCompleted && isByeMatchResult(match);
         const player1Name = participantNameById(tournament, match.player1Id);
         const player2Name = participantNameById(tournament, match.player2Id);
@@ -14450,7 +15501,7 @@
       return `<p class="ata-small">Kein KO-Turnierbaum vorhanden.</p>`;
     }
 
-    if (tournament?.mode === "double_ko") {
+    if (tournament?.mode === "double_ko" || (tournament?.mode === "preliminary_final" && tournament?.finalStage?.type === "double_ko")) {
       const sections = [
         { side: "winners", title: "Winners Bracket" },
         { side: "losers", title: "Losers Bracket" },
@@ -14522,7 +15573,32 @@
     let html = "";
     const fallbackVisible = state.bracket.failed ? "1" : "0";
 
-    if (tournament.mode === "league") {
+    if (tournament.mode === "preliminary_final") {
+      const rows = buildPreliminaryStandings(tournament);
+      html += renderStandingsTable(rows, "Vorrundentabelle");
+      html += `<section class="ata-card tournamentCard"><h3>Qualifikation und Finalphase</h3><p class="ata-small">Veranstalterprofil: Punkte, Leg-Differenz, Legs gewonnen. Direktvergleich wird nicht automatisch verwendet.</p>`;
+      if (!isPreliminaryComplete(tournament)) {
+        const remaining = getPreliminaryMatches(tournament).filter((match) => match.status !== STATUS_COMPLETED).length;
+        html += `<p>Noch ${remaining} Vorrundenmatches offen. Die Finalphase bleibt gesperrt.</p>`;
+      } else {
+        const qualification = analyzePreliminaryQualification(tournament);
+        if (!qualification.ok) {
+          const currentOrder = qualification.rows.map((row) => row.id);
+          html += `<p><strong>Playoff/Veranstalterentscheidung erforderlich:</strong> ${escapeHtml(qualification.message)}</p>
+            <div class="ata-table-wrap"><table class="ata-table"><thead><tr><th>Reihenfolge</th><th>Teilnehmer</th></tr></thead><tbody>${qualification.rows.map((row, index) => `<tr><td><input type="number" min="1" max="${qualification.rows.length}" value="${index + 1}" data-field="qualification-order" data-participant-id="${escapeHtml(row.id)}"></td><td>${escapeHtml(row.name)}</td></tr>`).join("")}</tbody></table></div>
+            <div class="ata-field"><label for="ata-qualification-reason">Begr\u00fcndung der Veranstalterentscheidung</label><input id="ata-qualification-reason" type="text" placeholder="z. B. ausgespieltes Entscheidungsleg"></div>
+            <button type="button" class="ata-btn" data-action="save-qualification-resolution">Reihenfolge best\u00e4tigen</button>`;
+        } else if (!getMatchesByStage(tournament, MATCH_STAGE_KO).length) {
+          const resolvedNote = tournament?.finalStage?.qualificationResolution
+            ? `<p>Gespeicherte Veranstalterentscheidung: ${escapeHtml(tournament.finalStage.qualificationResolution.reason)}</p>`
+            : "";
+          html += `${resolvedNote}<p>Top ${tournament.finalStage.qualifierCount} sind eindeutig gesetzt.</p><button type="button" class="ata-btn ata-btn-primary" data-action="generate-final-stage">${tournament.finalStage.generatedAt ? "Finalphase regenerieren" : "Finalphase erzeugen"}</button>`;
+        } else {
+          html += `<p>Finalphase ${escapeHtml(tournament.finalStage.status)}. Setzung: ${tournament.finalStage.seeding.map((id, index) => `${index + 1}. ${participantNameById(tournament, id)}`).map(escapeHtml).join(" · ")}</p>`;
+        }
+      }
+      html += `</section>`;
+    } else if (tournament.mode === "league") {
       const standings = standingsForMatches(tournament, getMatchesByStage(tournament, MATCH_STAGE_LEAGUE));
       html += renderStandingsTable(standings, "Liga-Tabelle", [
         { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
@@ -14556,7 +15632,7 @@
       }
     }
 
-    if (tournament.mode === "ko" || tournament.mode === "double_ko" || tournament.mode === "groups_ko") {
+    if (tournament.mode === "ko" || tournament.mode === "double_ko" || tournament.mode === "groups_ko" || (tournament.mode === "preliminary_final" && getMatchesByStage(tournament, MATCH_STAGE_KO).length)) {
       html += `
         <section class="ata-card tournamentCard">
           ${renderSectionHeading("KO-Turnierbaum", [
@@ -14769,7 +15845,7 @@
         <div class="ata-toggle">
           <div>
             <strong>KO-Erstrunde zuf\u00e4llig mischen (Standard) ${koDrawHelpLinks}</strong>
-            <div class="ata-small">Standard: EIN. Neue KO-Turniere nutzen damit Open Draw (deterministische Auslosungsreihenfolge, PDC-konforme Freilose).</div>
+            <div class="ata-small">Standard: EIN. Neue KO-Turniere nutzen damit Open Draw. Freilose werden anhand des gespeicherten Seed-Placements deterministisch verteilt.</div>
           </div>
           <input type="checkbox" id="ata-setting-randomize-ko" data-action="toggle-randomize-ko" ${randomizeKoEnabled}>
         </div>
@@ -14786,7 +15862,7 @@
           { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erkl\u00e4rung zur Turnierzeit-Prognose \u00f6ffnen", title: "README: Turnier anlegen" },
           { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen-Dokumentation \u00f6ffnen", title: "README: Einstellungen" },
         ])}
-        <p class="ata-small">Zeitprofil und Board-Anzahl werden direkt im Tab <code>Turnier</code> neben der Prognose gesetzt, damit die Planung ohne Tab-Wechsel angepasst werden kann.</p>
+        <p class="ata-small">Zeitprofil und Board-Anzahl werden direkt im Tab <code>Turnier</code> neben der Prognose gesetzt. Die Board-Anzahl ist ausschließlich ein Kapazitätsparameter der Zeitprognose und keine Board- oder Lobbyverwaltung.</p>
         <p class="ata-small"><strong>Schnell:</strong> z\u00fcgige Abl\u00e4ufe. <strong>Normal:</strong> ausgewogener Standard. <strong>Langsam:</strong> konservativer f\u00fcr gemischte Felder und l\u00e4ngere Wechselzeiten.</p>
       </section>
       <section class="ata-card tournamentCard">
@@ -14982,6 +16058,7 @@
       syncCreateFormDependencies(createForm);
       refreshCreateFormDurationEstimate(createForm);
       refreshCreateFormGroupsKoPolicy(createForm);
+      refreshCreateFormPreliminaryFinal(createForm);
       const handleDraftInputChange = (event) => {
         const target = event?.target;
         const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
@@ -15005,6 +16082,18 @@
         updateCreateDraftFromForm(createForm, true);
         refreshCreateFormDurationEstimate(createForm);
         refreshCreateFormGroupsKoPolicy(createForm);
+        const preliminarySummaryFields = [
+          "preliminaryMatchesPerParticipant",
+          "finalStageType",
+          "finalStageQualifierCount",
+        ];
+        if (
+          fieldName === "mode"
+          || fieldName === "participants"
+          || (event.type === "change" && preliminarySummaryFields.includes(fieldName))
+        ) {
+          refreshCreateFormPreliminaryFinal(createForm);
+        }
       };
       createForm.addEventListener("input", handleDraftInputChange);
       createForm.addEventListener("change", handleDraftInputChange);
@@ -15091,6 +16180,16 @@
         }
       });
     });
+    shadow.querySelectorAll("[data-action='save-fixed-match']").forEach((button) => {
+      button.addEventListener("click", () => { const matchId = button.getAttribute("data-match-id"); if (matchId) handleSaveFixedLegResult(matchId); });
+    });
+    shadow.querySelectorAll("[data-action='correct-preliminary-match']").forEach((button) => {
+      button.addEventListener("click", () => { const matchId = button.getAttribute("data-match-id"); if (matchId) handleCorrectPreliminaryMatch(matchId); });
+    });
+    const generateFinalStageButton = shadow.querySelector("[data-action='generate-final-stage']");
+    if (generateFinalStageButton) generateFinalStageButton.addEventListener("click", handleGenerateFinalStage);
+    const saveQualificationButton = shadow.querySelector("[data-action='save-qualification-resolution']");
+    if (saveQualificationButton) saveQualificationButton.addEventListener("click", handleSaveQualificationResolution);
 
     shadow.querySelectorAll("[data-action='start-match']").forEach((button) => {
       button.addEventListener("click", () => {
@@ -15444,6 +16543,15 @@
     const bullModeSelect = form.querySelector("#ata-x01-bullmode");
     const modeSelect = form.querySelector("#ata-mode");
     const grandFinalSelect = form.querySelector("#ata-grand-final-reset-mode");
+    const mode = modeSelect instanceof HTMLSelectElement ? normalizeText(modeSelect.value) : "ko";
+    const toggleDisplay = (selector, visible) => {
+      const element = form.querySelector(selector);
+      if (element instanceof HTMLElement) element.style.display = visible ? "" : "none";
+    };
+    toggleDisplay("[data-role='standard-bestof-field']", mode !== "preliminary_final");
+    toggleDisplay("[data-role='ko-draw-field']", mode === "ko" || mode === "double_ko");
+    toggleDisplay("[data-role='third-place-field']", mode === "ko");
+    toggleDisplay("[data-role='grand-final-field']", mode === "double_ko");
     if (modeSelect instanceof HTMLSelectElement && grandFinalSelect instanceof HTMLSelectElement) {
       const grandFinalField = grandFinalSelect.closest(".ata-field");
       if (grandFinalField instanceof HTMLElement) {
@@ -15513,6 +16621,15 @@
   }
 
 
+  function refreshCreateFormPreliminaryFinal(form) {
+    if (!(form instanceof HTMLFormElement)) return;
+    const host = form.querySelector("#ata-preliminary-final-fields-host");
+    if (!(host instanceof HTMLElement)) return;
+    const draft = normalizeCreateDraft(readCreateDraftInput(new FormData(form)), state.store.settings);
+    host.innerHTML = renderPreliminaryFinalFields(draft);
+  }
+
+
   function applySelectedPresetToCreateForm(form) {
     if (!(form instanceof HTMLFormElement)) {
       return;
@@ -15556,6 +16673,7 @@
     updateCreateDraftFromForm(form, true);
     refreshCreateFormDurationEstimate(form);
     refreshCreateFormGroupsKoPolicy(form);
+    refreshCreateFormPreliminaryFinal(form);
     setNotice("info", `Preset „${preset.label}“ wurde auf alle Turnierfelder angewendet.`, 2600);
   }
 
@@ -15579,6 +16697,13 @@
       grandFinalResetMode: formData.get("grandFinalResetMode"),
       groupsKoOddParticipantPolicy: formData.get("groupsKoOddParticipantPolicy"),
       groupsKoOddParticipantAcknowledged: formData.get("groupsKoOddParticipantAcknowledged") !== null,
+      preliminaryMatchesPerParticipant: formData.get("preliminaryMatchesPerParticipant"),
+      preliminaryWinPoints: formData.get("preliminaryWinPoints"),
+      preliminaryDrawPoints: formData.get("preliminaryDrawPoints"),
+      preliminaryLossPoints: formData.get("preliminaryLossPoints"),
+      finalStageType: formData.get("finalStageType"),
+      finalStageQualifierCount: formData.get("finalStageQualifierCount"),
+      finalStageBestOfLegs: formData.get("finalStageBestOfLegs"),
     };
   }
 
@@ -15636,6 +16761,7 @@
     updateCreateDraftFromForm(form, true);
     refreshCreateFormDurationEstimate(form);
     refreshCreateFormGroupsKoPolicy(form);
+    refreshCreateFormPreliminaryFinal(form);
     setNotice("success", "Teilnehmer wurden zuf\u00e4llig gemischt.", 1800);
   }
 
@@ -15664,6 +16790,13 @@
       grandFinalResetMode: draft.grandFinalResetMode,
       groupsKoOddParticipantPolicy: draft.groupsKoOddParticipantPolicy,
       groupsKoOddParticipantAcknowledged: draft.groupsKoOddParticipantAcknowledged,
+      preliminaryMatchesPerParticipant: draft.preliminaryMatchesPerParticipant,
+      preliminaryWinPoints: draft.preliminaryWinPoints,
+      preliminaryDrawPoints: draft.preliminaryDrawPoints,
+      preliminaryLossPoints: draft.preliminaryLossPoints,
+      finalStageType: draft.finalStageType,
+      finalStageQualifierCount: draft.finalStageQualifierCount,
+      finalStageBestOfLegs: draft.finalStageBestOfLegs,
       koDrawLocked: state.store.settings.featureFlags.koDrawLockDefault !== false,
       participants,
     };
@@ -15728,6 +16861,63 @@
     } else {
       setNotice("error", result.message || "Match konnte nicht gespeichert werden.");
     }
+  }
+
+
+  function handleSaveFixedLegResult(matchId) {
+    const shadow = state.shadowRoot;
+    const leg1 = getMatchFieldElement(shadow, "fixed-leg-1", matchId);
+    const leg2 = getMatchFieldElement(shadow, "fixed-leg-2", matchId);
+    if (!(leg1 instanceof HTMLSelectElement) || !(leg2 instanceof HTMLSelectElement)) return;
+    const entries = [];
+    if (normalizeText(leg1.value)) entries.push({ legIndex: 1, winnerId: leg1.value });
+    if (normalizeText(leg2.value)) entries.push({ legIndex: 2, winnerId: leg2.value });
+    const result = updateFixedLegMatchResult(matchId, entries);
+    if (result.ok) setNotice("success", result.completed ? "Vorrundenmatch abgeschlossen." : "Zwischenstand nach Leg 1 gespeichert.", 2200);
+    else setNotice("error", result.message || "Fixed-Legs-Ergebnis konnte nicht gespeichert werden.");
+  }
+
+
+  function handleCorrectPreliminaryMatch(matchId) {
+    const tournament = state.store.tournament;
+    const hasGeneratedFinal = getMatchesByStage(tournament, MATCH_STAGE_KO).length > 0;
+    const message = hasGeneratedFinal
+      ? "Die erzeugte Finalphase wird verworfen und muss nach der Korrektur explizit regeneriert werden. Fortfahren?"
+      : "Vorrundenergebnis zur Korrektur wieder \u00f6ffnen?";
+    if (!window.confirm(message)) return;
+    const result = resetActivePreliminaryMatchForCorrection(matchId);
+    if (result.ok) setNotice("success", result.discardedFinalStage ? "Ergebnis ge\u00f6ffnet; Finalphase wurde kontrolliert verworfen." : "Ergebnis zur Korrektur ge\u00f6ffnet.");
+    else setNotice("error", result.message || "Korrektur wurde blockiert.");
+  }
+
+
+  function handleGenerateFinalStage() {
+    if (!window.confirm("Finalphase jetzt aus der gespeicherten Tabellenreihenfolge erzeugen?")) return;
+    const result = generateActivePreliminaryFinalStage();
+    if (result.ok) setNotice("success", "Finalphase wurde aus den Tabellen-Seeds erzeugt.");
+    else setNotice("error", result.message || "Finalphase konnte nicht erzeugt werden.");
+  }
+
+
+  function handleSaveQualificationResolution() {
+    const shadow = state.shadowRoot;
+    if (!shadow) return;
+    const orderEntries = Array.from(shadow.querySelectorAll("[data-field='qualification-order']")).map((input) => ({
+      participantId: input.getAttribute("data-participant-id"),
+      order: Number(input.value),
+    }));
+    const orders = orderEntries.map((entry) => entry.order);
+    if (orders.some((order) => !Number.isInteger(order)) || new Set(orders).size !== orders.length) {
+      setNotice("error", "Jede Reihenfolgeposition muss eine eindeutige ganze Zahl sein.");
+      return;
+    }
+    orderEntries.sort((left, right) => left.order - right.order);
+    const reasonInput = shadow.getElementById("ata-qualification-reason");
+    const reason = reasonInput instanceof HTMLInputElement ? reasonInput.value : "";
+    if (!window.confirm("Diese Veranstalterentscheidung sichtbar speichern? Sie ist nach Start der Finalphase gesperrt.")) return;
+    const result = saveActiveQualificationResolution(orderEntries.map((entry) => entry.participantId), reason);
+    if (result.ok) setNotice("success", "Veranstalterentscheidung gespeichert. Die Finalphase kann jetzt erzeugt werden.");
+    else setNotice("error", result.message || "Reihenfolge konnte nicht gespeichert werden.");
   }
 
 

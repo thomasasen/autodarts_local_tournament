@@ -123,7 +123,7 @@
 
   function getTournamentDurationPhaseOverheadMinutes(mode, participantCount) {
     const count = clampInt(participantCount, 0, 0, TECHNICAL_PARTICIPANT_HARD_MAX);
-    if (mode === "groups_ko") {
+    if (mode === "groups_ko" || mode === "preliminary_final") {
       return 4;
     }
     if ((mode !== "ko" && mode !== "double_ko") || count < 2) {
@@ -546,6 +546,29 @@
 
 
   function buildTournamentDurationTasks(mode, participants, participantCount, options = {}) {
+    if (mode === "preliminary_final") {
+      const participantIds = normalizeTournamentDurationParticipants(participants);
+      const schedule = buildBalancedRegularPairings(participantIds, options?.preliminaryMatchesPerParticipant);
+      if (!schedule.ok) return [];
+      const preliminaryTasks = [];
+      schedule.rounds.forEach((round, roundIndex) => {
+        round.forEach((pair, pairIndex) => preliminaryTasks.push({
+          id: `preliminary-r${roundIndex + 1}-m${pairIndex + 1}`,
+          participants: [`p:${pair.player1Id}`, `p:${pair.player2Id}`],
+          dependsOn: [],
+        }));
+      });
+      const preliminaryIds = preliminaryTasks.map((task) => task.id);
+      const qualifierCount = clampInt(options?.finalStageQualifierCount, 2, 2, participantIds.length);
+      const qualifierPlaceholders = Array.from({ length: qualifierCount }, (_, index) => ({ id: `seed-${index + 1}` }));
+      const finalTasks = options?.finalStageType === FINAL_STAGE_TYPE_DOUBLE_KO
+        ? buildDoubleKoTournamentDurationTasks(qualifierPlaceholders, GRAND_FINAL_RESET_IF_NEEDED)
+        : buildKoTournamentDurationTasks(qualifierCount, false);
+      finalTasks.forEach((task) => {
+        if (!Array.isArray(task.dependsOn) || !task.dependsOn.length) task.dependsOn = preliminaryIds.slice();
+      });
+      return preliminaryTasks.concat(finalTasks);
+    }
     if (mode === "league") {
       return buildLeagueTournamentDurationTasks(participants);
     }
@@ -603,6 +626,9 @@
     const tasks = buildTournamentDurationTasks(mode, participants, participants.length, {
       enableThirdPlaceMatch: tournament?.ko?.enableThirdPlaceMatch === true,
       grandFinalResetMode: tournament?.ko?.grandFinalResetMode,
+      preliminaryMatchesPerParticipant: tournament?.preliminary?.matchesPerParticipant,
+      finalStageQualifierCount: tournament?.finalStage?.qualifierCount,
+      finalStageType: tournament?.finalStage?.type,
     });
     if (!tasks.length) {
       return progress;
@@ -646,7 +672,7 @@
 
   function estimateTournamentDuration(rawInput, settings = null) {
     const modeRaw = normalizeText(rawInput?.mode || "ko");
-    const mode = ["ko", "double_ko", "league", "groups_ko"].includes(modeRaw) ? modeRaw : "ko";
+    const mode = ["ko", "double_ko", "league", "groups_ko", "preliminary_final"].includes(modeRaw) ? modeRaw : "ko";
     const participants = (Array.isArray(rawInput?.participants) ? rawInput.participants : [])
       .filter((entry) => normalizeText(entry?.id || entry?.name || entry || ""));
     const participantCount = participants.length;
@@ -664,7 +690,7 @@
       bullOffMode: rawInput?.x01BullOffMode,
       lobbyVisibility: rawInput?.lobbyVisibility,
     }, rawInput?.startScore);
-    const bestOfLegs = sanitizeBestOf(rawInput?.bestOfLegs);
+    const bestOfLegs = sanitizeBestOf(mode === "preliminary_final" ? rawInput?.finalStageBestOfLegs : rawInput?.bestOfLegs);
     const boardCount = sanitizeTournamentBoardCount(
       rawInput?.boardCount,
       TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT,
@@ -704,7 +730,21 @@
       return estimate;
     }
 
-    const expectedLegs = getExpectedLegsForBestOf(bestOfLegs);
+    if (mode === "preliminary_final") {
+      const scheduleValidation = validatePreliminaryScheduleConfig(participantCount, rawInput?.preliminaryMatchesPerParticipant);
+      if (!scheduleValidation.ok) {
+        estimate.reason = scheduleValidation.message;
+        return estimate;
+      }
+    }
+
+    let expectedLegs = getExpectedLegsForBestOf(bestOfLegs);
+    if (mode === "preliminary_final") {
+      const preliminaryCount = (participantCount * Number(rawInput.preliminaryMatchesPerParticipant)) / 2;
+      const qualifierCount = clampInt(rawInput?.finalStageQualifierCount, 2, 2, participantCount);
+      const finalCount = rawInput?.finalStageType === FINAL_STAGE_TYPE_DOUBLE_KO ? Math.max(0, (2 * qualifierCount) - 1) : Math.max(0, qualifierCount - 1);
+      expectedLegs = ((preliminaryCount * PRELIMINARY_FIXED_LEG_COUNT) + (finalCount * expectedLegs)) / Math.max(1, preliminaryCount + finalCount);
+    }
     const bullModeFactor = x01Settings.bullOffMode === "Off"
       ? 1
       : (TOURNAMENT_DURATION_BULL_FACTORS[x01Settings.bullMode] || 1);
@@ -722,6 +762,9 @@
     const durationTasks = buildTournamentDurationTasks(mode, participants, participantCount, {
       enableThirdPlaceMatch: rawInput?.enableThirdPlaceMatch === true,
       grandFinalResetMode: rawInput?.grandFinalResetMode,
+      preliminaryMatchesPerParticipant: rawInput?.preliminaryMatchesPerParticipant,
+      finalStageQualifierCount: rawInput?.finalStageQualifierCount,
+      finalStageType: rawInput?.finalStageType,
     });
     const fallbackMatchCount = getTournamentDurationMatchCount(mode, participantCount);
     const matchCount = durationTasks.length || fallbackMatchCount;
@@ -780,6 +823,10 @@
       boardCount: draft.boardCount,
       enableThirdPlaceMatch: draft.enableThirdPlaceMatch,
       grandFinalResetMode: draft.grandFinalResetMode,
+      preliminaryMatchesPerParticipant: draft.preliminaryMatchesPerParticipant,
+      finalStageQualifierCount: draft.finalStageQualifierCount,
+      finalStageType: draft.finalStageType,
+      finalStageBestOfLegs: draft.finalStageBestOfLegs,
       participants,
       tournamentTimeProfile: settings?.tournamentTimeProfile,
     }, settings);
@@ -805,6 +852,10 @@
       boardCount: tournament?.duration?.boardCount,
       enableThirdPlaceMatch: tournament?.ko?.enableThirdPlaceMatch === true,
       grandFinalResetMode: tournament?.ko?.grandFinalResetMode,
+      preliminaryMatchesPerParticipant: tournament?.preliminary?.matchesPerParticipant,
+      finalStageQualifierCount: tournament?.finalStage?.qualifierCount,
+      finalStageType: tournament?.finalStage?.type,
+      finalStageBestOfLegs: tournament?.finalStage?.bestOfLegs,
       participants: tournament.participants,
       tournamentTimeProfile: settings?.tournamentTimeProfile,
     }, settings);

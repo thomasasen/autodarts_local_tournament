@@ -9,7 +9,7 @@
         <td>${row.draws || 0}</td>
         <td>${row.losses}</td>
         <td>${row.points}</td>
-        <td>${row.legDiff}</td>
+        <td>${row.legDifference ?? row.legDiff}</td>
         <td>${row.legsFor}</td>
         <td>${row.tiebreakState === "playoff_required" ? "Playoff" : "-"}</td>
       </tr>
@@ -83,7 +83,8 @@
     return matches
       .sort((a, b) => a.number - b.number)
       .map((match) => {
-        const isCompleted = isCompletedMatchResultValid(tournament, match);
+        const isCompleted = match?.status === STATUS_COMPLETED
+          && isCompletedMatchResultValid(tournament, match);
         const isBye = isCompleted && isByeMatchResult(match);
         const player1Name = participantNameById(tournament, match.player1Id);
         const player2Name = participantNameById(tournament, match.player2Id);
@@ -136,7 +137,7 @@
       return `<p class="ata-small">Kein KO-Turnierbaum vorhanden.</p>`;
     }
 
-    if (tournament?.mode === "double_ko") {
+    if (tournament?.mode === "double_ko" || (tournament?.mode === "preliminary_final" && tournament?.finalStage?.type === "double_ko")) {
       const sections = [
         { side: "winners", title: "Winners Bracket" },
         { side: "losers", title: "Losers Bracket" },
@@ -208,7 +209,32 @@
     let html = "";
     const fallbackVisible = state.bracket.failed ? "1" : "0";
 
-    if (tournament.mode === "league") {
+    if (tournament.mode === "preliminary_final") {
+      const rows = buildPreliminaryStandings(tournament);
+      html += renderStandingsTable(rows, "Vorrundentabelle");
+      html += `<section class="ata-card tournamentCard"><h3>Qualifikation und Finalphase</h3><p class="ata-small">Veranstalterprofil: Punkte, Leg-Differenz, Legs gewonnen. Direktvergleich wird nicht automatisch verwendet.</p>`;
+      if (!isPreliminaryComplete(tournament)) {
+        const remaining = getPreliminaryMatches(tournament).filter((match) => match.status !== STATUS_COMPLETED).length;
+        html += `<p>Noch ${remaining} Vorrundenmatches offen. Die Finalphase bleibt gesperrt.</p>`;
+      } else {
+        const qualification = analyzePreliminaryQualification(tournament);
+        if (!qualification.ok) {
+          const currentOrder = qualification.rows.map((row) => row.id);
+          html += `<p><strong>Playoff/Veranstalterentscheidung erforderlich:</strong> ${escapeHtml(qualification.message)}</p>
+            <div class="ata-table-wrap"><table class="ata-table"><thead><tr><th>Reihenfolge</th><th>Teilnehmer</th></tr></thead><tbody>${qualification.rows.map((row, index) => `<tr><td><input type="number" min="1" max="${qualification.rows.length}" value="${index + 1}" data-field="qualification-order" data-participant-id="${escapeHtml(row.id)}"></td><td>${escapeHtml(row.name)}</td></tr>`).join("")}</tbody></table></div>
+            <div class="ata-field"><label for="ata-qualification-reason">Begr\u00fcndung der Veranstalterentscheidung</label><input id="ata-qualification-reason" type="text" placeholder="z. B. ausgespieltes Entscheidungsleg"></div>
+            <button type="button" class="ata-btn" data-action="save-qualification-resolution">Reihenfolge best\u00e4tigen</button>`;
+        } else if (!getMatchesByStage(tournament, MATCH_STAGE_KO).length) {
+          const resolvedNote = tournament?.finalStage?.qualificationResolution
+            ? `<p>Gespeicherte Veranstalterentscheidung: ${escapeHtml(tournament.finalStage.qualificationResolution.reason)}</p>`
+            : "";
+          html += `${resolvedNote}<p>Top ${tournament.finalStage.qualifierCount} sind eindeutig gesetzt.</p><button type="button" class="ata-btn ata-btn-primary" data-action="generate-final-stage">${tournament.finalStage.generatedAt ? "Finalphase regenerieren" : "Finalphase erzeugen"}</button>`;
+        } else {
+          html += `<p>Finalphase ${escapeHtml(tournament.finalStage.status)}. Setzung: ${tournament.finalStage.seeding.map((id, index) => `${index + 1}. ${participantNameById(tournament, id)}`).map(escapeHtml).join(" · ")}</p>`;
+        }
+      }
+      html += `</section>`;
+    } else if (tournament.mode === "league") {
       const standings = standingsForMatches(tournament, getMatchesByStage(tournament, MATCH_STAGE_LEAGUE));
       html += renderStandingsTable(standings, "Liga-Tabelle", [
         { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
@@ -242,7 +268,7 @@
       }
     }
 
-    if (tournament.mode === "ko" || tournament.mode === "double_ko" || tournament.mode === "groups_ko") {
+    if (tournament.mode === "ko" || tournament.mode === "double_ko" || tournament.mode === "groups_ko" || (tournament.mode === "preliminary_final" && getMatchesByStage(tournament, MATCH_STAGE_KO).length)) {
       html += `
         <section class="ata-card tournamentCard">
           ${renderSectionHeading("KO-Turnierbaum", [

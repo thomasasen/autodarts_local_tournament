@@ -27,6 +27,7 @@
 
     const version = Number(rawValue.schemaVersion || 0);
     switch (version) {
+      case 5:
       case 4:
       case 3:
       case 2:

@@ -8,6 +8,13 @@
     match.stats = normalizeMatchStats(null);
     setMatchResultKind(match, null);
     resetMatchAutomationMeta(match);
+    if (match?.meta?.fixedLegs) {
+      match.meta.fixedLegs = {
+        count: PRELIMINARY_FIXED_LEG_COUNT,
+        entries: [],
+        syncStatus: "manual_only",
+      };
+    }
     match.updatedAt = nowIso();
   }
 
