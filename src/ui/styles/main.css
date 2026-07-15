@@ -566,16 +566,19 @@
         grid-template-columns: minmax(0, 1fr);
       }
 
-      .ata-create-rule-stack,
-      .ata-create-rule-notes {
+      .ata-create-rule-stack {
         display: grid;
         gap: var(--ata-space-2);
       }
 
-      .ata-create-rule-notes {
-        margin-top: 2px;
-        padding-top: 10px;
-        border-top: 1px solid rgba(255, 255, 255, 0.12);
+      .ata-create-rule-stack > [hidden],
+      .ata-game-rules-editor[hidden],
+      [data-role="standard-bestof-field"][hidden] {
+        display: none !important;
+      }
+
+      .ata-create-empty-rules {
+        margin: 0;
         color: var(--ata-color-muted);
       }
 
@@ -617,6 +620,44 @@
         font-weight: 800;
         letter-spacing: 0.04em;
         text-transform: uppercase;
+      }
+
+      .ata-game-rules-summary {
+        display: grid;
+        gap: 5px;
+        border: 1px solid rgba(90, 210, 153, 0.34);
+        border-radius: var(--ata-radius-sm);
+        padding: 11px 12px;
+        background: rgba(90, 210, 153, 0.08);
+      }
+
+      .ata-game-rules-origin,
+      .ata-game-rules-summary-text {
+        margin: 0;
+      }
+
+      .ata-game-rules-origin {
+        color: #baf5da;
+        font-size: 13px;
+      }
+
+      .ata-game-rules-summary-text {
+        color: var(--ata-color-text);
+        font-size: 15px;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+      }
+
+      .ata-game-rules-actions {
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      .ata-game-rules-editor {
+        display: grid;
+        gap: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.13);
+        padding-top: 12px;
       }
 
       .ata-create-primary-actions .ata-btn-primary {
@@ -1921,6 +1962,10 @@
         }
 
         .ata-create-section-actions .ata-btn {
+          width: 100%;
+        }
+
+        .ata-game-rules-actions .ata-btn {
           width: 100%;
         }
 

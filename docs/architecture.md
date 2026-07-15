@@ -55,6 +55,11 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
   - eine bewusste Preset-Auswahl wendet die vorhandene Definition direkt an; manuelle Änderungen an preset-relevanten Sachwerten setzen den Status auf Custom
   - Default ist `pdc_european_tour_official`
   - Legacy `pdc_standard` wird auf `pdc_501_double_out_basic` normalisiert
+- Modusabhängige Turnieranlage:
+  - `CREATE_MODE_RULE_FIELDS` und `CREATE_MODE_RULE_GROUPS` bilden die zentrale Zuordnung für alle fünf Create-Modi
+  - der persistierte Draft behält inaktive modusspezifische Werte; DOM-Controls sind außerhalb ihres Modus verborgen und deaktiviert
+  - `scopeCreateConfigToMode()` projiziert vor Validation und Domain-Factory ausschließlich die aktiven Zusatzregeln
+  - `state.createGameRulesExpanded` ist flüchtiger UI-State und wird nicht im Storage-Schema persistiert
 - KO-spezifisch:
   - `settings.featureFlags.koDrawLockDefault: boolean`
   - `tournament.ko.drawLocked: boolean`
@@ -71,7 +76,7 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
   - erwartete Legs pro Match aus `Best of`
   - X01-Setup (`Startscore`, `In`, `Out`, `Bull-off`, `Bull-Modus`, `Max Runden`)
   - globales Zeitprofil (`fast | normal | slow`)
-- Die UI rendert daraus einen Live-Block im Bereich `Turnierübersicht` des fünfstufig gegliederten Turnierformulars. Die Abschnittsstruktur bleibt reine Darstellung; bestehende Feld-IDs und Handler-Verträge tragen weiterhin Draft-, Preset- und Submit-Verhalten.
+- Die UI rendert daraus einen Live-Block im Bereich `Turnierübersicht` des fünfstufig gegliederten Turnierformulars. Eine separate kompakte Spielregel-Zusammenfassung wird aus denselben Draft-Werten abgeleitet; der Inline-Editor ändert Draft, Preset-Status und Prognose ohne Shell-Rerender. Die Abschnittsstruktur bleibt reine Darstellung; bestehende Feld-IDs und Handler-Verträge tragen weiterhin Draft-, Preset- und Submit-Verhalten.
 - Bei `preliminary_final` werden Vorrunde und abhängige KO-/Doppel-KO-Finalphase als getrennte Tasks mit eigenen Leg-Erwartungen modelliert.
 - `src/ui/handlers.js` aktualisiert diesen Block gezielt bei jedem Formular-Input, ohne die gesamte Shell neu zu rendern.
 

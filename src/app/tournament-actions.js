@@ -77,7 +77,8 @@
 
 
   function createTournamentSession(config) {
-    const validationDetails = validateCreateConfigDetails(config);
+    const scopedConfig = scopeCreateConfigToMode(config);
+    const validationDetails = validateCreateConfigDetails(scopedConfig);
     if (validationDetails.length) {
       return {
         ok: false,
@@ -87,7 +88,7 @@
       };
     }
 
-    const tournament = createTournament(config);
+    const tournament = createTournament(scopedConfig);
     refreshDerivedMatches(tournament);
     tournament.updatedAt = nowIso();
     state.store.tournament = tournament;

@@ -3,6 +3,7 @@
     ready: false,
     drawerOpen: false,
     activeTab: "tournament",
+    createGameRulesExpanded: false,
     lastFocused: null,
     notice: { type: "info", message: "" },
     noticeTimer: null,

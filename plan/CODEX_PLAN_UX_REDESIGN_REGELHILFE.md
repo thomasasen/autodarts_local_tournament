@@ -2,12 +2,11 @@
 
 ## Umsetzungsstatus
 
-- Aktueller Release: Release 2 – Preset-first und direkte Preset-Anwendung
-- Zielversion: `0.7.0`
+- Aktueller Release: Release 3 – Modusabhängige Zusatzregeln und kompakte Spielregeln
+- Zielversion: `0.8.0`
 - Status: `ABGESCHLOSSEN`
-- Begonnen: 2026-07-15 18:45 CEST
-- Zuletzt aktualisiert: 2026-07-15 19:14 CEST
-- Abgeschlossen: 2026-07-15 19:14 CEST
+- Begonnen: 2026-07-15 21:21 CEST
+- Zuletzt aktualisiert: 2026-07-15 21:50 CEST
 
 ### Fortschritt Release 1
 
@@ -80,6 +79,50 @@
 - Automatisiert geprüft: vollständige Anwendung beider fachlichen Presets, idempotente Wiederanwendung, Custom-Auswahl ohne Sachwertänderung, Custom-Umschaltung für alle preset-relevanten Felder, Draft-/Rerender-Erhalt, Zeitprognose, nicht preset-relevante Werte, Legacy-Draft und Legacy-Turnier sowie Markup-/Accessibility-Verträge.
 - Im lokalen Microsoft-Edge-Headless-Browser visuell geprüft: Kartenlayout bei `1920 × 1080`, `1366 × 768`, `1024 × 768` und `768 × 1024`; Drei- und Zweispaltenlayout, ausgewählter Zustand und Textumbruch sind sichtbar korrekt. Das Einspaltenlayout ist über den `600px`-Breakpoint und einen schmalen Headless-Render geprüft; der Headless-Browser stellt jedoch keinen verlässlichen physischen Tastaturtest bereit.
 - Vom Nutzer noch manuell sinnvoll zu prüfen: Pfeiltasten und Leertaste mit realer Tastatur, exakte schmale Gerätebreite sowie ein Installations-Smoke auf dem authentifizierten `play.autodarts.io`-Account. Native Radio-Semantik, zugeordnete Labels/Beschreibungen und sichtbarer `:focus-visible`-Stil sind automatisiert abgesichert.
+
+### Fortschritt Release 3
+
+- [x] Ausgangsstand und Abschluss von Release 2 geprüft
+- [x] Modus-, Draft-, Config- und Domainpfade analysiert
+- [x] Zentrale Zuordnung modusspezifischer Regeln umgesetzt
+- [x] KO zeigt nur relevante Zusatzregeln
+- [x] Doppel-KO zeigt nur relevante Zusatzregeln
+- [x] Liga zeigt keine irrelevanten Zusatzregeln
+- [x] Gruppenphase + KO zeigt nur unterstützte Gruppenregeln
+- [x] Vorrunde + Finalphase bleibt vollständig funktionsfähig
+- [x] Irrelevante Felder beeinflussen Config und Validierung nicht
+- [x] Modusspezifische Draft-Werte bleiben beim Moduswechsel erhalten
+- [x] Kompakte Live-Spielregel-Zusammenfassung umgesetzt
+- [x] Preset-Herkunft korrekt dargestellt
+- [x] Zugänglicher Inline-Bearbeitungsbereich umgesetzt
+- [x] Bull-off-/Bull-Modus-Abhängigkeit korrekt dargestellt
+- [x] Release-2-Preset-Verhalten regressionsfrei
+- [x] Responsive Verhalten geprüft
+- [x] Tastatur- und Fokusbedienung geprüft
+- [x] Automatisierte Tests ergänzt oder angepasst
+- [x] Domain-Tests erfolgreich
+- [x] Runtime-Contract-Tests erfolgreich
+- [x] Gesamtes QA-Skript erfolgreich
+- [x] Build erfolgreich erzeugt
+- [x] Dokumentation und Changelog aktualisiert
+- [x] Screenshot aktualisiert
+- [x] Manuelle Abnahmeszenarien geprüft
+- [x] Abschlussprüfung des Diffs durchgeführt
+
+### Arbeitsprotokoll Release 3
+
+| Zeitpunkt | Status | Arbeitsergebnis | Prüfung |
+|---|---|---|---|
+| 2026-07-15 21:21 CEST | IN ARBEIT | Verbindlichen Ausgangscommit `bae6a74923b7832505bd1156056c380448e3435e`, sauberen Arbeitsbaum, Repository-Anweisungen sowie die vollständigen Abschlussstände von Release 1 und 2 geprüft; Release 3 gestartet. | Exakter Ausgangscommit bestätigt; nur top-level `AGENTS.md` vorhanden; Zielversion `0.8.0`, Storage- und Implementierungsbedarf werden im nächsten Analyseschritt geprüft. |
+| 2026-07-15 21:21 CEST | IN ARBEIT | Render-, Handler-, Draft-, Normalisierungs-, Config-, Domain-, Import-/Export-, Persistenz-, Dauerprognose-, Modus- und Testpfade analysiert. Zentrale Risiken sind der Verlust deaktivierter/ungerenderter Felder über `FormData` und eine zu breite Create-Config; Storage-Schema 5 kann unverändert bleiben. | Unveränderte Baseline erfolgreich: 123 Domain-Tests; Runtime-Contract erfolgreich. |
+| 2026-07-15 21:45 CEST | IN ARBEIT | Zentrale Moduszuordnung, DOM-Deaktivierung, Draft-Erhalt, Domain-Config-Projektion, kompakte Live-Zusammenfassung und zugänglichen Inline-Editor umgesetzt; Dokumentation, Version `0.8.0` und Screenshot aktualisiert. | 129 Domain-Tests und Runtime-Contract erfolgreich; reale Headless-Viewport-Messung bei `1920×1080`, `1366×768`, `1024×768`, `768×1024` und `360×800` ohne horizontalen Dokument-, Drawer-, Content- oder Formular-Overflow; alle fünf Modusgruppen im Browser geprüft. |
+| 2026-07-15 21:50 CEST | ABGESCHLOSSEN | Release 3 auf `0.8.0` finalisiert, generierte Artefakte aktualisiert und den Gesamtdiff gegen den verbindlichen Ausgangscommit auf Release-3-Scope, tote Selektoren und unbeabsichtigte Regelhilfe aus Release 4 geprüft. | Build, Architektur-QA, Encoding-QA, Regelcheck, 129 Domain-Tests, Runtime-Contract mit 53 Selftests und Build-Disziplin erfolgreich; `git diff --check` ohne Fehler. |
+
+### Prüfgrenze Release 3
+
+- Automatisiert geprüft: zentrale Moduszuordnung, Sichtbarkeit und Deaktivierung irrelevanter Felder, Ausschluss aus `FormData`, Draft-Erhalt beim Moduswechsel, Domain-Config-Projektion, Zusammenfassung und Preset-Herkunft, Disclosure-/Fokusvertrag, Preset-Regressionen sowie alle Repository-QA-Gates.
+- Im lokalen Microsoft-Edge-Headless-Browser geprüft: alle fünf Modusgruppen, geschlossener und geöffneter Spielregel-Editor, Responsive-Verhalten und horizontaler Overflow bei `1920×1080`, `1366×768`, `1024×768`, `768×1024` und `360×800`; der neue Screenshot wurde visuell kontrolliert.
+- Nicht gegen einen authentifizierten Live-Account auf `play.autodarts.io` ausgeführt: echter Lobby-/Board-/API-Start und physische Tastaturbedienung. Die betroffenen Tastatur-, Fokus- und Create-Verträge sind automatisiert abgesichert; ein Installations-Smoke bleibt als nutzerseitige Abnahme sinnvoll.
 
 ## 1. Auftrag und Ziel
 

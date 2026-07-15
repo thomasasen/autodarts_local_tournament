@@ -943,7 +943,24 @@
   }
 
 
-  function validateCreateConfigDetails(config) {
+  function scopeCreateConfigToMode(rawConfig) {
+    const config = rawConfig && typeof rawConfig === "object" ? { ...rawConfig } : {};
+    const activeFields = new Set(CREATE_MODE_RULE_FIELDS[config.mode] || []);
+    const allModeRuleFields = new Set(Object.values(CREATE_MODE_RULE_FIELDS).flat());
+    allModeRuleFields.forEach((fieldName) => {
+      if (!activeFields.has(fieldName)) {
+        delete config[fieldName];
+      }
+    });
+    if (config.mode === "preliminary_final") {
+      delete config.bestOfLegs;
+    }
+    return config;
+  }
+
+
+  function validateCreateConfigDetails(rawConfig) {
+    const config = scopeCreateConfigToMode(rawConfig);
     const errors = [];
 
     if (!normalizeText(config.name)) {
@@ -997,7 +1014,8 @@
   }
 
 
-  function createTournament(config) {
+  function createTournament(rawConfig) {
+    const config = scopeCreateConfigToMode(rawConfig);
     const modeLimits = getModeParticipantLimits(config.mode);
     const participants = config.participants.slice(0, modeLimits.max);
     const participantIds = participants.map((participant) => participant.id);

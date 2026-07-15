@@ -378,7 +378,7 @@ Die drei Dateien zusammen bilden die Persistenzstrecke:
 | `src/domain/match-state.js` | gemeinsame Match-Mutationen | `clearMatchResult()` und `assignPlayerSlot()` als reine Match-Helfer | `src/domain/ko-engine.js`, `src/domain/groups.js`, `src/domain/results.js` |
 | `src/domain/preliminary-schedule.js` | fairer Vorrundenplan | validiert `n/k`, erzeugt deterministisch einen regulären Paarungsgraphen und kollisionsfreie Scheduling-Runden | `src/domain/tournament-create.js`, `src/ui/render-tournament.js`, `src/domain/tournament-duration.js` |
 | `src/domain/rules-config.js` | pure Regel-Mutationen | ändert Tie-Break-Profil und KO-Draw-Lock nur am übergebenen Turnierobjekt | `src/data/normalization.js`, `src/app/tournament-actions.js` |
-| `src/domain/tournament-create.js` | reine Turniererzeugung | Match-Factory, Round-Robin-Pairings, Seed- und Bye-Logik, Gruppenbildung, KO-Struktur, Validation, `createTournament` | `src/data/normalization.js`, `src/domain/ko-engine.js`, `src/app/tournament-actions.js`, `src/app/diagnostics.js` |
+| `src/domain/tournament-create.js` | reine Turniererzeugung | modusspezifische Create-Config-Projektion, Match-Factory, Round-Robin-Pairings, Seed- und Bye-Logik, Gruppenbildung, KO-Struktur, Validation, `createTournament` | `src/data/normalization.js`, `src/domain/ko-engine.js`, `src/app/tournament-actions.js`, `src/app/diagnostics.js` |
 | `src/domain/tournament-duration.js` | pure Zeitprognose | berechnet Matchanzahl, erwartete Legs, Matchdauer und Spannweite für die Turnieranlage ohne DOM-/State-Abhängigkeiten | `src/data/normalization.js`, `src/domain/tournament-create.js`, `src/ui/render-tournament.js`, `src/ui/render-settings.js`, `tests/unit-tournament-duration.js` |
 | `src/domain/standings-dra.js` | Tabellen- und Tie-Break-Motor | berechnet Punkte, Leg-Differenzen, Direktvergleich, Mini-Tabelle und `playoff_required` | `src/data/normalization.js`, `src/domain/groups.js`, `src/ui/render-view.js`, `src/runtime/public-api.js` |
 | `src/domain/preliminary-standings.js` | Vorrundentabelle | wertet Fixed-2-Legs nach konfigurierbaren Punkten und sortiert nach Punkten, Leg-Differenz und Legs gewonnen | `src/domain/preliminary-final-stage.js`, `src/ui/render-view.js` |
@@ -402,7 +402,7 @@ Hier liegt die eigentliche Turnierlogik. Wenn sich eine fachliche Regel ändert,
 | `src/app/bracket-controller.js` | Bracket-Orchestrierung | Render-Queue, Timeout, Height-Sync, Fallback-Sichtbarkeit und Fehlermeldungen | `src/bracket/frame-bridge.js`, `src/bracket/payload.js`, `src/ui/render-view.js` |
 | `src/app/browser-lifecycle.js` | Browser-Lifecycle | Cleanup, Event-Bridge und Runtime-nahe UI-Helfer | `src/infra/history-import.js`, `src/app/bracket-controller.js`, `src/runtime/bootstrap.js` |
 | `src/app/update-status.js` | Update-Status-Orchestrierung | hält den GitHub-Versionsstatus im Runtime-State und spiegelt ihn in UI und Loader-Menü | `src/infra/update-check.js`, `src/ui/render-settings.js`, `src/ui/handlers.js`, `src/runtime/bootstrap.js` |
-| `src/app/diagnostics.js` | Runtime-Diagnostik | `runSelfTests()` für Browser-Konsole und Contract-Test, einschließlich stabiler Turnieranlage-Hooks und Draft-/Shuffle-Verhalten | `src/domain/*`, `src/infra/*`, `src/ui/*`, `src/app/public-api.js`, `scripts/test-runtime-contract.ps1` |
+| `src/app/diagnostics.js` | Runtime-Diagnostik | `runSelfTests()` für Browser-Konsole und Contract-Test, einschließlich Modussichtbarkeit, Draft-Rückkehr, Spielregel-Disclosure, Fokus sowie stabiler Turnieranlage-Hooks | `src/domain/*`, `src/infra/*`, `src/ui/*`, `src/app/public-api.js`, `scripts/test-runtime-contract.ps1` |
 | `src/app/public-api.js` | Public Runtime API | veröffentlicht `window.__ATA_RUNTIME` und bindet Cleanup daran | `src/app/diagnostics.js`, `src/runtime/bootstrap.js`, Browser-Konsole |
 
 ### Infra
@@ -422,13 +422,13 @@ Hier liegt die eigentliche Turnierlogik. Wenn sich eine fachliche Regel ändert,
 |---|---|---|---|
 | `src/ui/render-shell.js` | äußerer Drawer-Rahmen | rendert Shadow-DOM-Shell, Tabs, Notices und Runtime-Status-Bar | `src/ui/render-tabs.js`, `src/infra/api-client.js`, `src/ui/handlers.js` |
 | `src/ui/render-tabs.js` | Tab-Verteiler | entscheidet, welcher Tab-Renderer für den aktiven Tab ausgeführt wird | `src/ui/render-tournament.js`, `src/ui/render-matches.js`, `src/ui/render-view.js`, `src/ui/render-io.js`, `src/ui/render-settings.js` |
-| `src/ui/render-helpers.js` | UI-Helfer | `renderInfoLinks()`, Abschnitts- und Turnierzeit-Helfer für wiederverwendbare HTML-Bausteine | `src/ui/render-*.js` |
-| `src/ui/render-tournament.js` | Turnieranlage und Turnierübersicht | rendert die fünf Bereiche `Turnierformat`, `Teilnehmer`, `Zusätzliche Turnierregeln`, `Spielregeln` und `Turnierübersicht`, dazu die zugängliche Preset-Radio-Gruppe im Turnierformat, Live-Zeitprognose, aktives Turnier und Reset-Bereich | `src/data/normalization.js`, `src/domain/tournament-duration.js`, `src/ui/render-helpers.js`, `src/ui/handlers.js` |
+| `src/ui/render-helpers.js` | UI-Helfer | `renderInfoLinks()`, Abschnitts-, Turnierzeit- und pure Spielregel-Zusammenfassung für wiederverwendbare HTML-Bausteine | `src/ui/render-*.js` |
+| `src/ui/render-tournament.js` | Turnieranlage und Turnierübersicht | rendert die fünf Bereiche mit modusspezifischen Zusatzregelgruppen, zugänglicher Preset-Radio-Gruppe, kompakter Spielregel-Zusammenfassung und Inline-Editor, Live-Zeitprognose, aktivem Turnier und Reset-Bereich | `src/data/normalization.js`, `src/domain/tournament-duration.js`, `src/ui/render-helpers.js`, `src/ui/handlers.js` |
 | `src/ui/render-matches.js` | Matchliste und Matchaktionen | rendert Editoren, Status und API-Start-Buttons; Sortierung und `Nächstes Match` kommen aus `src/app/match-view-models.js` | `src/app/match-view-models.js`, `src/domain/results.js`, `src/infra/api-automation.js` |
 | `src/ui/render-view.js` | Tabellen- und Bracket-Ansicht | rendert Liga-/Gruppentabellen, Fallback-Bracket und den Einstieg ins iframe-Bracket | `src/domain/standings-dra.js`, `src/domain/groups.js`, `src/domain/ko-engine.js`, `src/bracket/*` |
 | `src/ui/render-io.js` | Import/Export-Tab | rendert Export- und Import-Oberfläche | `src/ui/handlers.js`, `src/data/storage.js` |
 | `src/ui/render-settings.js` | Settings-Tab | rendert Debug-Flag, API-Automation, GitHub-Update-Panel, KO-Defaults, Zeitprofil, Tie-Break-Profil und Storage-Hinweise | `src/data/normalization.js`, `src/domain/tournament-duration.js`, `src/ui/render-helpers.js`, `src/app/update-status.js`, `src/ui/handlers.js` |
-| `src/ui/handlers.js` | UI-Orchestrator | erstellt Host, rendert Shell, bindet Events, wendet Preset-Radio-Auswahlen direkt an, liest Formulare, aktualisiert Draft und Live-Prognose, stößt GitHub-Update-Prüfungen an und delegiert Turnier-/Match-Aktionen in `src/app/*` | `src/ui/render-shell.js`, `src/app/tournament-actions.js`, `src/app/match-actions.js`, `src/infra/api-automation.js`, `src/infra/update-check.js`, `src/app/bracket-controller.js`, `src/domain/tournament-duration.js` |
+| `src/ui/handlers.js` | UI-Orchestrator | erstellt Host, rendert Shell, bindet Events, synchronisiert Modusgruppen und Inline-Disclosure, erhält inaktive Draft-Felder, wendet Presets direkt an und aktualisiert Zusammenfassung sowie Live-Prognose | `src/ui/render-shell.js`, `src/app/tournament-actions.js`, `src/app/match-actions.js`, `src/infra/api-automation.js`, `src/infra/update-check.js`, `src/app/bracket-controller.js`, `src/domain/tournament-duration.js` |
 
 `handlers.js` ist die Datei, in der Bedienung, State-Änderung und Re-Render zusammenlaufen. Die Render-Dateien bleiben dagegen weitgehend beschreibend.
 
@@ -451,7 +451,7 @@ Hier liegt die eigentliche Turnierlogik. Wenn sich eine fachliche Regel ändert,
 ## Unterstützende Dateien und Referenzmaterial
 
 ### `src/ui/styles/main.css`
-- enthält das komplette Shadow-DOM-Styling der UI, einschließlich der responsiven fünfteiligen Turnieranlage und der Preset-Auswahlkarten
+- enthält das komplette Shadow-DOM-Styling der UI, einschließlich der responsiven fünfteiligen Turnieranlage, Preset-Auswahlkarten und des kompakten Spielregel-Disclosure
 - wird nicht separat ausgeliefert, sondern durch `scripts/build.ps1` in das Bundle eingebettet
 - ist deshalb Quellmaterial, aber kein eigener Runtime-Ladepunkt
 

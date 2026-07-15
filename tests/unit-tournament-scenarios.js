@@ -427,3 +427,85 @@
     assertEqual(blocked.reasonCode, "tie_break_locked");
     assertEqual(tournament.rules.tieBreakProfile, TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF);
   });
+
+
+  test("Create config: mode projection removes every irrelevant additional rule", () => {
+    const raw = {
+      mode: "league",
+      bestOfLegs: 11,
+      randomizeKoRound1: true,
+      enableThirdPlaceMatch: true,
+      grandFinalResetMode: GRAND_FINAL_RESET_SINGLE_MATCH,
+      groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
+      groupsKoOddParticipantAcknowledged: true,
+      preliminaryMatchesPerParticipant: 6,
+      preliminaryWinPoints: 3,
+      preliminaryDrawPoints: 1,
+      preliminaryLossPoints: 0,
+      finalStageType: FINAL_STAGE_TYPE_DOUBLE_KO,
+      finalStageQualifierCount: 6,
+      finalStageBestOfLegs: 7,
+    };
+    const league = scopeCreateConfigToMode(raw);
+    assertDeepEqual(Object.keys(league), ["mode", "bestOfLegs"]);
+
+    const ko = scopeCreateConfigToMode({ ...raw, mode: "ko" });
+    assertEqual(ko.randomizeKoRound1, true);
+    assertEqual(ko.enableThirdPlaceMatch, true);
+    assert(!Object.prototype.hasOwnProperty.call(ko, "grandFinalResetMode"));
+    assert(!Object.prototype.hasOwnProperty.call(ko, "groupsKoOddParticipantPolicy"));
+    assert(!Object.prototype.hasOwnProperty.call(ko, "preliminaryMatchesPerParticipant"));
+
+    const doubleKo = scopeCreateConfigToMode({ ...raw, mode: "double_ko" });
+    assertEqual(doubleKo.randomizeKoRound1, true);
+    assertEqual(doubleKo.grandFinalResetMode, GRAND_FINAL_RESET_SINGLE_MATCH);
+    assert(!Object.prototype.hasOwnProperty.call(doubleKo, "enableThirdPlaceMatch"));
+
+    const groupsKo = scopeCreateConfigToMode({ ...raw, mode: "groups_ko" });
+    assertEqual(groupsKo.groupsKoOddParticipantPolicy, GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL);
+    assertEqual(groupsKo.groupsKoOddParticipantAcknowledged, true);
+    assert(!Object.prototype.hasOwnProperty.call(groupsKo, "randomizeKoRound1"));
+
+    const preliminary = scopeCreateConfigToMode({ ...raw, mode: "preliminary_final" });
+    assertEqual(preliminary.preliminaryMatchesPerParticipant, 6);
+    assertEqual(preliminary.finalStageBestOfLegs, 7);
+    assert(!Object.prototype.hasOwnProperty.call(preliminary, "grandFinalResetMode"));
+    assert(!Object.prototype.hasOwnProperty.call(preliminary, "bestOfLegs"));
+  });
+
+
+  test("Create factory: irrelevant rule values cannot affect other modes", () => {
+    const league = createTournament({
+      name: "Scoped League",
+      mode: "league",
+      bestOfLegs: 3,
+      startScore: 501,
+      x01Preset: X01_PRESET_CUSTOM,
+      x01InMode: "Straight",
+      x01OutMode: "Double",
+      x01BullMode: "25/50",
+      x01MaxRounds: 50,
+      x01BullOffMode: "Normal",
+      enableThirdPlaceMatch: true,
+      grandFinalResetMode: GRAND_FINAL_RESET_SINGLE_MATCH,
+      groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
+      groupsKoOddParticipantAcknowledged: true,
+      preliminaryMatchesPerParticipant: 8,
+      finalStageType: FINAL_STAGE_TYPE_DOUBLE_KO,
+      finalStageQualifierCount: 4,
+      finalStageBestOfLegs: 9,
+      participants: participantList(4, "SL"),
+    });
+    assertEqual(league.mode, "league");
+    assertEqual(league.ko, null);
+    assertEqual(league.preliminary, null);
+    assertEqual(league.finalStage, null);
+    assertEqual(league.groups.length, 0);
+
+    const ko = createKoTournament(participantList(4, "SK"), {
+      enableThirdPlaceMatch: true,
+      grandFinalResetMode: GRAND_FINAL_RESET_SINGLE_MATCH,
+    });
+    assertEqual(ko.ko.enableThirdPlaceMatch, true);
+    assert(!Object.prototype.hasOwnProperty.call(ko.ko, "grandFinalResetMode"));
+  });

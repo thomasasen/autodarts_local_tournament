@@ -89,10 +89,19 @@ $checkScript = @'
         ok: Boolean(selfTestResult?.ok),
         passed: Number(selfTestResult?.passed || 0),
         failed: Number(selfTestResult?.failed || 0),
+        failures: Array.isArray(selfTestResult?.results)
+          ? selfTestResult.results.filter((entry) => !entry?.ok).map((entry) => ({
+            name: String(entry?.name || ""),
+            details: String(entry?.details || ""),
+          }))
+          : [],
       };
       if (!selfTestResult?.ok) {
         result.ok = false;
-        result.failures.push(`Runtime-Selftests fehlgeschlagen (${selfTestResult?.failed || 0} Fehler).`);
+        const failedDetails = result.selfTests.failures
+          .map((entry) => `${entry.name}: ${entry.details}`)
+          .join(" | ");
+        result.failures.push(`Runtime-Selftests fehlgeschlagen (${selfTestResult?.failed || 0} Fehler): ${failedDetails}`);
       }
     }
   }
@@ -281,5 +290,5 @@ if (-not $result.ok) {
   throw "Runtime-Contract-Test fehlgeschlagen."
 }
 
-Write-Host "Runtime contract successful."
+Write-Host "Runtime contract successful ($($result.selfTests.passed) Runtime-Selftests)."
 Remove-Item -LiteralPath $tempRoot -Recurse -Force

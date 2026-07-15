@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.8.0
+- `Zusätzliche Turnierregeln` nutzt eine zentrale Zuordnung für alle fünf Modi: KO zeigt Draw und Platz 3, Doppel-KO Draw und Grand-Final-Regel, Liga nur eine kurze Leermeldung, `groups_ko` ausschließlich die vorhandene Gruppenpolicy/-analyse und `preliminary_final` ausschließlich seine bisherigen Spezialfelder.
+- Inaktive Regelgruppen sind nicht nur optisch verborgen, sondern mitsamt Controls deaktiviert. Dadurch verschwinden sie aus Tastaturreihenfolge, Browser-Validierung und `FormData`.
+- Das Draft-Lesen übernimmt nur aktive, tatsächlich gerenderte Modusfelder und erhält sonst die gespeicherten Werte. Platz-3-, Grand-Final-, Gruppen- und Vorrundenwerte stehen nach einer sicheren Rückkehr zum jeweiligen Modus wieder bereit; bestehende fachliche Reset-Logik für Gruppenbestätigungen bleibt erhalten.
+- `scopeCreateConfigToMode()` entfernt vor Validierung und Turniererzeugung sämtliche irrelevanten Zusatzregeln. Die Domain wendet Platz 3 weiterhin nur für `ko`, Grand-Final-Regeln nur für `double_ko`, Gruppenregeln nur für `groups_ko` und Vorrundenwerte nur für `preliminary_final` an.
+- `Spielregeln` zeigt standardmäßig eine Live-Zusammenfassung mit Preset-Herkunft, Startpunkten, effektivem Best-of/First-to, In/Out, Bull-off, wirksamem Bull-Modus und Maximalrunden. Bei Bull-off `Off` wird kein veralteter Bull-Modus ausgegeben; `preliminary_final` zeigt feste Vorrundenlegs und das eigene Finalphasen-Best-of.
+- `Spielregeln bearbeiten` öffnet einen flüchtigen, zugänglichen Inline-Disclosure-Bereich mit stabiler Region-ID, `aria-expanded`/`aria-controls`, verborgenem Standardzustand und Fokus-Rückgabe beim Schließen. Preset-, Draft-, Zusammenfassungs- und Zeitprognose-Updates funktionieren im offenen und geschlossenen Zustand.
+- Die langen dauerhaft sichtbaren Preset-Erklärblöcke im Spielregelbereich wurden auf den notwendigen Bull-off-Hinweis reduziert. Die kontextbezogene Regelhilfe aus Release 4 ist noch nicht implementiert.
+- Domain- und Runtime-Tests prüfen zentrale Zuordnung, Config-Projektion, alle fünf Sichtbarkeitszustände, deaktivierte Fremdfelder, Draft-Rückkehr, Summary-Varianten, Bull-Abhängigkeit, Preset-Synchronität, Disclosure-Semantik und Fokus-Rückgabe. Storage-Schema 5 bleibt unverändert.
+
 ## 0.7.0
 - Presets stehen als kompakte, responsive Auswahlkarten im Bereich `Turnierformat`; jede Option nutzt native Radio-Semantik, eine zugeordnete Beschreibung, sichtbaren Fokus und einen textlich erkennbaren Auswahlzustand.
 - Die bewusste Auswahl von `PDC European Tour (Official)` oder `PDC 501 / Double Out (Basic)` wendet alle bereits definierten Werte sofort an und aktualisiert Draft, Abhängigkeiten und Zeitprognose ohne zusätzliche Bestätigung.

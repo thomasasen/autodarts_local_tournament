@@ -2,7 +2,7 @@
 
 Lokales Turniermanagement direkt in `https://play.autodarts.io` als Userscript.
 
-Aktuelle Releaseversion: `0.7.0`.
+Aktuelle Releaseversion: `0.8.0`.
 
 [![Installieren](https://img.shields.io/badge/Installieren-Autodarts%20Tournament%20Assistant%20Loader-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js)
 
@@ -97,6 +97,8 @@ Nach Installation ist links im Hauptmenü der neue Eintrag sichtbar. Darüber ö
   - KO-Erstrunde als Hybrid-Draw (`seeded` oder `open_draw`)
   - Direkt anwendbare Preset-Karten mit offiziellem European-Tour-Format, Basic-Kompatibilitätsprofil und Custom-Status
   - Klar gegliedertes Formular mit `Turnierformat`, `Teilnehmer`, `Zusätzliche Turnierregeln`, `Spielregeln` und `Turnierübersicht`
+  - Zusatzregeln werden ausschließlich für den aktiven Modus angezeigt und sind in anderen Modi weder bedienbar noch Teil der erzeugten Create-Config
+  - Kompakte Live-Zusammenfassung der wirksamen X01-Werte; `Spielregeln bearbeiten` öffnet den zugänglichen Inline-Editor
   - Live-Prognose für die voraussichtliche Turnierzeit
   - Teilnehmerliste kann per Button gemischt werden
   - Formularentwurf bleibt erhalten (z. B. beim Moduswechsel)
@@ -204,7 +206,9 @@ Tab: `Turnier`
 
 ![Neues Turnier erstellen](assets/ss_Turnier_anlage-neu.png)
 
-Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten bis zum Anlegen. Auf breiten Ansichten steht die `Turnierübersicht` mit Boardzahl, Zeitprofil und Live-Prognose rechts neben dem Formular; auf schmalen Ansichten folgt sie ohne horizontale Überbreite darunter. Die Preset-Karten stehen im Bereich `Turnierformat` und wenden eine bewusste Auswahl sofort an; einen separaten Apply-Button gibt es nicht mehr.
+Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten bis zum Anlegen. Auf breiten Ansichten steht die `Turnierübersicht` mit Boardzahl, Zeitprofil und Live-Prognose rechts neben dem Formular; auf schmalen Ansichten folgt sie ohne horizontale Überbreite darunter. Die Preset-Karten stehen im Bereich `Turnierformat` und wenden eine bewusste Auswahl sofort an; einen separaten Apply-Button gibt es nicht mehr. `Zusätzliche Turnierregeln` zeigt nur die zum aktiven Modus gehörenden, bereits unterstützten Optionen. Inaktive Modusfelder bleiben für eine sichere Rückkehr im Draft erhalten, sind aber verborgen, deaktiviert und aus der Create-Config entfernt.
+
+`Spielregeln` zeigt standardmäßig eine kompakte Live-Zusammenfassung aus Preset-Herkunft, wirksamer Matchlänge, Startpunkten, In-/Out-Modus, Bull-off, gegebenenfalls Bull-Modus und Maximalrunden. `Spielregeln bearbeiten` öffnet diese vorhandenen X01-Felder als Inline-Bereich; beim Schließen aus einem Editorfeld kehrt der Fokus zum Button zurück. Für `preliminary_final` nennt die Zusammenfassung getrennt die festen zwei Vorrundenlegs und das eigene Best-of der Finalphase. Eine kontextbezogene Regelhilfe ist in `0.8.0` noch nicht implementiert.
 
 ### Pflichtfelder
 - Turniername
@@ -219,7 +223,7 @@ Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten b
 | `Vorrundenspiele je Teilnehmer` | `4..8`, nur im neuen Modus | Grad des regulären Paarungsplans | Ist ausdrücklich nicht die Anzahl der Scheduling-Runden |
 | `Vorrundenwertung` | Punkte für Sieg/Unentschieden/Niederlage | Gemeinsame Vorrundentabelle | Veranstalterprofil wird validiert und gespeichert |
 | `Finalphase` | KO oder Doppel-KO, Qualifikantenzahl, ungerades Best-of | Qualifikation und Matchlänge nach der Vorrunde | Vorrunden-Fixed-Legs werden nicht auf die Finalphase übertragen |
-| `Best of Legs` | Ungerade `1..21` | Matchlänge; intern `First to N` | Definiert Siegbedingung pro Match und Turnierdauer |
+| `Best of Legs` | Ungerade `1..21`; im Inline-Editor und nicht als redundantes Feld bei `preliminary_final` | Matchlänge; intern `First to N` | Definiert Siegbedingung pro Match und Turnierdauer; `preliminary_final` nutzt stattdessen `Best of Legs der Finalphase` |
 | `Startpunkte` | `121`, `170`, `301`, `501`, `701`, `901` | X01-Basis für jedes Match | Beeinflusst Matchdauer und Schwierigkeitsprofil |
 | `In-Modus` | `Straight`, `Double`, `Master` | Wie ein Leg gestartet wird | Regelt Einstiegsanforderung je Spielstil/Regelwerk |
 | `Out-Modus` | `Straight`, `Double`, `Master` | Wie ein Leg beendet wird | Zentrale Regel für Checkout-Strenge |
@@ -260,6 +264,8 @@ Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten b
   - der Modus gewechselt wird
   - die UI neu gerendert wird
 - Wenn `Bull-off = Off`, wird `Bull mode` automatisch read-only deaktiviert.
+- Verdeckte Zusatzregeln sind zusätzlich `disabled`, lösen keine Browser-Validierung aus und erscheinen nicht in `FormData` oder der modusspezifisch projizierten Create-Config.
+- Modusspezifische Draft-Werte wie Platz-3-Spiel, Grand-Final-Modus, Gruppenpolicy und Vorrundenwerte bleiben beim vorübergehenden Moduswechsel erhalten, soweit keine bestehende fachliche Reset-Regel greift.
 - Bei manuellen Änderungen an Preset-relevanten Feldern wird die Karte `Individuell / Manuell` sofort ausgewählt; die aktuellen Werte und der Draft bleiben erhalten.
 - Legacy-Drafts und Legacy-Turniere mit der alten Preset-ID `pdc_standard` werden automatisch auf `PDC 501 / Double Out (Basic)` abgebildet, damit gespeicherte `Best of 5`-Turniere nicht still auf `Best of 11` umspringen.
 
@@ -294,7 +300,7 @@ Die Anzeige bündelt Teilnehmerzahl, geplante Spielanzahl, durchschnittliche Mat
 
 ### Nach dem Anlegen
 Im aktiven Turnier siehst du die wichtigsten Tags sofort:
-- Format (`KO`, `Doppel-KO`, `Liga`, `Gruppenphase + KO`)
+- Format (`KO`, `Doppel-KO`, `Liga`, `Gruppenphase + KO`, `Vorrunde + Finalphase`)
 - `Best of`, `First to`, `Startpunkte`
 - Bei KO: `Open Draw`/`Gesetzter Draw`, `Draw-Lock aktiv/aus`, `Spiel um Platz 3 aktiv/aus`
 - Bei Doppel-KO: `Open Draw`/`Gesetzter Draw`, `Draw-Lock aktiv/aus`, Grand-Final-Regel
@@ -713,7 +719,7 @@ powershell -ExecutionPolicy Bypass -File scripts/test-runtime-contract.ps1
 - Technisches Hard-Cap: `128` Teilnehmer
 - API-Halbautomatik basiert auf in der Praxis verwendeten Endpunkten (Inference), siehe [docs/autodarts-api-capabilities.md](docs/autodarts-api-capabilities.md)
 - DOM-Autodetect bleibt best-effort
-- MultiBoard ist nicht Bestandteil von Version `0.7.0`. `Boards für Zeitprognose` ist ausschließlich ein Kapazitätsparameter der Schätzung. Board-Zuweisung, parallele Lobbyverwaltung, mehrere gleichzeitig gestartete Matches, Mehrgeräte-Synchronisierung und Mehrbrowser-Bearbeitung sind nicht implementiert.
+- MultiBoard ist nicht Bestandteil von Version `0.8.0`. `Boards für Zeitprognose` ist ausschließlich ein Kapazitätsparameter der Schätzung. Board-Zuweisung, parallele Lobbyverwaltung, mehrere gleichzeitig gestartete Matches, Mehrgeräte-Synchronisierung und Mehrbrowser-Bearbeitung sind nicht implementiert.
 
 ## Quellen
 - Turnierdauer-Benchmarks:

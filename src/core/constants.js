@@ -149,6 +149,31 @@
     groups_ko: Object.freeze({ label: "Gruppenphase + KO", min: 4, max: 16 }),
     preliminary_final: Object.freeze({ label: "Vorrunde + Finalphase", min: 5, max: 16 }),
   });
+  const CREATE_MODE_RULE_FIELDS = Object.freeze({
+    ko: Object.freeze(["randomizeKoRound1", "enableThirdPlaceMatch"]),
+    double_ko: Object.freeze(["randomizeKoRound1", "grandFinalResetMode"]),
+    league: Object.freeze([]),
+    groups_ko: Object.freeze([
+      "groupsKoOddParticipantPolicy",
+      "groupsKoOddParticipantAcknowledged",
+    ]),
+    preliminary_final: Object.freeze([
+      "preliminaryMatchesPerParticipant",
+      "preliminaryWinPoints",
+      "preliminaryDrawPoints",
+      "preliminaryLossPoints",
+      "finalStageType",
+      "finalStageQualifierCount",
+      "finalStageBestOfLegs",
+    ]),
+  });
+  const CREATE_MODE_RULE_GROUPS = Object.freeze({
+    ko: Object.freeze(["ko_draw", "third_place"]),
+    double_ko: Object.freeze(["ko_draw", "grand_final"]),
+    league: Object.freeze(["league_empty"]),
+    groups_ko: Object.freeze(["groups_ko"]),
+    preliminary_final: Object.freeze(["preliminary_final"]),
+  });
   const BYE_PLACEHOLDER_TOKENS = new Set([
     "bye",
     "freilos",

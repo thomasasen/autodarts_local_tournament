@@ -284,3 +284,32 @@
       </section>
     `;
   }
+
+
+  function buildCreateGameRulesSummary(rawDraft) {
+    const draft = normalizeCreateDraft(rawDraft);
+    const effectiveBestOf = draft.mode === "preliminary_final"
+      ? draft.finalStageBestOfLegs
+      : draft.bestOfLegs;
+    const matchLength = `Best of ${effectiveBestOf} (First to ${getLegsToWin(effectiveBestOf)})`;
+    const leadingParts = draft.mode === "preliminary_final"
+      ? [`Vorrunde: ${PRELIMINARY_FIXED_LEG_COUNT} feste Legs`, `Finalphase: ${matchLength}`, String(draft.startScore)]
+      : [String(draft.startScore), matchLength];
+    const bullParts = draft.x01BullOffMode === "Off"
+      ? ["Bull-off aus"]
+      : [`Bull-off ${draft.x01BullOffMode}`, `Bull ${draft.x01BullMode}`];
+    const activePresetId = getAppliedCreatePresetId(draft);
+    const presetLabel = activePresetId === X01_PRESET_CUSTOM
+      ? "Individuell / Manuell"
+      : getCreatePresetLabel(activePresetId);
+    return {
+      presetLabel,
+      text: [
+        ...leadingParts,
+        `${draft.x01InMode} In`,
+        `${draft.x01OutMode} Out`,
+        ...bullParts,
+        `Max. ${draft.x01MaxRounds} Runden`,
+      ].join(" · "),
+    };
+  }

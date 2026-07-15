@@ -137,6 +137,7 @@
       refreshCreateFormDurationEstimate(createForm);
       refreshCreateFormGroupsKoPolicy(createForm);
       refreshCreateFormPreliminaryFinal(createForm);
+      refreshCreateGameRulesSummary(createForm);
       const handleDraftInputChange = (event) => {
         const target = event?.target;
         const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
@@ -170,6 +171,7 @@
         syncCreateFormDependencies(createForm);
         updateCreateDraftFromForm(createForm, true);
         refreshCreateFormDurationEstimate(createForm);
+        refreshCreateGameRulesSummary(createForm);
         refreshCreateFormGroupsKoPolicy(createForm);
         const preliminarySummaryFields = [
           "preliminaryMatchesPerParticipant",
@@ -190,6 +192,13 @@
         event.preventDefault();
         handleCreateTournament(createForm);
       });
+
+      const gameRulesToggle = createForm.querySelector("[data-action='toggle-game-rules-editor']");
+      if (gameRulesToggle instanceof HTMLButtonElement) {
+        gameRulesToggle.addEventListener("click", () => {
+          setCreateGameRulesExpanded(createForm, state.createGameRulesExpanded !== true);
+        });
+      }
 
     }
 
@@ -554,6 +563,7 @@
 
   function closeDrawer() {
     state.drawerOpen = false;
+    state.createGameRulesExpanded = false;
     renderShell();
     if (state.lastFocused instanceof HTMLElement) {
       state.lastFocused.focus();
@@ -605,8 +615,7 @@
     if (!(form instanceof HTMLFormElement)) {
       return;
     }
-    const formData = new FormData(form);
-    const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
+    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
     const presetId = getAppliedCreatePresetId(draft);
     setCreateFormPresetValue(form, presetId);
   }
@@ -619,21 +628,30 @@
     const bullOffSelect = form.querySelector("#ata-x01-bulloff");
     const bullModeSelect = form.querySelector("#ata-x01-bullmode");
     const modeSelect = form.querySelector("#ata-mode");
-    const grandFinalSelect = form.querySelector("#ata-grand-final-reset-mode");
     const mode = modeSelect instanceof HTMLSelectElement ? normalizeText(modeSelect.value) : "ko";
-    const toggleDisplay = (selector, visible) => {
-      const element = form.querySelector(selector);
-      if (element instanceof HTMLElement) element.style.display = visible ? "" : "none";
-    };
-    toggleDisplay("[data-role='standard-bestof-field']", mode !== "preliminary_final");
-    toggleDisplay("[data-role='ko-draw-field']", mode === "ko" || mode === "double_ko");
-    toggleDisplay("[data-role='third-place-field']", mode === "ko");
-    toggleDisplay("[data-role='grand-final-field']", mode === "double_ko");
-    if (modeSelect instanceof HTMLSelectElement && grandFinalSelect instanceof HTMLSelectElement) {
-      const grandFinalField = grandFinalSelect.closest(".ata-field");
-      if (grandFinalField instanceof HTMLElement) {
-        grandFinalField.style.display = normalizeText(modeSelect.value) === "double_ko" ? "" : "none";
-      }
+    const activeRuleGroups = new Set(CREATE_MODE_RULE_GROUPS[mode] || []);
+    form.querySelectorAll("[data-mode-rule-group]").forEach((group) => {
+      if (!(group instanceof HTMLElement)) return;
+      const groupId = normalizeText(group.getAttribute("data-mode-rule-group") || "");
+      const active = activeRuleGroups.has(groupId);
+      group.hidden = !active;
+      group.querySelectorAll("input, select, textarea, button").forEach((control) => {
+        if (
+          control instanceof HTMLInputElement
+          || control instanceof HTMLSelectElement
+          || control instanceof HTMLTextAreaElement
+          || control instanceof HTMLButtonElement
+        ) {
+          control.disabled = !active;
+        }
+      });
+    });
+    const standardBestOfField = form.querySelector("[data-role='standard-bestof-field']");
+    if (standardBestOfField instanceof HTMLElement) {
+      const active = mode !== "preliminary_final";
+      standardBestOfField.hidden = !active;
+      const bestOfInput = standardBestOfField.querySelector("#ata-bestof");
+      if (bestOfInput instanceof HTMLInputElement) bestOfInput.disabled = !active;
     }
     if (!(bullOffSelect instanceof HTMLSelectElement) || !(bullModeSelect instanceof HTMLSelectElement)) {
       refreshCreateFormPresetSelection(form);
@@ -669,7 +687,7 @@
       return;
     }
     const currentDraft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store.settings);
-    const nextDraft = normalizeCreateDraft(readCreateDraftInput(new FormData(form)), state.store.settings);
+    const nextDraft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
     const currentParticipantCount = parseParticipantLines(currentDraft.participantsText).length;
     const nextParticipantCount = parseParticipantLines(nextDraft.participantsText).length;
     const basisChanged = currentDraft.mode !== nextDraft.mode
@@ -678,6 +696,10 @@
     if (!basisChanged) {
       return;
     }
+    state.store.ui.createDraft = normalizeCreateDraft({
+      ...currentDraft,
+      groupsKoOddParticipantAcknowledged: false,
+    }, state.store.settings);
     const acknowledgement = form.elements.namedItem("groupsKoOddParticipantAcknowledged");
     if (acknowledgement instanceof HTMLInputElement) {
       acknowledgement.checked = false;
@@ -693,7 +715,7 @@
     if (!(host instanceof HTMLElement)) {
       return;
     }
-    const draft = normalizeCreateDraft(readCreateDraftInput(new FormData(form)), state.store.settings);
+    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
     host.innerHTML = renderGroupsKoOddParticipantPolicyFields(draft);
   }
 
@@ -702,7 +724,7 @@
     if (!(form instanceof HTMLFormElement)) return;
     const host = form.querySelector("#ata-preliminary-final-fields-host");
     if (!(host instanceof HTMLElement)) return;
-    const draft = normalizeCreateDraft(readCreateDraftInput(new FormData(form)), state.store.settings);
+    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
     host.innerHTML = renderPreliminaryFinalFields(draft);
   }
 
@@ -724,6 +746,7 @@
       syncCreateFormDependencies(form);
       updateCreateDraftFromForm(form, true);
       refreshCreateFormDurationEstimate(form);
+      refreshCreateGameRulesSummary(form);
       return true;
     }
     if (storedDraft.x01Preset === preset.id && matchesCreatePresetSetup(storedDraft, preset.id)) {
@@ -754,38 +777,75 @@
     syncCreateFormDependencies(form);
     updateCreateDraftFromForm(form, true);
     refreshCreateFormDurationEstimate(form);
+    refreshCreateGameRulesSummary(form);
     refreshCreateFormGroupsKoPolicy(form);
     refreshCreateFormPreliminaryFinal(form);
     return true;
   }
 
 
-  function readCreateDraftInput(formData) {
+  function readCreateDraftInput(formOrData, preservedDraft = null) {
+    const form = formOrData instanceof HTMLFormElement ? formOrData : null;
+    const formData = formOrData instanceof FormData ? formOrData : new FormData(formOrData);
+    const preserved = normalizeCreateDraft(
+      preservedDraft || state.store?.ui?.createDraft,
+      state.store?.settings,
+    );
+    const modeValue = normalizeText(formData.get("mode") || preserved.mode);
+    const mode = Object.prototype.hasOwnProperty.call(CREATE_MODE_RULE_FIELDS, modeValue)
+      ? modeValue
+      : preserved.mode;
+    const activeModeFields = new Set(CREATE_MODE_RULE_FIELDS[mode] || []);
+    const hasEnabledControl = (fieldName) => {
+      if (!(form instanceof HTMLFormElement)) return true;
+      return Array.from(form.elements).some((control) => (
+        (control instanceof HTMLInputElement
+          || control instanceof HTMLSelectElement
+          || control instanceof HTMLTextAreaElement)
+        && control.name === fieldName
+        && !control.disabled
+      ));
+    };
+    const readModeValue = (fieldName) => {
+      if (!activeModeFields.has(fieldName) || !hasEnabledControl(fieldName)) {
+        return preserved[fieldName];
+      }
+      return formData.has(fieldName) ? formData.get(fieldName) : preserved[fieldName];
+    };
+    const readModeCheckbox = (fieldName) => {
+      if (!activeModeFields.has(fieldName) || !hasEnabledControl(fieldName)) {
+        return preserved[fieldName] === true;
+      }
+      return formData.has(fieldName);
+    };
+    const standardBestOf = mode === "preliminary_final" || !hasEnabledControl("bestOfLegs")
+      ? preserved.bestOfLegs
+      : formData.get("bestOfLegs");
     return {
-      name: formData.get("name"),
-      mode: formData.get("mode"),
-      bestOfLegs: formData.get("bestOfLegs"),
-      startScore: formData.get("startScore"),
-      x01Preset: formData.get("x01Preset"),
-      x01InMode: formData.get("x01InMode"),
-      x01OutMode: formData.get("x01OutMode"),
-      x01BullMode: formData.get("x01BullMode"),
-      x01MaxRounds: formData.get("x01MaxRounds"),
-      x01BullOffMode: formData.get("x01BullOffMode"),
-      boardCount: formData.get("boardCount"),
-      participantsText: String(formData.get("participants") || ""),
-      randomizeKoRound1: formData.get("randomizeKoRound1") !== null,
-      enableThirdPlaceMatch: formData.get("enableThirdPlaceMatch") !== null,
-      grandFinalResetMode: formData.get("grandFinalResetMode"),
-      groupsKoOddParticipantPolicy: formData.get("groupsKoOddParticipantPolicy"),
-      groupsKoOddParticipantAcknowledged: formData.get("groupsKoOddParticipantAcknowledged") !== null,
-      preliminaryMatchesPerParticipant: formData.get("preliminaryMatchesPerParticipant"),
-      preliminaryWinPoints: formData.get("preliminaryWinPoints"),
-      preliminaryDrawPoints: formData.get("preliminaryDrawPoints"),
-      preliminaryLossPoints: formData.get("preliminaryLossPoints"),
-      finalStageType: formData.get("finalStageType"),
-      finalStageQualifierCount: formData.get("finalStageQualifierCount"),
-      finalStageBestOfLegs: formData.get("finalStageBestOfLegs"),
+      name: formData.get("name") ?? preserved.name,
+      mode,
+      bestOfLegs: standardBestOf,
+      startScore: formData.get("startScore") ?? preserved.startScore,
+      x01Preset: formData.get("x01Preset") ?? preserved.x01Preset,
+      x01InMode: formData.get("x01InMode") ?? preserved.x01InMode,
+      x01OutMode: formData.get("x01OutMode") ?? preserved.x01OutMode,
+      x01BullMode: formData.get("x01BullMode") ?? preserved.x01BullMode,
+      x01MaxRounds: formData.get("x01MaxRounds") ?? preserved.x01MaxRounds,
+      x01BullOffMode: formData.get("x01BullOffMode") ?? preserved.x01BullOffMode,
+      boardCount: formData.get("boardCount") ?? preserved.boardCount,
+      participantsText: String(formData.get("participants") ?? preserved.participantsText),
+      randomizeKoRound1: readModeCheckbox("randomizeKoRound1"),
+      enableThirdPlaceMatch: readModeCheckbox("enableThirdPlaceMatch"),
+      grandFinalResetMode: readModeValue("grandFinalResetMode"),
+      groupsKoOddParticipantPolicy: readModeValue("groupsKoOddParticipantPolicy"),
+      groupsKoOddParticipantAcknowledged: readModeCheckbox("groupsKoOddParticipantAcknowledged"),
+      preliminaryMatchesPerParticipant: readModeValue("preliminaryMatchesPerParticipant"),
+      preliminaryWinPoints: readModeValue("preliminaryWinPoints"),
+      preliminaryDrawPoints: readModeValue("preliminaryDrawPoints"),
+      preliminaryLossPoints: readModeValue("preliminaryLossPoints"),
+      finalStageType: readModeValue("finalStageType"),
+      finalStageQualifierCount: readModeValue("finalStageQualifierCount"),
+      finalStageBestOfLegs: readModeValue("finalStageBestOfLegs"),
     };
   }
 
@@ -794,8 +854,7 @@
     if (!(form instanceof HTMLFormElement)) {
       return;
     }
-    const formData = new FormData(form);
-    const nextDraft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
+    const nextDraft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
     const currentDraft = state.store.ui.createDraft || {};
     const changed = JSON.stringify(nextDraft) !== JSON.stringify(currentDraft);
     if (!changed) {
@@ -816,12 +875,40 @@
     if (!(estimateHost instanceof HTMLElement)) {
       return;
     }
-    const formData = new FormData(form);
-    const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
+    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
     const estimate = estimateTournamentDurationFromDraft(draft, state.store.settings);
     estimateHost.innerHTML = renderTournamentDurationEstimate(estimate, {
       visible: state.store?.ui?.durationEstimateVisible !== false,
     });
+  }
+
+
+  function refreshCreateGameRulesSummary(form) {
+    if (!(form instanceof HTMLFormElement)) return;
+    const summaryHost = form.querySelector("[data-role='game-rules-summary-text']");
+    const presetHost = form.querySelector("[data-role='game-rules-preset-origin']");
+    if (!(summaryHost instanceof HTMLElement) || !(presetHost instanceof HTMLElement)) return;
+    const summary = buildCreateGameRulesSummary(state.store?.ui?.createDraft);
+    summaryHost.textContent = summary.text;
+    presetHost.innerHTML = `<strong>Format:</strong> ${escapeHtml(summary.presetLabel)}`;
+  }
+
+
+  function setCreateGameRulesExpanded(form, expanded) {
+    if (!(form instanceof HTMLFormElement)) return;
+    const button = form.querySelector("#ata-game-rules-editor-toggle");
+    const editor = form.querySelector("#ata-game-rules-editor");
+    if (!(button instanceof HTMLButtonElement) || !(editor instanceof HTMLElement)) return;
+    const nextExpanded = expanded === true;
+    const activeElement = state.shadowRoot?.activeElement || document.activeElement;
+    const returnFocus = !nextExpanded
+      && activeElement instanceof HTMLElement
+      && editor.contains(activeElement);
+    state.createGameRulesExpanded = nextExpanded;
+    button.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
+    button.textContent = nextExpanded ? "Bearbeitung schließen" : "Spielregeln bearbeiten";
+    editor.hidden = !nextExpanded;
+    if (returnFocus) button.focus();
   }
 
 
@@ -842,6 +929,7 @@
     participantField.value = shuffledNames.join("\n");
     updateCreateDraftFromForm(form, true);
     refreshCreateFormDurationEstimate(form);
+    refreshCreateGameRulesSummary(form);
     refreshCreateFormGroupsKoPolicy(form);
     refreshCreateFormPreliminaryFinal(form);
     setNotice("success", "Teilnehmer wurden zuf\u00e4llig gemischt.", 1800);
@@ -851,10 +939,10 @@
   function handleCreateTournament(form) {
     syncCreateFormDependencies(form);
     const formData = new FormData(form);
-    const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
+    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
     state.store.ui.createDraft = draft;
     const participants = parseParticipantLines(formData.get("participants"));
-    const config = {
+    const config = scopeCreateConfigToMode({
       name: draft.name,
       mode: draft.mode,
       bestOfLegs: draft.bestOfLegs,
@@ -881,7 +969,7 @@
       finalStageBestOfLegs: draft.finalStageBestOfLegs,
       koDrawLocked: state.store.settings.featureFlags.koDrawLockDefault !== false,
       participants,
-    };
+    });
 
     const result = createTournamentSession(config);
     if (!result.ok) {

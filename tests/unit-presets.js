@@ -207,3 +207,68 @@ test("Preset normalization: a deviating stored preset draft becomes Custom witho
   assertEqual(draft.boardCount, 2);
   assertEqual(draft.participantsText, "A\nB");
 });
+
+
+test("Game-rules summary: European Tour and Basic expose preset origin plus First-to", () => {
+  const european = buildCreateGameRulesSummary(createDefaultCreateDraft());
+  const basic = buildCreateGameRulesSummary(normalizeCreateDraft({
+    ...createDefaultCreateDraft(),
+    x01Preset: X01_PRESET_PDC_501_DOUBLE_OUT_BASIC,
+    bestOfLegs: 5,
+  }));
+
+  assertEqual(european.presetLabel, "PDC European Tour (Official)");
+  assert(european.text.includes("501 · Best of 11 (First to 6)"));
+  assert(european.text.includes("Straight In · Double Out"));
+  assert(european.text.includes("Bull-off Normal · Bull 25/50"));
+  assert(european.text.includes("Max. 50 Runden"));
+  assertEqual(basic.presetLabel, "PDC 501 / Double Out (Basic)");
+  assert(basic.text.includes("Best of 5 (First to 3)"));
+});
+
+
+test("Game-rules summary: Custom reflects all effective X01 values and suppresses stale bull mode", () => {
+  const custom = buildCreateGameRulesSummary(normalizeCreateDraft({
+    ...createDefaultCreateDraft(),
+    mode: "league",
+    bestOfLegs: 5,
+    x01Preset: X01_PRESET_CUSTOM,
+    startScore: 301,
+    x01InMode: "Double",
+    x01OutMode: "Master",
+    x01BullOffMode: "Off",
+    x01BullMode: "50/50",
+    x01MaxRounds: 20,
+  }));
+
+  assertEqual(custom.presetLabel, "Individuell / Manuell");
+  assert(custom.text.includes("301 · Best of 5 (First to 3)"));
+  assert(custom.text.includes("Double In · Master Out"));
+  assert(custom.text.includes("Bull-off aus"));
+  assert(!custom.text.includes("Bull 50/50"), "Bull mode must not be shown while bull-off is disabled.");
+  assert(custom.text.includes("Max. 20 Runden"));
+});
+
+
+test("Game-rules summary: active bull 50/50 stays visible", () => {
+  const summary = buildCreateGameRulesSummary(normalizeCreateDraft({
+    ...createDefaultCreateDraft(),
+    x01Preset: X01_PRESET_CUSTOM,
+    x01BullOffMode: "Official",
+    x01BullMode: "50/50",
+  }));
+  assert(summary.text.includes("Bull-off Official · Bull 50/50"));
+});
+
+
+test("Game-rules summary: preliminary_final uses fixed preliminary legs and final-stage Best-of", () => {
+  const summary = buildCreateGameRulesSummary(normalizeCreateDraft({
+    ...createDefaultCreateDraft(),
+    mode: "preliminary_final",
+    bestOfLegs: 11,
+    finalStageBestOfLegs: 5,
+    x01Preset: X01_PRESET_CUSTOM,
+  }));
+  assert(summary.text.startsWith("Vorrunde: 2 feste Legs · Finalphase: Best of 5 (First to 3) · 501"));
+  assert(!summary.text.includes("Best of 11"), "Ineffective general Best-of must not leak into the summary.");
+});

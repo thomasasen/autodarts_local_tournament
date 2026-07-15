@@ -158,7 +158,7 @@
         };
 
         selectPreset(X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL);
-        const europeanTourDraft = normalizeCreateDraft(readCreateDraftInput(new FormData(createForm)), state.store.settings);
+        const europeanTourDraft = normalizeCreateDraft(readCreateDraftInput(createForm), state.store.settings);
         const europeanDurationHtml = createForm.querySelector("#ata-create-duration-estimate")?.innerHTML || "";
         const europeanPersisted = state.store.ui.createDraft.x01Preset === X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL;
         const europeanTourState = JSON.stringify(state.store.ui.createDraft);
@@ -170,7 +170,7 @@
           && JSON.stringify(state.store.ui.createDraft) === europeanTourState;
 
         selectPreset(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC);
-        const basicDraft = normalizeCreateDraft(readCreateDraftInput(new FormData(createForm)), state.store.settings);
+        const basicDraft = normalizeCreateDraft(readCreateDraftInput(createForm), state.store.settings);
         const basicDurationHtml = createForm.querySelector("#ata-create-duration-estimate")?.innerHTML || "";
         const basicPersisted = state.store.ui.createDraft.x01Preset === X01_PRESET_PDC_501_DOUBLE_OUT_BASIC;
         const preservedFields = basicDraft.name === "Preset-Erhalt"
@@ -236,9 +236,9 @@
         );
 
         applySelectedPresetToCreateForm(createForm, X01_PRESET_PDC_501_DOUBLE_OUT_BASIC);
-        const valuesBeforeCustom = JSON.stringify(readCreateDraftInput(new FormData(createForm)));
+        const valuesBeforeCustom = JSON.stringify(readCreateDraftInput(createForm));
         selectPreset(X01_PRESET_CUSTOM);
-        const valuesAfterCustom = JSON.stringify(readCreateDraftInput(new FormData(createForm)));
+        const valuesAfterCustom = JSON.stringify(readCreateDraftInput(createForm));
         const customOnlyChangesStatus = valuesBeforeCustom.replace(
           X01_PRESET_PDC_501_DOUBLE_OUT_BASIC,
           X01_PRESET_CUSTOM,
@@ -260,6 +260,155 @@
       } finally {
         state.store.tournament = previousTournament;
         state.store.ui.createDraft = previousDraft || createDefaultCreateDraft(state.store.settings);
+        renderShell();
+      }
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      const previousDraft = cloneSerializable(state.store.ui?.createDraft);
+      const previousActiveTab = state.activeTab;
+      const previousStoredActiveTab = state.store.ui.activeTab;
+      const previousGameRulesExpanded = state.createGameRulesExpanded;
+      const previousDrawerOpen = state.drawerOpen;
+      try {
+        state.store.tournament = null;
+        state.drawerOpen = true;
+        state.activeTab = "tournament";
+        state.store.ui.activeTab = "tournament";
+        state.createGameRulesExpanded = false;
+        state.store.ui.createDraft = normalizeCreateDraft({
+          ...createDefaultCreateDraft(state.store.settings),
+          name: "Release 3 UI",
+          mode: "ko",
+          participantsText: "A\nB\nC\nD\nE\nF\nG",
+          x01Preset: X01_PRESET_CUSTOM,
+          bestOfLegs: 11,
+          enableThirdPlaceMatch: true,
+          grandFinalResetMode: GRAND_FINAL_RESET_SINGLE_MATCH,
+          groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
+          groupsKoOddParticipantAcknowledged: true,
+          preliminaryMatchesPerParticipant: 4,
+          finalStageType: FINAL_STAGE_TYPE_DOUBLE_KO,
+          finalStageQualifierCount: 4,
+          finalStageBestOfLegs: 5,
+        }, state.store.settings);
+        renderShell();
+        const createForm = state.shadowRoot?.getElementById("ata-create-form");
+        const modeSelect = createForm?.querySelector("#ata-mode");
+        if (!(createForm instanceof HTMLFormElement) || !(modeSelect instanceof HTMLSelectElement)) {
+          throw new Error("Create form or mode select missing.");
+        }
+        const switchMode = (mode) => {
+          modeSelect.value = mode;
+          modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+          return Array.from(createForm.querySelectorAll("[data-mode-rule-group]"))
+            .filter((group) => group instanceof HTMLElement && !group.hidden)
+            .map((group) => group.getAttribute("data-mode-rule-group"));
+        };
+        const inactiveControlsDisabled = () => Array.from(createForm.querySelectorAll("[data-mode-rule-group][hidden] input, [data-mode-rule-group][hidden] select, [data-mode-rule-group][hidden] textarea, [data-mode-rule-group][hidden] button"))
+          .every((control) => control.disabled === true);
+
+        const koGroups = switchMode("ko");
+        const leagueGroups = switchMode("league");
+        const leagueEmptyText = normalizeText(createForm.querySelector("[data-role='league-rules-empty']")?.textContent || "");
+        const thirdPlaceExcludedFromLeague = !new FormData(createForm).has("enableThirdPlaceMatch");
+        const doubleKoGroups = switchMode("double_ko");
+        const grandFinalSelect = createForm.querySelector("#ata-grand-final-reset-mode");
+        const grandFinalRestored = grandFinalSelect instanceof HTMLSelectElement
+          && grandFinalSelect.value === GRAND_FINAL_RESET_SINGLE_MATCH;
+        const groupsKoGroups = switchMode("groups_ko");
+        const groupPolicy = createForm.querySelector("#ata-groups-ko-odd-policy");
+        const groupPolicyRestored = groupPolicy instanceof HTMLSelectElement
+          && groupPolicy.value === GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL;
+        const preliminaryGroups = switchMode("preliminary_final");
+        const groupAcknowledgementReset = state.store.ui.createDraft.groupsKoOddParticipantAcknowledged === false;
+        const standardBestOf = createForm.querySelector("#ata-bestof");
+        const finalBestOf = createForm.querySelector("#ata-final-stage-bestof");
+        const preliminaryComplete = standardBestOf instanceof HTMLInputElement
+          && standardBestOf.disabled
+          && standardBestOf.closest("[data-role='standard-bestof-field']")?.hidden === true
+          && finalBestOf instanceof HTMLInputElement
+          && finalBestOf.value === "5";
+        switchMode("ko");
+        const thirdPlace = createForm.querySelector("#ata-enable-third-place");
+        const thirdPlaceRestored = thirdPlace instanceof HTMLInputElement && thirdPlace.checked;
+        const visibilityOk = JSON.stringify(koGroups) === JSON.stringify(["ko_draw", "third_place"])
+          && JSON.stringify(doubleKoGroups) === JSON.stringify(["ko_draw", "grand_final"])
+          && JSON.stringify(leagueGroups) === JSON.stringify(["league_empty"])
+          && JSON.stringify(groupsKoGroups) === JSON.stringify(["groups_ko"])
+          && JSON.stringify(preliminaryGroups) === JSON.stringify(["preliminary_final"])
+          && leagueEmptyText === "Für den Ligamodus sind keine zusätzlichen Turnierregeln erforderlich."
+          && thirdPlaceExcludedFromLeague
+          && inactiveControlsDisabled()
+          && grandFinalRestored
+          && groupPolicyRestored
+          && groupAcknowledgementReset
+          && preliminaryComplete
+          && thirdPlaceRestored;
+        record(
+          "Create-UI Release 3: nur aktive Modusregeln sind sichtbar, bedienbar und in FormData",
+          visibilityOk,
+          `ko=${koGroups.join("/")}, double=${doubleKoGroups.join("/")}, league=${leagueGroups.join("/")}, groups=${groupsKoGroups.join("/")}, preliminary=${preliminaryGroups.join("/")}, preserved=${grandFinalRestored && groupPolicyRestored && thirdPlaceRestored}, ackReset=${groupAcknowledgementReset}`,
+        );
+
+        const toggle = createForm.querySelector("#ata-game-rules-editor-toggle");
+        const editor = createForm.querySelector("#ata-game-rules-editor");
+        if (!(toggle instanceof HTMLButtonElement) || !(editor instanceof HTMLElement)) {
+          throw new Error("Game-rules disclosure missing.");
+        }
+        const initiallyClosed = editor.hidden
+          && toggle.getAttribute("aria-expanded") === "false"
+          && toggle.getAttribute("aria-controls") === editor.id
+          && normalizeText(toggle.textContent) === "Spielregeln bearbeiten";
+        toggle.click();
+        const opened = !editor.hidden
+          && toggle.getAttribute("aria-expanded") === "true"
+          && state.createGameRulesExpanded === true;
+        const bestOf = createForm.querySelector("#ata-bestof");
+        if (!(bestOf instanceof HTMLInputElement)) throw new Error("Best-of input missing.");
+        bestOf.focus();
+        toggle.click();
+        const focusReturned = editor.hidden
+          && state.shadowRoot?.activeElement === toggle
+          && toggle.getAttribute("aria-expanded") === "false";
+        record(
+          "Create-UI Release 3: Inline-Disclosure ist geschlossen, zugänglich und gibt Fokus zurück",
+          initiallyClosed && opened && focusReturned,
+          `closed=${initiallyClosed}, opened=${opened}, focus=${focusReturned}, hidden=${editor.hidden}, aria=${toggle.getAttribute("aria-expanded")}, active=${state.shadowRoot?.activeElement?.id || state.shadowRoot?.activeElement?.tagName || "-"}`,
+        );
+
+        toggle.click();
+        bestOf.value = "5";
+        bestOf.dispatchEvent(new Event("change", { bubbles: true }));
+        const customSummary = normalizeText(createForm.querySelector("[data-role='game-rules-summary-text']")?.textContent || "");
+        const customOrigin = normalizeText(createForm.querySelector("[data-role='game-rules-preset-origin']")?.textContent || "");
+        const basicRadio = createForm.querySelector(`input[name='x01Preset'][value='${X01_PRESET_PDC_501_DOUBLE_OUT_BASIC}']`);
+        if (!(basicRadio instanceof HTMLInputElement)) throw new Error("Basic preset radio missing.");
+        basicRadio.checked = true;
+        basicRadio.dispatchEvent(new Event("change", { bubbles: true }));
+        const basicSummary = normalizeText(createForm.querySelector("[data-role='game-rules-summary-text']")?.textContent || "");
+        const basicOrigin = normalizeText(createForm.querySelector("[data-role='game-rules-preset-origin']")?.textContent || "");
+        const liveSummaryOk = customSummary.includes("Best of 5 (First to 3)")
+          && customOrigin.includes("Individuell / Manuell")
+          && basicSummary.includes("501 · Best of 5 (First to 3)")
+          && basicOrigin.includes("PDC 501 / Double Out (Basic)")
+          && state.createGameRulesExpanded === true
+          && !editor.hidden;
+        record(
+          "Create-UI Release 3: Zusammenfassung, Preset-Herkunft und offener Editor bleiben synchron",
+          liveSummaryOk,
+          `custom=${customOrigin}, basic=${basicOrigin}, expanded=${state.createGameRulesExpanded}`,
+        );
+      } catch (error) {
+        record("Create-UI Release 3: Modusregeln und Spielregel-Disclosure", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+        state.store.ui.createDraft = previousDraft || createDefaultCreateDraft(state.store.settings);
+        state.activeTab = previousActiveTab;
+        state.store.ui.activeTab = previousStoredActiveTab;
+        state.createGameRulesExpanded = previousGameRulesExpanded;
+        state.drawerOpen = previousDrawerOpen;
         renderShell();
       }
     }
@@ -302,6 +451,9 @@
           "#ata-x01-bulloff",
           "#ata-x01-bullmode",
           "#ata-x01-maxrounds",
+          "[data-role='game-rules-summary']",
+          "#ata-game-rules-editor-toggle",
+          "#ata-game-rules-editor",
           "[data-role='preset-selection']",
           `input[name='x01Preset'][value='${X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL}']`,
           `input[name='x01Preset'][value='${X01_PRESET_PDC_501_DOUBLE_OUT_BASIC}']`,
@@ -408,7 +560,7 @@
           modeSelect.value = "preliminary_final";
           modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
 
-          const draft = normalizeCreateDraft(readCreateDraftInput(new FormData(createForm)), state.store.settings);
+          const draft = normalizeCreateDraft(readCreateDraftInput(createForm), state.store.settings);
           const summaryText = normalizeText(createForm.querySelector("[data-role='preliminary-live-summary']")?.textContent || "");
           const defaultsOk = draft.mode === "preliminary_final"
             && draft.preliminaryMatchesPerParticipant === 4

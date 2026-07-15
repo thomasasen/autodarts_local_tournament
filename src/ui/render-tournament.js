@@ -251,21 +251,21 @@
             ${renderGroupsKoOddParticipantPolicyFields(draft)}
           </div>
           <div id="ata-preliminary-final-fields-host" data-mode-rule-group="preliminary_final">${renderPreliminaryFinalFields(draft)}</div>
-          <div class="ata-toggle ata-toggle-compact" data-role="ko-draw-field" data-mode-rule-group="ko double_ko">
+          <div class="ata-toggle ata-toggle-compact" data-role="ko-draw-field" data-mode-rule-group="ko_draw">
             <div>
               <strong>KO-Erstrunde zuf\u00e4llig mischen ${drawHelpLinks}</strong>
               <div class="ata-small">Open Draw bei aktivem Schalter, sonst gesetzter Draw.</div>
             </div>
             <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
           </div>
-          <div class="ata-toggle ata-toggle-compact" data-role="third-place-field" data-mode-rule-group="ko">
+          <div class="ata-toggle ata-toggle-compact" data-role="third-place-field" data-mode-rule-group="third_place">
             <div>
               <strong>Spiel um Platz 3 (optional)</strong>
               <div class="ata-small">Nur im KO-Modus: Halbfinal-Verlierer spielen um Platz 3. Ohne Option bleibt klassischer Single-Elimination-Baum.</div>
             </div>
             <input id="ata-enable-third-place" name="enableThirdPlaceMatch" type="checkbox" ${thirdPlaceChecked}>
           </div>
-          <div class="ata-field" data-role="grand-final-field" data-mode-rule-group="double_ko">
+          <div class="ata-field" data-role="grand-final-field" data-mode-rule-group="grand_final">
             <label for="ata-grand-final-reset-mode">Doppel-KO Grand Final</label>
             <select id="ata-grand-final-reset-mode" name="grandFinalResetMode">
               <option value="${GRAND_FINAL_RESET_IF_NEEDED}" ${grandFinalResetMode === GRAND_FINAL_RESET_IF_NEEDED ? "selected" : ""}>Reset-Finale falls nötig (empfohlen)</option>
@@ -273,6 +273,7 @@
             </select>
             <p class="ata-small ata-create-help">Gilt für Doppel-KO: Beim Reset-Finale darf der Winners-Bracket-Sieger das erste Grand Final verlieren; dann entscheidet ein zweites Finale. Ein einzelnes Grand Final ist schneller, aber kein vollständiges klassisches Doppel-KO.</p>
           </div>
+          <p class="ata-small ata-create-empty-rules" data-role="league-rules-empty" data-mode-rule-group="league_empty">Für den Ligamodus sind keine zusätzlichen Turnierregeln erforderlich.</p>
         </div>
       </section>
     `;
@@ -286,72 +287,91 @@
       bullModeDisabledAttr,
       bullModeHiddenInput,
     } = options;
+    const summary = buildCreateGameRulesSummary(draft);
+    const expanded = state.createGameRulesExpanded === true;
     return `
       <section class="ata-create-section" data-create-section="game-rules" aria-labelledby="ata-create-game-rules-heading">
         ${renderCreateFormSectionHeading(4, "Spielregeln", "Matchlänge und X01-Einstellungen prüfen oder anpassen.", "ata-create-game-rules-heading")}
         <div class="ata-create-section-body">
-          <div class="ata-grid-3 ata-grid-3-tight">
-            <div class="ata-field" data-role="standard-bestof-field">
-              <label for="ata-bestof">Best of Legs</label>
-              <input id="ata-bestof" name="bestOfLegs" type="number" min="1" max="21" step="2" value="${draft.bestOfLegs}">
-            </div>
-            <div class="ata-field">
-              <label for="ata-startscore">Startpunkte</label>
-              <select id="ata-startscore" name="startScore">${startScoreOptions}</select>
-            </div>
-            <div class="ata-field">
-              <label for="ata-x01-inmode">In-Modus</label>
-              <select id="ata-x01-inmode" name="x01InMode">
-                <option value="Straight" ${draft.x01InMode === "Straight" ? "selected" : ""}>Straight</option>
-                <option value="Double" ${draft.x01InMode === "Double" ? "selected" : ""}>Double</option>
-                <option value="Master" ${draft.x01InMode === "Master" ? "selected" : ""}>Master</option>
-              </select>
-            </div>
-            <div class="ata-field">
-              <label for="ata-x01-outmode">Out-Modus</label>
-              <select id="ata-x01-outmode" name="x01OutMode">
-                <option value="Straight" ${draft.x01OutMode === "Straight" ? "selected" : ""}>Straight</option>
-                <option value="Double" ${draft.x01OutMode === "Double" ? "selected" : ""}>Double</option>
-                <option value="Master" ${draft.x01OutMode === "Master" ? "selected" : ""}>Master</option>
-              </select>
-            </div>
-            <div class="ata-field">
-              <label for="ata-x01-bulloff">Bull-off</label>
-              <select id="ata-x01-bulloff" name="x01BullOffMode">
-                <option value="Off" ${draft.x01BullOffMode === "Off" ? "selected" : ""}>Off</option>
-                <option value="Normal" ${draft.x01BullOffMode === "Normal" ? "selected" : ""}>Normal</option>
-                <option value="Official" ${draft.x01BullOffMode === "Official" ? "selected" : ""}>Official</option>
-              </select>
-            </div>
-            <div class="ata-field">
-              <label for="ata-x01-bullmode">Bull-Modus</label>
-              <select id="ata-x01-bullmode" name="x01BullMode" ${bullModeDisabledAttr}>
-                <option value="25/50" ${draft.x01BullMode === "25/50" ? "selected" : ""}>25/50</option>
-                <option value="50/50" ${draft.x01BullMode === "50/50" ? "selected" : ""}>50/50</option>
-              </select>
-              ${bullModeHiddenInput}
-            </div>
-            <div class="ata-field">
-              <label for="ata-x01-maxrounds">Max Runden</label>
-              <select id="ata-x01-maxrounds" name="x01MaxRounds">
-                <option value="15" ${draft.x01MaxRounds === 15 ? "selected" : ""}>15</option>
-                <option value="20" ${draft.x01MaxRounds === 20 ? "selected" : ""}>20</option>
-                <option value="50" ${draft.x01MaxRounds === 50 ? "selected" : ""}>50</option>
-                <option value="80" ${draft.x01MaxRounds === 80 ? "selected" : ""}>80</option>
-              </select>
-            </div>
+          <div class="ata-game-rules-summary" data-role="game-rules-summary" aria-live="polite">
+            <p class="ata-game-rules-origin" data-role="game-rules-preset-origin"><strong>Format:</strong> ${escapeHtml(summary.presetLabel)}</p>
+            <p class="ata-game-rules-summary-text" data-role="game-rules-summary-text">${escapeHtml(summary.text)}</p>
           </div>
-          <div class="ata-create-fixed-summary" data-role="fixed-match-setup" role="group" aria-label="Festes technisches Spiel-Setup">
-            <span class="ata-create-fixed-summary-label">Festes Setup</span>
-            <span>X01</span>
-            <span>Legs · First to N aus Best of</span>
-            <span>Private Lobby</span>
+          <div class="ata-game-rules-actions">
+            <button
+              id="ata-game-rules-editor-toggle"
+              type="button"
+              class="ata-btn ata-btn-sm"
+              data-action="toggle-game-rules-editor"
+              aria-expanded="${expanded ? "true" : "false"}"
+              aria-controls="ata-game-rules-editor"
+            >${expanded ? "Bearbeitung schließen" : "Spielregeln bearbeiten"}</button>
           </div>
-          <div class="ata-create-rule-notes">
-            <p class="ata-small ata-create-help">PDC European Tour (Official): KO, Best of 11 Legs (First to 6), 501, Straight In, Double Out, Bull 25/50. Bull-off Normal und Max Runden 50 bleiben technische AutoDarts-Werte.</p>
-            <p class="ata-small ata-create-help">PDC 501 / Double Out (Basic): kompatibler Ersatz für das frühere irreführende „PDC-Standard“-Preset. Ehrlich benannt, aber kein offizielles PDC-Eventformat.</p>
-            <p class="ata-small ata-create-help">PDC World Championship im echten Set-Format wird bewusst nicht als offizielles Preset angeboten, weil AutoDarts hier nur Legs / First to N unterstützt.</p>
-            <p class="ata-small ata-create-help">Bull-off = Off deaktiviert Bull-Modus automatisch (schreibgeschützt).</p>
+          <div
+            id="ata-game-rules-editor"
+            class="ata-game-rules-editor"
+            role="region"
+            aria-labelledby="ata-create-game-rules-heading"
+            ${expanded ? "" : "hidden"}
+          >
+            <div class="ata-grid-3 ata-grid-3-tight">
+              <div class="ata-field" data-role="standard-bestof-field">
+                <label for="ata-bestof">Best of Legs</label>
+                <input id="ata-bestof" name="bestOfLegs" type="number" min="1" max="21" step="2" value="${draft.bestOfLegs}">
+              </div>
+              <div class="ata-field">
+                <label for="ata-startscore">Startpunkte</label>
+                <select id="ata-startscore" name="startScore">${startScoreOptions}</select>
+              </div>
+              <div class="ata-field">
+                <label for="ata-x01-inmode">In-Modus</label>
+                <select id="ata-x01-inmode" name="x01InMode">
+                  <option value="Straight" ${draft.x01InMode === "Straight" ? "selected" : ""}>Straight</option>
+                  <option value="Double" ${draft.x01InMode === "Double" ? "selected" : ""}>Double</option>
+                  <option value="Master" ${draft.x01InMode === "Master" ? "selected" : ""}>Master</option>
+                </select>
+              </div>
+              <div class="ata-field">
+                <label for="ata-x01-outmode">Out-Modus</label>
+                <select id="ata-x01-outmode" name="x01OutMode">
+                  <option value="Straight" ${draft.x01OutMode === "Straight" ? "selected" : ""}>Straight</option>
+                  <option value="Double" ${draft.x01OutMode === "Double" ? "selected" : ""}>Double</option>
+                  <option value="Master" ${draft.x01OutMode === "Master" ? "selected" : ""}>Master</option>
+                </select>
+              </div>
+              <div class="ata-field">
+                <label for="ata-x01-bulloff">Bull-off</label>
+                <select id="ata-x01-bulloff" name="x01BullOffMode">
+                  <option value="Off" ${draft.x01BullOffMode === "Off" ? "selected" : ""}>Off</option>
+                  <option value="Normal" ${draft.x01BullOffMode === "Normal" ? "selected" : ""}>Normal</option>
+                  <option value="Official" ${draft.x01BullOffMode === "Official" ? "selected" : ""}>Official</option>
+                </select>
+              </div>
+              <div class="ata-field">
+                <label for="ata-x01-bullmode">Bull-Modus</label>
+                <select id="ata-x01-bullmode" name="x01BullMode" ${bullModeDisabledAttr}>
+                  <option value="25/50" ${draft.x01BullMode === "25/50" ? "selected" : ""}>25/50</option>
+                  <option value="50/50" ${draft.x01BullMode === "50/50" ? "selected" : ""}>50/50</option>
+                </select>
+                ${bullModeHiddenInput}
+              </div>
+              <div class="ata-field">
+                <label for="ata-x01-maxrounds">Max Runden</label>
+                <select id="ata-x01-maxrounds" name="x01MaxRounds">
+                  <option value="15" ${draft.x01MaxRounds === 15 ? "selected" : ""}>15</option>
+                  <option value="20" ${draft.x01MaxRounds === 20 ? "selected" : ""}>20</option>
+                  <option value="50" ${draft.x01MaxRounds === 50 ? "selected" : ""}>50</option>
+                  <option value="80" ${draft.x01MaxRounds === 80 ? "selected" : ""}>80</option>
+                </select>
+              </div>
+            </div>
+            <div class="ata-create-fixed-summary" data-role="fixed-match-setup" role="group" aria-label="Festes technisches Spiel-Setup">
+              <span class="ata-create-fixed-summary-label">Festes Setup</span>
+              <span>X01</span>
+              <span>Legs · First to N aus Best of</span>
+              <span>Private Lobby</span>
+            </div>
+            <p class="ata-small ata-create-help">Bull-off = Off deaktiviert den dann wirkungslosen Bull-Modus automatisch.</p>
           </div>
         </div>
       </section>

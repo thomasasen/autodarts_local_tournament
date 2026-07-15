@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.7.0
+// @version      0.8.0
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -22,7 +22,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.7.0";
+  const APP_VERSION = "0.8.0";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 5;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
@@ -633,16 +633,19 @@
         grid-template-columns: minmax(0, 1fr);
       }
 
-      .ata-create-rule-stack,
-      .ata-create-rule-notes {
+      .ata-create-rule-stack {
         display: grid;
         gap: var(--ata-space-2);
       }
 
-      .ata-create-rule-notes {
-        margin-top: 2px;
-        padding-top: 10px;
-        border-top: 1px solid rgba(255, 255, 255, 0.12);
+      .ata-create-rule-stack > [hidden],
+      .ata-game-rules-editor[hidden],
+      [data-role="standard-bestof-field"][hidden] {
+        display: none !important;
+      }
+
+      .ata-create-empty-rules {
+        margin: 0;
         color: var(--ata-color-muted);
       }
 
@@ -684,6 +687,44 @@
         font-weight: 800;
         letter-spacing: 0.04em;
         text-transform: uppercase;
+      }
+
+      .ata-game-rules-summary {
+        display: grid;
+        gap: 5px;
+        border: 1px solid rgba(90, 210, 153, 0.34);
+        border-radius: var(--ata-radius-sm);
+        padding: 11px 12px;
+        background: rgba(90, 210, 153, 0.08);
+      }
+
+      .ata-game-rules-origin,
+      .ata-game-rules-summary-text {
+        margin: 0;
+      }
+
+      .ata-game-rules-origin {
+        color: #baf5da;
+        font-size: 13px;
+      }
+
+      .ata-game-rules-summary-text {
+        color: var(--ata-color-text);
+        font-size: 15px;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+      }
+
+      .ata-game-rules-actions {
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      .ata-game-rules-editor {
+        display: grid;
+        gap: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.13);
+        padding-top: 12px;
       }
 
       .ata-create-primary-actions .ata-btn-primary {
@@ -1991,6 +2032,10 @@
           width: 100%;
         }
 
+        .ata-game-rules-actions .ata-btn {
+          width: 100%;
+        }
+
         .ata-toggle {
           align-items: flex-start;
         }
@@ -2082,6 +2127,31 @@
     groups_ko: Object.freeze({ label: "Gruppenphase + KO", min: 4, max: 16 }),
     preliminary_final: Object.freeze({ label: "Vorrunde + Finalphase", min: 5, max: 16 }),
   });
+  const CREATE_MODE_RULE_FIELDS = Object.freeze({
+    ko: Object.freeze(["randomizeKoRound1", "enableThirdPlaceMatch"]),
+    double_ko: Object.freeze(["randomizeKoRound1", "grandFinalResetMode"]),
+    league: Object.freeze([]),
+    groups_ko: Object.freeze([
+      "groupsKoOddParticipantPolicy",
+      "groupsKoOddParticipantAcknowledged",
+    ]),
+    preliminary_final: Object.freeze([
+      "preliminaryMatchesPerParticipant",
+      "preliminaryWinPoints",
+      "preliminaryDrawPoints",
+      "preliminaryLossPoints",
+      "finalStageType",
+      "finalStageQualifierCount",
+      "finalStageBestOfLegs",
+    ]),
+  });
+  const CREATE_MODE_RULE_GROUPS = Object.freeze({
+    ko: Object.freeze(["ko_draw", "third_place"]),
+    double_ko: Object.freeze(["ko_draw", "grand_final"]),
+    league: Object.freeze(["league_empty"]),
+    groups_ko: Object.freeze(["groups_ko"]),
+    preliminary_final: Object.freeze(["preliminary_final"]),
+  });
   const BYE_PLACEHOLDER_TOKENS = new Set([
     "bye",
     "freilos",
@@ -2103,6 +2173,7 @@
     ready: false,
     drawerOpen: false,
     activeTab: "tournament",
+    createGameRulesExpanded: false,
     lastFocused: null,
     notice: { type: "info", message: "" },
     noticeTimer: null,
@@ -5346,7 +5417,24 @@
   }
 
 
-  function validateCreateConfigDetails(config) {
+  function scopeCreateConfigToMode(rawConfig) {
+    const config = rawConfig && typeof rawConfig === "object" ? { ...rawConfig } : {};
+    const activeFields = new Set(CREATE_MODE_RULE_FIELDS[config.mode] || []);
+    const allModeRuleFields = new Set(Object.values(CREATE_MODE_RULE_FIELDS).flat());
+    allModeRuleFields.forEach((fieldName) => {
+      if (!activeFields.has(fieldName)) {
+        delete config[fieldName];
+      }
+    });
+    if (config.mode === "preliminary_final") {
+      delete config.bestOfLegs;
+    }
+    return config;
+  }
+
+
+  function validateCreateConfigDetails(rawConfig) {
+    const config = scopeCreateConfigToMode(rawConfig);
     const errors = [];
 
     if (!normalizeText(config.name)) {
@@ -5400,7 +5488,8 @@
   }
 
 
-  function createTournament(config) {
+  function createTournament(rawConfig) {
+    const config = scopeCreateConfigToMode(rawConfig);
     const modeLimits = getModeParticipantLimits(config.mode);
     const participants = config.participants.slice(0, modeLimits.max);
     const participantIds = participants.map((participant) => participant.id);
@@ -8718,7 +8807,8 @@
 
 
   function createTournamentSession(config) {
-    const validationDetails = validateCreateConfigDetails(config);
+    const scopedConfig = scopeCreateConfigToMode(config);
+    const validationDetails = validateCreateConfigDetails(scopedConfig);
     if (validationDetails.length) {
       return {
         ok: false,
@@ -8728,7 +8818,7 @@
       };
     }
 
-    const tournament = createTournament(config);
+    const tournament = createTournament(scopedConfig);
     refreshDerivedMatches(tournament);
     tournament.updatedAt = nowIso();
     state.store.tournament = tournament;
@@ -9360,7 +9450,7 @@
         };
 
         selectPreset(X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL);
-        const europeanTourDraft = normalizeCreateDraft(readCreateDraftInput(new FormData(createForm)), state.store.settings);
+        const europeanTourDraft = normalizeCreateDraft(readCreateDraftInput(createForm), state.store.settings);
         const europeanDurationHtml = createForm.querySelector("#ata-create-duration-estimate")?.innerHTML || "";
         const europeanPersisted = state.store.ui.createDraft.x01Preset === X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL;
         const europeanTourState = JSON.stringify(state.store.ui.createDraft);
@@ -9372,7 +9462,7 @@
           && JSON.stringify(state.store.ui.createDraft) === europeanTourState;
 
         selectPreset(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC);
-        const basicDraft = normalizeCreateDraft(readCreateDraftInput(new FormData(createForm)), state.store.settings);
+        const basicDraft = normalizeCreateDraft(readCreateDraftInput(createForm), state.store.settings);
         const basicDurationHtml = createForm.querySelector("#ata-create-duration-estimate")?.innerHTML || "";
         const basicPersisted = state.store.ui.createDraft.x01Preset === X01_PRESET_PDC_501_DOUBLE_OUT_BASIC;
         const preservedFields = basicDraft.name === "Preset-Erhalt"
@@ -9438,9 +9528,9 @@
         );
 
         applySelectedPresetToCreateForm(createForm, X01_PRESET_PDC_501_DOUBLE_OUT_BASIC);
-        const valuesBeforeCustom = JSON.stringify(readCreateDraftInput(new FormData(createForm)));
+        const valuesBeforeCustom = JSON.stringify(readCreateDraftInput(createForm));
         selectPreset(X01_PRESET_CUSTOM);
-        const valuesAfterCustom = JSON.stringify(readCreateDraftInput(new FormData(createForm)));
+        const valuesAfterCustom = JSON.stringify(readCreateDraftInput(createForm));
         const customOnlyChangesStatus = valuesBeforeCustom.replace(
           X01_PRESET_PDC_501_DOUBLE_OUT_BASIC,
           X01_PRESET_CUSTOM,
@@ -9462,6 +9552,155 @@
       } finally {
         state.store.tournament = previousTournament;
         state.store.ui.createDraft = previousDraft || createDefaultCreateDraft(state.store.settings);
+        renderShell();
+      }
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      const previousDraft = cloneSerializable(state.store.ui?.createDraft);
+      const previousActiveTab = state.activeTab;
+      const previousStoredActiveTab = state.store.ui.activeTab;
+      const previousGameRulesExpanded = state.createGameRulesExpanded;
+      const previousDrawerOpen = state.drawerOpen;
+      try {
+        state.store.tournament = null;
+        state.drawerOpen = true;
+        state.activeTab = "tournament";
+        state.store.ui.activeTab = "tournament";
+        state.createGameRulesExpanded = false;
+        state.store.ui.createDraft = normalizeCreateDraft({
+          ...createDefaultCreateDraft(state.store.settings),
+          name: "Release 3 UI",
+          mode: "ko",
+          participantsText: "A\nB\nC\nD\nE\nF\nG",
+          x01Preset: X01_PRESET_CUSTOM,
+          bestOfLegs: 11,
+          enableThirdPlaceMatch: true,
+          grandFinalResetMode: GRAND_FINAL_RESET_SINGLE_MATCH,
+          groupsKoOddParticipantPolicy: GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL,
+          groupsKoOddParticipantAcknowledged: true,
+          preliminaryMatchesPerParticipant: 4,
+          finalStageType: FINAL_STAGE_TYPE_DOUBLE_KO,
+          finalStageQualifierCount: 4,
+          finalStageBestOfLegs: 5,
+        }, state.store.settings);
+        renderShell();
+        const createForm = state.shadowRoot?.getElementById("ata-create-form");
+        const modeSelect = createForm?.querySelector("#ata-mode");
+        if (!(createForm instanceof HTMLFormElement) || !(modeSelect instanceof HTMLSelectElement)) {
+          throw new Error("Create form or mode select missing.");
+        }
+        const switchMode = (mode) => {
+          modeSelect.value = mode;
+          modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+          return Array.from(createForm.querySelectorAll("[data-mode-rule-group]"))
+            .filter((group) => group instanceof HTMLElement && !group.hidden)
+            .map((group) => group.getAttribute("data-mode-rule-group"));
+        };
+        const inactiveControlsDisabled = () => Array.from(createForm.querySelectorAll("[data-mode-rule-group][hidden] input, [data-mode-rule-group][hidden] select, [data-mode-rule-group][hidden] textarea, [data-mode-rule-group][hidden] button"))
+          .every((control) => control.disabled === true);
+
+        const koGroups = switchMode("ko");
+        const leagueGroups = switchMode("league");
+        const leagueEmptyText = normalizeText(createForm.querySelector("[data-role='league-rules-empty']")?.textContent || "");
+        const thirdPlaceExcludedFromLeague = !new FormData(createForm).has("enableThirdPlaceMatch");
+        const doubleKoGroups = switchMode("double_ko");
+        const grandFinalSelect = createForm.querySelector("#ata-grand-final-reset-mode");
+        const grandFinalRestored = grandFinalSelect instanceof HTMLSelectElement
+          && grandFinalSelect.value === GRAND_FINAL_RESET_SINGLE_MATCH;
+        const groupsKoGroups = switchMode("groups_ko");
+        const groupPolicy = createForm.querySelector("#ata-groups-ko-odd-policy");
+        const groupPolicyRestored = groupPolicy instanceof HTMLSelectElement
+          && groupPolicy.value === GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL;
+        const preliminaryGroups = switchMode("preliminary_final");
+        const groupAcknowledgementReset = state.store.ui.createDraft.groupsKoOddParticipantAcknowledged === false;
+        const standardBestOf = createForm.querySelector("#ata-bestof");
+        const finalBestOf = createForm.querySelector("#ata-final-stage-bestof");
+        const preliminaryComplete = standardBestOf instanceof HTMLInputElement
+          && standardBestOf.disabled
+          && standardBestOf.closest("[data-role='standard-bestof-field']")?.hidden === true
+          && finalBestOf instanceof HTMLInputElement
+          && finalBestOf.value === "5";
+        switchMode("ko");
+        const thirdPlace = createForm.querySelector("#ata-enable-third-place");
+        const thirdPlaceRestored = thirdPlace instanceof HTMLInputElement && thirdPlace.checked;
+        const visibilityOk = JSON.stringify(koGroups) === JSON.stringify(["ko_draw", "third_place"])
+          && JSON.stringify(doubleKoGroups) === JSON.stringify(["ko_draw", "grand_final"])
+          && JSON.stringify(leagueGroups) === JSON.stringify(["league_empty"])
+          && JSON.stringify(groupsKoGroups) === JSON.stringify(["groups_ko"])
+          && JSON.stringify(preliminaryGroups) === JSON.stringify(["preliminary_final"])
+          && leagueEmptyText === "Für den Ligamodus sind keine zusätzlichen Turnierregeln erforderlich."
+          && thirdPlaceExcludedFromLeague
+          && inactiveControlsDisabled()
+          && grandFinalRestored
+          && groupPolicyRestored
+          && groupAcknowledgementReset
+          && preliminaryComplete
+          && thirdPlaceRestored;
+        record(
+          "Create-UI Release 3: nur aktive Modusregeln sind sichtbar, bedienbar und in FormData",
+          visibilityOk,
+          `ko=${koGroups.join("/")}, double=${doubleKoGroups.join("/")}, league=${leagueGroups.join("/")}, groups=${groupsKoGroups.join("/")}, preliminary=${preliminaryGroups.join("/")}, preserved=${grandFinalRestored && groupPolicyRestored && thirdPlaceRestored}, ackReset=${groupAcknowledgementReset}`,
+        );
+
+        const toggle = createForm.querySelector("#ata-game-rules-editor-toggle");
+        const editor = createForm.querySelector("#ata-game-rules-editor");
+        if (!(toggle instanceof HTMLButtonElement) || !(editor instanceof HTMLElement)) {
+          throw new Error("Game-rules disclosure missing.");
+        }
+        const initiallyClosed = editor.hidden
+          && toggle.getAttribute("aria-expanded") === "false"
+          && toggle.getAttribute("aria-controls") === editor.id
+          && normalizeText(toggle.textContent) === "Spielregeln bearbeiten";
+        toggle.click();
+        const opened = !editor.hidden
+          && toggle.getAttribute("aria-expanded") === "true"
+          && state.createGameRulesExpanded === true;
+        const bestOf = createForm.querySelector("#ata-bestof");
+        if (!(bestOf instanceof HTMLInputElement)) throw new Error("Best-of input missing.");
+        bestOf.focus();
+        toggle.click();
+        const focusReturned = editor.hidden
+          && state.shadowRoot?.activeElement === toggle
+          && toggle.getAttribute("aria-expanded") === "false";
+        record(
+          "Create-UI Release 3: Inline-Disclosure ist geschlossen, zugänglich und gibt Fokus zurück",
+          initiallyClosed && opened && focusReturned,
+          `closed=${initiallyClosed}, opened=${opened}, focus=${focusReturned}, hidden=${editor.hidden}, aria=${toggle.getAttribute("aria-expanded")}, active=${state.shadowRoot?.activeElement?.id || state.shadowRoot?.activeElement?.tagName || "-"}`,
+        );
+
+        toggle.click();
+        bestOf.value = "5";
+        bestOf.dispatchEvent(new Event("change", { bubbles: true }));
+        const customSummary = normalizeText(createForm.querySelector("[data-role='game-rules-summary-text']")?.textContent || "");
+        const customOrigin = normalizeText(createForm.querySelector("[data-role='game-rules-preset-origin']")?.textContent || "");
+        const basicRadio = createForm.querySelector(`input[name='x01Preset'][value='${X01_PRESET_PDC_501_DOUBLE_OUT_BASIC}']`);
+        if (!(basicRadio instanceof HTMLInputElement)) throw new Error("Basic preset radio missing.");
+        basicRadio.checked = true;
+        basicRadio.dispatchEvent(new Event("change", { bubbles: true }));
+        const basicSummary = normalizeText(createForm.querySelector("[data-role='game-rules-summary-text']")?.textContent || "");
+        const basicOrigin = normalizeText(createForm.querySelector("[data-role='game-rules-preset-origin']")?.textContent || "");
+        const liveSummaryOk = customSummary.includes("Best of 5 (First to 3)")
+          && customOrigin.includes("Individuell / Manuell")
+          && basicSummary.includes("501 · Best of 5 (First to 3)")
+          && basicOrigin.includes("PDC 501 / Double Out (Basic)")
+          && state.createGameRulesExpanded === true
+          && !editor.hidden;
+        record(
+          "Create-UI Release 3: Zusammenfassung, Preset-Herkunft und offener Editor bleiben synchron",
+          liveSummaryOk,
+          `custom=${customOrigin}, basic=${basicOrigin}, expanded=${state.createGameRulesExpanded}`,
+        );
+      } catch (error) {
+        record("Create-UI Release 3: Modusregeln und Spielregel-Disclosure", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+        state.store.ui.createDraft = previousDraft || createDefaultCreateDraft(state.store.settings);
+        state.activeTab = previousActiveTab;
+        state.store.ui.activeTab = previousStoredActiveTab;
+        state.createGameRulesExpanded = previousGameRulesExpanded;
+        state.drawerOpen = previousDrawerOpen;
         renderShell();
       }
     }
@@ -9504,6 +9743,9 @@
           "#ata-x01-bulloff",
           "#ata-x01-bullmode",
           "#ata-x01-maxrounds",
+          "[data-role='game-rules-summary']",
+          "#ata-game-rules-editor-toggle",
+          "#ata-game-rules-editor",
           "[data-role='preset-selection']",
           `input[name='x01Preset'][value='${X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL}']`,
           `input[name='x01Preset'][value='${X01_PRESET_PDC_501_DOUBLE_OUT_BASIC}']`,
@@ -9610,7 +9852,7 @@
           modeSelect.value = "preliminary_final";
           modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
 
-          const draft = normalizeCreateDraft(readCreateDraftInput(new FormData(createForm)), state.store.settings);
+          const draft = normalizeCreateDraft(readCreateDraftInput(createForm), state.store.settings);
           const summaryText = normalizeText(createForm.querySelector("[data-role='preliminary-live-summary']")?.textContent || "");
           const defaultsOk = draft.mode === "preliminary_final"
             && draft.preliminaryMatchesPerParticipant === 4
@@ -15092,6 +15334,35 @@
     `;
   }
 
+
+  function buildCreateGameRulesSummary(rawDraft) {
+    const draft = normalizeCreateDraft(rawDraft);
+    const effectiveBestOf = draft.mode === "preliminary_final"
+      ? draft.finalStageBestOfLegs
+      : draft.bestOfLegs;
+    const matchLength = `Best of ${effectiveBestOf} (First to ${getLegsToWin(effectiveBestOf)})`;
+    const leadingParts = draft.mode === "preliminary_final"
+      ? [`Vorrunde: ${PRELIMINARY_FIXED_LEG_COUNT} feste Legs`, `Finalphase: ${matchLength}`, String(draft.startScore)]
+      : [String(draft.startScore), matchLength];
+    const bullParts = draft.x01BullOffMode === "Off"
+      ? ["Bull-off aus"]
+      : [`Bull-off ${draft.x01BullOffMode}`, `Bull ${draft.x01BullMode}`];
+    const activePresetId = getAppliedCreatePresetId(draft);
+    const presetLabel = activePresetId === X01_PRESET_CUSTOM
+      ? "Individuell / Manuell"
+      : getCreatePresetLabel(activePresetId);
+    return {
+      presetLabel,
+      text: [
+        ...leadingParts,
+        `${draft.x01InMode} In`,
+        `${draft.x01OutMode} Out`,
+        ...bullParts,
+        `Max. ${draft.x01MaxRounds} Runden`,
+      ].join(" · "),
+    };
+  }
+
   function buildStyles() {
     return ATA_UI_MAIN_CSS;
   }
@@ -15399,21 +15670,21 @@
             ${renderGroupsKoOddParticipantPolicyFields(draft)}
           </div>
           <div id="ata-preliminary-final-fields-host" data-mode-rule-group="preliminary_final">${renderPreliminaryFinalFields(draft)}</div>
-          <div class="ata-toggle ata-toggle-compact" data-role="ko-draw-field" data-mode-rule-group="ko double_ko">
+          <div class="ata-toggle ata-toggle-compact" data-role="ko-draw-field" data-mode-rule-group="ko_draw">
             <div>
               <strong>KO-Erstrunde zuf\u00e4llig mischen ${drawHelpLinks}</strong>
               <div class="ata-small">Open Draw bei aktivem Schalter, sonst gesetzter Draw.</div>
             </div>
             <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
           </div>
-          <div class="ata-toggle ata-toggle-compact" data-role="third-place-field" data-mode-rule-group="ko">
+          <div class="ata-toggle ata-toggle-compact" data-role="third-place-field" data-mode-rule-group="third_place">
             <div>
               <strong>Spiel um Platz 3 (optional)</strong>
               <div class="ata-small">Nur im KO-Modus: Halbfinal-Verlierer spielen um Platz 3. Ohne Option bleibt klassischer Single-Elimination-Baum.</div>
             </div>
             <input id="ata-enable-third-place" name="enableThirdPlaceMatch" type="checkbox" ${thirdPlaceChecked}>
           </div>
-          <div class="ata-field" data-role="grand-final-field" data-mode-rule-group="double_ko">
+          <div class="ata-field" data-role="grand-final-field" data-mode-rule-group="grand_final">
             <label for="ata-grand-final-reset-mode">Doppel-KO Grand Final</label>
             <select id="ata-grand-final-reset-mode" name="grandFinalResetMode">
               <option value="${GRAND_FINAL_RESET_IF_NEEDED}" ${grandFinalResetMode === GRAND_FINAL_RESET_IF_NEEDED ? "selected" : ""}>Reset-Finale falls nötig (empfohlen)</option>
@@ -15421,6 +15692,7 @@
             </select>
             <p class="ata-small ata-create-help">Gilt für Doppel-KO: Beim Reset-Finale darf der Winners-Bracket-Sieger das erste Grand Final verlieren; dann entscheidet ein zweites Finale. Ein einzelnes Grand Final ist schneller, aber kein vollständiges klassisches Doppel-KO.</p>
           </div>
+          <p class="ata-small ata-create-empty-rules" data-role="league-rules-empty" data-mode-rule-group="league_empty">Für den Ligamodus sind keine zusätzlichen Turnierregeln erforderlich.</p>
         </div>
       </section>
     `;
@@ -15434,72 +15706,91 @@
       bullModeDisabledAttr,
       bullModeHiddenInput,
     } = options;
+    const summary = buildCreateGameRulesSummary(draft);
+    const expanded = state.createGameRulesExpanded === true;
     return `
       <section class="ata-create-section" data-create-section="game-rules" aria-labelledby="ata-create-game-rules-heading">
         ${renderCreateFormSectionHeading(4, "Spielregeln", "Matchlänge und X01-Einstellungen prüfen oder anpassen.", "ata-create-game-rules-heading")}
         <div class="ata-create-section-body">
-          <div class="ata-grid-3 ata-grid-3-tight">
-            <div class="ata-field" data-role="standard-bestof-field">
-              <label for="ata-bestof">Best of Legs</label>
-              <input id="ata-bestof" name="bestOfLegs" type="number" min="1" max="21" step="2" value="${draft.bestOfLegs}">
-            </div>
-            <div class="ata-field">
-              <label for="ata-startscore">Startpunkte</label>
-              <select id="ata-startscore" name="startScore">${startScoreOptions}</select>
-            </div>
-            <div class="ata-field">
-              <label for="ata-x01-inmode">In-Modus</label>
-              <select id="ata-x01-inmode" name="x01InMode">
-                <option value="Straight" ${draft.x01InMode === "Straight" ? "selected" : ""}>Straight</option>
-                <option value="Double" ${draft.x01InMode === "Double" ? "selected" : ""}>Double</option>
-                <option value="Master" ${draft.x01InMode === "Master" ? "selected" : ""}>Master</option>
-              </select>
-            </div>
-            <div class="ata-field">
-              <label for="ata-x01-outmode">Out-Modus</label>
-              <select id="ata-x01-outmode" name="x01OutMode">
-                <option value="Straight" ${draft.x01OutMode === "Straight" ? "selected" : ""}>Straight</option>
-                <option value="Double" ${draft.x01OutMode === "Double" ? "selected" : ""}>Double</option>
-                <option value="Master" ${draft.x01OutMode === "Master" ? "selected" : ""}>Master</option>
-              </select>
-            </div>
-            <div class="ata-field">
-              <label for="ata-x01-bulloff">Bull-off</label>
-              <select id="ata-x01-bulloff" name="x01BullOffMode">
-                <option value="Off" ${draft.x01BullOffMode === "Off" ? "selected" : ""}>Off</option>
-                <option value="Normal" ${draft.x01BullOffMode === "Normal" ? "selected" : ""}>Normal</option>
-                <option value="Official" ${draft.x01BullOffMode === "Official" ? "selected" : ""}>Official</option>
-              </select>
-            </div>
-            <div class="ata-field">
-              <label for="ata-x01-bullmode">Bull-Modus</label>
-              <select id="ata-x01-bullmode" name="x01BullMode" ${bullModeDisabledAttr}>
-                <option value="25/50" ${draft.x01BullMode === "25/50" ? "selected" : ""}>25/50</option>
-                <option value="50/50" ${draft.x01BullMode === "50/50" ? "selected" : ""}>50/50</option>
-              </select>
-              ${bullModeHiddenInput}
-            </div>
-            <div class="ata-field">
-              <label for="ata-x01-maxrounds">Max Runden</label>
-              <select id="ata-x01-maxrounds" name="x01MaxRounds">
-                <option value="15" ${draft.x01MaxRounds === 15 ? "selected" : ""}>15</option>
-                <option value="20" ${draft.x01MaxRounds === 20 ? "selected" : ""}>20</option>
-                <option value="50" ${draft.x01MaxRounds === 50 ? "selected" : ""}>50</option>
-                <option value="80" ${draft.x01MaxRounds === 80 ? "selected" : ""}>80</option>
-              </select>
-            </div>
+          <div class="ata-game-rules-summary" data-role="game-rules-summary" aria-live="polite">
+            <p class="ata-game-rules-origin" data-role="game-rules-preset-origin"><strong>Format:</strong> ${escapeHtml(summary.presetLabel)}</p>
+            <p class="ata-game-rules-summary-text" data-role="game-rules-summary-text">${escapeHtml(summary.text)}</p>
           </div>
-          <div class="ata-create-fixed-summary" data-role="fixed-match-setup" role="group" aria-label="Festes technisches Spiel-Setup">
-            <span class="ata-create-fixed-summary-label">Festes Setup</span>
-            <span>X01</span>
-            <span>Legs · First to N aus Best of</span>
-            <span>Private Lobby</span>
+          <div class="ata-game-rules-actions">
+            <button
+              id="ata-game-rules-editor-toggle"
+              type="button"
+              class="ata-btn ata-btn-sm"
+              data-action="toggle-game-rules-editor"
+              aria-expanded="${expanded ? "true" : "false"}"
+              aria-controls="ata-game-rules-editor"
+            >${expanded ? "Bearbeitung schließen" : "Spielregeln bearbeiten"}</button>
           </div>
-          <div class="ata-create-rule-notes">
-            <p class="ata-small ata-create-help">PDC European Tour (Official): KO, Best of 11 Legs (First to 6), 501, Straight In, Double Out, Bull 25/50. Bull-off Normal und Max Runden 50 bleiben technische AutoDarts-Werte.</p>
-            <p class="ata-small ata-create-help">PDC 501 / Double Out (Basic): kompatibler Ersatz für das frühere irreführende „PDC-Standard“-Preset. Ehrlich benannt, aber kein offizielles PDC-Eventformat.</p>
-            <p class="ata-small ata-create-help">PDC World Championship im echten Set-Format wird bewusst nicht als offizielles Preset angeboten, weil AutoDarts hier nur Legs / First to N unterstützt.</p>
-            <p class="ata-small ata-create-help">Bull-off = Off deaktiviert Bull-Modus automatisch (schreibgeschützt).</p>
+          <div
+            id="ata-game-rules-editor"
+            class="ata-game-rules-editor"
+            role="region"
+            aria-labelledby="ata-create-game-rules-heading"
+            ${expanded ? "" : "hidden"}
+          >
+            <div class="ata-grid-3 ata-grid-3-tight">
+              <div class="ata-field" data-role="standard-bestof-field">
+                <label for="ata-bestof">Best of Legs</label>
+                <input id="ata-bestof" name="bestOfLegs" type="number" min="1" max="21" step="2" value="${draft.bestOfLegs}">
+              </div>
+              <div class="ata-field">
+                <label for="ata-startscore">Startpunkte</label>
+                <select id="ata-startscore" name="startScore">${startScoreOptions}</select>
+              </div>
+              <div class="ata-field">
+                <label for="ata-x01-inmode">In-Modus</label>
+                <select id="ata-x01-inmode" name="x01InMode">
+                  <option value="Straight" ${draft.x01InMode === "Straight" ? "selected" : ""}>Straight</option>
+                  <option value="Double" ${draft.x01InMode === "Double" ? "selected" : ""}>Double</option>
+                  <option value="Master" ${draft.x01InMode === "Master" ? "selected" : ""}>Master</option>
+                </select>
+              </div>
+              <div class="ata-field">
+                <label for="ata-x01-outmode">Out-Modus</label>
+                <select id="ata-x01-outmode" name="x01OutMode">
+                  <option value="Straight" ${draft.x01OutMode === "Straight" ? "selected" : ""}>Straight</option>
+                  <option value="Double" ${draft.x01OutMode === "Double" ? "selected" : ""}>Double</option>
+                  <option value="Master" ${draft.x01OutMode === "Master" ? "selected" : ""}>Master</option>
+                </select>
+              </div>
+              <div class="ata-field">
+                <label for="ata-x01-bulloff">Bull-off</label>
+                <select id="ata-x01-bulloff" name="x01BullOffMode">
+                  <option value="Off" ${draft.x01BullOffMode === "Off" ? "selected" : ""}>Off</option>
+                  <option value="Normal" ${draft.x01BullOffMode === "Normal" ? "selected" : ""}>Normal</option>
+                  <option value="Official" ${draft.x01BullOffMode === "Official" ? "selected" : ""}>Official</option>
+                </select>
+              </div>
+              <div class="ata-field">
+                <label for="ata-x01-bullmode">Bull-Modus</label>
+                <select id="ata-x01-bullmode" name="x01BullMode" ${bullModeDisabledAttr}>
+                  <option value="25/50" ${draft.x01BullMode === "25/50" ? "selected" : ""}>25/50</option>
+                  <option value="50/50" ${draft.x01BullMode === "50/50" ? "selected" : ""}>50/50</option>
+                </select>
+                ${bullModeHiddenInput}
+              </div>
+              <div class="ata-field">
+                <label for="ata-x01-maxrounds">Max Runden</label>
+                <select id="ata-x01-maxrounds" name="x01MaxRounds">
+                  <option value="15" ${draft.x01MaxRounds === 15 ? "selected" : ""}>15</option>
+                  <option value="20" ${draft.x01MaxRounds === 20 ? "selected" : ""}>20</option>
+                  <option value="50" ${draft.x01MaxRounds === 50 ? "selected" : ""}>50</option>
+                  <option value="80" ${draft.x01MaxRounds === 80 ? "selected" : ""}>80</option>
+                </select>
+              </div>
+            </div>
+            <div class="ata-create-fixed-summary" data-role="fixed-match-setup" role="group" aria-label="Festes technisches Spiel-Setup">
+              <span class="ata-create-fixed-summary-label">Festes Setup</span>
+              <span>X01</span>
+              <span>Legs · First to N aus Best of</span>
+              <span>Private Lobby</span>
+            </div>
+            <p class="ata-small ata-create-help">Bull-off = Off deaktiviert den dann wirkungslosen Bull-Modus automatisch.</p>
           </div>
         </div>
       </section>
@@ -16712,6 +17003,7 @@
       refreshCreateFormDurationEstimate(createForm);
       refreshCreateFormGroupsKoPolicy(createForm);
       refreshCreateFormPreliminaryFinal(createForm);
+      refreshCreateGameRulesSummary(createForm);
       const handleDraftInputChange = (event) => {
         const target = event?.target;
         const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
@@ -16745,6 +17037,7 @@
         syncCreateFormDependencies(createForm);
         updateCreateDraftFromForm(createForm, true);
         refreshCreateFormDurationEstimate(createForm);
+        refreshCreateGameRulesSummary(createForm);
         refreshCreateFormGroupsKoPolicy(createForm);
         const preliminarySummaryFields = [
           "preliminaryMatchesPerParticipant",
@@ -16765,6 +17058,13 @@
         event.preventDefault();
         handleCreateTournament(createForm);
       });
+
+      const gameRulesToggle = createForm.querySelector("[data-action='toggle-game-rules-editor']");
+      if (gameRulesToggle instanceof HTMLButtonElement) {
+        gameRulesToggle.addEventListener("click", () => {
+          setCreateGameRulesExpanded(createForm, state.createGameRulesExpanded !== true);
+        });
+      }
 
     }
 
@@ -17129,6 +17429,7 @@
 
   function closeDrawer() {
     state.drawerOpen = false;
+    state.createGameRulesExpanded = false;
     renderShell();
     if (state.lastFocused instanceof HTMLElement) {
       state.lastFocused.focus();
@@ -17180,8 +17481,7 @@
     if (!(form instanceof HTMLFormElement)) {
       return;
     }
-    const formData = new FormData(form);
-    const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
+    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
     const presetId = getAppliedCreatePresetId(draft);
     setCreateFormPresetValue(form, presetId);
   }
@@ -17194,21 +17494,30 @@
     const bullOffSelect = form.querySelector("#ata-x01-bulloff");
     const bullModeSelect = form.querySelector("#ata-x01-bullmode");
     const modeSelect = form.querySelector("#ata-mode");
-    const grandFinalSelect = form.querySelector("#ata-grand-final-reset-mode");
     const mode = modeSelect instanceof HTMLSelectElement ? normalizeText(modeSelect.value) : "ko";
-    const toggleDisplay = (selector, visible) => {
-      const element = form.querySelector(selector);
-      if (element instanceof HTMLElement) element.style.display = visible ? "" : "none";
-    };
-    toggleDisplay("[data-role='standard-bestof-field']", mode !== "preliminary_final");
-    toggleDisplay("[data-role='ko-draw-field']", mode === "ko" || mode === "double_ko");
-    toggleDisplay("[data-role='third-place-field']", mode === "ko");
-    toggleDisplay("[data-role='grand-final-field']", mode === "double_ko");
-    if (modeSelect instanceof HTMLSelectElement && grandFinalSelect instanceof HTMLSelectElement) {
-      const grandFinalField = grandFinalSelect.closest(".ata-field");
-      if (grandFinalField instanceof HTMLElement) {
-        grandFinalField.style.display = normalizeText(modeSelect.value) === "double_ko" ? "" : "none";
-      }
+    const activeRuleGroups = new Set(CREATE_MODE_RULE_GROUPS[mode] || []);
+    form.querySelectorAll("[data-mode-rule-group]").forEach((group) => {
+      if (!(group instanceof HTMLElement)) return;
+      const groupId = normalizeText(group.getAttribute("data-mode-rule-group") || "");
+      const active = activeRuleGroups.has(groupId);
+      group.hidden = !active;
+      group.querySelectorAll("input, select, textarea, button").forEach((control) => {
+        if (
+          control instanceof HTMLInputElement
+          || control instanceof HTMLSelectElement
+          || control instanceof HTMLTextAreaElement
+          || control instanceof HTMLButtonElement
+        ) {
+          control.disabled = !active;
+        }
+      });
+    });
+    const standardBestOfField = form.querySelector("[data-role='standard-bestof-field']");
+    if (standardBestOfField instanceof HTMLElement) {
+      const active = mode !== "preliminary_final";
+      standardBestOfField.hidden = !active;
+      const bestOfInput = standardBestOfField.querySelector("#ata-bestof");
+      if (bestOfInput instanceof HTMLInputElement) bestOfInput.disabled = !active;
     }
     if (!(bullOffSelect instanceof HTMLSelectElement) || !(bullModeSelect instanceof HTMLSelectElement)) {
       refreshCreateFormPresetSelection(form);
@@ -17244,7 +17553,7 @@
       return;
     }
     const currentDraft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store.settings);
-    const nextDraft = normalizeCreateDraft(readCreateDraftInput(new FormData(form)), state.store.settings);
+    const nextDraft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
     const currentParticipantCount = parseParticipantLines(currentDraft.participantsText).length;
     const nextParticipantCount = parseParticipantLines(nextDraft.participantsText).length;
     const basisChanged = currentDraft.mode !== nextDraft.mode
@@ -17253,6 +17562,10 @@
     if (!basisChanged) {
       return;
     }
+    state.store.ui.createDraft = normalizeCreateDraft({
+      ...currentDraft,
+      groupsKoOddParticipantAcknowledged: false,
+    }, state.store.settings);
     const acknowledgement = form.elements.namedItem("groupsKoOddParticipantAcknowledged");
     if (acknowledgement instanceof HTMLInputElement) {
       acknowledgement.checked = false;
@@ -17268,7 +17581,7 @@
     if (!(host instanceof HTMLElement)) {
       return;
     }
-    const draft = normalizeCreateDraft(readCreateDraftInput(new FormData(form)), state.store.settings);
+    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
     host.innerHTML = renderGroupsKoOddParticipantPolicyFields(draft);
   }
 
@@ -17277,7 +17590,7 @@
     if (!(form instanceof HTMLFormElement)) return;
     const host = form.querySelector("#ata-preliminary-final-fields-host");
     if (!(host instanceof HTMLElement)) return;
-    const draft = normalizeCreateDraft(readCreateDraftInput(new FormData(form)), state.store.settings);
+    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
     host.innerHTML = renderPreliminaryFinalFields(draft);
   }
 
@@ -17299,6 +17612,7 @@
       syncCreateFormDependencies(form);
       updateCreateDraftFromForm(form, true);
       refreshCreateFormDurationEstimate(form);
+      refreshCreateGameRulesSummary(form);
       return true;
     }
     if (storedDraft.x01Preset === preset.id && matchesCreatePresetSetup(storedDraft, preset.id)) {
@@ -17329,38 +17643,75 @@
     syncCreateFormDependencies(form);
     updateCreateDraftFromForm(form, true);
     refreshCreateFormDurationEstimate(form);
+    refreshCreateGameRulesSummary(form);
     refreshCreateFormGroupsKoPolicy(form);
     refreshCreateFormPreliminaryFinal(form);
     return true;
   }
 
 
-  function readCreateDraftInput(formData) {
+  function readCreateDraftInput(formOrData, preservedDraft = null) {
+    const form = formOrData instanceof HTMLFormElement ? formOrData : null;
+    const formData = formOrData instanceof FormData ? formOrData : new FormData(formOrData);
+    const preserved = normalizeCreateDraft(
+      preservedDraft || state.store?.ui?.createDraft,
+      state.store?.settings,
+    );
+    const modeValue = normalizeText(formData.get("mode") || preserved.mode);
+    const mode = Object.prototype.hasOwnProperty.call(CREATE_MODE_RULE_FIELDS, modeValue)
+      ? modeValue
+      : preserved.mode;
+    const activeModeFields = new Set(CREATE_MODE_RULE_FIELDS[mode] || []);
+    const hasEnabledControl = (fieldName) => {
+      if (!(form instanceof HTMLFormElement)) return true;
+      return Array.from(form.elements).some((control) => (
+        (control instanceof HTMLInputElement
+          || control instanceof HTMLSelectElement
+          || control instanceof HTMLTextAreaElement)
+        && control.name === fieldName
+        && !control.disabled
+      ));
+    };
+    const readModeValue = (fieldName) => {
+      if (!activeModeFields.has(fieldName) || !hasEnabledControl(fieldName)) {
+        return preserved[fieldName];
+      }
+      return formData.has(fieldName) ? formData.get(fieldName) : preserved[fieldName];
+    };
+    const readModeCheckbox = (fieldName) => {
+      if (!activeModeFields.has(fieldName) || !hasEnabledControl(fieldName)) {
+        return preserved[fieldName] === true;
+      }
+      return formData.has(fieldName);
+    };
+    const standardBestOf = mode === "preliminary_final" || !hasEnabledControl("bestOfLegs")
+      ? preserved.bestOfLegs
+      : formData.get("bestOfLegs");
     return {
-      name: formData.get("name"),
-      mode: formData.get("mode"),
-      bestOfLegs: formData.get("bestOfLegs"),
-      startScore: formData.get("startScore"),
-      x01Preset: formData.get("x01Preset"),
-      x01InMode: formData.get("x01InMode"),
-      x01OutMode: formData.get("x01OutMode"),
-      x01BullMode: formData.get("x01BullMode"),
-      x01MaxRounds: formData.get("x01MaxRounds"),
-      x01BullOffMode: formData.get("x01BullOffMode"),
-      boardCount: formData.get("boardCount"),
-      participantsText: String(formData.get("participants") || ""),
-      randomizeKoRound1: formData.get("randomizeKoRound1") !== null,
-      enableThirdPlaceMatch: formData.get("enableThirdPlaceMatch") !== null,
-      grandFinalResetMode: formData.get("grandFinalResetMode"),
-      groupsKoOddParticipantPolicy: formData.get("groupsKoOddParticipantPolicy"),
-      groupsKoOddParticipantAcknowledged: formData.get("groupsKoOddParticipantAcknowledged") !== null,
-      preliminaryMatchesPerParticipant: formData.get("preliminaryMatchesPerParticipant"),
-      preliminaryWinPoints: formData.get("preliminaryWinPoints"),
-      preliminaryDrawPoints: formData.get("preliminaryDrawPoints"),
-      preliminaryLossPoints: formData.get("preliminaryLossPoints"),
-      finalStageType: formData.get("finalStageType"),
-      finalStageQualifierCount: formData.get("finalStageQualifierCount"),
-      finalStageBestOfLegs: formData.get("finalStageBestOfLegs"),
+      name: formData.get("name") ?? preserved.name,
+      mode,
+      bestOfLegs: standardBestOf,
+      startScore: formData.get("startScore") ?? preserved.startScore,
+      x01Preset: formData.get("x01Preset") ?? preserved.x01Preset,
+      x01InMode: formData.get("x01InMode") ?? preserved.x01InMode,
+      x01OutMode: formData.get("x01OutMode") ?? preserved.x01OutMode,
+      x01BullMode: formData.get("x01BullMode") ?? preserved.x01BullMode,
+      x01MaxRounds: formData.get("x01MaxRounds") ?? preserved.x01MaxRounds,
+      x01BullOffMode: formData.get("x01BullOffMode") ?? preserved.x01BullOffMode,
+      boardCount: formData.get("boardCount") ?? preserved.boardCount,
+      participantsText: String(formData.get("participants") ?? preserved.participantsText),
+      randomizeKoRound1: readModeCheckbox("randomizeKoRound1"),
+      enableThirdPlaceMatch: readModeCheckbox("enableThirdPlaceMatch"),
+      grandFinalResetMode: readModeValue("grandFinalResetMode"),
+      groupsKoOddParticipantPolicy: readModeValue("groupsKoOddParticipantPolicy"),
+      groupsKoOddParticipantAcknowledged: readModeCheckbox("groupsKoOddParticipantAcknowledged"),
+      preliminaryMatchesPerParticipant: readModeValue("preliminaryMatchesPerParticipant"),
+      preliminaryWinPoints: readModeValue("preliminaryWinPoints"),
+      preliminaryDrawPoints: readModeValue("preliminaryDrawPoints"),
+      preliminaryLossPoints: readModeValue("preliminaryLossPoints"),
+      finalStageType: readModeValue("finalStageType"),
+      finalStageQualifierCount: readModeValue("finalStageQualifierCount"),
+      finalStageBestOfLegs: readModeValue("finalStageBestOfLegs"),
     };
   }
 
@@ -17369,8 +17720,7 @@
     if (!(form instanceof HTMLFormElement)) {
       return;
     }
-    const formData = new FormData(form);
-    const nextDraft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
+    const nextDraft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
     const currentDraft = state.store.ui.createDraft || {};
     const changed = JSON.stringify(nextDraft) !== JSON.stringify(currentDraft);
     if (!changed) {
@@ -17391,12 +17741,40 @@
     if (!(estimateHost instanceof HTMLElement)) {
       return;
     }
-    const formData = new FormData(form);
-    const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
+    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
     const estimate = estimateTournamentDurationFromDraft(draft, state.store.settings);
     estimateHost.innerHTML = renderTournamentDurationEstimate(estimate, {
       visible: state.store?.ui?.durationEstimateVisible !== false,
     });
+  }
+
+
+  function refreshCreateGameRulesSummary(form) {
+    if (!(form instanceof HTMLFormElement)) return;
+    const summaryHost = form.querySelector("[data-role='game-rules-summary-text']");
+    const presetHost = form.querySelector("[data-role='game-rules-preset-origin']");
+    if (!(summaryHost instanceof HTMLElement) || !(presetHost instanceof HTMLElement)) return;
+    const summary = buildCreateGameRulesSummary(state.store?.ui?.createDraft);
+    summaryHost.textContent = summary.text;
+    presetHost.innerHTML = `<strong>Format:</strong> ${escapeHtml(summary.presetLabel)}`;
+  }
+
+
+  function setCreateGameRulesExpanded(form, expanded) {
+    if (!(form instanceof HTMLFormElement)) return;
+    const button = form.querySelector("#ata-game-rules-editor-toggle");
+    const editor = form.querySelector("#ata-game-rules-editor");
+    if (!(button instanceof HTMLButtonElement) || !(editor instanceof HTMLElement)) return;
+    const nextExpanded = expanded === true;
+    const activeElement = state.shadowRoot?.activeElement || document.activeElement;
+    const returnFocus = !nextExpanded
+      && activeElement instanceof HTMLElement
+      && editor.contains(activeElement);
+    state.createGameRulesExpanded = nextExpanded;
+    button.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
+    button.textContent = nextExpanded ? "Bearbeitung schließen" : "Spielregeln bearbeiten";
+    editor.hidden = !nextExpanded;
+    if (returnFocus) button.focus();
   }
 
 
@@ -17417,6 +17795,7 @@
     participantField.value = shuffledNames.join("\n");
     updateCreateDraftFromForm(form, true);
     refreshCreateFormDurationEstimate(form);
+    refreshCreateGameRulesSummary(form);
     refreshCreateFormGroupsKoPolicy(form);
     refreshCreateFormPreliminaryFinal(form);
     setNotice("success", "Teilnehmer wurden zuf\u00e4llig gemischt.", 1800);
@@ -17426,10 +17805,10 @@
   function handleCreateTournament(form) {
     syncCreateFormDependencies(form);
     const formData = new FormData(form);
-    const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
+    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
     state.store.ui.createDraft = draft;
     const participants = parseParticipantLines(formData.get("participants"));
-    const config = {
+    const config = scopeCreateConfigToMode({
       name: draft.name,
       mode: draft.mode,
       bestOfLegs: draft.bestOfLegs,
@@ -17456,7 +17835,7 @@
       finalStageBestOfLegs: draft.finalStageBestOfLegs,
       koDrawLocked: state.store.settings.featureFlags.koDrawLockDefault !== false,
       participants,
-    };
+    });
 
     const result = createTournamentSession(config);
     if (!result.ok) {
