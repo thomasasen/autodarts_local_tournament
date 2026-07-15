@@ -2,12 +2,12 @@
 
 ## Umsetzungsstatus
 
-- Aktueller Release: Release 1 – Strukturelle Grundlage und sichere UI-Aufteilung
-- Zielversion: `0.6.0`
+- Aktueller Release: Release 2 – Preset-first und direkte Preset-Anwendung
+- Zielversion: `0.7.0`
 - Status: `ABGESCHLOSSEN`
-- Begonnen: 2026-07-15 18:07 CEST
-- Zuletzt aktualisiert: 2026-07-15 18:40 CEST
-- Abgeschlossen: 2026-07-15 18:40 CEST
+- Begonnen: 2026-07-15 18:45 CEST
+- Zuletzt aktualisiert: 2026-07-15 19:14 CEST
+- Abgeschlossen: 2026-07-15 19:14 CEST
 
 ### Fortschritt Release 1
 
@@ -43,6 +43,43 @@
 - Automatisiert geprüft: Domain-/Szenariologik, Runtime-Selftests, stabiler Create-UI-DOM-Contract, Preset-Anwendung, Draft-/Shuffle-Verhalten sowie alle Repository-QA-Gates.
 - Im lokalen Microsoft-Edge-Headless-Browser geprüft: Öffnen/Schließen, Anlage aller fünf vorhandenen Modi, Erreichbarkeit aller Tabs, responsive Anordnung und horizontale Formularbreite.
 - Nicht gegen einen authentifizierten Live-Account auf `play.autodarts.io` ausgeführt: echter Lobby-/Board-/API-Start. Diese Integration wurde in Release 1 nicht geändert und bleibt ein sinnvoller Installations-Smoke für den Nutzer.
+
+### Fortschritt Release 2
+
+- [x] Ausgangsstand und Abschluss von Release 1 geprüft
+- [x] Bestehende Preset-Definitionen und Migrationen analysiert
+- [x] Preset-Auswahl in den Bereich Turnierformat verschoben
+- [x] Zugängliche Preset-Auswahlkarten umgesetzt
+- [x] Direkte Preset-Anwendung umgesetzt
+- [x] Apply-Button und veraltete Handler entfernt
+- [x] Custom-Verhalten bei manuellen Änderungen umgesetzt
+- [x] Nicht preset-relevante Draft-Werte bleiben erhalten
+- [x] Legacy-Preset-Migration geprüft
+- [x] Responsive Verhalten geprüft
+- [x] Tastatur- und Fokusbedienung geprüft
+- [x] Automatisierte Tests ergänzt oder angepasst
+- [x] Domain-Tests erfolgreich
+- [x] Runtime-Contract-Tests erfolgreich
+- [x] Gesamtes QA-Skript erfolgreich
+- [x] Build erfolgreich erzeugt
+- [x] Dokumentation und Changelog aktualisiert
+- [x] Screenshot aktualisiert
+- [x] Manuelle Abnahmeszenarien geprüft
+- [x] Abschlussprüfung des Diffs durchgeführt
+
+### Arbeitsprotokoll Release 2
+
+| Zeitpunkt | Status | Arbeitsergebnis | Prüfung |
+|---|---|---|---|
+| 2026-07-15 18:45 CEST | IN ARBEIT | Ausgangscommit `b61f13fabd58ad03dbaf2954befe1ee8a5a934a1`, Release-1-Abschluss, Preset-Katalog, Draft-Normalisierung, Legacy-Alias, Render- und Handlerfluss analysiert; Storage-Schema bleibt unverändert. | Arbeitsbaum war sauber und exakt auf dem verbindlichen Ausgangscommit; nur top-level `AGENTS.md` vorhanden. |
+| 2026-07-15 19:02 CEST | IN ARBEIT | Eine native Radio-Gruppe mit drei zugänglichen Preset-Karten als einzige `x01Preset`-Formularquelle umgesetzt; direkte Anwendung, Custom-Umschaltung und Erhalt nicht preset-relevanter Werte abgesichert; alte Select-/Apply-/Pill-Struktur entfernt. | Zwischenbuild erfolgreich; 123 Domain-Tests bestanden; Runtime-Contract einschließlich 50 Runtime-Selftests erfolgreich. |
+| 2026-07-15 19:14 CEST | ABGESCHLOSSEN | Release 2 auf `0.7.0` finalisiert, Dokumentation und Screenshot aktualisiert sowie Diff gegen den Ausgangscommit auf Release-2-Scope, tote Preset-Selektoren und Storage-Kompatibilität geprüft; Release 3 nicht begonnen. | Gesamtes QA erfolgreich: Build, Architektur, Encoding, Regelcheck, 123 Domain-Tests, Runtime-Contract, 50 Runtime-Selftests und Build-Disziplin; `git diff --check` ohne Fehler. |
+
+### Prüfgrenze Release 2
+
+- Automatisiert geprüft: vollständige Anwendung beider fachlichen Presets, idempotente Wiederanwendung, Custom-Auswahl ohne Sachwertänderung, Custom-Umschaltung für alle preset-relevanten Felder, Draft-/Rerender-Erhalt, Zeitprognose, nicht preset-relevante Werte, Legacy-Draft und Legacy-Turnier sowie Markup-/Accessibility-Verträge.
+- Im lokalen Microsoft-Edge-Headless-Browser visuell geprüft: Kartenlayout bei `1920 × 1080`, `1366 × 768`, `1024 × 768` und `768 × 1024`; Drei- und Zweispaltenlayout, ausgewählter Zustand und Textumbruch sind sichtbar korrekt. Das Einspaltenlayout ist über den `600px`-Breakpoint und einen schmalen Headless-Render geprüft; der Headless-Browser stellt jedoch keinen verlässlichen physischen Tastaturtest bereit.
+- Vom Nutzer noch manuell sinnvoll zu prüfen: Pfeiltasten und Leertaste mit realer Tastatur, exakte schmale Gerätebreite sowie ein Installations-Smoke auf dem authentifizierten `play.autodarts.io`-Account. Native Radio-Semantik, zugeordnete Labels/Beschreibungen und sichtbarer `:focus-visible`-Stil sind automatisiert abgesichert.
 
 ## 1. Auftrag und Ziel
 

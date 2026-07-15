@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.7.0
+- Presets stehen als kompakte, responsive Auswahlkarten im Bereich `Turnierformat`; jede Option nutzt native Radio-Semantik, eine zugeordnete Beschreibung, sichtbaren Fokus und einen textlich erkennbaren Auswahlzustand.
+- Die bewusste Auswahl von `PDC European Tour (Official)` oder `PDC 501 / Double Out (Basic)` wendet alle bereits definierten Werte sofort an und aktualisiert Draft, Abhängigkeiten und Zeitprognose ohne zusätzliche Bestätigung.
+- `Individuell / Manuell` behält alle Sachwerte bei. Manuelle Änderungen an Modus, Best-of oder X01-Feldern aktivieren diese Karte weiterhin unmittelbar.
+- Select, Hidden-Preset-Feld, Status-Pill, separater Button `Preset anwenden`, die Action `apply-selected-preset` und die zugehörigen Handler/CSS-Regeln wurden entfernt. Die Radio-Gruppe ist die einzige autoritative `x01Preset`-Quelle für `FormData`.
+- Turniername, Teilnehmer, Board-Anzahl und weitere nicht vom Preset gesteuerte Draft-Werte bleiben bei Preset-Wechseln erhalten. Das Storage-Schema bleibt unverändert bei Version 5.
+- Die Legacy-ID `pdc_standard` wird weiterhin auf `PDC 501 / Double Out (Basic)` abgebildet; gespeicherte Best-of-5-Werte springen nicht still auf European Tour.
+- Domain-, Runtime-Self- und Runtime-Contract-Tests decken direkte Anwendung, idempotente Wiederanwendung, Custom-Umschaltung, Rerender-Persistenz, Daten-Erhalt, Legacy-Verhalten, Markup und Accessibility ab.
+
 ## 0.6.0
 - Die Turnieranlage ist ohne Änderung der Fachlogik in fünf klar erkennbare Bereiche gegliedert: `Turnierformat`, `Teilnehmer`, `Zusätzliche Turnierregeln`, `Spielregeln` und `Turnierübersicht`.
 - Die unveränderbaren Angaben `Spielmodus` und `Lobby` erscheinen nicht mehr als schreibgeschützte Fake-Eingabefelder, sondern als kompakte Zusammenfassung des festen Setups (`X01 · Legs / First to N · Private Lobby`).

@@ -31,8 +31,10 @@ const RUNTIME_API_CONTRACT = Object.freeze({
     requiredSelectors: Object.freeze([
       "#ata-name",
       "#ata-mode",
-      "#ata-preset-select",
-      "#ata-apply-preset",
+      "fieldset[data-role='preset-selection']",
+      "#ata-preset-pdc_european_tour_official",
+      "#ata-preset-pdc_501_double_out_basic",
+      "#ata-preset-custom",
       "#ata-participants",
       "[data-action='shuffle-participants']",
       "#ata-create-duration-estimate",
@@ -42,6 +44,11 @@ const RUNTIME_API_CONTRACT = Object.freeze({
     forbiddenSelectors: Object.freeze([
       "#ata-match-mode",
       "#ata-lobby-fixed",
+      "#ata-x01-preset",
+      "#ata-preset-select",
+      "#ata-apply-preset",
+      "[data-action='apply-selected-preset']",
+      ".ata-preset-pill",
     ]),
     forbiddenStyleFragments: Object.freeze([
       ".ata-card:hover",
@@ -50,7 +57,10 @@ const RUNTIME_API_CONTRACT = Object.freeze({
     requiredStyleFragments: Object.freeze([
       ".ata-create-layout",
       ".ata-create-overview",
+      ".ata-preset-card-grid",
+      ".ata-preset-radio:checked",
       "@media (max-width: 1250px)",
+      "@media (max-width: 600px)",
       "@media (max-width: 480px)",
     ]),
   }),

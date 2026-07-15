@@ -126,6 +126,20 @@ $checkScript = @'
       && fixedSummaryText.includes("X01")
       && fixedSummaryText.includes("Legs")
       && fixedSummaryText.includes("Private Lobby");
+    const presetFieldset = createForm?.querySelector("fieldset[data-role='preset-selection']") || null;
+    const presetRadios = createForm
+      ? Array.from(createForm.querySelectorAll("input[name='x01Preset']"))
+      : [];
+    const presetMarkupOk = Boolean(presetFieldset)
+      && presetFieldset.tagName === "FIELDSET"
+      && normalizeContractText(presetFieldset.querySelector("legend")?.textContent) === "Turnierformat ausw\u00e4hlen"
+      && presetRadios.length === 3
+      && presetRadios.every((radio) => radio.type === "radio"
+        && radio.labels?.length === 1
+        && Boolean(radio.getAttribute("aria-describedby"))
+        && Boolean(createForm.querySelector(`#${radio.getAttribute("aria-describedby")}`)))
+      && presetRadios.filter((radio) => radio.checked).length === 1
+      && new FormData(createForm).get("x01Preset") === presetRadios.find((radio) => radio.checked)?.value;
     const sectionOrderOk = JSON.stringify(sectionOrder) === JSON.stringify(createUiContract.sectionOrder);
 
     result.createUi = {
@@ -135,6 +149,17 @@ $checkScript = @'
       presentForbiddenStyles,
       missingRequiredStyles,
       fixedSummaryOk,
+      presetMarkupOk,
+      presetMarkupDetails: {
+        fieldsetTag: presetFieldset?.tagName || "",
+        legend: normalizeContractText(presetFieldset?.querySelector("legend")?.textContent || ""),
+        radioCount: presetRadios.length,
+        radioTypes: presetRadios.map((radio) => radio.type),
+        labelCounts: presetRadios.map((radio) => radio.labels?.length || 0),
+        descriptions: presetRadios.map((radio) => radio.getAttribute("aria-describedby") || ""),
+        descriptionMatches: presetRadios.map((radio) => Boolean(createForm?.querySelector(`#${radio.getAttribute("aria-describedby")}`))),
+        checkedCount: presetRadios.filter((radio) => radio.checked).length,
+      },
     };
     if (!createForm) {
       result.ok = false;
@@ -163,6 +188,10 @@ $checkScript = @'
     if (!fixedSummaryOk) {
       result.ok = false;
       result.failures.push("Kompakte Zusammenfassung für X01, Legs und private Lobby fehlt oder enthält Formfelder.");
+    }
+    if (!presetMarkupOk) {
+      result.ok = false;
+      result.failures.push("Zugängliche Preset-Radio-Gruppe mit genau einer Auswahl und zugeordneten Beschreibungen fehlt.");
     }
   }
 

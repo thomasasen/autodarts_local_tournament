@@ -152,6 +152,17 @@
             schedulePersist();
           }
         }
+        if (fieldName === "x01Preset") {
+          if (
+            event.type === "change"
+            && target instanceof HTMLInputElement
+            && target.type === "radio"
+            && target.checked
+          ) {
+            applySelectedPresetToCreateForm(createForm, target.value);
+          }
+          return;
+        }
         if (isCreateDraftPresetField(fieldName)) {
           setCreateFormPresetValue(createForm, X01_PRESET_CUSTOM);
         }
@@ -180,12 +191,6 @@
         handleCreateTournament(createForm);
       });
 
-      const applyPresetButton = createForm.querySelector("[data-action='apply-selected-preset']");
-      if (applyPresetButton instanceof HTMLButtonElement) {
-        applyPresetButton.addEventListener("click", () => {
-          applySelectedPresetToCreateForm(createForm);
-        });
-      }
     }
 
     shadow.querySelectorAll("[data-action='set-duration-time-profile']").forEach((select) => {
@@ -583,33 +588,27 @@
     if (!(form instanceof HTMLFormElement)) {
       return;
     }
-    const presetInput = form.querySelector("#ata-x01-preset");
-    const presetSelect = form.querySelector("#ata-preset-select");
-    if (!(presetInput instanceof HTMLInputElement)) {
+    const presetRadios = Array.from(form.querySelectorAll("input[type='radio'][name='x01Preset']"));
+    if (!presetRadios.length) {
       return;
     }
     const normalizedPreset = sanitizeX01Preset(presetId, X01_PRESET_CUSTOM);
-    presetInput.value = normalizedPreset;
-    if (presetSelect instanceof HTMLSelectElement) {
-      presetSelect.value = normalizedPreset;
-    }
+    presetRadios.forEach((radio) => {
+      if (radio instanceof HTMLInputElement) {
+        radio.checked = radio.value === normalizedPreset;
+      }
+    });
   }
 
 
-  function refreshCreateFormPresetBadge(form) {
+  function refreshCreateFormPresetSelection(form) {
     if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
-    const presetInput = form.querySelector("#ata-x01-preset");
-    const presetBadge = form.querySelector(".ata-preset-pill");
-    if (!(presetInput instanceof HTMLInputElement) || !(presetBadge instanceof HTMLElement)) {
       return;
     }
     const formData = new FormData(form);
     const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
     const presetId = getAppliedCreatePresetId(draft);
-    presetInput.value = presetId;
-    presetBadge.textContent = `Preset aktiv: ${getCreatePresetLabel(presetId)}`;
+    setCreateFormPresetValue(form, presetId);
   }
 
 
@@ -637,7 +636,7 @@
       }
     }
     if (!(bullOffSelect instanceof HTMLSelectElement) || !(bullModeSelect instanceof HTMLSelectElement)) {
-      refreshCreateFormPresetBadge(form);
+      refreshCreateFormPresetSelection(form);
       return;
     }
 
@@ -661,7 +660,7 @@
       hiddenBullMode.remove();
     }
 
-    refreshCreateFormPresetBadge(form);
+    refreshCreateFormPresetSelection(form);
   }
 
 
@@ -708,23 +707,28 @@
   }
 
 
-  function applySelectedPresetToCreateForm(form) {
+  function applySelectedPresetToCreateForm(form, selectedPresetId = null) {
     if (!(form instanceof HTMLFormElement)) {
-      return;
+      return false;
     }
-    const presetSelect = form.querySelector("#ata-preset-select");
-    if (!(presetSelect instanceof HTMLSelectElement)) {
-      return;
-    }
-    const presetId = sanitizeX01Preset(presetSelect.value, X01_PRESET_CUSTOM);
+    const requestedPresetId = selectedPresetId ?? new FormData(form).get("x01Preset");
+    const presetId = sanitizeX01Preset(requestedPresetId, X01_PRESET_CUSTOM);
     const preset = getCreatePresetDefinition(presetId);
+    const storedDraft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store.settings);
     if (!preset) {
+      if (storedDraft.x01Preset === X01_PRESET_CUSTOM) {
+        setCreateFormPresetValue(form, X01_PRESET_CUSTOM);
+        return false;
+      }
       setCreateFormPresetValue(form, X01_PRESET_CUSTOM);
       syncCreateFormDependencies(form);
       updateCreateDraftFromForm(form, true);
       refreshCreateFormDurationEstimate(form);
-      setNotice("info", "Individuelles Preset bleibt aktiv; Felder wurden nicht überschrieben.", 2400);
-      return;
+      return true;
+    }
+    if (storedDraft.x01Preset === preset.id && matchesCreatePresetSetup(storedDraft, preset.id)) {
+      setCreateFormPresetValue(form, preset.id);
+      return false;
     }
     const apply = preset.apply;
     const assignments = [
@@ -752,7 +756,7 @@
     refreshCreateFormDurationEstimate(form);
     refreshCreateFormGroupsKoPolicy(form);
     refreshCreateFormPreliminaryFinal(form);
-    setNotice("info", `Preset „${preset.label}“ wurde auf alle Turnierfelder angewendet.`, 2600);
+    return true;
   }
 
 

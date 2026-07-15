@@ -51,7 +51,8 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
 - Neues globales Settings-Feld:
   - `settings.tournamentTimeProfile: "fast" | "normal" | "slow"`
 - Turnier-Presetlogik:
-  - `ui.createDraft.x01Preset` hält das aktuell aktive Create-Preset
+  - die native Radio-Gruppe im Bereich `Turnierformat` ist die einzige autoritative Formularquelle für `x01Preset`; `ui.createDraft.x01Preset` hält den daraus persistierten Create-Preset-Status
+  - eine bewusste Preset-Auswahl wendet die vorhandene Definition direkt an; manuelle Änderungen an preset-relevanten Sachwerten setzen den Status auf Custom
   - Default ist `pdc_european_tour_official`
   - Legacy `pdc_standard` wird auf `pdc_501_double_out_basic` normalisiert
 - KO-spezifisch:

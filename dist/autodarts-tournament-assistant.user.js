@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.6.0
+// @version      0.7.0
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -22,7 +22,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.6.0";
+  const APP_VERSION = "0.7.0";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 5;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
@@ -541,6 +541,10 @@
         grid-column: 1 / -1;
       }
 
+      .ata-field-span-2 {
+        grid-column: 1 / -1;
+      }
+
       .ata-create-form {
         display: grid;
         gap: var(--ata-space-2);
@@ -846,24 +850,112 @@
         gap: var(--ata-space-2);
       }
 
-      .ata-form-inline-actions #ata-preset-select {
-        flex: 1 1 320px;
+      .ata-preset-fieldset {
+        min-width: 0;
+        margin: 0;
+        border: 0;
+        padding: 0;
+      }
+
+      .ata-preset-fieldset legend {
+        margin: 0 0 6px;
+        padding: 0;
+        color: var(--ata-color-muted);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.35px;
+        text-transform: uppercase;
+      }
+
+      .ata-preset-card-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
         min-width: 0;
       }
 
-      .ata-preset-pill {
-        display: inline-flex;
-        align-items: center;
-        border: 1px solid rgba(255, 211, 79, 0.48);
+      .ata-preset-card {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        min-width: 0;
+        min-height: 94px;
+        border: 1px solid var(--ata-control-border);
+        border-radius: var(--ata-radius-sm);
+        padding: 11px;
+        background: rgba(13, 29, 65, 0.68);
+        color: var(--ata-color-text);
+        cursor: pointer;
+        box-sizing: border-box;
+      }
+
+      .ata-preset-card:hover {
+        border-color: rgba(185, 199, 236, 0.58);
+        background: rgba(29, 50, 94, 0.84);
+      }
+
+      .ata-preset-card:has(.ata-preset-radio:checked) {
+        border-color: rgba(90, 210, 153, 0.82);
+        box-shadow: inset 0 0 0 1px rgba(90, 210, 153, 0.28);
+        background: rgba(49, 112, 92, 0.28);
+      }
+
+      .ata-preset-card:has(.ata-preset-radio:focus-visible) {
+        outline: 2px solid var(--ata-color-focus);
+        outline-offset: 2px;
+      }
+
+      .ata-preset-radio {
+        flex: 0 0 auto;
+        width: 20px;
+        height: 20px;
+        margin: 1px 0 0;
+        accent-color: var(--ata-color-accent);
+        cursor: pointer;
+      }
+
+      .ata-preset-card-body {
+        display: grid;
+        gap: 7px;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+
+      .ata-preset-card-heading {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 5px 8px;
+        min-width: 0;
+        line-height: 1.25;
+      }
+
+      .ata-preset-card-heading strong {
+        overflow-wrap: anywhere;
+      }
+
+      .ata-preset-card-state {
+        visibility: hidden;
         border-radius: 999px;
-        padding: 5px 11px;
-        background: rgba(255, 211, 79, 0.14);
-        color: #ffe39a;
-        font-size: 14px;
-        line-height: 1.1;
-        max-width: 100%;
-        white-space: normal;
-        text-align: center;
+        padding: 2px 7px;
+        background: rgba(90, 210, 153, 0.2);
+        color: #baf5da;
+        font-size: 11px;
+        font-weight: 800;
+        line-height: 1.3;
+        white-space: nowrap;
+      }
+
+      .ata-preset-radio:checked + .ata-preset-card-body .ata-preset-card-state {
+        visibility: visible;
+      }
+
+      .ata-preset-card-summary {
+        color: var(--ata-color-muted);
+        font-size: 13px;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
       }
 
       .ata-score-grid select,
@@ -1786,17 +1878,8 @@
           padding: 11px 12px 12px;
         }
 
-        .ata-create-preset-field .ata-form-inline-actions {
-          align-items: stretch;
-        }
-
-        .ata-create-preset-field .ata-form-inline-actions #ata-preset-select,
-        .ata-create-preset-field .ata-form-inline-actions .ata-btn,
-        .ata-create-preset-field .ata-preset-pill {
-          flex: 1 1 100%;
-          width: 100%;
-          box-sizing: border-box;
-          justify-content: center;
+        .ata-preset-card-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
         .ata-runtime-statusbar {
@@ -1851,6 +1934,12 @@
           width: 100%;
         }
 
+      }
+
+      @media (max-width: 600px) {
+        .ata-preset-card-grid {
+          grid-template-columns: 1fr;
+        }
       }
 
       @media (max-width: 480px) {
@@ -9239,34 +9328,137 @@
       const previousDraft = cloneSerializable(state.store.ui?.createDraft);
       try {
         state.store.tournament = null;
-        state.store.ui.createDraft = createDefaultCreateDraft(state.store.settings);
+        state.store.ui.createDraft = normalizeCreateDraft({
+          ...createDefaultCreateDraft(state.store.settings),
+          name: "Preset-Erhalt",
+          mode: "league",
+          bestOfLegs: 7,
+          x01Preset: X01_PRESET_CUSTOM,
+          boardCount: 3,
+          participantsText: "Ada\nBerta\nClara",
+          randomizeKoRound1: false,
+          enableThirdPlaceMatch: true,
+          grandFinalResetMode: GRAND_FINAL_RESET_SINGLE_MATCH,
+        }, state.store.settings);
         renderShell();
         const createForm = state.shadowRoot?.getElementById("ata-create-form");
-        const presetSelect = createForm?.querySelector("#ata-preset-select");
-        if (!(createForm instanceof HTMLFormElement) || !(presetSelect instanceof HTMLSelectElement)) {
-          throw new Error("Create form or preset select missing.");
+        const presetRadios = createForm
+          ? Array.from(createForm.querySelectorAll("input[type='radio'][name='x01Preset']"))
+          : [];
+        if (!(createForm instanceof HTMLFormElement) || presetRadios.length !== 3) {
+          throw new Error("Create form or preset radio group missing.");
         }
-        presetSelect.value = X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL;
-        applySelectedPresetToCreateForm(createForm);
-        const europeanTourDraft = normalizeCreateDraft(readCreateDraftInput(new FormData(createForm)), state.store.settings);
+        const durationBeforePreset = createForm.querySelector("#ata-create-duration-estimate")?.innerHTML || "";
+        const selectPreset = (presetId) => {
+          const radio = presetRadios.find((entry) => entry instanceof HTMLInputElement && entry.value === presetId);
+          if (!(radio instanceof HTMLInputElement)) {
+            throw new Error(`Preset radio missing: ${presetId}`);
+          }
+          radio.checked = true;
+          radio.dispatchEvent(new Event("input", { bubbles: true }));
+          radio.dispatchEvent(new Event("change", { bubbles: true }));
+        };
 
-        presetSelect.value = X01_PRESET_PDC_501_DOUBLE_OUT_BASIC;
-        applySelectedPresetToCreateForm(createForm);
+        selectPreset(X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL);
+        const europeanTourDraft = normalizeCreateDraft(readCreateDraftInput(new FormData(createForm)), state.store.settings);
+        const europeanDurationHtml = createForm.querySelector("#ata-create-duration-estimate")?.innerHTML || "";
+        const europeanPersisted = state.store.ui.createDraft.x01Preset === X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL;
+        const europeanTourState = JSON.stringify(state.store.ui.createDraft);
+        const repeatedApplyChanged = applySelectedPresetToCreateForm(
+          createForm,
+          X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL,
+        );
+        const repeatedApplyStable = repeatedApplyChanged === false
+          && JSON.stringify(state.store.ui.createDraft) === europeanTourState;
+
+        selectPreset(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC);
         const basicDraft = normalizeCreateDraft(readCreateDraftInput(new FormData(createForm)), state.store.settings);
+        const basicDurationHtml = createForm.querySelector("#ata-create-duration-estimate")?.innerHTML || "";
+        const basicPersisted = state.store.ui.createDraft.x01Preset === X01_PRESET_PDC_501_DOUBLE_OUT_BASIC;
+        const preservedFields = basicDraft.name === "Preset-Erhalt"
+          && basicDraft.participantsText === "Ada\nBerta\nClara"
+          && basicDraft.boardCount === 3
+          && basicDraft.randomizeKoRound1 === false
+          && basicDraft.enableThirdPlaceMatch === true
+          && basicDraft.grandFinalResetMode === GRAND_FINAL_RESET_SINGLE_MATCH;
+        const durationUpdated = Boolean(europeanDurationHtml && basicDurationHtml)
+          && durationBeforePreset !== europeanDurationHtml
+          && europeanDurationHtml !== basicDurationHtml;
 
         record(
-          "Preset-UI: Auswahl + Anwenden setzt alle Formularfelder konsistent",
+          "Preset-UI: Radio-Auswahl wendet European Tour und Basic direkt und vollständig an",
           europeanTourDraft.x01Preset === X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL
             && europeanTourDraft.mode === "ko"
             && europeanTourDraft.bestOfLegs === 11
+            && europeanTourDraft.startScore === 501
+            && europeanTourDraft.x01InMode === "Straight"
+            && europeanTourDraft.x01OutMode === "Double"
+            && europeanTourDraft.x01BullMode === "25/50"
+            && europeanTourDraft.x01BullOffMode === "Normal"
+            && europeanTourDraft.x01MaxRounds === 50
+            && europeanPersisted
             && basicDraft.x01Preset === X01_PRESET_PDC_501_DOUBLE_OUT_BASIC
             && basicDraft.bestOfLegs === 5
             && basicDraft.startScore === 501
-            && basicDraft.x01OutMode === "Double",
-          `et=${europeanTourDraft.bestOfLegs}/${europeanTourDraft.x01Preset}, basic=${basicDraft.bestOfLegs}/${basicDraft.x01Preset}`,
+            && basicDraft.x01OutMode === "Double"
+            && basicPersisted
+            && repeatedApplyStable
+            && preservedFields
+            && durationUpdated,
+          `et=${europeanTourDraft.bestOfLegs}/${europeanTourDraft.x01Preset}, basic=${basicDraft.bestOfLegs}/${basicDraft.x01Preset}, repeat=${repeatedApplyStable}, preserved=${preservedFields}, forecast=${durationUpdated}`,
+        );
+
+        const manualFieldCases = [
+          ["#ata-mode", "league"],
+          ["#ata-bestof", "7"],
+          ["#ata-startscore", "301"],
+          ["#ata-x01-inmode", "Double"],
+          ["#ata-x01-outmode", "Master"],
+          ["#ata-x01-bullmode", "50/50"],
+          ["#ata-x01-bulloff", "Official"],
+          ["#ata-x01-maxrounds", "20"],
+        ];
+        const manualResults = manualFieldCases.map(([selector, value]) => {
+          applySelectedPresetToCreateForm(createForm, X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL);
+          const field = createForm.querySelector(selector);
+          if (!(field instanceof HTMLInputElement) && !(field instanceof HTMLSelectElement)) {
+            return false;
+          }
+          field.value = value;
+          field.dispatchEvent(new Event("change", { bubbles: true }));
+          const customRadio = createForm.querySelector(`input[name='x01Preset'][value='${X01_PRESET_CUSTOM}']`);
+          return state.store.ui.createDraft.x01Preset === X01_PRESET_CUSTOM
+            && customRadio instanceof HTMLInputElement
+            && customRadio.checked;
+        });
+        record(
+          "Preset-UI: jede manuelle preset-relevante Änderung aktiviert Individuell / Manuell",
+          manualResults.every(Boolean),
+          manualResults.map((ok, index) => `${manualFieldCases[index][0]}:${ok}`).join(", "),
+        );
+
+        applySelectedPresetToCreateForm(createForm, X01_PRESET_PDC_501_DOUBLE_OUT_BASIC);
+        const valuesBeforeCustom = JSON.stringify(readCreateDraftInput(new FormData(createForm)));
+        selectPreset(X01_PRESET_CUSTOM);
+        const valuesAfterCustom = JSON.stringify(readCreateDraftInput(new FormData(createForm)));
+        const customOnlyChangesStatus = valuesBeforeCustom.replace(
+          X01_PRESET_PDC_501_DOUBLE_OUT_BASIC,
+          X01_PRESET_CUSTOM,
+        ) === valuesAfterCustom;
+        renderShell();
+        const rerenderedCustom = state.shadowRoot?.querySelector(
+          `#ata-create-form input[name='x01Preset'][value='${X01_PRESET_CUSTOM}']`,
+        );
+        record(
+          "Preset-UI: bewusste Custom-Auswahl erhält Sachwerte und bleibt nach Rerender aktiv",
+          customOnlyChangesStatus
+            && state.store.ui.createDraft.x01Preset === X01_PRESET_CUSTOM
+            && rerenderedCustom instanceof HTMLInputElement
+            && rerenderedCustom.checked,
+          `values=${customOnlyChangesStatus}, persisted=${state.store.ui.createDraft.x01Preset}`,
         );
       } catch (error) {
-        record("Preset-UI: Auswahl + Anwenden setzt alle Formularfelder konsistent", false, String(error?.message || error));
+        record("Preset-UI: direkte Radio-Auswahl und Custom-Verhalten", false, String(error?.message || error));
       } finally {
         state.store.tournament = previousTournament;
         state.store.ui.createDraft = previousDraft || createDefaultCreateDraft(state.store.settings);
@@ -9312,8 +9504,10 @@
           "#ata-x01-bulloff",
           "#ata-x01-bullmode",
           "#ata-x01-maxrounds",
-          "#ata-preset-select",
-          "#ata-apply-preset",
+          "[data-role='preset-selection']",
+          `input[name='x01Preset'][value='${X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL}']`,
+          `input[name='x01Preset'][value='${X01_PRESET_PDC_501_DOUBLE_OUT_BASIC}']`,
+          `input[name='x01Preset'][value='${X01_PRESET_CUSTOM}']`,
           "#ata-participants",
           "#ata-randomize-ko",
           "#ata-enable-third-place",
@@ -9333,17 +9527,33 @@
           && fixedSummaryText.includes("X01")
           && fixedSummaryText.includes("Legs")
           && fixedSummaryText.includes("Private Lobby");
+        const presetFieldset = createForm.querySelector("fieldset[data-role='preset-selection']");
+        const presetRadios = Array.from(createForm.querySelectorAll("input[name='x01Preset']"));
+        const presetMarkupOk = presetFieldset instanceof HTMLFieldSetElement
+          && normalizeText(presetFieldset.querySelector("legend")?.textContent) === "Turnierformat auswählen"
+          && presetRadios.length === 3
+          && presetRadios.every((radio) => radio instanceof HTMLInputElement
+            && radio.type === "radio"
+            && Boolean(radio.labels?.length)
+            && Boolean(radio.getAttribute("aria-describedby"))
+            && Boolean(createForm.querySelector(`#${radio.getAttribute("aria-describedby")}`)))
+          && presetRadios.filter((radio) => radio instanceof HTMLInputElement && radio.checked).length === 1
+          && new FormData(createForm).get("x01Preset") === presetRadios.find(
+            (radio) => radio instanceof HTMLInputElement && radio.checked,
+          )?.value
+          && createForm.querySelector("#ata-x01-preset, #ata-preset-select, #ata-apply-preset, [data-action='apply-selected-preset'], .ata-preset-pill") === null;
         const structureOk = JSON.stringify(sectionOrder) === JSON.stringify(expectedSectionOrder)
           && JSON.stringify(sectionHeadings) === JSON.stringify(expectedHeadings)
           && hooksPreserved
           && JSON.stringify(modeValues) === JSON.stringify(["ko", "double_ko", "league", "groups_ko", "preliminary_final"])
           && createForm.querySelector("#ata-match-mode") === null
           && createForm.querySelector("#ata-lobby-fixed") === null
-          && fixedSummaryOk;
+          && fixedSummaryOk
+          && presetMarkupOk;
         record(
           "Create-UI: fünf klar benannte Bereiche und kompaktes festes Setup",
           structureOk,
-          `sections=${sectionOrder.join("/")}, hooks=${hooksPreserved}, modes=${modeValues.join("/")}, fixed=${fixedSummaryOk}`,
+          `sections=${sectionOrder.join("/")}, hooks=${hooksPreserved}, modes=${modeValues.join("/")}, fixed=${fixedSummaryOk}, presets=${presetMarkupOk}`,
         );
 
         const participantsField = createForm.querySelector("#ata-participants");
@@ -15075,15 +15285,74 @@
   }
 
 
+  function getCreatePresetCardSummary(preset) {
+    const apply = preset?.apply || {};
+    const modeLabel = apply.mode === "ko" ? "KO" : normalizeText(apply.mode || "").toUpperCase();
+    return [
+      modeLabel,
+      `Best of ${apply.bestOfLegs}`,
+      apply.startScore,
+      `${apply.x01InMode} In`,
+      `${apply.x01OutMode} Out`,
+    ].join(" · ");
+  }
+
+
+  function renderCreatePresetSelection(draft) {
+    const activePresetId = getAppliedCreatePresetId(draft);
+    const presetCards = getCreatePresetCatalog().map((preset) => ({
+      id: preset.id,
+      label: preset.label,
+      summary: getCreatePresetCardSummary(preset),
+    }));
+    presetCards.push({
+      id: X01_PRESET_CUSTOM,
+      label: "Individuell / Manuell",
+      summary: "Aktuelle Werte beibehalten und selbst konfigurieren",
+    });
+    const cardsHtml = presetCards.map((preset) => {
+      const inputId = `ata-preset-${preset.id}`;
+      const descriptionId = `${inputId}-description`;
+      return `
+        <label class="ata-preset-card" for="${escapeHtml(inputId)}" data-preset-id="${escapeHtml(preset.id)}">
+          <input
+            id="${escapeHtml(inputId)}"
+            class="ata-preset-radio"
+            type="radio"
+            name="x01Preset"
+            value="${escapeHtml(preset.id)}"
+            aria-describedby="${escapeHtml(descriptionId)}"
+            ${activePresetId === preset.id ? "checked" : ""}
+          >
+          <span class="ata-preset-card-body">
+            <span class="ata-preset-card-heading">
+              <strong>${escapeHtml(preset.label)}</strong>
+              <span class="ata-preset-card-state" aria-hidden="true">Ausgewählt</span>
+            </span>
+            <span id="${escapeHtml(descriptionId)}" class="ata-preset-card-summary">${escapeHtml(preset.summary)}</span>
+          </span>
+        </label>
+      `;
+    }).join("");
+    return `
+      <fieldset class="ata-preset-fieldset ata-field-span-2" data-role="preset-selection">
+        <legend>Turnierformat auswählen</legend>
+        <div class="ata-preset-card-grid">${cardsHtml}</div>
+      </fieldset>
+    `;
+  }
+
+
   function renderCreateTournamentFormatSection(draft, modeHelpLinks) {
     return `
       <section class="ata-create-section" data-create-section="format" aria-labelledby="ata-create-format-heading">
         ${renderCreateFormSectionHeading(1, "Turnierformat", "Name und grundlegenden Turnierablauf festlegen.", "ata-create-format-heading")}
         <div class="ata-create-section-body ata-grid-2">
-          <div class="ata-field">
+          <div class="ata-field ata-field-span-2">
             <label for="ata-name">Turniername</label>
             <input id="ata-name" name="name" type="text" placeholder="z. B. Freitagsturnier" value="${escapeHtml(draft.name)}" required>
           </div>
+          ${renderCreatePresetSelection(draft)}
           <div class="ata-field">
             <label for="ata-mode">Modus ${modeHelpLinks}</label>
             <select id="ata-mode" name="mode">
@@ -15164,8 +15433,6 @@
       startScoreOptions,
       bullModeDisabledAttr,
       bullModeHiddenInput,
-      presetOptions,
-      presetStatusLabel,
     } = options;
     return `
       <section class="ata-create-section" data-create-section="game-rules" aria-labelledby="ata-create-game-rules-heading">
@@ -15220,14 +15487,6 @@
                 <option value="50" ${draft.x01MaxRounds === 50 ? "selected" : ""}>50</option>
                 <option value="80" ${draft.x01MaxRounds === 80 ? "selected" : ""}>80</option>
               </select>
-            </div>
-            <div class="ata-field ata-field-span-3 ata-create-preset-field">
-              <label for="ata-preset-select">Preset</label>
-              <div class="ata-form-inline-actions">
-                <select id="ata-preset-select" data-role="preset-select" aria-label="Preset auswählen">${presetOptions}</select>
-                <button id="ata-apply-preset" type="button" class="ata-btn ata-btn-sm" data-action="apply-selected-preset">Preset anwenden</button>
-                <span class="ata-preset-pill">${escapeHtml(presetStatusLabel)}</span>
-              </div>
             </div>
           </div>
           <div class="ata-create-fixed-summary" data-role="fixed-match-setup" role="group" aria-label="Festes technisches Spiel-Setup">
@@ -15305,14 +15564,6 @@
         `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${score}</option>`
       )).join("");
       const durationEstimate = estimateTournamentDurationFromDraft(draft, state.store.settings);
-      const activePresetId = getAppliedCreatePresetId(draft);
-      const presetStatusLabel = `Preset aktiv: ${getCreatePresetLabel(activePresetId)}`;
-      const presetOptions = [
-        ...getCreatePresetCatalog().map((preset) => (
-          `<option value="${preset.id}" ${draft.x01Preset === preset.id ? "selected" : ""}>${escapeHtml(preset.label)}</option>`
-        )),
-        `<option value="${X01_PRESET_CUSTOM}" ${draft.x01Preset === X01_PRESET_CUSTOM ? "selected" : ""}>Individuell / Manuell</option>`,
-      ].join("");
       const bullModeDisabled = draft.x01BullOffMode === "Off";
       const bullModeDisabledAttr = bullModeDisabled ? "disabled" : "";
       const bullModeHiddenInput = bullModeDisabled
@@ -15337,7 +15588,6 @@
         <section class="ata-card tournamentCard ata-create-card">
           ${renderSectionHeading("Neues Turnier erstellen", createHeadingLinks)}
           <form id="ata-create-form" class="ata-create-form">
-            <input type="hidden" id="ata-x01-preset" name="x01Preset" value="${escapeHtml(draft.x01Preset)}">
             <div class="ata-create-layout">
               <div class="ata-create-main">
                 ${renderCreateTournamentFormatSection(draft, modeHelpLinks)}
@@ -15348,8 +15598,6 @@
                   startScoreOptions,
                   bullModeDisabledAttr,
                   bullModeHiddenInput,
-                  presetOptions,
-                  presetStatusLabel,
                 })}
               </div>
               ${renderCreateTournamentOverview({
@@ -16479,6 +16727,17 @@
             schedulePersist();
           }
         }
+        if (fieldName === "x01Preset") {
+          if (
+            event.type === "change"
+            && target instanceof HTMLInputElement
+            && target.type === "radio"
+            && target.checked
+          ) {
+            applySelectedPresetToCreateForm(createForm, target.value);
+          }
+          return;
+        }
         if (isCreateDraftPresetField(fieldName)) {
           setCreateFormPresetValue(createForm, X01_PRESET_CUSTOM);
         }
@@ -16507,12 +16766,6 @@
         handleCreateTournament(createForm);
       });
 
-      const applyPresetButton = createForm.querySelector("[data-action='apply-selected-preset']");
-      if (applyPresetButton instanceof HTMLButtonElement) {
-        applyPresetButton.addEventListener("click", () => {
-          applySelectedPresetToCreateForm(createForm);
-        });
-      }
     }
 
     shadow.querySelectorAll("[data-action='set-duration-time-profile']").forEach((select) => {
@@ -16910,33 +17163,27 @@
     if (!(form instanceof HTMLFormElement)) {
       return;
     }
-    const presetInput = form.querySelector("#ata-x01-preset");
-    const presetSelect = form.querySelector("#ata-preset-select");
-    if (!(presetInput instanceof HTMLInputElement)) {
+    const presetRadios = Array.from(form.querySelectorAll("input[type='radio'][name='x01Preset']"));
+    if (!presetRadios.length) {
       return;
     }
     const normalizedPreset = sanitizeX01Preset(presetId, X01_PRESET_CUSTOM);
-    presetInput.value = normalizedPreset;
-    if (presetSelect instanceof HTMLSelectElement) {
-      presetSelect.value = normalizedPreset;
-    }
+    presetRadios.forEach((radio) => {
+      if (radio instanceof HTMLInputElement) {
+        radio.checked = radio.value === normalizedPreset;
+      }
+    });
   }
 
 
-  function refreshCreateFormPresetBadge(form) {
+  function refreshCreateFormPresetSelection(form) {
     if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
-    const presetInput = form.querySelector("#ata-x01-preset");
-    const presetBadge = form.querySelector(".ata-preset-pill");
-    if (!(presetInput instanceof HTMLInputElement) || !(presetBadge instanceof HTMLElement)) {
       return;
     }
     const formData = new FormData(form);
     const draft = normalizeCreateDraft(readCreateDraftInput(formData), state.store.settings);
     const presetId = getAppliedCreatePresetId(draft);
-    presetInput.value = presetId;
-    presetBadge.textContent = `Preset aktiv: ${getCreatePresetLabel(presetId)}`;
+    setCreateFormPresetValue(form, presetId);
   }
 
 
@@ -16964,7 +17211,7 @@
       }
     }
     if (!(bullOffSelect instanceof HTMLSelectElement) || !(bullModeSelect instanceof HTMLSelectElement)) {
-      refreshCreateFormPresetBadge(form);
+      refreshCreateFormPresetSelection(form);
       return;
     }
 
@@ -16988,7 +17235,7 @@
       hiddenBullMode.remove();
     }
 
-    refreshCreateFormPresetBadge(form);
+    refreshCreateFormPresetSelection(form);
   }
 
 
@@ -17035,23 +17282,28 @@
   }
 
 
-  function applySelectedPresetToCreateForm(form) {
+  function applySelectedPresetToCreateForm(form, selectedPresetId = null) {
     if (!(form instanceof HTMLFormElement)) {
-      return;
+      return false;
     }
-    const presetSelect = form.querySelector("#ata-preset-select");
-    if (!(presetSelect instanceof HTMLSelectElement)) {
-      return;
-    }
-    const presetId = sanitizeX01Preset(presetSelect.value, X01_PRESET_CUSTOM);
+    const requestedPresetId = selectedPresetId ?? new FormData(form).get("x01Preset");
+    const presetId = sanitizeX01Preset(requestedPresetId, X01_PRESET_CUSTOM);
     const preset = getCreatePresetDefinition(presetId);
+    const storedDraft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store.settings);
     if (!preset) {
+      if (storedDraft.x01Preset === X01_PRESET_CUSTOM) {
+        setCreateFormPresetValue(form, X01_PRESET_CUSTOM);
+        return false;
+      }
       setCreateFormPresetValue(form, X01_PRESET_CUSTOM);
       syncCreateFormDependencies(form);
       updateCreateDraftFromForm(form, true);
       refreshCreateFormDurationEstimate(form);
-      setNotice("info", "Individuelles Preset bleibt aktiv; Felder wurden nicht überschrieben.", 2400);
-      return;
+      return true;
+    }
+    if (storedDraft.x01Preset === preset.id && matchesCreatePresetSetup(storedDraft, preset.id)) {
+      setCreateFormPresetValue(form, preset.id);
+      return false;
     }
     const apply = preset.apply;
     const assignments = [
@@ -17079,7 +17331,7 @@
     refreshCreateFormDurationEstimate(form);
     refreshCreateFormGroupsKoPolicy(form);
     refreshCreateFormPreliminaryFinal(form);
-    setNotice("info", `Preset „${preset.label}“ wurde auf alle Turnierfelder angewendet.`, 2600);
+    return true;
   }
 
 

@@ -2,7 +2,7 @@
 
 Lokales Turniermanagement direkt in `https://play.autodarts.io` als Userscript.
 
-Aktuelle Releaseversion: `0.6.0`.
+Aktuelle Releaseversion: `0.7.0`.
 
 [![Installieren](https://img.shields.io/badge/Installieren-Autodarts%20Tournament%20Assistant%20Loader-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js)
 
@@ -95,7 +95,7 @@ Nach Installation ist links im Hauptmenü der neue Eintrag sichtbar. Darüber ö
   - HTML-Fallback bei CDN-Fehler/Timeout
 - Turnieranlage:
   - KO-Erstrunde als Hybrid-Draw (`seeded` oder `open_draw`)
-  - Preset-Auswahl mit offiziellem European-Tour-Format, Basic-Kompatibilitätsprofil und Custom-Status
+  - Direkt anwendbare Preset-Karten mit offiziellem European-Tour-Format, Basic-Kompatibilitätsprofil und Custom-Status
   - Klar gegliedertes Formular mit `Turnierformat`, `Teilnehmer`, `Zusätzliche Turnierregeln`, `Spielregeln` und `Turnierübersicht`
   - Live-Prognose für die voraussichtliche Turnierzeit
   - Teilnehmerliste kann per Button gemischt werden
@@ -204,7 +204,7 @@ Tab: `Turnier`
 
 ![Neues Turnier erstellen](assets/ss_Turnier_anlage-neu.png)
 
-Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten bis zum Anlegen. Auf breiten Ansichten steht die `Turnierübersicht` mit Boardzahl, Zeitprofil und Live-Prognose rechts neben dem Formular; auf schmalen Ansichten folgt sie ohne horizontale Überbreite darunter. Die bestehende Preset-Auswahl mit separatem Button bleibt im Bereich `Spielregeln` unverändert.
+Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten bis zum Anlegen. Auf breiten Ansichten steht die `Turnierübersicht` mit Boardzahl, Zeitprofil und Live-Prognose rechts neben dem Formular; auf schmalen Ansichten folgt sie ohne horizontale Überbreite darunter. Die Preset-Karten stehen im Bereich `Turnierformat` und wenden eine bewusste Auswahl sofort an; einen separaten Apply-Button gibt es nicht mehr.
 
 ### Pflichtfelder
 - Turniername
@@ -227,7 +227,7 @@ Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten b
 | `Bull-Modus` | `25/50`, `50/50` | Wertung der Bull-Segmente | Muss mit Hausregeln/Turnierkontext konsistent sein |
 | `Max Runden` | `15`, `20`, `50`, `80` | Upper bound für Matchdauer in der Lobby | Verhindert hängende/zu lange Matches |
 | `Festes Setup` | kompakte Anzeige `X01 · Legs / First to N · Private Lobby` | Technisches Match-Setup; nicht umstellbar in der UI | Verhindert inkonsistente Kombinationen und stellt unveränderbare Werte nicht als Eingabefelder dar |
-| `Preset` | Auswahlfeld + Button `Preset anwenden` | Setzt alle Preset-relevanten Turnierfelder konsistent | Offizielle und kompatible Profile bleiben klar getrennt |
+| `Preset` | Drei zugängliche Auswahlkarten im Bereich `Turnierformat` | Eine Karte wendet alle Preset-relevanten Turnierfelder sofort und konsistent an | Offizielle und kompatible Profile bleiben klar getrennt; `Individuell / Manuell` behält aktuelle Werte bei |
 | `KO-Erstrunde zufällig mischen` | Checkbox `ON/OFF` | `open_draw` oder `seeded` in Runde 1 | Transparente Entscheidung zwischen deterministischer Open-Draw-Reihenfolge und Setzlogik |
 | `Spiel um Platz 3 (optional)` | Checkbox `ON/OFF` | Fügt im KO-Modus ein separates Bronze-Match (Halbfinal-Verlierer) hinzu | Default bleibt klassisches KO mit genau einem Finale; zusätzliche Platzierung nur als explizite Tournament Rule |
 | `Doppel-KO Grand Final` | `Reset-Finale falls nötig`, `Ein einzelnes Grand Final` | Legt fest, ob bei Sieg des Losers-Bracket-Siegers im Grand Final ein Reset-Finale entsteht | Default bildet klassisches Doppel-KO ab; Einzelmatch ist eine bewusst schnellere Turnierregel |
@@ -237,7 +237,8 @@ Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten b
 
 ### Preset-Katalog
 - Bei Neuanlage ist standardmäßig `PDC European Tour (Official)` aktiv.
-- Das Preset wird über Auswahlfeld + Button `Preset anwenden` auf alle relevanten Turnierfelder angewendet.
+- Die Preset-Karten befinden sich im Bereich `Turnierformat`; die Auswahl eines fachlichen Presets wird sofort und vollständig angewendet.
+- `Individuell / Manuell` ändert nur den Preset-Status und behält Turniername, Teilnehmer, Board-Anzahl sowie alle aktuellen Sachwerte bei.
 - Der Spielmodus bleibt immer `Legs`; `Best-of Legs` ist führend für die Matchlänge und wird API-seitig als `First to N Legs` umgesetzt.
 
 | Preset | Parameter | Hinweise |
@@ -259,7 +260,7 @@ Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten b
   - der Modus gewechselt wird
   - die UI neu gerendert wird
 - Wenn `Bull-off = Off`, wird `Bull mode` automatisch read-only deaktiviert.
-- Bei manuellen Änderungen an Preset-relevanten Feldern springt der Preset-Status auf `Individuell`.
+- Bei manuellen Änderungen an Preset-relevanten Feldern wird die Karte `Individuell / Manuell` sofort ausgewählt; die aktuellen Werte und der Draft bleiben erhalten.
 - Legacy-Drafts und Legacy-Turniere mit der alten Preset-ID `pdc_standard` werden automatisch auf `PDC 501 / Double Out (Basic)` abgebildet, damit gespeicherte `Best of 5`-Turniere nicht still auf `Best of 11` umspringen.
 
 ### Voraussichtliche Turnierzeit
@@ -712,7 +713,7 @@ powershell -ExecutionPolicy Bypass -File scripts/test-runtime-contract.ps1
 - Technisches Hard-Cap: `128` Teilnehmer
 - API-Halbautomatik basiert auf in der Praxis verwendeten Endpunkten (Inference), siehe [docs/autodarts-api-capabilities.md](docs/autodarts-api-capabilities.md)
 - DOM-Autodetect bleibt best-effort
-- MultiBoard ist nicht Bestandteil von Version `0.6.0`. `Boards für Zeitprognose` ist ausschließlich ein Kapazitätsparameter der Schätzung. Board-Zuweisung, parallele Lobbyverwaltung, mehrere gleichzeitig gestartete Matches, Mehrgeräte-Synchronisierung und Mehrbrowser-Bearbeitung sind nicht implementiert.
+- MultiBoard ist nicht Bestandteil von Version `0.7.0`. `Boards für Zeitprognose` ist ausschließlich ein Kapazitätsparameter der Schätzung. Board-Zuweisung, parallele Lobbyverwaltung, mehrere gleichzeitig gestartete Matches, Mehrgeräte-Synchronisierung und Mehrbrowser-Bearbeitung sind nicht implementiert.
 
 ## Quellen
 - Turnierdauer-Benchmarks:

@@ -423,12 +423,12 @@ Hier liegt die eigentliche Turnierlogik. Wenn sich eine fachliche Regel ändert,
 | `src/ui/render-shell.js` | äußerer Drawer-Rahmen | rendert Shadow-DOM-Shell, Tabs, Notices und Runtime-Status-Bar | `src/ui/render-tabs.js`, `src/infra/api-client.js`, `src/ui/handlers.js` |
 | `src/ui/render-tabs.js` | Tab-Verteiler | entscheidet, welcher Tab-Renderer für den aktiven Tab ausgeführt wird | `src/ui/render-tournament.js`, `src/ui/render-matches.js`, `src/ui/render-view.js`, `src/ui/render-io.js`, `src/ui/render-settings.js` |
 | `src/ui/render-helpers.js` | UI-Helfer | `renderInfoLinks()`, Abschnitts- und Turnierzeit-Helfer für wiederverwendbare HTML-Bausteine | `src/ui/render-*.js` |
-| `src/ui/render-tournament.js` | Turnieranlage und Turnierübersicht | rendert die fünf Bereiche `Turnierformat`, `Teilnehmer`, `Zusätzliche Turnierregeln`, `Spielregeln` und `Turnierübersicht`, dazu unveränderte Preset-Auswahl, Live-Zeitprognose, aktives Turnier und Reset-Bereich | `src/data/normalization.js`, `src/domain/tournament-duration.js`, `src/ui/render-helpers.js`, `src/ui/handlers.js` |
+| `src/ui/render-tournament.js` | Turnieranlage und Turnierübersicht | rendert die fünf Bereiche `Turnierformat`, `Teilnehmer`, `Zusätzliche Turnierregeln`, `Spielregeln` und `Turnierübersicht`, dazu die zugängliche Preset-Radio-Gruppe im Turnierformat, Live-Zeitprognose, aktives Turnier und Reset-Bereich | `src/data/normalization.js`, `src/domain/tournament-duration.js`, `src/ui/render-helpers.js`, `src/ui/handlers.js` |
 | `src/ui/render-matches.js` | Matchliste und Matchaktionen | rendert Editoren, Status und API-Start-Buttons; Sortierung und `Nächstes Match` kommen aus `src/app/match-view-models.js` | `src/app/match-view-models.js`, `src/domain/results.js`, `src/infra/api-automation.js` |
 | `src/ui/render-view.js` | Tabellen- und Bracket-Ansicht | rendert Liga-/Gruppentabellen, Fallback-Bracket und den Einstieg ins iframe-Bracket | `src/domain/standings-dra.js`, `src/domain/groups.js`, `src/domain/ko-engine.js`, `src/bracket/*` |
 | `src/ui/render-io.js` | Import/Export-Tab | rendert Export- und Import-Oberfläche | `src/ui/handlers.js`, `src/data/storage.js` |
 | `src/ui/render-settings.js` | Settings-Tab | rendert Debug-Flag, API-Automation, GitHub-Update-Panel, KO-Defaults, Zeitprofil, Tie-Break-Profil und Storage-Hinweise | `src/data/normalization.js`, `src/domain/tournament-duration.js`, `src/ui/render-helpers.js`, `src/app/update-status.js`, `src/ui/handlers.js` |
-| `src/ui/handlers.js` | UI-Orchestrator | erstellt Host, rendert Shell, bindet Events, liest Formulare, aktualisiert Live-Prognose, stößt GitHub-Update-Prüfungen an und delegiert Turnier-/Match-Aktionen in `src/app/*` | `src/ui/render-shell.js`, `src/app/tournament-actions.js`, `src/app/match-actions.js`, `src/infra/api-automation.js`, `src/infra/update-check.js`, `src/app/bracket-controller.js`, `src/domain/tournament-duration.js` |
+| `src/ui/handlers.js` | UI-Orchestrator | erstellt Host, rendert Shell, bindet Events, wendet Preset-Radio-Auswahlen direkt an, liest Formulare, aktualisiert Draft und Live-Prognose, stößt GitHub-Update-Prüfungen an und delegiert Turnier-/Match-Aktionen in `src/app/*` | `src/ui/render-shell.js`, `src/app/tournament-actions.js`, `src/app/match-actions.js`, `src/infra/api-automation.js`, `src/infra/update-check.js`, `src/app/bracket-controller.js`, `src/domain/tournament-duration.js` |
 
 `handlers.js` ist die Datei, in der Bedienung, State-Änderung und Re-Render zusammenlaufen. Die Render-Dateien bleiben dagegen weitgehend beschreibend.
 
@@ -451,7 +451,7 @@ Hier liegt die eigentliche Turnierlogik. Wenn sich eine fachliche Regel ändert,
 ## Unterstützende Dateien und Referenzmaterial
 
 ### `src/ui/styles/main.css`
-- enthält das komplette Shadow-DOM-Styling der UI, einschließlich der responsiven fünfteiligen Turnieranlage
+- enthält das komplette Shadow-DOM-Styling der UI, einschließlich der responsiven fünfteiligen Turnieranlage und der Preset-Auswahlkarten
 - wird nicht separat ausgeliefert, sondern durch `scripts/build.ps1` in das Bundle eingebettet
 - ist deshalb Quellmaterial, aber kein eigener Runtime-Ladepunkt
 

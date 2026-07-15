@@ -137,15 +137,74 @@
   }
 
 
+  function getCreatePresetCardSummary(preset) {
+    const apply = preset?.apply || {};
+    const modeLabel = apply.mode === "ko" ? "KO" : normalizeText(apply.mode || "").toUpperCase();
+    return [
+      modeLabel,
+      `Best of ${apply.bestOfLegs}`,
+      apply.startScore,
+      `${apply.x01InMode} In`,
+      `${apply.x01OutMode} Out`,
+    ].join(" · ");
+  }
+
+
+  function renderCreatePresetSelection(draft) {
+    const activePresetId = getAppliedCreatePresetId(draft);
+    const presetCards = getCreatePresetCatalog().map((preset) => ({
+      id: preset.id,
+      label: preset.label,
+      summary: getCreatePresetCardSummary(preset),
+    }));
+    presetCards.push({
+      id: X01_PRESET_CUSTOM,
+      label: "Individuell / Manuell",
+      summary: "Aktuelle Werte beibehalten und selbst konfigurieren",
+    });
+    const cardsHtml = presetCards.map((preset) => {
+      const inputId = `ata-preset-${preset.id}`;
+      const descriptionId = `${inputId}-description`;
+      return `
+        <label class="ata-preset-card" for="${escapeHtml(inputId)}" data-preset-id="${escapeHtml(preset.id)}">
+          <input
+            id="${escapeHtml(inputId)}"
+            class="ata-preset-radio"
+            type="radio"
+            name="x01Preset"
+            value="${escapeHtml(preset.id)}"
+            aria-describedby="${escapeHtml(descriptionId)}"
+            ${activePresetId === preset.id ? "checked" : ""}
+          >
+          <span class="ata-preset-card-body">
+            <span class="ata-preset-card-heading">
+              <strong>${escapeHtml(preset.label)}</strong>
+              <span class="ata-preset-card-state" aria-hidden="true">Ausgewählt</span>
+            </span>
+            <span id="${escapeHtml(descriptionId)}" class="ata-preset-card-summary">${escapeHtml(preset.summary)}</span>
+          </span>
+        </label>
+      `;
+    }).join("");
+    return `
+      <fieldset class="ata-preset-fieldset ata-field-span-2" data-role="preset-selection">
+        <legend>Turnierformat auswählen</legend>
+        <div class="ata-preset-card-grid">${cardsHtml}</div>
+      </fieldset>
+    `;
+  }
+
+
   function renderCreateTournamentFormatSection(draft, modeHelpLinks) {
     return `
       <section class="ata-create-section" data-create-section="format" aria-labelledby="ata-create-format-heading">
         ${renderCreateFormSectionHeading(1, "Turnierformat", "Name und grundlegenden Turnierablauf festlegen.", "ata-create-format-heading")}
         <div class="ata-create-section-body ata-grid-2">
-          <div class="ata-field">
+          <div class="ata-field ata-field-span-2">
             <label for="ata-name">Turniername</label>
             <input id="ata-name" name="name" type="text" placeholder="z. B. Freitagsturnier" value="${escapeHtml(draft.name)}" required>
           </div>
+          ${renderCreatePresetSelection(draft)}
           <div class="ata-field">
             <label for="ata-mode">Modus ${modeHelpLinks}</label>
             <select id="ata-mode" name="mode">
@@ -226,8 +285,6 @@
       startScoreOptions,
       bullModeDisabledAttr,
       bullModeHiddenInput,
-      presetOptions,
-      presetStatusLabel,
     } = options;
     return `
       <section class="ata-create-section" data-create-section="game-rules" aria-labelledby="ata-create-game-rules-heading">
@@ -282,14 +339,6 @@
                 <option value="50" ${draft.x01MaxRounds === 50 ? "selected" : ""}>50</option>
                 <option value="80" ${draft.x01MaxRounds === 80 ? "selected" : ""}>80</option>
               </select>
-            </div>
-            <div class="ata-field ata-field-span-3 ata-create-preset-field">
-              <label for="ata-preset-select">Preset</label>
-              <div class="ata-form-inline-actions">
-                <select id="ata-preset-select" data-role="preset-select" aria-label="Preset auswählen">${presetOptions}</select>
-                <button id="ata-apply-preset" type="button" class="ata-btn ata-btn-sm" data-action="apply-selected-preset">Preset anwenden</button>
-                <span class="ata-preset-pill">${escapeHtml(presetStatusLabel)}</span>
-              </div>
             </div>
           </div>
           <div class="ata-create-fixed-summary" data-role="fixed-match-setup" role="group" aria-label="Festes technisches Spiel-Setup">
@@ -367,14 +416,6 @@
         `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${score}</option>`
       )).join("");
       const durationEstimate = estimateTournamentDurationFromDraft(draft, state.store.settings);
-      const activePresetId = getAppliedCreatePresetId(draft);
-      const presetStatusLabel = `Preset aktiv: ${getCreatePresetLabel(activePresetId)}`;
-      const presetOptions = [
-        ...getCreatePresetCatalog().map((preset) => (
-          `<option value="${preset.id}" ${draft.x01Preset === preset.id ? "selected" : ""}>${escapeHtml(preset.label)}</option>`
-        )),
-        `<option value="${X01_PRESET_CUSTOM}" ${draft.x01Preset === X01_PRESET_CUSTOM ? "selected" : ""}>Individuell / Manuell</option>`,
-      ].join("");
       const bullModeDisabled = draft.x01BullOffMode === "Off";
       const bullModeDisabledAttr = bullModeDisabled ? "disabled" : "";
       const bullModeHiddenInput = bullModeDisabled
@@ -399,7 +440,6 @@
         <section class="ata-card tournamentCard ata-create-card">
           ${renderSectionHeading("Neues Turnier erstellen", createHeadingLinks)}
           <form id="ata-create-form" class="ata-create-form">
-            <input type="hidden" id="ata-x01-preset" name="x01Preset" value="${escapeHtml(draft.x01Preset)}">
             <div class="ata-create-layout">
               <div class="ata-create-main">
                 ${renderCreateTournamentFormatSection(draft, modeHelpLinks)}
@@ -410,8 +450,6 @@
                   startScoreOptions,
                   bullModeDisabledAttr,
                   bullModeHiddenInput,
-                  presetOptions,
-                  presetStatusLabel,
                 })}
               </div>
               ${renderCreateTournamentOverview({
