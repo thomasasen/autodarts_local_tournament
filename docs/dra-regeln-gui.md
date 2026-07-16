@@ -27,7 +27,7 @@ Screenshot-Kontext:
 
 ### DRA-Referenz (Kapitel/Punkt/Seite)
 - `6.8.1`, Seite `17`
-- `6.8.2`, Seite `17`
+- `6.8.2`, Seite `18`
 
 ### Deutsche Erklärung
 - `6.8.1`: Das Grundprinzip ist KO (Straight Knockout).
@@ -43,6 +43,7 @@ Screenshot-Kontext:
 
 ### Nachprüfen im PDF
 - [DRA-RULE_BOOK.pdf#page=17](DRA-RULE_BOOK.pdf#page=17)
+- [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
 
 ![Turnieranlage mit Moduswahl](../assets/ss_Turnier_anlage-neu.png)
 
@@ -71,11 +72,11 @@ Screenshot-Kontext:
 - Einstellungen > KO-Erstrunde zufällig mischen (Standard)
 
 ### DRA-Referenz (Kapitel/Punkt/Seite)
-- `6.12.1`, Seite `18`
+- `6.12.1`, Seite `19`
 
 ### Deutsche Erklärung
 - Der Schalter bestimmt nur, **wie Runde 1 erzeugt wird**:
-  - `open_draw`: deterministische Auslosungsreihenfolge für Runde 1.
+  - `open_draw`: vom Tool gemischte Auslosungsreihenfolge für Runde 1; dies ist eine Produktfunktion und keine Behauptung, einen externen offiziellen Live-Draw durchzuführen.
   - `seeded`: feste Reihenfolge nach Eingabe.
 - Nach Veröffentlichung des Draws bleibt die Struktur bestehen (`6.12.1`).
 
@@ -84,7 +85,7 @@ Screenshot-Kontext:
 - Nach Start gibt es keine "heimliche" Neuverteilung durch Bedienfehler.
 
 ### Nachprüfen im PDF
-- [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
+- [DRA-RULE_BOOK.pdf#page=19](DRA-RULE_BOOK.pdf#page=19)
 
 <a id="dra-gui-rule-draw-lock"></a>
 ## Draw-Lock
@@ -94,7 +95,7 @@ Screenshot-Kontext:
 - Einstellungen > KO Draw-Lock (aktives Turnier)
 
 ### DRA-Referenz (Kapitel/Punkt/Seite)
-- `6.12.1`, Seite `18`
+- `6.12.1`, Seite `19`
 
 ### Deutsche Erklärung
 - Draw-Lock ist die technische Absicherung der Regel:
@@ -106,7 +107,7 @@ Screenshot-Kontext:
 - Macht Entscheidungen der Turnierleitung nachvollziehbar und dokumentierbar.
 
 ### Nachprüfen im PDF
-- [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
+- [DRA-RULE_BOOK.pdf#page=19](DRA-RULE_BOOK.pdf#page=19)
 
 <a id="dra-gui-rule-third-place"></a>
 ## Spiel um Platz 3 (optional)
@@ -118,7 +119,7 @@ Screenshot-Kontext:
 
 ### DRA-Referenz (Kapitel/Punkt/Seite)
 - `6.8.1`, Seite `17`
-- `6.12.1`, Seite `18`
+- `6.12.1`, Seite `19`
 - `1.2` und `6.8.4` (separate Tournament-/Promoter-Rules möglich)
 
 ### Deutsche Erklärung
@@ -134,7 +135,7 @@ Screenshot-Kontext:
 
 ### Nachprüfen im PDF
 - [DRA-RULE_BOOK.pdf#page=17](DRA-RULE_BOOK.pdf#page=17)
-- [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
+- [DRA-RULE_BOOK.pdf#page=19](DRA-RULE_BOOK.pdf#page=19)
 
 <a id="dra-gui-rule-participant-limits"></a>
 ## Teilnehmerlimits
@@ -144,12 +145,11 @@ Screenshot-Kontext:
 - Einstellungen > Regelbasis und Limits
 
 ### DRA-Referenz (Kapitel/Punkt/Seite)
-- `6.10.1`, Seite `17`
-- `6.10.5.2`, Seite `18`
+- `6.10.1`, Seite `18`
 
 ### Deutsche Erklärung
 - Das DRA-Rulebook setzt kein fixes globales Software-Maximum.
-- Es gibt Veranstalter-Ermessen für Organisation und Ablauf.
+- `6.10.1` überlässt die Zulassung zu einem Event dem Veranstalter. Daraus folgt kein DRA-Softwarelimit; die folgenden Grenzen sind ausschließlich technische und organisatorische Produktleitplanken.
 - Die App setzt daher bewusste Leitplanken:
   - `ko`: `2..128`
   - `double_ko`: `2..32`
@@ -162,7 +162,6 @@ Screenshot-Kontext:
 - Erhöht Stabilität (Rendering, Browserlast, Bedienbarkeit).
 
 ### Nachprüfen im PDF
-- [DRA-RULE_BOOK.pdf#page=17](DRA-RULE_BOOK.pdf#page=17)
 - [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
 
 <a id="dra-gui-rule-bye"></a>
@@ -174,7 +173,7 @@ Screenshot-Kontext:
 
 ### DRA-Referenz (Kapitel/Punkt/Seite)
 - Abschnitt `2` (Definition `Bye`), Seite `4`
-- `6.12.1`, Seite `18`
+- `6.12.1`, Seite `19`
 
 ### Deutsche Erklärung
 - Ein `Bye` ist ein reguläres Freilos für eine Runde.
@@ -187,7 +186,7 @@ Screenshot-Kontext:
 
 ### Nachprüfen im PDF
 - [DRA-RULE_BOOK.pdf#page=4](DRA-RULE_BOOK.pdf#page=4)
-- [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
+- [DRA-RULE_BOOK.pdf#page=19](DRA-RULE_BOOK.pdf#page=19)
 
 ![Turnierbaum mit Freilos-Markierung](../assets/ss_Turnierbaum_neu-gestartet.png)
 
@@ -200,7 +199,7 @@ Screenshot-Kontext:
 - Turnierbaum > Gruppenentscheidung offen
 
 ### DRA-Referenz (Kapitel/Punkt/Seite)
-- `6.16.1`, Seite `20`
+- `6.16.1`, Seite `21`
 
 ### Deutsche Erklärung
 - DRA `6.16.1` schreibt keine konkrete universelle Tie-Break-Reihenfolge vor, sondern überlässt diese dem Veranstalter.
@@ -217,7 +216,7 @@ Screenshot-Kontext:
 - Spieler und Turnierleitung sehen eindeutig, wann eine manuelle Entscheidung nötig ist.
 
 ### Nachprüfen im PDF
-- [DRA-RULE_BOOK.pdf#page=20](DRA-RULE_BOOK.pdf#page=20)
+- [DRA-RULE_BOOK.pdf#page=21](DRA-RULE_BOOK.pdf#page=21)
 
 Screenshot-Kontext:
 
@@ -236,17 +235,15 @@ Gruppenphase + KO mit Gruppentabellen und nachgelagertem KO-Turnierbaum:
 - Einstellungen > DRA Checkliste (nicht automatisierbar)
 
 ### DRA-Referenz (Kapitel/Punkt/Seite)
-- `5.14`, Seite `15`
-- `11.3`, Seite `26`
-- `11.4`, Seite `26`
-- `12.1`, Seite `27`
-- `12.2`, Seite `27`
+- `6.8.3`, Seite `18`
+- `6.13.1` bis `6.13.7`, Seite `20`
+- `6.15.1`, Seite `20`
 
 ### Deutsche Erklärung
 - Einige Punkte sind absichtlich nicht automatisiert:
   - Start-/Wurfreihenfolge, Bull-Off-Entscheidungen
-  - Disziplinarische und organisatorische Entscheidungen
-  - Strittige Sonderfälle
+  - organisatorische Entscheidungen des Veranstalters und der Offiziellen
+  - strittige Sonderfälle im laufenden Turnier
 - Die Software dokumentiert und unterstützt, ersetzt aber keine offizielle Turnierentscheidung.
 
 ### Warum wichtig
@@ -254,6 +251,5 @@ Gruppenphase + KO mit Gruppentabellen und nachgelagertem KO-Turnierbaum:
 - Verhindert falsche Erwartung, dass jeder Regelfall algorithmisch "automatisch richtig" entschieden wird.
 
 ### Nachprüfen im PDF
-- [DRA-RULE_BOOK.pdf#page=15](DRA-RULE_BOOK.pdf#page=15)
-- [DRA-RULE_BOOK.pdf#page=26](DRA-RULE_BOOK.pdf#page=26)
-- [DRA-RULE_BOOK.pdf#page=27](DRA-RULE_BOOK.pdf#page=27)
+- [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
+- [DRA-RULE_BOOK.pdf#page=20](DRA-RULE_BOOK.pdf#page=20)

@@ -79,6 +79,9 @@ autodarts_local_tournament/
 |  |  `- update-check.js
 |  |- ui/
 |  |  |- render-helpers.js
+|  |  |- tournament-help-topics.js
+|  |  |- tournament-help-state.js
+|  |  |- render-tournament-help.js
 |  |  |- render-shell.js
 |  |  |- render-tabs.js
 |  |  |- render-tournament.js
@@ -423,12 +426,15 @@ Hier liegt die eigentliche Turnierlogik. Wenn sich eine fachliche Regel ändert,
 | `src/ui/render-shell.js` | äußerer Drawer-Rahmen | rendert Shadow-DOM-Shell, Tabs, Notices und Runtime-Status-Bar | `src/ui/render-tabs.js`, `src/infra/api-client.js`, `src/ui/handlers.js` |
 | `src/ui/render-tabs.js` | Tab-Verteiler | entscheidet, welcher Tab-Renderer für den aktiven Tab ausgeführt wird | `src/ui/render-tournament.js`, `src/ui/render-matches.js`, `src/ui/render-view.js`, `src/ui/render-io.js`, `src/ui/render-settings.js` |
 | `src/ui/render-helpers.js` | UI-Helfer | `renderInfoLinks()`, Abschnitts-, Turnierzeit- und pure Spielregel-Zusammenfassung für wiederverwendbare HTML-Bausteine | `src/ui/render-*.js` |
-| `src/ui/render-tournament.js` | Turnieranlage und Turnierübersicht | rendert die fünf Bereiche mit modusspezifischen Zusatzregelgruppen, zugänglicher Preset-Radio-Gruppe, kompakter Spielregel-Zusammenfassung und Inline-Editor, Live-Zeitprognose, aktivem Turnier und Reset-Bereich | `src/data/normalization.js`, `src/domain/tournament-duration.js`, `src/ui/render-helpers.js`, `src/ui/handlers.js` |
+| `src/ui/tournament-help-topics.js` | Hilfekatalog und Resolver | elf stabile Themen mit dynamischer Auswahl, Auswirkungen, Beispielen, Tipps, Abhängigkeiten, Grenzen, Herkunft, Regelstatus und sicheren Quellen; nutzt bestehende pure Domain-Analysen | `src/data/normalization.js`, `src/domain/tournament-create.js`, `src/domain/preliminary-schedule.js`, `src/domain/tournament-duration.js`, `src/ui/render-helpers.js` |
+| `src/ui/tournament-help-state.js` | flüchtiger Hilfezustand | aktiviert, validiert und verwirft das offene Thema sowie den Fokusanker ohne Storage-Schema-Änderung | `src/ui/tournament-help-topics.js`, `src/ui/handlers.js` |
+| `src/ui/render-tournament-help.js` | Hilfe-UI | rendert zugängliche `?`-Trigger und das nicht-modale Panel mit getrennten Herkunfts- und Regelstatusabschnitten | `src/ui/tournament-help-topics.js`, `src/ui/tournament-help-state.js`, `src/ui/render-tournament.js` |
+| `src/ui/render-tournament.js` | Turnieranlage und Turnierübersicht | rendert die fünf Bereiche mit modusspezifischen Zusatzregelgruppen, zugänglicher Preset-Radio-Gruppe, kompakter Spielregel-Zusammenfassung und Inline-Editor, kontextbezogener Hilfe, Live-Zeitprognose, aktivem Turnier und Reset-Bereich | `src/data/normalization.js`, `src/domain/tournament-duration.js`, `src/ui/render-helpers.js`, `src/ui/render-tournament-help.js`, `src/ui/handlers.js` |
 | `src/ui/render-matches.js` | Matchliste und Matchaktionen | rendert Editoren, Status und API-Start-Buttons; Sortierung und `Nächstes Match` kommen aus `src/app/match-view-models.js` | `src/app/match-view-models.js`, `src/domain/results.js`, `src/infra/api-automation.js` |
 | `src/ui/render-view.js` | Tabellen- und Bracket-Ansicht | rendert Liga-/Gruppentabellen, Fallback-Bracket und den Einstieg ins iframe-Bracket | `src/domain/standings-dra.js`, `src/domain/groups.js`, `src/domain/ko-engine.js`, `src/bracket/*` |
 | `src/ui/render-io.js` | Import/Export-Tab | rendert Export- und Import-Oberfläche | `src/ui/handlers.js`, `src/data/storage.js` |
 | `src/ui/render-settings.js` | Settings-Tab | rendert Debug-Flag, API-Automation, GitHub-Update-Panel, KO-Defaults, Zeitprofil, Tie-Break-Profil und Storage-Hinweise | `src/data/normalization.js`, `src/domain/tournament-duration.js`, `src/ui/render-helpers.js`, `src/app/update-status.js`, `src/ui/handlers.js` |
-| `src/ui/handlers.js` | UI-Orchestrator | erstellt Host, rendert Shell, bindet Events, synchronisiert Modusgruppen und Inline-Disclosure, erhält inaktive Draft-Felder, wendet Presets direkt an und aktualisiert Zusammenfassung sowie Live-Prognose | `src/ui/render-shell.js`, `src/app/tournament-actions.js`, `src/app/match-actions.js`, `src/infra/api-automation.js`, `src/infra/update-check.js`, `src/app/bracket-controller.js`, `src/domain/tournament-duration.js` |
+| `src/ui/handlers.js` | UI-Orchestrator | erstellt Host, rendert Shell, bindet Events, synchronisiert Modusgruppen und Inline-Disclosure, erhält inaktive Draft-Felder, wendet Presets direkt an und aktualisiert Zusammenfassung, Hilfe sowie Live-Prognose | `src/ui/render-shell.js`, `src/ui/render-tournament-help.js`, `src/app/tournament-actions.js`, `src/app/match-actions.js`, `src/infra/api-automation.js`, `src/infra/update-check.js`, `src/app/bracket-controller.js`, `src/domain/tournament-duration.js` |
 
 `handlers.js` ist die Datei, in der Bedienung, State-Änderung und Re-Render zusammenlaufen. Die Render-Dateien bleiben dagegen weitgehend beschreibend.
 

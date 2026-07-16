@@ -1,7 +1,7 @@
 ﻿// Auto-generated module split from dist source.
   // Source of truth for shipped presets:
-  // - "PDC European Tour (Official)" models the default round setup this project can represent honestly:
-  //   KO, Best of 11 Legs, 501, Straight In, Double Out.
+  // - "PDC European Tour (Official)" models the first four rounds through the quarter-finals:
+  //   KO, Best of 11 Legs, 501, Straight In, Double Out. Later event rounds use longer formats.
   // - PDC World Championship style set-play is intentionally not shipped as an "official" preset here,
   //   because the AutoDarts lobby payload only supports legs/first-to-N, not sets.
   function getCreatePresetDefinitions() {
@@ -10,8 +10,9 @@
         id: X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL,
         label: "PDC European Tour (Official)",
         shortLabel: "PDC European Tour",
-        description: "European Tour default round format: KO, Best of 11 Legs (First to 6), 501, Straight In, Double Out, Bull 25/50.",
+        description: "European Tour rounds one to four (through the quarter-finals): KO, Best of 11 Legs (First to 6), 501, Straight In, Double Out, Bull 25/50.",
         notes: Object.freeze([
+          "Semi-finals and the final use longer event formats and are not represented by this single-round preset.",
           "Bull-off Normal is the AutoDarts mapping used by this preset.",
           "Max Runden 50 remains a technical AutoDarts limit and is not part of the PDC rule claim.",
         ]),

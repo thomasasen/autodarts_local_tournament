@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.10.0
+- Alle elf Hilfethemen der Turnieranlage lösen aktuelle Auswahl, direkte Auswirkungen, Beispiele, Tipps, Abhängigkeiten, Grenzen, Herkunft, Regelstatus und Quellen aus dem normalisierten Draft auf. Bestehende pure Domain-Logik liefert Moduslimits, First-to, Gruppen-/Vorrundenanalyse, Spielregelzusammenfassung und Zeitprognose.
+- Teilnehmer- und Draw-Hilfe erklärt erkannte Anzahl, Modusgrenzen, Setz-/Open-Draw-Wirkung und Freilose. Modusspezifische Hilfe reagiert auf Platz-3-Spiel, Grand-Final-Regel, gerade/ungerade Gruppen samt Bestätigung sowie das vollständige Vorrunden-/Finalphasenprofil.
+- Spielregelhilfe trennt Presetwerte von technischen AutoDarts-Werten, erklärt `Best of` als `First to`, bildet Bull-off/Bull-Modus korrekt ab und grenzt Custom- sowie Kompatibilitätsprofile von offiziellen Formatclaims ab.
+- Board- und Zeitprofilhilfe verwenden die reale Dauerprognose, bleiben aber ausdrücklich technische Planungsparameter ohne MultiBoard- oder Turnierregelbehauptung.
+- Tipps besitzen einen eigenen visuellen Abschnitt. `Herkunft der Einstellung` und `Regelstatus und Konformität` werden separat und textlich verständlich gerendert; Geltungsbereich und technische Durchsetzung verhindern pauschale Gesamt-Konformitätsclaims.
+- Ein geöffnetes Thema aktualisiert sich bei relevanten Eingaben, ohne selbstständig zu wechseln. Dynamische Gruppen-/Vorrundenfelder erhalten beim gezielten Teil-Render den aktiven Fokus und eine vorhandene Textauswahl.
+- Quellenclaims wurden gegen die lokale DRA-PDF geprüft: Round Robin verweist auf Seite 18, Draw auf 19 und Veranstalter-Tie-Break auf 21. Das European-Tour-Preset ist auf die ersten vier Runden bis einschließlich Viertelfinale begrenzt; Halbfinale und Finale werden nicht als abgedeckt behauptet.
+- Domain- und Runtime-Tests decken sichere Teil-Drafts, alle Modi und Presets, Abhängigkeiten, kritische Compliance-Texte, getrenntes Rendering, Live-Änderungen und Fokus-Erhalt ab. Storage-Schema 5 bleibt unverändert.
+
 ## 0.9.0
 - Die Turnieranlage besitzt einen zentralen, datengetriebenen Help-Topic-Katalog mit elf echten Themen: Turniermodus, Preset/Format, Teilnehmer, KO-Auslosung, Platz 3, Doppel-KO Grand Final, ungerade Gruppenfelder, Vorrunde + Finalphase, Spielregeln/X01, Board-Anzahl und Zeitprofil.
 - Einheitliche kreisförmige `?`-Buttons sind echte Buttons mit konkretem `aria-label`, stabilem `aria-controls`, synchronem `aria-expanded`, sichtbarem Tastaturfokus und vergrößertem Touch-Ziel. Einen globalen Hilfe-Schalter, Glühlampen oder eine Regelarten-Legende gibt es im Create-Formular nicht.

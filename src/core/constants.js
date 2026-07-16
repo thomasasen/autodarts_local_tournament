@@ -63,6 +63,7 @@
   const PDC_DRA_COMPLIANCE_KO_URL = `${PDC_DRA_COMPLIANCE_DOC_URL}#pdc-dra-ko`;
   const PDC_DRA_COMPLIANCE_PRELIMINARY_FINAL_URL = `${PDC_DRA_COMPLIANCE_DOC_URL}#pdc-dra-preliminary-final`;
   const PDC_DRA_COMPLIANCE_PRESET_URL = `${PDC_DRA_COMPLIANCE_DOC_URL}#pdc-dra-preset-logic`;
+  const PDC_EUROPEAN_TOUR_FORMAT_URL = "https://www.pdc-europe.tv/tournaments/et-2026-en/european-darts-open-2026/";
   const TOURNAMENT_DURATION_DOC_URL = `${REPO_BLOB_BASE_URL}/docs/tournament-duration.md`;
   const TOURNAMENT_DURATION_PARAMETERS_URL = `${TOURNAMENT_DURATION_DOC_URL}#tournament-duration-parameters`;
   const TOURNAMENT_DURATION_TIME_PROFILES_URL = `${TOURNAMENT_DURATION_DOC_URL}#tournament-duration-time-profiles`;

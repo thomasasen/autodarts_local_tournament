@@ -7,6 +7,7 @@ Diese Dokumentation beschreibt die Berechnungsgrundlage der Live-Prognose in `sr
 - Während eines laufenden Turniers wird zusätzlich eine statische Restzeit-Prognose aus offenem Matchplan und abgeschlossenen Matches berechnet.
 - Sie ist bewusst nicht normativ: DRA/PDC definieren kein allgemeines Minutenmodell für lokale Turnierdauer.
 - Ziel ist eine belastbare Vorab-Planung, keine sekundengenaue Laufzeitvorhersage.
+- Die kontextbezogene Regelhilfe für `Boards für Zeitprognose` und `Zeitprofil` verwendet dieselbe pure Berechnung. Sie erklärt aktuelle Schätzung und Abhängigkeiten, bewertet beide Felder aber ausdrücklich als technische Planungsparameter und nicht als Turnierregeln.
 
 <a id="tournament-duration-parameters"></a>
 ## Verwendete Turnier-Parameter

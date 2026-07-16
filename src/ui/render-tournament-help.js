@@ -54,12 +54,27 @@
     if (!label && !description) return "";
     return `
       <section class="ata-create-help-section ata-create-help-classification">
-        <h5>Einordnung</h5>
+        <h5>Herkunft der Einstellung</h5>
         ${label ? `<p class="ata-create-help-classification-label">${escapeHtml(label)}</p>` : ""}
         ${description ? `<p>${escapeHtml(description)}</p>` : ""}
       </section>
     `;
   }
+
+  function renderCreateHelpCompliance(compliance) {
+    const normalized = normalizeCreateHelpCompliance(compliance);
+    if (!normalized) return "";
+    return `
+      <section class="ata-create-help-section ata-create-help-compliance" data-compliance-status="${escapeHtml(normalized.status)}">
+        <h5>Regelstatus und Konformität</h5>
+        <p class="ata-create-help-compliance-label">${escapeHtml(normalized.label)}</p>
+        ${normalized.description ? `<p>${escapeHtml(normalized.description)}</p>` : ""}
+        ${normalized.scope ? `<p><strong>Geltungsbereich:</strong> ${escapeHtml(normalized.scope)}</p>` : ""}
+        ${normalized.enforcement ? `<p><strong>Technische Durchsetzung:</strong> ${escapeHtml(normalized.enforcement)}</p>` : ""}
+      </section>
+    `;
+  }
+
 
   function renderCreateHelpSources(sources) {
     const safeSources = (Array.isArray(sources) ? sources : []).filter((source) => (
@@ -80,9 +95,6 @@
     if (!model) {
       return `<h4 id="${CREATE_HELP_TITLE_ID}" tabindex="-1">Kontextbezogene Hilfe</h4>`;
     }
-    const compliance = model.compliance && typeof model.compliance === "object"
-      ? model.compliance
-      : null;
     return `
       <div class="ata-create-help-panel-head">
         <h4 id="${CREATE_HELP_TITLE_ID}" tabindex="-1">${escapeHtml(model.title)}</h4>
@@ -93,10 +105,11 @@
         ${renderCreateHelpTextSection("Aktuelle Auswahl", model.currentSelection, "ata-create-help-current")}
         ${renderCreateHelpListSection("Auswirkung auf dein Turnier", model.effects)}
         ${renderCreateHelpListSection("Beispiele", model.examples)}
-        ${renderCreateHelpListSection("Tipps", model.tips)}
+        ${renderCreateHelpListSection("Tipps", model.tips, "ata-create-help-tips")}
         ${renderCreateHelpListSection("Abhängigkeiten", model.dependencies)}
         ${renderCreateHelpListSection("Einschränkungen", model.limitations)}
-        ${renderCreateHelpClassification(model.classification || compliance)}
+        ${renderCreateHelpClassification(model.classification)}
+        ${renderCreateHelpCompliance(model.compliance)}
         ${renderCreateHelpSources(model.sources)}
       </div>
     `;

@@ -17,7 +17,7 @@
   - Gesamt-Leg-Differenz
   - Gesamt-Legs gewonnen
   - danach `playoff_required`
-- Referenz: DRA Rulebook `6.16.1` (Seite 20), PDF-Link: [DRA-RULE_BOOK.pdf#page=20](DRA-RULE_BOOK.pdf#page=20)
+- Referenz: DRA Rulebook `6.16.1` (Seite 21), PDF-Link: [DRA-RULE_BOOK.pdf#page=21](DRA-RULE_BOOK.pdf#page=21)
 - Profilwechsel ist nach dem ersten abgeschlossenen Gruppen-/Liga-Ergebnis technisch gesperrt.
 
 <a id="pdc-dra-groups-resolution"></a>
@@ -44,7 +44,7 @@
   - Bei Bye-/Edge-Szenarien wird kein unvollständiger Placement-Pfad erzeugt.
 - Draw-Lock ist standardmäßig aktiv und hält den initialen KO-Draw stabil.
 - Entsperren ist nur als expliziter Promoter-Override mit Bestätigung zulässig.
-- Referenz: DRA Rulebook `6.8.1` (Seite 17), `6.12.1` (Seite 18), sowie `1.2`/`6.8.4` für explizite Tournament-/Promoter-Rules; PDF-Link: [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
+- Referenz: DRA Rulebook `6.8.1` (Seite 17), `6.12.1` (Seite 19), sowie `1.2`/`6.8.4` für explizite Tournament-/Promoter-Rules; PDF-Links: [KO](DRA-RULE_BOOK.pdf#page=17), [Draw](DRA-RULE_BOOK.pdf#page=19)
 
 <a id="pdc-dra-preliminary-final"></a>
 3a. **Vorrunde + Finalphase als Veranstalterprofil**
@@ -64,7 +64,9 @@
 5. **Preset-Logik (ehrlich statt irreführend)**
 - Offizielles Preset in der UI:
   - `PDC European Tour (Official)`
-  - Default-Rundenformat: `KO`, `Best of 11 Legs (First to 6)`, `501`, `Straight In`, `Double Out`, `Bull 25/50`
+  - Format der ersten vier Runden bis einschließlich Viertelfinale: `KO`, `Best of 11 Legs (First to 6)`, `501`, `Straight In`, `Double Out`, `Bull 25/50`
+  - Halbfinale (`Best of 13`) und Finale (`Best of 15`) sind längere Eventrunden und werden von diesem Einzelrunden-Preset nicht abgebildet.
+- PDC-Europe-Quelle: [European Darts Open 2026 – Format](https://www.pdc-europe.tv/tournaments/et-2026-en/european-darts-open-2026/)
 - Technische AutoDarts-Werte bleiben explizit getrennt:
   - `Bull-off Normal` ist die technische Lobby-Abbildung im Tool
   - `Max Runden 50` ist **kein** PDC-Regelpunkt, sondern nur ein technisches Limit für die Lobby
@@ -76,4 +78,4 @@
 - Bei vollständigem Deadlock wird keine automatische Entscheidung getroffen.
 - Der Systemstatus ist `playoff_required` und erfordert eine manuelle Turnierentscheidung.
 - `PDC World Championship` wird nicht als offizielles Preset behauptet, weil das reale Format `Sets` benötigt und die AutoDarts-/ATA-Integration hier nur `Legs / First to N` abbilden kann.
-- MultiBoard ist nicht Bestandteil von Version `0.9.0`. Die Board-Anzahl ist ausschließlich ein Kapazitätsparameter der Zeitprognose; Board-Zuweisung, parallele Lobbyverwaltung und mehrere gleichzeitig gestartete Matches bleiben außerhalb des Scopes.
+- MultiBoard ist nicht Bestandteil von Version `0.10.0`. Die Board-Anzahl ist ausschließlich ein Kapazitätsparameter der Zeitprognose; Board-Zuweisung, parallele Lobbyverwaltung und mehrere gleichzeitig gestartete Matches bleiben außerhalb des Scopes.

@@ -732,6 +732,44 @@
   }
 
 
+  function replaceCreateDynamicHostContent(host, html) {
+    if (!(host instanceof HTMLElement)) return;
+    const nextHtml = String(html || "");
+    if (host.innerHTML === nextHtml) return;
+    const activeElement = state.shadowRoot?.activeElement || document.activeElement;
+    const restoreFocus = activeElement instanceof HTMLElement && host.contains(activeElement);
+    const activeId = restoreFocus ? normalizeText(activeElement.id || "") : "";
+    const activeName = restoreFocus
+      && (activeElement instanceof HTMLInputElement
+        || activeElement instanceof HTMLSelectElement
+        || activeElement instanceof HTMLTextAreaElement)
+      ? normalizeText(activeElement.name || "")
+      : "";
+    const selectionStart = activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
+      ? activeElement.selectionStart
+      : null;
+    const selectionEnd = activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
+      ? activeElement.selectionEnd
+      : null;
+
+    host.innerHTML = nextHtml;
+    if (!restoreFocus) return;
+    const replacement = (activeId ? host.querySelector(`#${activeId}`) : null)
+      || Array.from(host.querySelectorAll("input, select, textarea, button")).find((control) => (
+        activeName && normalizeText(control.name || "") === activeName
+      ));
+    if (!(replacement instanceof HTMLElement)) return;
+    replacement.focus({ preventScroll: true });
+    if (
+      (replacement instanceof HTMLInputElement || replacement instanceof HTMLTextAreaElement)
+      && Number.isInteger(selectionStart)
+      && Number.isInteger(selectionEnd)
+    ) {
+      replacement.setSelectionRange(selectionStart, selectionEnd);
+    }
+  }
+
+
   function refreshCreateFormGroupsKoPolicy(form) {
     if (!(form instanceof HTMLFormElement)) {
       return;
@@ -741,7 +779,7 @@
       return;
     }
     const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
-    host.innerHTML = renderGroupsKoOddParticipantPolicyFields(draft);
+    replaceCreateDynamicHostContent(host, renderGroupsKoOddParticipantPolicyFields(draft));
   }
 
 
@@ -750,7 +788,7 @@
     const host = form.querySelector("#ata-preliminary-final-fields-host");
     if (!(host instanceof HTMLElement)) return;
     const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
-    host.innerHTML = renderPreliminaryFinalFields(draft);
+    replaceCreateDynamicHostContent(host, renderPreliminaryFinalFields(draft));
   }
 
 
@@ -1022,6 +1060,7 @@
     refreshCreateGameRulesSummary(form);
     refreshCreateFormGroupsKoPolicy(form);
     refreshCreateFormPreliminaryFinal(form);
+    refreshCreateHelpUi(form);
     setNotice("success", "Teilnehmer wurden zuf\u00e4llig gemischt.", 1800);
   }
 

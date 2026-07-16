@@ -2,11 +2,43 @@
 
 ## Umsetzungsstatus
 
-- Aktueller Release: Release 4 – Kontextbezogene Regelhilfe als Grundsystem
-- Zielversion: `0.9.0`
+- Aktueller Release: Release 5 – Dynamische Hilfe, Abhängigkeiten, Beispiele und Compliance
+- Zielversion: `0.10.0`
 - Status: `ABGESCHLOSSEN`
-- Begonnen: 2026-07-16 09:35 CEST
-- Zuletzt aktualisiert: 2026-07-16 10:29 CEST
+- Begonnen: 2026-07-16 CEST
+- Zuletzt aktualisiert: 2026-07-16 12:22 CEST
+
+### Fortschritt Release 5
+
+- [x] Ausgangsstand und Release-4-Abschluss geprüft
+- [x] DRA-/PDC-Claims und konkrete Quellen geprüft
+- [x] Alle elf Themen um dynamische Pflichtabschnitte erweitert
+- [x] Abhängigkeiten, Beispiele und getrennte Tipps umgesetzt
+- [x] Herkunft und Regelstatus als getrennte Modelle und UI-Abschnitte umgesetzt
+- [x] Live-Aktualisierung ohne automatischen Themenwechsel umgesetzt
+- [x] Fokus-Erhalt bei dynamischen Teil-Rendern umgesetzt
+- [x] Sichere Fallbacks für Teil-Drafts und unbekannte Statuswerte umgesetzt
+- [x] Automatisierte Domain- und Runtime-Tests erweitert
+- [x] Responsive Verhalten und Screenshot abschließend geprüft
+- [x] Build und gesamtes QA-Skript erfolgreich
+- [x] Dokumentation, Changelog und Quellenprüfung abgeschlossen
+- [x] Abschlussprüfung des Gesamtdiffs durchgeführt
+
+### Arbeitsprotokoll Release 5
+
+| Zeitpunkt | Status | Arbeitsergebnis | Prüfung |
+|---|---|---|---|
+| 2026-07-16 CEST | IN ARBEIT | Ausgangscommit `15228867157e7cc5df261b4f161fd8ea103ddd03`, sauberen Release-4-Abschluss, Startprompt, UX-Plan, Architektur, Dokumentation und lokale DRA-PDF geprüft; Release 5 mit Zielversion `0.10.0` gestartet. | Unveränderte Baseline erfolgreich: 134 Domain-Tests; Storage-Schema 5 bleibt unverändert. |
+| 2026-07-16 CEST | IN ARBEIT | Elf Topics um dynamische Auswahl, Auswirkungen, Beispiele, Tipps, Abhängigkeiten, Grenzen, Herkunft, eigenständigen Regelstatus und themenspezifische Quellen erweitert; Live-Update und Fokus-Erhalt abgesichert. | Zwischenstand erfolgreich: 144 Domain-Tests, Runtime-Contract mit 62 Selftests und Build. |
+| 2026-07-16 12:22 CEST | ABGESCHLOSSEN | Release 5 als `0.10.0` finalisiert; DRA-/PDC-Claims, Dokumentation, Codebase-Map, Changelog, generierte Distribution und Screenshot aktualisiert sowie Gesamtdiff gegen den Ausgangscommit auf Release-5-Scope geprüft. | Gesamtes QA erfolgreich: Build, Architektur-, Encoding- und Regelcheck, 144 Domain-Tests, Runtime-Contract mit 62 Selftests und Build-Disziplin; fünf Quellen-Basisziele HTTP 200, alle lokalen Anker vorhanden, Responsive-Messung ohne horizontalen Overflow und `git diff --check` ohne Fehler. |
+
+### Prüfgrenze Release 5
+
+- Automatisiert geprüft: Katalogvollständigkeit, sichere Resolver aus Teil-Drafts, alle Modi und Presets, Teilnehmer-/Draw-/Freiloswirkung, Gruppen- und Vorrundenanalyse, First-to, Bull-off/Bull-Modus, Board-/Zeitprognose, Regelstatus-Fallbacks, getrenntes Rendering, Live-Aktualisierung, Themenstabilität und Fokus-Erhalt.
+- Im lokalen Microsoft-Edge-Headless-Browser geprüft: geöffnete dynamische Preset-Hilfe bei `1920 × 1080`, `1366 × 768`, `1024 × 768`, `768 × 1024` und echter `360 × 800`-Geräteemulation ohne horizontalen Dokument-, Drawer-, Content-, Formular- oder Panel-Overflow; Mobile-Touchziel `44 × 44 px`, fokussierte Panelüberschrift und stabile Topic-ID. Der Screenshot wurde bei `1366 × 768` aktualisiert und visuell kontrolliert.
+- Alle lokalen Hilfeanker sind vorhanden; die vier GitHub-Dokumentziele und die direkte PDC-Europe-Formatquelle antworteten mit HTTP 200. Nicht gegen einen authentifizierten Live-Account ausgeführt wurden echter Lobby-/Board-/API-Start sowie eine physische Tastatur-/Screenreader-Abnahme; Release 5 verändert diese Integrationen nicht.
+
+### Historie Release 4
 
 ### Fortschritt Release 4
 

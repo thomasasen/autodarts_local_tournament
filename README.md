@@ -2,7 +2,7 @@
 
 Lokales Turniermanagement direkt in `https://play.autodarts.io` als Userscript.
 
-Aktuelle Releaseversion: `0.9.0`.
+Aktuelle Releaseversion: `0.10.0`.
 
 [![Installieren](https://img.shields.io/badge/Installieren-Autodarts%20Tournament%20Assistant%20Loader-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js)
 
@@ -215,11 +215,12 @@ Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten b
 
 - Kreisförmige `?`-Buttons stehen direkt an Turniermodus, Preset/Format, Teilnehmerliste, KO-Auslosung, Spiel um Platz 3, Grand-Final-Regel, ungerader Gruppenregel, Vorrunde + Finalphase, Spielregeln/X01, Board-Anzahl und Zeitprofil.
 - Nur ein ausdrücklicher Klick öffnet oder wechselt ein Hilfethema. Fokuswechsel und normale Feldänderungen wählen kein anderes Thema aus.
-- Das rechte Panel ist eine ergänzende, nicht-modale Region. Es zeigt Titel, Kurzbeschreibung, aktuelle Auswahl, direkte Auswirkungen, fachliche Einordnung und konkret beschriftete Quellenlinks.
+- Das rechte Panel ist eine ergänzende, nicht-modale Region. Es zeigt Titel, Kurzbeschreibung, aktuelle Auswahl, direkte Auswirkungen, Beispiele, klar als solche getrennte Tipps, Abhängigkeiten, Grenzen, Herkunft der Einstellung, einen eigenständigen Regelstatus mit Geltungsbereich/technischer Durchsetzung und konkret beschriftete Quellenlinks.
 - Ändert sich ein zugehöriger Formularwert, wird der Inhalt des bereits geöffneten Themas live aktualisiert. Bei einem Moduswechsel schließt ein dadurch unzulässiges Thema, ohne den Fokus vom Modusfeld wegzubewegen.
+- Teilnehmerzahl, Moduslimits, Seed-Wirkung, Gruppenverteilung, Vorrundenprofil, First-to, Bull-off/Bull-Modus, Grand-Final-Modus sowie Board-/Zeitprognose-Abhängigkeiten werden aus dem normalisierten Draft und vorhandener reiner Domain-Logik abgeleitet. Der Regelstatus ist bewusst keine pauschale Konformitätsbewertung des gesamten Turniers.
 - `Hilfe schließen` und `Escape` schließen nur das Panel, stellen die Turnierübersicht wieder her und geben den Fokus an den auslösenden `?`-Button zurück. Beim Schließen des Drawers, nach erfolgreicher Turnieranlage, beim Import und beim Turnier-Reset wird der flüchtige Hilfezustand verworfen.
 - Es gibt keinen globalen Hilfe-Schalter, keine Glühlampen und keine zusätzliche Regelarten-Legende im Formular.
-- Release 5 mit erweiterten Abhängigkeiten, Beispielen und detaillierter Compliance-Hilfe ist noch nicht umgesetzt.
+- Release 6 mit Live-Validierung und erweiterter Turnierübersicht ist noch nicht umgesetzt.
 
 ### Pflichtfelder
 - Turniername
@@ -258,7 +259,7 @@ Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten b
 
 | Preset | Parameter | Hinweise |
 |---|---|---|
-| `PDC European Tour (Official)` | `KO`, `Best of 11`, `501`, `Straight In`, `Double Out`, `Bull 25/50`, `Bull-off Normal`, `Max Runden 50`, `Lobby privat` | Offizielles Default-Rundenformat. `Bull-off Normal` und `Max Runden 50` sind AutoDarts-/Technikwerte; `Max Runden` ist **keine** PDC-Fachregel. |
+| `PDC European Tour (Official)` | `KO`, `Best of 11`, `501`, `Straight In`, `Double Out`, `Bull 25/50`, `Bull-off Normal`, `Max Runden 50`, `Lobby privat` | Offizielles Format der ersten vier Runden bis einschließlich Viertelfinale. Halbfinale und Finale verwenden längere Distanzen und sind nicht durch dieses Einzelrunden-Preset abgebildet. `Bull-off Normal` und `Max Runden 50` sind AutoDarts-/Technikwerte; `Max Runden` ist **keine** PDC-Fachregel. |
 | `PDC 501 / Double Out (Basic)` | `KO`, `Best of 5`, `501`, `Straight In`, `Double Out`, `Bull 25/50`, `Bull-off Normal`, `Max Runden 50`, `Lobby privat` | Ehrlich benanntes Kompatibilitätsprofil für das frühere irreführende `PDC Standard`. **Kein** offizielles PDC-Eventformat. |
 | `Individuell / Manuell` | aktuelle Formularwerte | Status nach manuellen Änderungen an Preset-Feldern. |
 
@@ -581,14 +582,16 @@ Priorisierung für Limits in diesem Projekt:
 - DRA-Referenzen:
   - Definition Bye: Abschnitt `2` (Seite 4):
     [DRA-RULE_BOOK.pdf#page=4](docs/DRA-RULE_BOOK.pdf#page=4)
-  - Turnierformat KO / Round Robin: `6.8.1`, `6.8.2` (Seite 17):
+  - Turnierformat KO: `6.8.1` (Seite 17):
     [DRA-RULE_BOOK.pdf#page=17](docs/DRA-RULE_BOOK.pdf#page=17)
-  - Teilnehmer und Veranstalter-Ermessen: `6.10.1`, `6.10.5.2` (Seiten 17-18):
+  - Turnierformat Round Robin: `6.8.2` (Seite 18):
     [DRA-RULE_BOOK.pdf#page=18](docs/DRA-RULE_BOOK.pdf#page=18)
-  - Draw bleibt bestehen: `6.12.1` (Seite 18):
+  - Teilnehmer und Veranstalter-Ermessen: `6.10.1` (Seite 18):
     [DRA-RULE_BOOK.pdf#page=18](docs/DRA-RULE_BOOK.pdf#page=18)
-  - Tie-Break im Ermessen des Veranstalters: `6.16.1` (Seite 20):
-    [DRA-RULE_BOOK.pdf#page=20](docs/DRA-RULE_BOOK.pdf#page=20)
+  - Draw bleibt bestehen: `6.12.1` (Seite 19):
+    [DRA-RULE_BOOK.pdf#page=19](docs/DRA-RULE_BOOK.pdf#page=19)
+  - Tie-Break im Ermessen des Veranstalters: `6.16.1` (Seite 21):
+    [DRA-RULE_BOOK.pdf#page=21](docs/DRA-RULE_BOOK.pdf#page=21)
 
 ### Umgesetzte Limits (mit Hintergrund)
 | Modus | Limit | Warum |
@@ -732,7 +735,7 @@ powershell -ExecutionPolicy Bypass -File scripts/test-runtime-contract.ps1
 - Technisches Hard-Cap: `128` Teilnehmer
 - API-Halbautomatik basiert auf in der Praxis verwendeten Endpunkten (Inference), siehe [docs/autodarts-api-capabilities.md](docs/autodarts-api-capabilities.md)
 - DOM-Autodetect bleibt best-effort
-- MultiBoard ist nicht Bestandteil von Version `0.9.0`. `Boards für Zeitprognose` ist ausschließlich ein Kapazitätsparameter der Schätzung. Board-Zuweisung, parallele Lobbyverwaltung, mehrere gleichzeitig gestartete Matches, Mehrgeräte-Synchronisierung und Mehrbrowser-Bearbeitung sind nicht implementiert.
+- MultiBoard ist nicht Bestandteil von Version `0.10.0`. `Boards für Zeitprognose` ist ausschließlich ein Kapazitätsparameter der Schätzung. Board-Zuweisung, parallele Lobbyverwaltung, mehrere gleichzeitig gestartete Matches, Mehrgeräte-Synchronisierung und Mehrbrowser-Bearbeitung sind nicht implementiert.
 
 ## Quellen
 - Turnierdauer-Benchmarks:
@@ -742,7 +745,9 @@ powershell -ExecutionPolicy Bypass -File scripts/test-runtime-contract.ps1
 - DRA (offizielle Regelbasis):
   - https://www.thedra.co.uk/dra-rulebook
   - [docs/DRA-RULE_BOOK.pdf](docs/DRA-RULE_BOOK.pdf)
-- PDC (Open Draw Kontext, Eventregeln):
+- PDC (Eventformat):
+  - https://www.pdc-europe.tv/tournaments/et-2026-en/european-darts-open-2026/
+- PDC (historischer Open-Draw-Kontext):
   - https://www.pdc.tv/news/2013/01/16/rules-challenge-youth-tours
 - JS-Modularisierung:
   - https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules

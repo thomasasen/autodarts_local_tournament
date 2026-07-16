@@ -60,6 +60,11 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
   - der persistierte Draft behält inaktive modusspezifische Werte; DOM-Controls sind außerhalb ihres Modus verborgen und deaktiviert
   - `scopeCreateConfigToMode()` projiziert vor Validation und Domain-Factory ausschließlich die aktiven Zusatzregeln
   - `state.createGameRulesExpanded` ist flüchtiger UI-State und wird nicht im Storage-Schema persistiert
+- Kontextbezogene Regelhilfe:
+  - `src/ui/tournament-help-topics.js` enthält elf stabile Topic-IDs und reine Resolver für Auswahl, Auswirkungen, Beispiele, Tipps, Abhängigkeiten, Grenzen, Herkunft, Regelstatus und Quellen
+  - Resolver normalisieren den Draft und verwenden bestehende pure Domain-Analysen für Limits, Gruppen, Vorrunde, Spielregeln und Zeitprognose; sie verändern weder Draft noch Domainzustand
+  - `state.activeCreateHelpTopicId` und der auslösende Fokusanker bleiben flüchtig; relevante Eingaben aktualisieren nur den offenen Inhalt und wählen kein anderes Thema
+  - `src/ui/render-tournament-help.js` rendert Herkunft und Regelstatus als getrennte Abschnitte; ein Topic-Status ist keine Gesamtbewertung des Turniers
 - KO-spezifisch:
   - `settings.featureFlags.koDrawLockDefault: boolean`
   - `tournament.ko.drawLocked: boolean`

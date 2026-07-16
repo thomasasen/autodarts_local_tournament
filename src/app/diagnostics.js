@@ -502,6 +502,114 @@
           `board=${boardLiveOk}, time=${timeLiveOk}, profile=${state.store.settings.tournamentTimeProfile}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
         );
 
+        const participantsTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("participants")}`);
+        const participantField = createForm.querySelector("#ata-participants");
+        const thirdPlaceInput = createForm.querySelector("#ata-enable-third-place");
+        if (!(participantsTrigger instanceof HTMLButtonElement)
+          || !(participantField instanceof HTMLTextAreaElement)
+          || !(thirdPlaceInput instanceof HTMLInputElement)) {
+          throw new Error("Dependent help controls missing.");
+        }
+        participantsTrigger.click();
+        participantField.focus();
+        participantField.value = "Zora\nYara\nXenia\nWanda\nVera\nUte\nTina\nSara";
+        participantField.dispatchEvent(new Event("input", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const participantsText = normalizeText(panel?.textContent || "");
+        const participantsLiveOk = state.activeCreateHelpTopic === "participants"
+          && participantsText.includes("8 Teilnehmer erkannt")
+          && participantsText.includes("Zora vor Yara")
+          && state.shadowRoot?.activeElement === participantField;
+
+        const thirdPlaceLiveTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("thirdPlace")}`);
+        if (!(thirdPlaceLiveTrigger instanceof HTMLButtonElement)) throw new Error("Third-place live trigger missing.");
+        thirdPlaceLiveTrigger.click();
+        thirdPlaceInput.focus();
+        thirdPlaceInput.checked = false;
+        thirdPlaceInput.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const thirdPlaceText = normalizeText(panel?.textContent || "");
+        const thirdPlaceLiveOk = state.activeCreateHelpTopic === "thirdPlace"
+          && thirdPlaceText.includes("Aktuelle Auswahl Aus · 8 Teilnehmer · kein zusätzliches Match")
+          && state.shadowRoot?.activeElement === thirdPlaceInput;
+
+        modeSelect.value = "double_ko";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        const grandFinalLiveTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("grandFinal")}`);
+        const grandFinalSelect = createForm.querySelector("#ata-grand-final-reset-mode");
+        if (!(grandFinalLiveTrigger instanceof HTMLButtonElement) || !(grandFinalSelect instanceof HTMLSelectElement)) {
+          throw new Error("Grand-final live controls missing.");
+        }
+        grandFinalLiveTrigger.click();
+        grandFinalSelect.focus();
+        grandFinalSelect.value = GRAND_FINAL_RESET_SINGLE_MATCH;
+        grandFinalSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const grandFinalText = normalizeText(panel?.textContent || "");
+        const grandFinalLiveOk = state.activeCreateHelpTopic === "grandFinal"
+          && grandFinalText.includes("Ein einzelnes Grand Final")
+          && grandFinalText.includes("verkürzte Variante")
+          && state.shadowRoot?.activeElement === grandFinalSelect;
+
+        modeSelect.value = "groups_ko";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        participantField.value = "A\nB\nC\nD\nE\nF\nG\nH\nI";
+        participantField.dispatchEvent(new Event("input", { bubbles: true }));
+        const groupsLiveTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("groupsKoOddParticipants")}`);
+        let groupsPolicy = createForm.querySelector("#ata-groups-ko-odd-policy");
+        if (!(groupsLiveTrigger instanceof HTMLButtonElement) || !(groupsPolicy instanceof HTMLSelectElement)) {
+          throw new Error("Groups live controls missing.");
+        }
+        groupsLiveTrigger.click();
+        groupsPolicy.focus();
+        groupsPolicy.value = GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL;
+        groupsPolicy.dispatchEvent(new Event("change", { bubbles: true }));
+        groupsPolicy = createForm.querySelector("#ata-groups-ko-odd-policy");
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const groupsPendingText = normalizeText(panel?.textContent || "");
+        const groupsPolicyFocusOk = groupsPolicy instanceof HTMLSelectElement
+          && state.shadowRoot?.activeElement === groupsPolicy;
+        let groupsAcknowledgement = createForm.querySelector("input[name='groupsKoOddParticipantAcknowledged']");
+        if (!(groupsAcknowledgement instanceof HTMLInputElement)) throw new Error("Groups acknowledgement missing.");
+        groupsAcknowledgement.focus();
+        groupsAcknowledgement.checked = true;
+        groupsAcknowledgement.dispatchEvent(new Event("change", { bubbles: true }));
+        groupsAcknowledgement = createForm.querySelector("input[name='groupsKoOddParticipantAcknowledged']");
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const groupsAcknowledgedText = normalizeText(panel?.textContent || "");
+        const groupsLiveOk = state.activeCreateHelpTopic === "groupsKoOddParticipants"
+          && groupsPendingText.includes("Bestätigung noch erforderlich")
+          && groupsAcknowledgedText.includes("Bestätigung erteilt")
+          && groupsPolicyFocusOk
+          && groupsAcknowledgement instanceof HTMLInputElement
+          && state.shadowRoot?.activeElement === groupsAcknowledgement;
+
+        modeSelect.value = "preliminary_final";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        participantField.value = "A\nB\nC\nD\nE\nF\nG\nH";
+        participantField.dispatchEvent(new Event("input", { bubbles: true }));
+        const preliminaryLiveTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("preliminaryFinal")}`);
+        let preliminaryMatchCount = createForm.querySelector("#ata-preliminary-match-count");
+        if (!(preliminaryLiveTrigger instanceof HTMLButtonElement) || !(preliminaryMatchCount instanceof HTMLInputElement)) {
+          throw new Error("Preliminary live controls missing.");
+        }
+        preliminaryLiveTrigger.click();
+        preliminaryMatchCount.focus();
+        preliminaryMatchCount.value = "6";
+        preliminaryMatchCount.dispatchEvent(new Event("change", { bubbles: true }));
+        preliminaryMatchCount = createForm.querySelector("#ata-preliminary-match-count");
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const preliminaryText = normalizeText(panel?.textContent || "");
+        const preliminaryLiveOk = state.activeCreateHelpTopic === "preliminaryFinal"
+          && preliminaryText.includes("24 Vorrundenmatches gesamt")
+          && preliminaryMatchCount instanceof HTMLInputElement
+          && state.shadowRoot?.activeElement === preliminaryMatchCount;
+        record(
+          "Create-UI Release 5: Teilnehmer, Platz 3, Grand Final, Gruppen und Vorrunde aktualisieren Hilfe und erhalten Feldfokus",
+          participantsLiveOk && thirdPlaceLiveOk && grandFinalLiveOk && groupsLiveOk && preliminaryLiveOk,
+          `participants=${participantsLiveOk}, third=${thirdPlaceLiveOk}, grand=${grandFinalLiveOk}, groups=${groupsLiveOk}, preliminary=${preliminaryLiveOk}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
         modeTrigger.click();
         modeSelect.focus();
         modeSelect.value = "double_ko";
