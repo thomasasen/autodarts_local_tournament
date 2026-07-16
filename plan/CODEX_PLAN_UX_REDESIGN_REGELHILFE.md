@@ -2,11 +2,56 @@
 
 ## Umsetzungsstatus
 
-- Aktueller Release: Release 3 – Modusabhängige Zusatzregeln und kompakte Spielregeln
-- Zielversion: `0.8.0`
+- Aktueller Release: Release 4 – Kontextbezogene Regelhilfe als Grundsystem
+- Zielversion: `0.9.0`
 - Status: `ABGESCHLOSSEN`
-- Begonnen: 2026-07-15 21:21 CEST
-- Zuletzt aktualisiert: 2026-07-15 21:50 CEST
+- Begonnen: 2026-07-16 09:35 CEST
+- Zuletzt aktualisiert: 2026-07-16 10:29 CEST
+
+### Fortschritt Release 4
+
+- [x] Ausgangsstand und Abschluss von Release 3 geprüft
+- [x] Bestehende Hilfe-Links und relevante Dokumentationsquellen analysiert
+- [x] Datengetriebenes Help-Topic-Modell umgesetzt
+- [x] Flüchtigen Hilfezustand umgesetzt
+- [x] Einheitliche zugängliche Hilfe-Buttons umgesetzt
+- [x] Rechtes nicht modales Hilfe-Panel umgesetzt
+- [x] Turnierübersicht und Hilfe-Panel sauber umgeschaltet
+- [x] Öffnen und expliziter Themenwechsel umgesetzt
+- [x] Inhalt aktualisiert sich ohne automatischen Themenwechsel
+- [x] Schließen per Button umgesetzt
+- [x] Schließen per Escape umgesetzt
+- [x] Fokus auf Panel-Überschrift und Fokus-Rückgabe umgesetzt
+- [x] Ungültiges Thema bei Moduswechsel sicher behandelt
+- [x] Pflicht-Themen vollständig umgesetzt
+- [x] Quellenlinks geprüft und themenspezifisch eingebunden
+- [x] Alte formularnahe Hilfe-Links ohne Doppelung migriert
+- [x] Release-3-Funktionen regressionsfrei
+- [x] Responsive Verhalten geprüft
+- [x] Tastatur- und Fokusbedienung geprüft
+- [x] Automatisierte Tests ergänzt oder angepasst
+- [x] Domain-Tests erfolgreich
+- [x] Runtime-Contract-Tests erfolgreich
+- [x] Gesamtes QA-Skript erfolgreich
+- [x] Build erfolgreich erzeugt
+- [x] Dokumentation und Changelog aktualisiert
+- [x] Screenshot aktualisiert
+- [x] Manuelle Abnahmeszenarien geprüft
+- [x] Abschlussprüfung des Diffs durchgeführt
+
+### Arbeitsprotokoll Release 4
+
+| Zeitpunkt | Status | Arbeitsergebnis | Prüfung |
+|---|---|---|---|
+| 2026-07-16 09:35 CEST | IN ARBEIT | Verbindlichen Ausgangscommit `9660e10ba682d82942931485b60e601f70ac9f33`, sauberen Release-3-Abschluss, Repository-Anweisungen, Startprompt, UX-Plan, Formulararchitektur und DRA-/Projektdokumentation geprüft; Release 4 mit Zielversion `0.9.0` gestartet. | Unveränderte Baseline erfolgreich: 129 Domain-Tests und Runtime-Contract mit 53 Selftests; Storage-Schema 5 bleibt unverändert. |
+| 2026-07-16 10:15 CEST | IN ARBEIT | Datengetriebenen Katalog mit elf Pflicht-Themen, flüchtigen Zustand, echte Fragezeichen-Buttons, nicht-modales rechtes Hilfe-Panel, Übersichtsaustausch, Live-Aktualisierung, expliziten Themenwechsel sowie Fokus-, Escape- und Modusinvalidierungslogik umgesetzt; alte formularnahe Linkgruppen entfernt. | Zwischenstand erfolgreich: 133 Domain-Tests und Runtime-Contract mit 58 Selftests; ergänzte Tests prüfen Katalog, Inhalte, sichere Links, Öffnen, Themenwechsel, Live-Update, Schließen, Fokus-Rückgabe und ungültige Modusthemen. |
+| 2026-07-16 10:29 CEST | ABGESCHLOSSEN | Release 4 auf `0.9.0` finalisiert, Dokumentation, stabile Quellenanker und Screenshot aktualisiert und den Gesamtdiff gegen den verbindlichen Ausgangscommit auf Release-4-Scope, tote formularnahe Hilfe-Links und unbeabsichtigte Release-5-Inhalte geprüft; Release 5 nicht begonnen. | Gesamtes QA erfolgreich: Build, Architektur-, Encoding- und Regelcheck, 134 Domain-Tests, Runtime-Contract mit 61 Selftests und Build-Disziplin; Quellen-Basisziele HTTP 200, Responsive-Messung ohne horizontalen Overflow und `git diff --check` ohne Fehler. |
+
+### Prüfgrenze Release 4
+
+- Automatisiert geprüft: Katalogvollständigkeit und sichere Quellen, alle elf Inhalte, unbekannte IDs, optionale Abschnitte, Trigger-/ARIA-Verträge, explizites Öffnen und Wechseln, Preset-, Draw-, Spielregel-, Board- und Zeitprofil-Liveupdates, drei Modusinvalidierungen, Schließen, Escape, Fokus-Rückgabe und Fallback sowie sämtliche Regressionstests der Releases 1 bis 3.
+- Im lokalen Microsoft-Edge-Headless-Browser geprüft: rechte Spalte bei `1920 × 1080` und `1366 × 768`, normaler Dokumentfluss bei `1024 × 768`, `768 × 1024` und emulierten echten `360 × 800`, Fokus-Scroll zum Panel, `44px`-Touchziel bei Touch-Emulation und kein horizontaler Dokument-, Drawer-, Content-, Formular- oder Panel-Overflow; der aktualisierte Screenshot wurde visuell kontrolliert.
+- Die vier verwendeten GitHub-Dokumentziele antworteten mit HTTP 200; stabile Themenanker wurden gegen die lokalen Dokumente geprüft. Nicht gegen einen authentifizierten Live-Account auf `play.autodarts.io` ausgeführt wurden echter Lobby-/Board-/API-Start und eine physische Tastatur-/Screenreader-Abnahme. Native Button-/Aside-Semantik, Tab-Erreichbarkeit, sichtbarer Fokus, Enter-/Leertastenaktivierung, Escape und Fokus-Rückgabe sind automatisiert abgesichert; ein Installations-Smoke bleibt nutzerseitig sinnvoll.
 
 ### Fortschritt Release 1
 

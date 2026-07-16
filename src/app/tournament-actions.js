@@ -93,6 +93,7 @@
     tournament.updatedAt = nowIso();
     state.store.tournament = tournament;
     clearTransientMatchShortcutState();
+    resetCreateHelpState();
     state.activeTab = "matches";
     state.store.ui.activeTab = "matches";
     schedulePersist();
@@ -104,6 +105,7 @@
   function resetTournamentSession() {
     state.store.tournament = null;
     clearTransientMatchShortcutState();
+    resetCreateHelpState();
     state.apiAutomation.startingMatchId = "";
     state.apiAutomation.authBackoffUntil = 0;
     state.activeTab = "tournament";
@@ -181,6 +183,7 @@
     normalizedTournament.updatedAt = nowIso();
     state.store.tournament = normalizedTournament;
     clearTransientMatchShortcutState();
+    resetCreateHelpState();
     state.activeTab = "matches";
     state.store.ui.activeTab = "matches";
     schedulePersist();

@@ -4,6 +4,8 @@
     drawerOpen: false,
     activeTab: "tournament",
     createGameRulesExpanded: false,
+    activeCreateHelpTopic: null,
+    lastCreateHelpTriggerId: null,
     lastFocused: null,
     notice: { type: "info", message: "" },
     noticeTimer: null,
@@ -65,5 +67,11 @@
     runtimeStatusSignature: "",
     cleanupStack: [],
   };
+
+
+  function resetCreateHelpState() {
+    state.activeCreateHelpTopic = null;
+    state.lastCreateHelpTriggerId = null;
+  }
 
 

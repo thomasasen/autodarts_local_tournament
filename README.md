@@ -2,7 +2,7 @@
 
 Lokales Turniermanagement direkt in `https://play.autodarts.io` als Userscript.
 
-Aktuelle Releaseversion: `0.8.0`.
+Aktuelle Releaseversion: `0.9.0`.
 
 [![Installieren](https://img.shields.io/badge/Installieren-Autodarts%20Tournament%20Assistant%20Loader-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js)
 
@@ -99,6 +99,7 @@ Nach Installation ist links im Hauptmenü der neue Eintrag sichtbar. Darüber ö
   - Klar gegliedertes Formular mit `Turnierformat`, `Teilnehmer`, `Zusätzliche Turnierregeln`, `Spielregeln` und `Turnierübersicht`
   - Zusatzregeln werden ausschließlich für den aktiven Modus angezeigt und sind in anderen Modi weder bedienbar noch Teil der erzeugten Create-Config
   - Kompakte Live-Zusammenfassung der wirksamen X01-Werte; `Spielregeln bearbeiten` öffnet den zugänglichen Inline-Editor
+  - Kontextbezogene Fragezeichen-Hilfe mit nicht-modalem Panel, aktueller Auswahl, direkten Auswirkungen und themenspezifischen Quellen
   - Live-Prognose für die voraussichtliche Turnierzeit
   - Teilnehmerliste kann per Button gemischt werden
   - Formularentwurf bleibt erhalten (z. B. beim Moduswechsel)
@@ -206,9 +207,19 @@ Tab: `Turnier`
 
 ![Neues Turnier erstellen](assets/ss_Turnier_anlage-neu.png)
 
-Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten bis zum Anlegen. Auf breiten Ansichten steht die `Turnierübersicht` mit Boardzahl, Zeitprofil und Live-Prognose rechts neben dem Formular; auf schmalen Ansichten folgt sie ohne horizontale Überbreite darunter. Die Preset-Karten stehen im Bereich `Turnierformat` und wenden eine bewusste Auswahl sofort an; einen separaten Apply-Button gibt es nicht mehr. `Zusätzliche Turnierregeln` zeigt nur die zum aktiven Modus gehörenden, bereits unterstützten Optionen. Inaktive Modusfelder bleiben für eine sichere Rückkehr im Draft erhalten, sind aber verborgen, deaktiviert und aus der Create-Config entfernt.
+Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten bis zum Anlegen. Auf breiten Ansichten steht die `Turnierübersicht` mit Boardzahl, Zeitprofil und Live-Prognose rechts neben dem Formular; bei geöffneter Regelhilfe wird sie an derselben Stelle durch das Hilfe-Panel ersetzt. Auf schmalen Ansichten folgen Übersicht oder Panel ohne horizontale Überbreite unter dem Formular. Die Preset-Karten stehen im Bereich `Turnierformat` und wenden eine bewusste Auswahl sofort an; einen separaten Apply-Button gibt es nicht mehr. `Zusätzliche Turnierregeln` zeigt nur die zum aktiven Modus gehörenden, bereits unterstützten Optionen. Inaktive Modusfelder bleiben für eine sichere Rückkehr im Draft erhalten, sind aber verborgen, deaktiviert und aus der Create-Config entfernt.
 
-`Spielregeln` zeigt standardmäßig eine kompakte Live-Zusammenfassung aus Preset-Herkunft, wirksamer Matchlänge, Startpunkten, In-/Out-Modus, Bull-off, gegebenenfalls Bull-Modus und Maximalrunden. `Spielregeln bearbeiten` öffnet diese vorhandenen X01-Felder als Inline-Bereich; beim Schließen aus einem Editorfeld kehrt der Fokus zum Button zurück. Für `preliminary_final` nennt die Zusammenfassung getrennt die festen zwei Vorrundenlegs und das eigene Best-of der Finalphase. Eine kontextbezogene Regelhilfe ist in `0.8.0` noch nicht implementiert.
+`Spielregeln` zeigt standardmäßig eine kompakte Live-Zusammenfassung aus Preset-Herkunft, wirksamer Matchlänge, Startpunkten, In-/Out-Modus, Bull-off, gegebenenfalls Bull-Modus und Maximalrunden. `Spielregeln bearbeiten` öffnet diese vorhandenen X01-Felder als Inline-Bereich; beim Schließen aus einem Editorfeld kehrt der Fokus zum Button zurück. Für `preliminary_final` nennt die Zusammenfassung getrennt die festen zwei Vorrundenlegs und das eigene Best-of der Finalphase.
+
+### Kontextbezogene Regelhilfe
+
+- Kreisförmige `?`-Buttons stehen direkt an Turniermodus, Preset/Format, Teilnehmerliste, KO-Auslosung, Spiel um Platz 3, Grand-Final-Regel, ungerader Gruppenregel, Vorrunde + Finalphase, Spielregeln/X01, Board-Anzahl und Zeitprofil.
+- Nur ein ausdrücklicher Klick öffnet oder wechselt ein Hilfethema. Fokuswechsel und normale Feldänderungen wählen kein anderes Thema aus.
+- Das rechte Panel ist eine ergänzende, nicht-modale Region. Es zeigt Titel, Kurzbeschreibung, aktuelle Auswahl, direkte Auswirkungen, fachliche Einordnung und konkret beschriftete Quellenlinks.
+- Ändert sich ein zugehöriger Formularwert, wird der Inhalt des bereits geöffneten Themas live aktualisiert. Bei einem Moduswechsel schließt ein dadurch unzulässiges Thema, ohne den Fokus vom Modusfeld wegzubewegen.
+- `Hilfe schließen` und `Escape` schließen nur das Panel, stellen die Turnierübersicht wieder her und geben den Fokus an den auslösenden `?`-Button zurück. Beim Schließen des Drawers, nach erfolgreicher Turnieranlage, beim Import und beim Turnier-Reset wird der flüchtige Hilfezustand verworfen.
+- Es gibt keinen globalen Hilfe-Schalter, keine Glühlampen und keine zusätzliche Regelarten-Legende im Formular.
+- Release 5 mit erweiterten Abhängigkeiten, Beispielen und detaillierter Compliance-Hilfe ist noch nicht umgesetzt.
 
 ### Pflichtfelder
 - Turniername
@@ -474,6 +485,8 @@ Tab: `Einstellungen`
 ### Info-Symbole
 Legende für die eingeblendeten Hilfelinks:
 
+Diese Link-Icons bleiben in bestehenden Ansichten und Einstellungen erhalten. Die Turnieranlage verwendet stattdessen die oben beschriebenen kontextbezogenen `?`-Buttons und das rechte Hilfe-Panel.
+
 | Symbol | Bedeutung | Typischer Inhalt |
 |---|---|---|
 | ![Info-Symbol](assets/ss_info.png) | `Info-Icon` = technische Information | Bedienung, Implementierung, README-Kontext |
@@ -719,7 +732,7 @@ powershell -ExecutionPolicy Bypass -File scripts/test-runtime-contract.ps1
 - Technisches Hard-Cap: `128` Teilnehmer
 - API-Halbautomatik basiert auf in der Praxis verwendeten Endpunkten (Inference), siehe [docs/autodarts-api-capabilities.md](docs/autodarts-api-capabilities.md)
 - DOM-Autodetect bleibt best-effort
-- MultiBoard ist nicht Bestandteil von Version `0.8.0`. `Boards für Zeitprognose` ist ausschließlich ein Kapazitätsparameter der Schätzung. Board-Zuweisung, parallele Lobbyverwaltung, mehrere gleichzeitig gestartete Matches, Mehrgeräte-Synchronisierung und Mehrbrowser-Bearbeitung sind nicht implementiert.
+- MultiBoard ist nicht Bestandteil von Version `0.9.0`. `Boards für Zeitprognose` ist ausschließlich ein Kapazitätsparameter der Schätzung. Board-Zuweisung, parallele Lobbyverwaltung, mehrere gleichzeitig gestartete Matches, Mehrgeräte-Synchronisierung und Mehrbrowser-Bearbeitung sind nicht implementiert.
 
 ## Quellen
 - Turnierdauer-Benchmarks:

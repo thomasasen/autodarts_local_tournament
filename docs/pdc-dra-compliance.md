@@ -20,6 +20,7 @@
 - Referenz: DRA Rulebook `6.16.1` (Seite 20), PDF-Link: [DRA-RULE_BOOK.pdf#page=20](DRA-RULE_BOOK.pdf#page=20)
 - Profilwechsel ist nach dem ersten abgeschlossenen Gruppen-/Liga-Ergebnis technisch gesperrt.
 
+<a id="pdc-dra-groups-resolution"></a>
 2. **Gruppenauflösung**
 - `groupResolution.status` wird auf `playoff_required` gesetzt, wenn Gleichstände nicht auflösbar sind.
 - KO-Qualifikation wird bis zur manuellen Klärung blockiert.
@@ -29,6 +30,7 @@
 - Unterstützt werden ausschließlich zwei Gruppen mit vollständigem Round Robin und Top 2 je Gruppe. Andere offizielle Formate werden nicht angenähert oder als durch diesen Modus regelkonform abgebildet bezeichnet.
 - Legacy-Turniere bleiben ohne Neuverteilung spielbar; eine fehlende historische Bestätigung wird transparent angezeigt und nicht erfunden.
 
+<a id="pdc-dra-ko"></a>
 3. **KO / Straight Knockout**
 - KO-Bracket bleibt Single Elimination.
 - Default bleibt ein klassischer KO-Baum mit genau einem Finale.
@@ -44,6 +46,7 @@
 - Entsperren ist nur als expliziter Promoter-Override mit Bestätigung zulässig.
 - Referenz: DRA Rulebook `6.8.1` (Seite 17), `6.12.1` (Seite 18), sowie `1.2`/`6.8.4` für explizite Tournament-/Promoter-Rules; PDF-Link: [DRA-RULE_BOOK.pdf#page=18](DRA-RULE_BOOK.pdf#page=18)
 
+<a id="pdc-dra-preliminary-final"></a>
 3a. **Vorrunde + Finalphase als Veranstalterprofil**
 - `preliminary_final` erzeugt deterministisch einen einfachen regulären Paarungsgraphen mit gleicher realer Matchanzahl für alle Teilnehmer.
 - Das gespeicherte Profil regelt zwei feste Legs, Punkte, Rangfolge, Qualifikantenzahl und KO-/Doppel-KO-Finalphase. Diese Details werden nicht als universelle DRA-/PDC-/WDF-Regel bezeichnet.
@@ -57,6 +60,7 @@
   - `Liga (Round Robin)`
   - `Nächstes Match (Next Match)`
 
+<a id="pdc-dra-preset-logic"></a>
 5. **Preset-Logik (ehrlich statt irreführend)**
 - Offizielles Preset in der UI:
   - `PDC European Tour (Official)`
@@ -72,4 +76,4 @@
 - Bei vollständigem Deadlock wird keine automatische Entscheidung getroffen.
 - Der Systemstatus ist `playoff_required` und erfordert eine manuelle Turnierentscheidung.
 - `PDC World Championship` wird nicht als offizielles Preset behauptet, weil das reale Format `Sets` benötigt und die AutoDarts-/ATA-Integration hier nur `Legs / First to N` abbilden kann.
-- MultiBoard ist nicht Bestandteil von Version `0.8.0`. Die Board-Anzahl ist ausschließlich ein Kapazitätsparameter der Zeitprognose; Board-Zuweisung, parallele Lobbyverwaltung und mehrere gleichzeitig gestartete Matches bleiben außerhalb des Scopes.
+- MultiBoard ist nicht Bestandteil von Version `0.9.0`. Die Board-Anzahl ist ausschließlich ein Kapazitätsparameter der Zeitprognose; Board-Zuweisung, parallele Lobbyverwaltung und mehrere gleichzeitig gestartete Matches bleiben außerhalb des Scopes.

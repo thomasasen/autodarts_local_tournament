@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.8.0
+// @version      0.9.0
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -22,7 +22,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.8.0";
+  const APP_VERSION = "0.9.0";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 5;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
@@ -46,15 +46,25 @@
   const README_INFO_SYMBOLS_URL = `${README_BASE_URL}#info-symbole`;
   const README_TOURNAMENT_MODES_URL = `${README_BASE_URL}#turniermodi`;
   const README_TOURNAMENT_CREATE_URL = `${README_BASE_URL}#turnier-anlegen`;
+  const README_PRESET_CATALOG_URL = `${README_BASE_URL}#preset-katalog`;
   const README_API_AUTOMATION_URL = `${README_BASE_URL}#api-halbautomatik`;
   const DRA_GUI_RULES_DOC_URL = `${REPO_BLOB_BASE_URL}/docs/dra-regeln-gui.md`;
   const DRA_GUI_RULE_MODE_FORMATS_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-mode-formats`;
   const DRA_GUI_RULE_OPEN_DRAW_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-open-draw`;
   const DRA_GUI_RULE_DRAW_LOCK_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-draw-lock`;
   const DRA_GUI_RULE_PARTICIPANT_LIMITS_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-participant-limits`;
+  const DRA_GUI_RULE_THIRD_PLACE_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-third-place`;
   const DRA_GUI_RULE_BYE_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-bye`;
   const DRA_GUI_RULE_TIE_BREAK_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-tie-break`;
   const DRA_GUI_RULE_CHECKLIST_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-checklist`;
+  const PDC_DRA_COMPLIANCE_DOC_URL = `${REPO_BLOB_BASE_URL}/docs/pdc-dra-compliance.md`;
+  const PDC_DRA_COMPLIANCE_GROUPS_URL = `${PDC_DRA_COMPLIANCE_DOC_URL}#pdc-dra-groups-resolution`;
+  const PDC_DRA_COMPLIANCE_KO_URL = `${PDC_DRA_COMPLIANCE_DOC_URL}#pdc-dra-ko`;
+  const PDC_DRA_COMPLIANCE_PRELIMINARY_FINAL_URL = `${PDC_DRA_COMPLIANCE_DOC_URL}#pdc-dra-preliminary-final`;
+  const PDC_DRA_COMPLIANCE_PRESET_URL = `${PDC_DRA_COMPLIANCE_DOC_URL}#pdc-dra-preset-logic`;
+  const TOURNAMENT_DURATION_DOC_URL = `${REPO_BLOB_BASE_URL}/docs/tournament-duration.md`;
+  const TOURNAMENT_DURATION_PARAMETERS_URL = `${TOURNAMENT_DURATION_DOC_URL}#tournament-duration-parameters`;
+  const TOURNAMENT_DURATION_TIME_PROFILES_URL = `${TOURNAMENT_DURATION_DOC_URL}#tournament-duration-time-profiles`;
   const USERSCRIPT_DOWNLOAD_URL = "https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.user.js";
   const USERSCRIPT_UPDATE_URL = "https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.meta.js";
   const USERSCRIPT_LOADER_URL = "https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js";
@@ -563,6 +573,12 @@
         min-width: 0;
       }
 
+      .ata-create-side {
+        display: grid;
+        gap: var(--ata-space-3);
+        min-width: 0;
+      }
+
       .ata-create-section,
       .ata-create-overview {
         min-width: 0;
@@ -570,6 +586,111 @@
         border-radius: var(--ata-radius-md);
         background: rgba(255, 255, 255, 0.05);
         overflow: hidden;
+      }
+
+      .ata-create-overview[hidden],
+      .ata-create-help-panel[hidden] {
+        display: none !important;
+      }
+
+      .ata-create-help-panel {
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid rgba(153, 184, 245, 0.5);
+        border-radius: var(--ata-radius-md);
+        background:
+          radial-gradient(circle at 100% 0%, rgba(153, 184, 245, 0.16), transparent 42%),
+          rgba(13, 29, 65, 0.96);
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.24);
+      }
+
+      .ata-create-help-panel-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--ata-space-2);
+        padding: 13px 14px;
+        border-bottom: 1px solid rgba(153, 184, 245, 0.22);
+        background: rgba(153, 184, 245, 0.08);
+      }
+
+      .ata-create-help-panel-head h4 {
+        min-width: 0;
+        margin: 0;
+        color: var(--ata-color-text);
+        font-size: 20px;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+
+      .ata-create-help-panel-head h4:focus-visible {
+        outline: 2px solid var(--ata-color-focus);
+        outline-offset: 3px;
+        border-radius: 3px;
+      }
+
+      .ata-create-help-panel-body {
+        display: grid;
+        gap: 0;
+        padding: 2px 14px 14px;
+      }
+
+      .ata-create-help-section {
+        min-width: 0;
+        padding: 12px 0;
+        border-bottom: 1px solid rgba(185, 199, 236, 0.14);
+      }
+
+      .ata-create-help-section:last-child {
+        border-bottom: 0;
+      }
+
+      .ata-create-help-section h5 {
+        margin: 0 0 5px;
+        color: #cddaff;
+        font-size: 13px;
+        letter-spacing: 0.35px;
+        text-transform: uppercase;
+      }
+
+      .ata-create-help-section p,
+      .ata-create-help-section ul {
+        margin: 0;
+        color: var(--ata-color-text);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .ata-create-help-section ul {
+        display: grid;
+        gap: 5px;
+        padding-left: 19px;
+      }
+
+      .ata-create-help-current p,
+      .ata-create-help-classification-label {
+        color: #c9f8e2;
+        font-weight: 750;
+      }
+
+      .ata-create-help-classification p + p {
+        margin-top: 4px;
+      }
+
+      .ata-create-help-sources a {
+        color: #b9cbff;
+        text-underline-offset: 3px;
+        overflow-wrap: anywhere;
+      }
+
+      .ata-create-help-sources a:hover {
+        color: #e3eaff;
+      }
+
+      .ata-create-help-sources a:focus-visible {
+        outline: 2px solid var(--ata-color-focus);
+        outline-offset: 2px;
+        border-radius: 2px;
       }
 
       .ata-create-overview {
@@ -605,6 +726,73 @@
 
       .ata-create-section-title {
         min-width: 0;
+      }
+
+      .ata-create-section-title-row,
+      .ata-field-label-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+      }
+
+      .ata-create-section-title-row {
+        align-items: flex-start;
+      }
+
+      .ata-field-label-row > label,
+      .ata-field-label-row > strong,
+      .ata-field-label-row > h5 {
+        min-width: 0;
+      }
+
+      .ata-preliminary-final-heading {
+        margin-bottom: 10px;
+      }
+
+      .ata-preliminary-final-heading h5 {
+        margin: 0;
+        color: var(--ata-color-text);
+        font-size: 16px;
+      }
+
+      .ata-help-trigger {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 36px;
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        min-height: 36px;
+        margin: -8px 0;
+        padding: 0;
+        border: 1px solid rgba(153, 184, 245, 0.62);
+        border-radius: 999px;
+        background: rgba(153, 184, 245, 0.14);
+        color: #e8efff;
+        font: inherit;
+        font-size: 16px;
+        font-weight: 850;
+        line-height: 1;
+        cursor: pointer;
+        transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+      }
+
+      .ata-help-trigger:hover,
+      .ata-help-trigger[aria-expanded="true"] {
+        border-color: rgba(90, 210, 153, 0.82);
+        background: rgba(90, 210, 153, 0.22);
+        color: #d8ffed;
+      }
+
+      .ata-help-trigger:hover {
+        transform: translateY(-1px);
+      }
+
+      .ata-help-trigger:focus-visible {
+        outline: 2px solid var(--ata-color-focus);
+        outline-offset: 2px;
       }
 
       .ata-create-section-title h4 {
@@ -899,6 +1087,9 @@
       }
 
       .ata-preset-fieldset legend {
+        display: flex;
+        align-items: center;
+        gap: 7px;
         margin: 0 0 6px;
         padding: 0;
         color: var(--ata-color-muted);
@@ -1915,8 +2106,13 @@
         }
 
         .ata-create-section-body,
-        .ata-create-overview-body {
+        .ata-create-overview-body,
+        .ata-create-help-panel-body {
           padding: 11px 12px 12px;
+        }
+
+        .ata-create-help-panel-head {
+          padding: 11px 12px;
         }
 
         .ata-preset-card-grid {
@@ -1994,7 +2190,8 @@
         }
 
         .ata-create-layout,
-        .ata-create-main {
+        .ata-create-main,
+        .ata-create-side {
           gap: var(--ata-space-2);
         }
 
@@ -2015,8 +2212,18 @@
         }
 
         .ata-create-section-body,
-        .ata-create-overview-body {
+        .ata-create-overview-body,
+        .ata-create-help-panel-body {
           padding: 10px;
+        }
+
+        .ata-create-help-panel-head {
+          align-items: center;
+          padding: 10px;
+        }
+
+        .ata-create-help-panel-head h4 {
+          font-size: 18px;
         }
 
         .ata-create-fixed-summary-label {
@@ -2043,6 +2250,27 @@
         .ata-toggle input {
           flex: 0 0 auto;
           margin-top: 2px;
+        }
+      }
+
+      @media (pointer: coarse) {
+        .ata-help-trigger {
+          flex-basis: 44px;
+          width: 44px;
+          height: 44px;
+          min-width: 44px;
+          min-height: 44px;
+          margin: -10px 0;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .ata-help-trigger {
+          transition: none;
+        }
+
+        .ata-help-trigger:hover {
+          transform: none;
         }
       }
     `;
@@ -2174,6 +2402,8 @@
     drawerOpen: false,
     activeTab: "tournament",
     createGameRulesExpanded: false,
+    activeCreateHelpTopic: null,
+    lastCreateHelpTriggerId: null,
     lastFocused: null,
     notice: { type: "info", message: "" },
     noticeTimer: null,
@@ -2235,6 +2465,12 @@
     runtimeStatusSignature: "",
     cleanupStack: [],
   };
+
+
+  function resetCreateHelpState() {
+    state.activeCreateHelpTopic = null;
+    state.lastCreateHelpTriggerId = null;
+  }
 
   function nowIso() {
     return new Date().toISOString();
@@ -8823,6 +9059,7 @@
     tournament.updatedAt = nowIso();
     state.store.tournament = tournament;
     clearTransientMatchShortcutState();
+    resetCreateHelpState();
     state.activeTab = "matches";
     state.store.ui.activeTab = "matches";
     schedulePersist();
@@ -8834,6 +9071,7 @@
   function resetTournamentSession() {
     state.store.tournament = null;
     clearTransientMatchShortcutState();
+    resetCreateHelpState();
     state.apiAutomation.startingMatchId = "";
     state.apiAutomation.authBackoffUntil = 0;
     state.activeTab = "tournament";
@@ -8911,6 +9149,7 @@
     normalizedTournament.updatedAt = nowIso();
     state.store.tournament = normalizedTournament;
     clearTransientMatchShortcutState();
+    resetCreateHelpState();
     state.activeTab = "matches";
     state.store.ui.activeTab = "matches";
     schedulePersist();
@@ -9179,6 +9418,7 @@
 
 
   function cleanupRuntime() {
+    resetCreateHelpState();
     if (state.saveTimer) {
       clearTimeout(state.saveTimer);
       state.saveTimer = null;
@@ -9563,6 +9803,339 @@
       const previousStoredActiveTab = state.store.ui.activeTab;
       const previousGameRulesExpanded = state.createGameRulesExpanded;
       const previousDrawerOpen = state.drawerOpen;
+      const previousHelpTopic = state.activeCreateHelpTopic;
+      const previousHelpTriggerId = state.lastCreateHelpTriggerId;
+      const previousTimeProfile = state.store.settings.tournamentTimeProfile;
+      try {
+        state.store.tournament = null;
+        state.drawerOpen = true;
+        state.activeTab = "tournament";
+        state.store.ui.activeTab = "tournament";
+        state.createGameRulesExpanded = false;
+        resetCreateHelpState();
+        state.store.ui.createDraft = normalizeCreateDraft({
+          ...createDefaultCreateDraft(state.store.settings),
+          name: "Release 4 Regelhilfe",
+          mode: "ko",
+          participantsText: "A\nB\nC\nD\nE\nF\nG\nH",
+          x01Preset: X01_PRESET_CUSTOM,
+          bestOfLegs: 5,
+          randomizeKoRound1: false,
+          enableThirdPlaceMatch: true,
+        }, state.store.settings);
+        renderShell();
+
+        const createForm = state.shadowRoot?.getElementById("ata-create-form");
+        const drawer = state.shadowRoot?.querySelector(".ata-drawer");
+        const modeSelect = createForm?.querySelector("#ata-mode");
+        if (!(createForm instanceof HTMLFormElement)
+          || !(drawer instanceof HTMLElement)
+          || !(modeSelect instanceof HTMLSelectElement)) {
+          throw new Error("Create form, drawer or mode select missing.");
+        }
+        const catalogValidation = validateCreateHelpTopicCatalog();
+        const initialPanel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const initialOverview = createForm.querySelector("#ata-create-overview");
+        const formHelpLinks = createForm.querySelectorAll(".ata-help-links");
+        const expectedInitialTopics = [
+          "tournamentMode",
+          "presetFormat",
+          "participants",
+          "koDraw",
+          "thirdPlace",
+          "grandFinal",
+          "gameRules",
+          "boardCount",
+          "timeProfile",
+        ];
+        const initialTriggersOk = expectedInitialTopics.every((topicId) => {
+          const trigger = createForm.querySelector(`#${getCreateHelpTriggerId(topicId)}`);
+          return trigger instanceof HTMLButtonElement
+            && trigger.getAttribute("aria-controls") === CREATE_HELP_PANEL_ID
+            && trigger.getAttribute("aria-expanded") === "false"
+            && normalizeText(trigger.getAttribute("aria-label")).startsWith("Hilfe")
+            && normalizeText(trigger.textContent) === "?";
+        });
+        const forbiddenHelpChromeAbsent = !normalizeText(createForm.textContent).includes("💡")
+          && createForm.querySelector("[data-action='toggle-create-help'], [data-action='toggle-rule-help'], .ata-rule-types-legend") === null;
+        record(
+          "Create-UI Release 4: Katalog, echte Fragezeichen-Buttons und geschlossener Ausgangszustand",
+          catalogValidation.ok
+            && catalogValidation.topicIds.length === 11
+            && initialTriggersOk
+            && initialPanel instanceof HTMLElement
+            && initialPanel.hidden
+            && initialOverview instanceof HTMLElement
+            && !initialOverview.hidden
+            && formHelpLinks.length === 0
+            && forbiddenHelpChromeAbsent,
+          `topics=${catalogValidation.topicIds.length}, issues=${catalogValidation.issues.join("/") || "-"}, triggers=${initialTriggersOk}, oldLinks=${formHelpLinks.length}, forbidden=${!forbiddenHelpChromeAbsent}`,
+        );
+
+        const modeTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("tournamentMode")}`);
+        if (!(modeTrigger instanceof HTMLButtonElement)) throw new Error("Mode help trigger missing.");
+        modeTrigger.click();
+        let panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        let overview = createForm.querySelector("#ata-create-overview");
+        let title = panel?.querySelector(`#${CREATE_HELP_TITLE_ID}`);
+        const expandedTriggers = Array.from(createForm.querySelectorAll("[data-action='open-create-help'][aria-expanded='true']"));
+        const hiddenControlsRemainSubmittable = new FormData(createForm).has("boardCount")
+          && new FormData(createForm).has("tournamentTimeProfile");
+        const sources = Array.from(panel?.querySelectorAll(".ata-create-help-sources a") || []);
+        record(
+          "Create-UI Release 4: explizites Öffnen ersetzt die Übersicht nicht-modal und fokussiert den Titel",
+          state.activeCreateHelpTopic === "tournamentMode"
+            && panel instanceof HTMLElement
+            && !panel.hidden
+            && overview instanceof HTMLElement
+            && overview.hidden
+            && title instanceof HTMLElement
+            && state.shadowRoot?.activeElement === title
+            && expandedTriggers.length === 1
+            && expandedTriggers[0] === modeTrigger
+            && hiddenControlsRemainSubmittable
+            && sources.length >= 1
+            && sources.every((link) => link.target === "_blank" && link.rel.includes("noopener") && link.rel.includes("noreferrer")),
+          `topic=${state.activeCreateHelpTopic || "-"}, panel=${panel instanceof HTMLElement && !panel.hidden}, focus=${state.shadowRoot?.activeElement?.id || "-"}, expanded=${expandedTriggers.length}, sources=${sources.length}`,
+        );
+
+        const presetTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("presetFormat")}`);
+        const basicPreset = createForm.querySelector(`input[name='x01Preset'][value='${X01_PRESET_PDC_501_DOUBLE_OUT_BASIC}']`);
+        if (!(presetTrigger instanceof HTMLButtonElement) || !(basicPreset instanceof HTMLInputElement)) {
+          throw new Error("Preset help controls missing.");
+        }
+        presetTrigger.click();
+        presetTrigger.click();
+        const sameTriggerStable = state.activeCreateHelpTopic === "presetFormat"
+          && createForm.querySelectorAll("[data-action='open-create-help'][aria-expanded='true']").length === 1;
+        modeSelect.focus();
+        modeSelect.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+        const focusAndHoverStable = state.activeCreateHelpTopic === "presetFormat";
+        basicPreset.focus();
+        basicPreset.checked = true;
+        basicPreset.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const presetText = normalizeText(panel?.textContent || "");
+        record(
+          "Create-UI Release 4: expliziter Preset-Wechsel ist stabil; Fokus, Hover und Presetwert wechseln kein Thema",
+          sameTriggerStable
+            && focusAndHoverStable
+            && state.activeCreateHelpTopic === "presetFormat"
+            && presetText.includes("PDC 501 / Double Out (Basic)")
+            && presetText.includes("kein offizielles PDC-Eventformat")
+            && state.shadowRoot?.activeElement === basicPreset,
+          `same=${sameTriggerStable}, passive=${focusAndHoverStable}, topic=${state.activeCreateHelpTopic || "-"}, basic=${presetText.includes("Basic")}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        const drawTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("koDraw")}`);
+        const drawInput = createForm.querySelector("#ata-randomize-ko");
+        if (!(drawTrigger instanceof HTMLButtonElement) || !(drawInput instanceof HTMLInputElement)) {
+          throw new Error("KO draw help controls missing.");
+        }
+        drawTrigger.click();
+        drawInput.focus();
+        drawInput.checked = true;
+        drawInput.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const liveDrawText = normalizeText(panel?.textContent || "");
+        record(
+          "Create-UI Release 4: aktives Thema aktualisiert Sachwerte live ohne automatischen Themenwechsel",
+          state.activeCreateHelpTopic === "koDraw"
+            && liveDrawText.includes("Aktuelle Auswahl Open Draw")
+            && state.shadowRoot?.activeElement === drawInput
+            && createForm.querySelectorAll("[data-action='open-create-help'][aria-expanded='true']").length === 1,
+          `topic=${state.activeCreateHelpTopic || "-"}, openDraw=${liveDrawText.includes("Open Draw")}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        const gameRulesTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("gameRules")}`);
+        const gameRulesToggle = createForm.querySelector("#ata-game-rules-editor-toggle");
+        const bestOf = createForm.querySelector("#ata-bestof");
+        if (!(gameRulesTrigger instanceof HTMLButtonElement)
+          || !(gameRulesToggle instanceof HTMLButtonElement)
+          || !(bestOf instanceof HTMLInputElement)) {
+          throw new Error("Game-rules help controls missing.");
+        }
+        gameRulesTrigger.click();
+        gameRulesToggle.click();
+        bestOf.focus();
+        bestOf.value = "7";
+        bestOf.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const liveRulesText = normalizeText(panel?.textContent || "");
+        const closeButton = panel?.querySelector("[data-action='close-create-help']");
+        if (!(closeButton instanceof HTMLButtonElement)) throw new Error("Help close button missing.");
+        closeButton.click();
+        overview = createForm.querySelector("#ata-create-overview");
+        const explicitCloseOk = !state.activeCreateHelpTopic
+          && panel instanceof HTMLElement
+          && panel.hidden
+          && overview instanceof HTMLElement
+          && !overview.hidden
+          && state.shadowRoot?.activeElement === gameRulesTrigger;
+        record(
+          "Create-UI Release 4: Spielregelhilfe bleibt live; Schließen stellt Übersicht und Trigger-Fokus wieder her",
+          liveRulesText.includes("Best of 7 (First to 4)") && explicitCloseOk,
+          `rules=${liveRulesText.includes("Best of 7")}, closed=${explicitCloseOk}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        gameRulesTrigger.click();
+        modeSelect.focus();
+        modeSelect.value = "preliminary_final";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const preliminaryRulesText = normalizeText(panel?.textContent || "");
+        const gameRulesModeUpdateOk = state.activeCreateHelpTopic === "gameRules"
+          && preliminaryRulesText.includes("Vorrunde: 2 feste Legs")
+          && preliminaryRulesText.includes("Finalphase: Best of")
+          && state.shadowRoot?.activeElement === modeSelect;
+        panel?.querySelector("[data-action='close-create-help']")?.click();
+        modeSelect.value = "ko";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        record(
+          "Create-UI Release 4: Spielregelthema bleibt bei Moduswechsel aktiv und zeigt die wirksame Vorrundenkonfiguration",
+          gameRulesModeUpdateOk,
+          `topic=${state.activeCreateHelpTopic || "closed"}, preliminary=${preliminaryRulesText.includes("Vorrunde: 2 feste Legs")}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        const boardTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("boardCount")}`);
+        const boardInput = createForm.querySelector("#ata-board-count");
+        const timeTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("timeProfile")}`);
+        const timeSelect = createForm.querySelector("#ata-create-time-profile");
+        if (!(boardTrigger instanceof HTMLButtonElement)
+          || !(boardInput instanceof HTMLInputElement)
+          || !(timeTrigger instanceof HTMLButtonElement)
+          || !(timeSelect instanceof HTMLSelectElement)) {
+          throw new Error("Duration help controls missing.");
+        }
+        boardTrigger.click();
+        modeSelect.focus();
+        boardInput.value = "3";
+        boardInput.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const boardText = normalizeText(panel?.textContent || "");
+        const boardLiveOk = state.activeCreateHelpTopic === "boardCount"
+          && boardText.includes("Aktuelle Auswahl 3 Boards")
+          && state.shadowRoot?.activeElement === modeSelect;
+        panel?.querySelector("[data-action='close-create-help']")?.click();
+        timeTrigger.click();
+        modeSelect.focus();
+        timeSelect.value = TOURNAMENT_TIME_PROFILE_SLOW;
+        timeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const timeText = normalizeText(panel?.textContent || "");
+        const timeLiveOk = state.activeCreateHelpTopic === "timeProfile"
+          && timeText.includes("Aktuelle Auswahl Langsam")
+          && timeText.includes("keine Turnierregel")
+          && state.shadowRoot?.activeElement === modeSelect;
+        panel?.querySelector("[data-action='close-create-help']")?.click();
+        record(
+          "Create-UI Release 4: Board-Anzahl und Zeitprofil aktualisieren ihr aktives Thema ohne Fokuswechsel",
+          boardLiveOk && timeLiveOk,
+          `board=${boardLiveOk}, time=${timeLiveOk}, profile=${state.store.settings.tournamentTimeProfile}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        modeTrigger.click();
+        modeSelect.focus();
+        modeSelect.value = "double_ko";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const liveModeText = normalizeText(panel?.textContent || "");
+        const liveModeOk = state.activeCreateHelpTopic === "tournamentMode"
+          && liveModeText.includes("Aktuelle Auswahl Doppel-KO")
+          && state.shadowRoot?.activeElement === modeSelect;
+        title = createForm.querySelector(`#${CREATE_HELP_TITLE_ID}`);
+        title?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const escapeOk = state.drawerOpen
+          && !state.activeCreateHelpTopic
+          && panel instanceof HTMLElement
+          && panel.hidden
+          && state.shadowRoot?.activeElement === modeTrigger;
+
+        modeSelect.value = "ko";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        const thirdPlaceTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("thirdPlace")}`);
+        if (!(thirdPlaceTrigger instanceof HTMLButtonElement)) throw new Error("Third-place help trigger missing.");
+        thirdPlaceTrigger.click();
+        modeSelect.focus();
+        modeSelect.value = "league";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        overview = createForm.querySelector("#ata-create-overview");
+        const invalidationOk = !state.activeCreateHelpTopic
+          && panel instanceof HTMLElement
+          && panel.hidden
+          && overview instanceof HTMLElement
+          && !overview.hidden
+          && state.shadowRoot?.activeElement === modeSelect;
+
+        modeSelect.value = "double_ko";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        const grandFinalTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("grandFinal")}`);
+        if (!(grandFinalTrigger instanceof HTMLButtonElement)) throw new Error("Grand-final help trigger missing.");
+        grandFinalTrigger.click();
+        modeSelect.focus();
+        modeSelect.value = "ko";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        const grandFinalInvalidationOk = !state.activeCreateHelpTopic
+          && createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`)?.hidden
+          && state.shadowRoot?.activeElement === modeSelect;
+
+        modeSelect.value = "groups_ko";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        const groupsTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("groupsKoOddParticipants")}`);
+        if (!(groupsTrigger instanceof HTMLButtonElement)) throw new Error("Groups help trigger missing.");
+        groupsTrigger.click();
+        modeSelect.focus();
+        modeSelect.value = "league";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        const groupsInvalidationOk = !state.activeCreateHelpTopic
+          && createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`)?.hidden
+          && state.shadowRoot?.activeElement === modeSelect;
+
+        const fallbackActivated = activateCreateHelpTopic(
+          "presetFormat",
+          "ata-create-help-trigger-does-not-exist",
+          readCreateDraftInput(createForm),
+        );
+        refreshCreateHelpUi(createForm);
+        const fallbackClosed = closeCreateHelpPanel(createForm, { returnFocus: true });
+        const fallbackOk = fallbackActivated
+          && fallbackClosed
+          && state.shadowRoot?.activeElement === modeTrigger;
+        record(
+          "Create-UI Release 4: Escape, Modus-Liveupdate, drei Invalidierungen und Fokus-Fallback sind sicher",
+          liveModeOk
+            && escapeOk
+            && invalidationOk
+            && grandFinalInvalidationOk
+            && groupsInvalidationOk
+            && fallbackOk,
+          `mode=${liveModeOk}, escape=${escapeOk}, third=${invalidationOk}, grand=${grandFinalInvalidationOk}, groups=${groupsInvalidationOk}, fallback=${fallbackOk}, drawer=${state.drawerOpen}`,
+        );
+      } catch (error) {
+        record("Create-UI Release 4: kontextbezogene Regelhilfe", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+        state.store.ui.createDraft = previousDraft || createDefaultCreateDraft(state.store.settings);
+        state.activeTab = previousActiveTab;
+        state.store.ui.activeTab = previousStoredActiveTab;
+        state.createGameRulesExpanded = previousGameRulesExpanded;
+        state.drawerOpen = previousDrawerOpen;
+        state.activeCreateHelpTopic = previousHelpTopic;
+        state.lastCreateHelpTriggerId = previousHelpTriggerId;
+        state.store.settings.tournamentTimeProfile = previousTimeProfile;
+        renderShell();
+      }
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      const previousDraft = cloneSerializable(state.store.ui?.createDraft);
+      const previousActiveTab = state.activeTab;
+      const previousStoredActiveTab = state.store.ui.activeTab;
+      const previousGameRulesExpanded = state.createGameRulesExpanded;
+      const previousDrawerOpen = state.drawerOpen;
       try {
         state.store.tournament = null;
         state.drawerOpen = true;
@@ -9772,7 +10345,7 @@
         const presetFieldset = createForm.querySelector("fieldset[data-role='preset-selection']");
         const presetRadios = Array.from(createForm.querySelectorAll("input[name='x01Preset']"));
         const presetMarkupOk = presetFieldset instanceof HTMLFieldSetElement
-          && normalizeText(presetFieldset.querySelector("legend")?.textContent) === "Turnierformat auswählen"
+          && normalizeText(presetFieldset.querySelector("legend")?.textContent).startsWith("Turnierformat auswählen")
           && presetRadios.length === 3
           && presetRadios.every((radio) => radio instanceof HTMLInputElement
             && radio.type === "radio"
@@ -10299,7 +10872,7 @@
           && requireEvenHtml.includes("Gruppe B: 3 Spieler, 2 Spiele je Spieler, 2 von 3 qualifizieren sich.")
           && !requireEvenHtml.includes('name="groupsKoOddParticipantAcknowledged"')
           && allowUnequalHtml.includes('name="groupsKoOddParticipantAcknowledged"')
-          && allowUnequalHtml.includes("Andere offizielle Formate werden nicht automatisch angenähert")
+          && allowUnequalHtml.includes('data-help-topic="groupsKoOddParticipants"')
           && otherModeHtml === "",
         `require=${requireEvenHtml.length}, allow=${allowUnequalHtml.length}, other=${otherModeHtml.length}`,
       );
@@ -15211,7 +15784,7 @@
 
   function renderTournamentDurationEstimate(estimate, options = {}) {
     const visible = options?.visible !== false;
-    const helpLinks = renderInfoLinks([
+    const helpLinks = options?.showHelpLinks === false ? "" : renderInfoLinks([
       { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erkl\u00e4rung zur Turnierzeit-Prognose \u00f6ffnen", title: "README: Turnier anlegen" },
       { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen f\u00fcr das Zeitprofil \u00f6ffnen", title: "README: Einstellungen" },
     ]);
@@ -15363,6 +15936,472 @@
     };
   }
 
+// Data model and dynamic value resolution for contextual create-tournament help.
+  const CREATE_HELP_TOPIC_IDS = Object.freeze([
+    "tournamentMode",
+    "presetFormat",
+    "participants",
+    "koDraw",
+    "thirdPlace",
+    "grandFinal",
+    "groupsKoOddParticipants",
+    "preliminaryFinal",
+    "gameRules",
+    "boardCount",
+    "timeProfile",
+  ]);
+
+  const CREATE_HELP_MODE_EFFECTS = Object.freeze({
+    ko: "Erzeugt einen Single-Elimination-Baum; nach einer Niederlage scheidet eine Person aus.",
+    double_ko: "Erzeugt Winners Bracket, Losers Bracket und Grand Final; ausgeschieden ist eine Person nach der zweiten Niederlage.",
+    league: "Erzeugt einen vollständigen Round-Robin-Spielplan, in dem jede Person gegen jede andere spielt.",
+    groups_ko: "Erzeugt zwei Round-Robin-Gruppen; die Top 2 jeder Gruppe erreichen die Kreuz-KO-Phase.",
+    preliminary_final: "Erzeugt eine Vorrunde mit gleich vielen realen Matches je Person und danach eine gesetzte KO- oder Doppel-KO-Finalphase.",
+  });
+
+  function freezeCreateHelpTopic(topic) {
+    return Object.freeze({
+      ...topic,
+      availableModes: Object.freeze([...(topic.availableModes || [])]),
+      sources: Object.freeze((topic.sources || []).map((source) => Object.freeze({ ...source }))),
+      classification: topic.classification ? Object.freeze({ ...topic.classification }) : null,
+    });
+  }
+
+  const CREATE_HELP_TOPICS = Object.freeze({
+    tournamentMode: freezeCreateHelpTopic({
+      id: "tournamentMode",
+      title: "Turniermodus",
+      shortDescription: "Der Modus legt Turnierstruktur, Spielplan und Fortschrittslogik fest. Unterstützt werden KO, Doppel-KO, Liga, Gruppenphase + KO sowie Vorrunde + Finalphase; nicht jeder Modus ist dadurch automatisch ein offizielles PDC-Format.",
+      resolveCurrentSelection: ({ draft }) => MODE_PARTICIPANT_LIMITS[draft.mode]?.label || "KO",
+      resolveEffects: ({ draft }) => [CREATE_HELP_MODE_EFFECTS[draft.mode] || CREATE_HELP_MODE_EFFECTS.ko],
+      classification: {
+        label: "Formatentscheidung",
+        description: "KO und Round Robin sind im DRA-Regelwerk beschrieben. Die konkrete Moduskonfiguration muss zusätzlich zur veröffentlichten Turnierordnung passen.",
+      },
+      sources: [
+        { label: "README - Turniermodi", href: README_TOURNAMENT_MODES_URL },
+        { label: "DRA-Regeln in der GUI - Modus und Format (DRA 6.8.1, 6.8.2 und 6.8.4)", href: DRA_GUI_RULE_MODE_FORMATS_URL },
+      ],
+    }),
+    presetFormat: freezeCreateHelpTopic({
+      id: "presetFormat",
+      title: "Preset und Formatprofil",
+      shortDescription: "European Tour wendet das dokumentierte offizielle Rundenprofil an. Basic ist ein rückwärtskompatibles 501-/Double-Out-Profil und kein offizielles PDC-Eventformat. Individuell / Manuell behält die aktuellen Werte bei.",
+      resolveCurrentSelection: ({ draft }) => getCreatePresetLabel(getAppliedCreatePresetId(draft)),
+      resolveEffects: ({ draft }) => {
+        const presetId = getAppliedCreatePresetId(draft);
+        if (presetId === X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL) {
+          return ["Wendet KO, Best of 11, 501, Straight In, Double Out und die dokumentierten technischen Lobbywerte an."];
+        }
+        if (presetId === X01_PRESET_PDC_501_DOUBLE_OUT_BASIC) {
+          return ["Wendet KO, Best of 5, 501, Straight In, Double Out und die kompatiblen technischen Lobbywerte an."];
+        }
+        return ["Ändert keine Sachwerte; Modus und X01-Werte bleiben in ihrer aktuellen manuellen Konfiguration erhalten."];
+      },
+      classification: {
+        label: "Offizielles Formatprofil oder Kompatibilitätsprofil",
+        description: "Nur European Tour ist hier als offizielles PDC-Formatprofil dokumentiert. Basic und Custom erheben diesen Anspruch nicht.",
+      },
+      sources: [
+        { label: "README - Preset-Katalog", href: README_PRESET_CATALOG_URL },
+        { label: "PDC/DRA Compliance-Mapping - Preset-Logik", href: PDC_DRA_COMPLIANCE_PRESET_URL },
+      ],
+    }),
+    participants: freezeCreateHelpTopic({
+      id: "participants",
+      title: "Teilnehmerliste",
+      shortDescription: "Trage eine Person pro Zeile ein. Die Eingabereihenfolge bleibt bei einem gesetzten Draw relevant; Teilnehmer mischen verändert genau diese Reihenfolge.",
+      resolveCurrentSelection: ({ participants }) => `${participants.length} Teilnehmer erkannt`,
+      resolveEffects: () => ["Die Liste bestimmt das Teilnehmerfeld. Bei einem gesetzten KO-Draw wird ihre Reihenfolge als Seed-Reihenfolge verwendet."],
+      classification: {
+        label: "Eingabe- und Setzreihenfolge",
+        description: "Die Anwendung validiert die Teilnehmerzahl beim Anlegen; eine erweiterte Live-Validierung ist nicht Bestandteil dieses Releases.",
+      },
+      sources: [
+        { label: "README - Turnier anlegen und Teilnehmer", href: README_TOURNAMENT_CREATE_URL },
+        { label: "README - KO und Seed-Placement", href: README_TOURNAMENT_MODES_URL },
+      ],
+    }),
+    koDraw: freezeCreateHelpTopic({
+      id: "koDraw",
+      title: "Auslosung der ersten KO-Runde",
+      availableModes: ["ko", "double_ko"],
+      shortDescription: "Open Draw mischt die Reihenfolge für die erste KO-Runde deterministisch. Beim gesetzten Draw bleibt die Eingabereihenfolge als Seed-Reihenfolge wirksam.",
+      resolveCurrentSelection: ({ draft }) => draft.randomizeKoRound1 ? "Open Draw" : "Gesetzter Draw",
+      resolveEffects: ({ draft }) => [draft.randomizeKoRound1
+        ? "Die erste KO-Runde wird aus einer gemischten Seed-Reihenfolge aufgebaut."
+        : "Die erste KO-Runde und die Bye-Verteilung folgen der eingegebenen Seed-Reihenfolge."],
+      classification: {
+        label: "Draw-Entscheidung",
+        description: "Die Auswahl ist transparent und draw-stabil, behauptet aber für sich allein keine vollständige Konformität mit einer konkreten Eventordnung.",
+      },
+      sources: [
+        { label: "README - KO und Doppel-KO Draw", href: README_TOURNAMENT_MODES_URL },
+        { label: "DRA-Regeln in der GUI - Open Draw und Draw-Stabilität (DRA 6.12.1)", href: DRA_GUI_RULE_OPEN_DRAW_URL },
+      ],
+    }),
+    thirdPlace: freezeCreateHelpTopic({
+      id: "thirdPlace",
+      title: "Spiel um Platz 3",
+      availableModes: ["ko"],
+      shortDescription: "Diese Option gibt es nur im Single-Elimination-KO. Sie ergänzt ein separates Match zwischen den beiden Halbfinalverlierern.",
+      resolveCurrentSelection: ({ draft }) => draft.enableThirdPlaceMatch ? "Aktiv" : "Aus",
+      resolveEffects: ({ draft }) => [draft.enableThirdPlaceMatch
+        ? "Ein zusätzliches Platz-3-Match wird erzeugt; der Champion-Pfad des Hauptfinales bleibt unverändert."
+        : "Es wird kein Platz-3-Match erzeugt; der KO-Baum endet mit dem Hauptfinale."],
+      classification: {
+        label: "Optionale Veranstalterentscheidung",
+        description: "Das Platz-3-Spiel ist keine allgemeine PDC- oder DRA-Pflicht und muss zur konkreten Turnierordnung passen.",
+      },
+      sources: [
+        { label: "README - KO und optionales Spiel um Platz 3", href: README_TOURNAMENT_MODES_URL },
+        { label: "DRA-Regeln in der GUI - Spiel um Platz 3 (DRA 1.2, 6.8.1, 6.8.4 und 6.12.1)", href: DRA_GUI_RULE_THIRD_PLACE_URL },
+      ],
+    }),
+    grandFinal: freezeCreateHelpTopic({
+      id: "grandFinal",
+      title: "Doppel-KO Grand Final",
+      availableModes: ["double_ko"],
+      shortDescription: "Beim Reset-Finale muss der Sieger des Losers Bracket den bis dahin ungeschlagenen Winners-Bracket-Sieger bei Bedarf zweimal besiegen. Die Einzelmatch-Variante verkürzt diesen Ablauf bewusst.",
+      resolveCurrentSelection: ({ draft }) => sanitizeGrandFinalResetMode(draft.grandFinalResetMode) === GRAND_FINAL_RESET_IF_NEEDED
+        ? "Reset-Finale falls nötig"
+        : "Ein einzelnes Grand Final",
+      resolveEffects: ({ draft }) => [sanitizeGrandFinalResetMode(draft.grandFinalResetMode) === GRAND_FINAL_RESET_IF_NEEDED
+        ? "Verliert der Winners-Bracket-Sieger das erste Grand Final, wird ein zweites und entscheidendes Finale aktiviert."
+        : "Das Turnier endet nach einem Grand Final; diese bewusst verkürzte Variante bildet kein vollständiges klassisches Doppel-KO ab."],
+      classification: {
+        label: "Veranstalterentscheidung im Doppel-KO",
+        description: "Das Projekt dokumentiert beide Varianten und bezeichnet das Einzelmatch ausdrücklich als verkürzt.",
+      },
+      sources: [
+        { label: "README - Doppel-KO und Grand-Final-Regel", href: README_TOURNAMENT_MODES_URL },
+        { label: "PDC/DRA Compliance-Mapping - KO und Veranstalterregeln", href: PDC_DRA_COMPLIANCE_KO_URL },
+      ],
+    }),
+    groupsKoOddParticipants: freezeCreateHelpTopic({
+      id: "groupsKoOddParticipants",
+      title: "Ungerade Teilnehmerzahl in Gruppenphase + KO",
+      availableModes: ["groups_ko"],
+      shortDescription: "Gerade Teilnehmerzahlen sind der sichere Produktstandard für zwei gleich große Gruppen. Ungleiche Gruppen sind nur als ausdrücklich gewählte Veranstalterregel zulässig.",
+      resolveCurrentSelection: ({ draft }) => sanitizeGroupsKoOddParticipantPolicy(draft.groupsKoOddParticipantPolicy) === GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL
+        ? "Ungleiche Gruppengrößen zulassen"
+        : "Nur gerade Teilnehmerzahl zulassen",
+      resolveEffects: ({ draft, participants }) => {
+        const policy = sanitizeGroupsKoOddParticipantPolicy(draft.groupsKoOddParticipantPolicy);
+        const analysis = analyzeGroupsKoParticipantDistribution(participants.length);
+        const effects = [];
+        if (participants.length > 0) {
+          effects.push(`Die aktuelle Verteilung ergibt Gruppe A mit ${analysis.groupASize} und Gruppe B mit ${analysis.groupBSize} Personen.`);
+        }
+        effects.push(policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL
+          ? "Bei ungerader Teilnehmerzahl ist vor dem Anlegen eine ausdrückliche Bestätigung der verwendeten Turnierordnung erforderlich."
+          : "Eine ungerade Teilnehmerzahl blockiert das Anlegen, damit keine ungleichen Gruppen still entstehen.");
+        return effects;
+      },
+      classification: {
+        label: "Produktstandard oder Veranstalterregel",
+        description: "Das DRA-Regelwerk enthält hierfür keine universelle Gruppenpolicy. Die Auswahl begründet keine allgemeine Verbandskonformität.",
+      },
+      sources: [
+        { label: "DRA-Regeln in der GUI - Gruppenphase und ungerade Teilnehmerzahl", href: DRA_GUI_RULE_MODE_FORMATS_URL },
+        { label: "PDC/DRA Compliance-Mapping - Gruppenauflösung", href: PDC_DRA_COMPLIANCE_GROUPS_URL },
+      ],
+    }),
+    preliminaryFinal: freezeCreateHelpTopic({
+      id: "preliminaryFinal",
+      title: "Vorrunde und Finalphase",
+      availableModes: ["preliminary_final"],
+      shortDescription: "Dieses Veranstalterprofil verteilt gleich viele reale Vorrundenmatches auf alle Personen und erzeugt danach eine nach Tabellenplatz gesetzte KO- oder Doppel-KO-Finalphase.",
+      resolveCurrentSelection: ({ draft, participants }) => `${participants.length} Teilnehmer · ${draft.preliminaryMatchesPerParticipant} Vorrundenmatches je Person · 2 Legs fest · Top ${draft.finalStageQualifierCount} in ${draft.finalStageType === FINAL_STAGE_TYPE_DOUBLE_KO ? "Doppel-KO" : "KO"} · Finalphase Best of ${draft.finalStageBestOfLegs}`,
+      resolveEffects: ({ draft }) => [
+        "In jedem Vorrundenmatch werden genau zwei Legs gespielt; ein 1:1 ist möglich.",
+        `Die Finalphase verwendet eine getrennte Matchlänge von Best of ${draft.finalStageBestOfLegs} Legs.`,
+      ],
+      classification: {
+        label: "Veranstalterprofil",
+        description: "Paarung, Wertung und Qualifikation sind deterministisch umgesetzt, werden aber nicht als allgemeines PDC-, DRA-, WDF- oder Verbandsformat bezeichnet.",
+      },
+      sources: [
+        { label: "README - Vorrunde + Finalphase", href: README_TOURNAMENT_MODES_URL },
+        { label: "PDC/DRA Compliance-Mapping - Vorrunde + Finalphase", href: PDC_DRA_COMPLIANCE_PRELIMINARY_FINAL_URL },
+      ],
+    }),
+    gameRules: freezeCreateHelpTopic({
+      id: "gameRules",
+      title: "Spielregeln und X01",
+      shortDescription: "Die kompakte Zusammenfassung zeigt die aktuell wirksame Matchlänge, Startpunkte, In-/Out-Modus, Bull-off, den wirksamen Bull-Modus und die technischen Maximalrunden.",
+      resolveCurrentSelection: ({ draft }) => buildCreateGameRulesSummary(draft).text,
+      resolveEffects: ({ draft }) => {
+        const effectiveBestOf = draft.mode === "preliminary_final" ? draft.finalStageBestOfLegs : draft.bestOfLegs;
+        return [
+          `Best of ${effectiveBestOf} bedeutet First to ${getLegsToWin(effectiveBestOf)} Legs${draft.mode === "preliminary_final" ? " in der Finalphase" : ""}.`,
+          "Diese Werte werden für die X01-Matchkonfiguration und die Zeitprognose verwendet.",
+        ];
+      },
+      classification: {
+        label: "Formatwerte und technische AutoDarts-Vorgaben",
+        description: "501, Straight In und Double Out können Teil eines offiziellen Formats sein. Bull-off Normal und Max Runden 50 sind in den Presets technische Lobbywerte und nicht automatisch offizielle Formatregeln.",
+      },
+      sources: [
+        { label: "README - Spielregeln und Feldinhalte", href: README_TOURNAMENT_CREATE_URL },
+        { label: "PDC/DRA Compliance-Mapping - Preset-Logik und technische Abgrenzung", href: PDC_DRA_COMPLIANCE_PRESET_URL },
+      ],
+    }),
+    boardCount: freezeCreateHelpTopic({
+      id: "boardCount",
+      title: "Boards für die Zeitprognose",
+      shortDescription: "Die Board-Anzahl ist ausschließlich ein Kapazitätsparameter der deterministischen Turnierzeitprognose.",
+      resolveCurrentSelection: ({ draft }) => `${sanitizeTournamentBoardCount(draft.boardCount, TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT)} ${sanitizeTournamentBoardCount(draft.boardCount, TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT) === 1 ? "Board" : "Boards"}`,
+      resolveEffects: () => ["Die Prognose begrenzt damit die Zahl gleichzeitig planbarer Matches und berücksichtigt weiterhin Match-Abhängigkeiten sowie Spielerkonflikte."],
+      classification: {
+        label: "Planungsparameter",
+        description: "Die Eingabe weist keine Boards zu, verwaltet keine parallelen Lobbys und aktiviert weder MultiBoard noch mehrere gleichzeitig gestartete Matches.",
+      },
+      sources: [
+        { label: "Dokumentation - verwendete Turnierparameter der Prognose", href: TOURNAMENT_DURATION_PARAMETERS_URL },
+        { label: "README - Voraussichtliche Turnierzeit", href: README_TOURNAMENT_CREATE_URL },
+      ],
+    }),
+    timeProfile: freezeCreateHelpTopic({
+      id: "timeProfile",
+      title: "Zeitprofil",
+      shortDescription: "Das Zeitprofil kalibriert die angenommene Leg-Geschwindigkeit sowie Übergangszeiten zwischen Matches und Turnierphasen.",
+      resolveCurrentSelection: ({ settings }) => getTournamentTimeProfileMeta(settings.tournamentTimeProfile).label,
+      resolveEffects: ({ settings }) => [getTournamentTimeProfileMeta(settings.tournamentTimeProfile).description, "Das Profil ändert keine Turnierregel und keine X01-Matchkonfiguration."],
+      classification: {
+        label: "Technischer Prognoseparameter",
+        description: "Das Profil ist eine Planungsannahme für lokale Turniere und keine normative PDC- oder DRA-Zeitvorgabe.",
+      },
+      sources: [
+        { label: "Dokumentation - Zeitprofile und Berechnungsgrundlage", href: TOURNAMENT_DURATION_TIME_PROFILES_URL },
+      ],
+    }),
+  });
+
+  function getCreateHelpTopic(topicId) {
+    const id = normalizeText(topicId || "");
+    return Object.prototype.hasOwnProperty.call(CREATE_HELP_TOPICS, id)
+      ? CREATE_HELP_TOPICS[id]
+      : null;
+  }
+
+  function isCreateHelpSourceUrlAllowed(href) {
+    return /^https:\/\//i.test(normalizeText(href || ""));
+  }
+
+  function isCreateHelpTopicAvailable(topicId, rawDraft) {
+    const topic = getCreateHelpTopic(topicId);
+    if (!topic) return false;
+    const draft = normalizeCreateDraft(rawDraft);
+    return !topic.availableModes.length || topic.availableModes.includes(draft.mode);
+  }
+
+  function resolveCreateHelpValue(value, context, fallback) {
+    const resolved = typeof value === "function" ? value(context) : value;
+    return resolved == null ? fallback : resolved;
+  }
+
+  function normalizeCreateHelpList(value) {
+    const values = Array.isArray(value) ? value : value == null ? [] : [value];
+    return values.map((entry) => normalizeText(entry || "")).filter(Boolean);
+  }
+
+  function resolveCreateHelpTopic(topicId, rawDraft, rawSettings = {}) {
+    const topic = getCreateHelpTopic(topicId);
+    const draft = normalizeCreateDraft(rawDraft, rawSettings);
+    if (!topic || !isCreateHelpTopicAvailable(topic.id, draft)) return null;
+    const settings = {
+      ...(rawSettings || {}),
+      tournamentTimeProfile: sanitizeTournamentTimeProfile(
+        rawSettings?.tournamentTimeProfile,
+        TOURNAMENT_TIME_PROFILE_NORMAL,
+      ),
+    };
+    const context = {
+      draft,
+      settings,
+      participants: parseParticipantLines(draft.participantsText),
+    };
+    return {
+      id: topic.id,
+      title: normalizeText(topic.title),
+      shortDescription: normalizeText(topic.shortDescription),
+      currentSelection: normalizeText(resolveCreateHelpValue(topic.resolveCurrentSelection, context, "")),
+      effects: normalizeCreateHelpList(resolveCreateHelpValue(topic.resolveEffects, context, [])),
+      classification: topic.classification,
+      examples: normalizeCreateHelpList(resolveCreateHelpValue(topic.examples, context, [])),
+      tips: normalizeCreateHelpList(resolveCreateHelpValue(topic.tips, context, [])),
+      dependencies: normalizeCreateHelpList(resolveCreateHelpValue(topic.dependencies, context, [])),
+      limitations: normalizeCreateHelpList(resolveCreateHelpValue(topic.limitations, context, [])),
+      compliance: resolveCreateHelpValue(topic.compliance, context, null),
+      sources: topic.sources,
+    };
+  }
+
+  function validateCreateHelpTopicCatalog() {
+    const issues = [];
+    const catalogIds = Object.keys(CREATE_HELP_TOPICS);
+    CREATE_HELP_TOPIC_IDS.forEach((id) => {
+      const topic = getCreateHelpTopic(id);
+      if (!topic) {
+        issues.push(`${id}: Thema fehlt.`);
+        return;
+      }
+      if (topic.id !== id) issues.push(`${id}: Topic-ID stimmt nicht mit dem Katalogschlüssel überein.`);
+      if (!normalizeText(topic.title)) issues.push(`${id}: Titel fehlt.`);
+      if (!normalizeText(topic.shortDescription)) issues.push(`${id}: Kurzbeschreibung fehlt.`);
+      if (typeof topic.resolveCurrentSelection !== "function") issues.push(`${id}: Resolver für aktuelle Auswahl fehlt.`);
+      if (typeof topic.resolveEffects !== "function") issues.push(`${id}: Resolver für Auswirkungen fehlt.`);
+      if (!topic.sources.length) issues.push(`${id}: Quelle fehlt.`);
+      topic.sources.forEach((source) => {
+        if (!normalizeText(source.label)) issues.push(`${id}: Quellenlink ohne Beschriftung.`);
+        if (!isCreateHelpSourceUrlAllowed(source.href)) issues.push(`${id}: Unsichere oder ungültige Quellen-URL.`);
+      });
+    });
+    if (new Set(catalogIds).size !== catalogIds.length) issues.push("Topic-IDs sind nicht eindeutig.");
+    return { ok: issues.length === 0, issues, topicIds: catalogIds };
+  }
+
+// Transient create-help activation and mode reconciliation. State is never persisted.
+  function activateCreateHelpTopic(topicId, triggerId, rawDraft) {
+    const topic = getCreateHelpTopic(topicId);
+    if (!topic || !isCreateHelpTopicAvailable(topic.id, rawDraft)) {
+      return false;
+    }
+    state.activeCreateHelpTopic = topic.id;
+    state.lastCreateHelpTriggerId = normalizeText(triggerId || "");
+    return true;
+  }
+
+  function reconcileCreateHelpState(rawDraft) {
+    const activeTopic = normalizeText(state.activeCreateHelpTopic || "");
+    if (!activeTopic) return false;
+    if (isCreateHelpTopicAvailable(activeTopic, rawDraft)) return false;
+    resetCreateHelpState();
+    return true;
+  }
+
+// Rendering helpers for create-tournament help triggers and the non-modal panel.
+  const CREATE_HELP_PANEL_ID = "ata-create-help-panel";
+  const CREATE_HELP_TITLE_ID = "ata-create-help-title";
+
+  function getCreateHelpTriggerId(topicId) {
+    const topic = getCreateHelpTopic(topicId);
+    return topic ? `ata-create-help-trigger-${topic.id}` : "";
+  }
+
+  function renderCreateHelpTrigger(topicId, ariaLabel) {
+    const topic = getCreateHelpTopic(topicId);
+    if (!topic) return "";
+    const triggerId = getCreateHelpTriggerId(topic.id);
+    const expanded = state.activeCreateHelpTopic === topic.id;
+    return `
+      <button
+        id="${escapeHtml(triggerId)}"
+        type="button"
+        class="ata-help-trigger"
+        data-action="open-create-help"
+        data-help-topic="${escapeHtml(topic.id)}"
+        aria-label="${escapeHtml(ariaLabel)}"
+        aria-controls="${CREATE_HELP_PANEL_ID}"
+        aria-expanded="${expanded ? "true" : "false"}"
+      ><span aria-hidden="true">?</span></button>
+    `;
+  }
+
+  function renderCreateHelpTextSection(title, value, className = "") {
+    const text = normalizeText(value || "");
+    if (!text) return "";
+    return `
+      <section class="ata-create-help-section ${escapeHtml(className)}">
+        <h5>${escapeHtml(title)}</h5>
+        <p>${escapeHtml(text)}</p>
+      </section>
+    `;
+  }
+
+  function renderCreateHelpListSection(title, values, className = "") {
+    const items = normalizeCreateHelpList(values);
+    if (!items.length) return "";
+    return `
+      <section class="ata-create-help-section ${escapeHtml(className)}">
+        <h5>${escapeHtml(title)}</h5>
+        <ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+      </section>
+    `;
+  }
+
+  function renderCreateHelpClassification(classification) {
+    const label = normalizeText(classification?.label || "");
+    const description = normalizeText(classification?.description || "");
+    if (!label && !description) return "";
+    return `
+      <section class="ata-create-help-section ata-create-help-classification">
+        <h5>Einordnung</h5>
+        ${label ? `<p class="ata-create-help-classification-label">${escapeHtml(label)}</p>` : ""}
+        ${description ? `<p>${escapeHtml(description)}</p>` : ""}
+      </section>
+    `;
+  }
+
+  function renderCreateHelpSources(sources) {
+    const safeSources = (Array.isArray(sources) ? sources : []).filter((source) => (
+      normalizeText(source?.label || "") && isCreateHelpSourceUrlAllowed(source?.href)
+    ));
+    if (!safeSources.length) return "";
+    return `
+      <section class="ata-create-help-section ata-create-help-sources">
+        <h5>Quellen</h5>
+        <ul>${safeSources.map((source) => `
+          <li><a href="${escapeHtml(source.href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.label)}</a></li>
+        `).join("")}</ul>
+      </section>
+    `;
+  }
+
+  function renderCreateHelpPanelBody(model) {
+    if (!model) {
+      return `<h4 id="${CREATE_HELP_TITLE_ID}" tabindex="-1">Kontextbezogene Hilfe</h4>`;
+    }
+    const compliance = model.compliance && typeof model.compliance === "object"
+      ? model.compliance
+      : null;
+    return `
+      <div class="ata-create-help-panel-head">
+        <h4 id="${CREATE_HELP_TITLE_ID}" tabindex="-1">${escapeHtml(model.title)}</h4>
+        <button type="button" class="ata-btn ata-btn-sm" data-action="close-create-help">Hilfe schließen</button>
+      </div>
+      <div class="ata-create-help-panel-body">
+        ${renderCreateHelpTextSection("Kurz erklärt", model.shortDescription)}
+        ${renderCreateHelpTextSection("Aktuelle Auswahl", model.currentSelection, "ata-create-help-current")}
+        ${renderCreateHelpListSection("Auswirkung auf dein Turnier", model.effects)}
+        ${renderCreateHelpListSection("Beispiele", model.examples)}
+        ${renderCreateHelpListSection("Tipps", model.tips)}
+        ${renderCreateHelpListSection("Abhängigkeiten", model.dependencies)}
+        ${renderCreateHelpListSection("Einschränkungen", model.limitations)}
+        ${renderCreateHelpClassification(model.classification || compliance)}
+        ${renderCreateHelpSources(model.sources)}
+      </div>
+    `;
+  }
+
+  function renderCreateHelpPanel(draft) {
+    const model = resolveCreateHelpTopic(
+      state.activeCreateHelpTopic,
+      draft,
+      state.store?.settings,
+    );
+    return `
+      <aside
+        id="${CREATE_HELP_PANEL_ID}"
+        class="ata-create-help-panel"
+        aria-labelledby="${CREATE_HELP_TITLE_ID}"
+        ${model ? "" : "hidden"}
+      >${renderCreateHelpPanelBody(model)}</aside>
+    `;
+  }
+
   function buildStyles() {
     return ATA_UI_MAIN_CSS;
   }
@@ -15451,16 +16490,17 @@
 
     return `
       <section class="ata-field" data-role="groups-ko-odd-policy">
-        <label for="ata-groups-ko-odd-policy">Ungerade Teilnehmerzahl</label>
+        <div class="ata-field-label-row">
+          <label for="ata-groups-ko-odd-policy">Ungerade Teilnehmerzahl</label>
+          ${renderCreateHelpTrigger("groupsKoOddParticipants", "Hilfe zu ungeraden Teilnehmerzahlen in Gruppenphase und KO öffnen")}
+        </div>
         <select id="ata-groups-ko-odd-policy" name="groupsKoOddParticipantPolicy">
           <option value="${GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN}" ${policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN ? "selected" : ""}>Nur gerade Teilnehmerzahl zulassen (empfohlen)</option>
           <option value="${GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL}" ${policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL ? "selected" : ""}>Ungleiche Gruppengrößen zulassen (Veranstalterregel)</option>
         </select>
-        <p class="ata-small ata-create-help">Der sichere Produktstandard ist keine DRA-Universalregel. Ungleiche Gruppen sind nur zulässig, wenn diese Veranstalterregel zur konkreten Turnierordnung passt.</p>
         ${analysisHtml}
         ${twoPlayerWarning}
         ${acknowledgementHtml}
-        <p class="ata-small ata-create-help" data-role="groups-ko-format-scope">Unterstützt werden genau zwei Gruppen mit vollständigem Round Robin und Top 2 je Gruppe. Andere offizielle Formate werden nicht automatisch angenähert.</p>
       </section>
     `;
   }
@@ -15491,6 +16531,10 @@
       : `<div class="ata-meta-block" data-role="preliminary-live-summary"><p><strong>Konfiguration nicht zul\u00e4ssig:</strong> ${escapeHtml(analysis.message)}</p><p>Zul\u00e4ssig innerhalb 4\u20138: ${escapeHtml(allowedText)}.</p></div>`;
     return `
       <section data-role="preliminary-final-fields">
+        <div class="ata-field-label-row ata-preliminary-final-heading">
+          <h5>Vorrunde und Finalphase</h5>
+          ${renderCreateHelpTrigger("preliminaryFinal", "Hilfe zu Vorrunde und Finalphase öffnen")}
+        </div>
         <div class="ata-grid-3 ata-grid-3-tight">
           <div class="ata-field">
             <label for="ata-preliminary-match-count">Vorrundenspiele je Teilnehmer</label>
@@ -15509,7 +16553,6 @@
           <div class="ata-field"><label for="ata-final-stage-bestof">Best of Legs der Finalphase</label><input id="ata-final-stage-bestof" name="finalStageBestOfLegs" type="number" min="1" max="21" step="2" value="${draft.finalStageBestOfLegs}"></div>
         </div>
         ${summary}
-        <p class="ata-small ata-create-help">Veranstalterprofil: Punkte, Leg-Differenz, Legs gewonnen. Keine allgemeine DRA-, PDC-, WDF- oder Verbandskonformit\u00e4t wird behauptet.</p>
       </section>
     `;
   }
@@ -15543,12 +16586,15 @@
   }
 
 
-  function renderCreateFormSectionHeading(step, title, description, headingId) {
+  function renderCreateFormSectionHeading(step, title, description, headingId, titleAdornmentHtml = "") {
     return `
       <header class="ata-create-section-head">
         <span class="ata-create-section-step" aria-hidden="true">${escapeHtml(String(step))}</span>
         <div class="ata-create-section-title">
-          <h4 id="${escapeHtml(headingId)}">${escapeHtml(title)}</h4>
+          <div class="ata-create-section-title-row">
+            <h4 id="${escapeHtml(headingId)}">${escapeHtml(title)}</h4>
+            ${titleAdornmentHtml}
+          </div>
           <p>${escapeHtml(description)}</p>
         </div>
       </header>
@@ -15607,14 +16653,17 @@
     }).join("");
     return `
       <fieldset class="ata-preset-fieldset ata-field-span-2" data-role="preset-selection">
-        <legend>Turnierformat auswählen</legend>
+        <legend>
+          <span>Turnierformat auswählen</span>
+          ${renderCreateHelpTrigger("presetFormat", "Hilfe zu Presets und Formatprofilen öffnen")}
+        </legend>
         <div class="ata-preset-card-grid">${cardsHtml}</div>
       </fieldset>
     `;
   }
 
 
-  function renderCreateTournamentFormatSection(draft, modeHelpLinks) {
+  function renderCreateTournamentFormatSection(draft) {
     return `
       <section class="ata-create-section" data-create-section="format" aria-labelledby="ata-create-format-heading">
         ${renderCreateFormSectionHeading(1, "Turnierformat", "Name und grundlegenden Turnierablauf festlegen.", "ata-create-format-heading")}
@@ -15625,7 +16674,10 @@
           </div>
           ${renderCreatePresetSelection(draft)}
           <div class="ata-field">
-            <label for="ata-mode">Modus ${modeHelpLinks}</label>
+            <div class="ata-field-label-row">
+              <label for="ata-mode">Modus</label>
+              ${renderCreateHelpTrigger("tournamentMode", "Hilfe zum Turniermodus öffnen")}
+            </div>
             <select id="ata-mode" name="mode">
               <option value="ko" ${draft.mode === "ko" ? "selected" : ""}>KO</option>
               <option value="double_ko" ${draft.mode === "double_ko" ? "selected" : ""}>Doppel-KO</option>
@@ -15646,7 +16698,10 @@
         ${renderCreateFormSectionHeading(2, "Teilnehmer", "Eine Person pro Zeile; die Reihenfolge bleibt für gesetzte Draws erhalten.", "ata-create-participants-heading")}
         <div class="ata-create-section-body">
           <div class="ata-field">
-            <label for="ata-participants">Teilnehmer (eine Zeile pro Person)</label>
+            <div class="ata-field-label-row">
+              <label for="ata-participants">Teilnehmer (eine Zeile pro Person)</label>
+              ${renderCreateHelpTrigger("participants", "Hilfe zur Teilnehmerliste öffnen")}
+            </div>
             <textarea id="ata-participants" name="participants" placeholder="Max Mustermann&#10;Erika Musterfrau">${escapeHtml(draft.participantsText)}</textarea>
           </div>
           <div class="ata-create-section-actions">
@@ -15658,7 +16713,7 @@
   }
 
 
-  function renderCreateAdditionalRulesSection(draft, drawHelpLinks) {
+  function renderCreateAdditionalRulesSection(draft) {
     const randomizeChecked = draft.randomizeKoRound1 ? "checked" : "";
     const thirdPlaceChecked = draft.enableThirdPlaceMatch ? "checked" : "";
     const grandFinalResetMode = sanitizeGrandFinalResetMode(draft.grandFinalResetMode);
@@ -15672,25 +16727,33 @@
           <div id="ata-preliminary-final-fields-host" data-mode-rule-group="preliminary_final">${renderPreliminaryFinalFields(draft)}</div>
           <div class="ata-toggle ata-toggle-compact" data-role="ko-draw-field" data-mode-rule-group="ko_draw">
             <div>
-              <strong>KO-Erstrunde zuf\u00e4llig mischen ${drawHelpLinks}</strong>
+              <div class="ata-field-label-row">
+                <strong>KO-Erstrunde zuf\u00e4llig mischen</strong>
+                ${renderCreateHelpTrigger("koDraw", "Hilfe zur Auslosung der ersten KO-Runde öffnen")}
+              </div>
               <div class="ata-small">Open Draw bei aktivem Schalter, sonst gesetzter Draw.</div>
             </div>
             <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
           </div>
           <div class="ata-toggle ata-toggle-compact" data-role="third-place-field" data-mode-rule-group="third_place">
             <div>
-              <strong>Spiel um Platz 3 (optional)</strong>
+              <div class="ata-field-label-row">
+                <strong>Spiel um Platz 3 (optional)</strong>
+                ${renderCreateHelpTrigger("thirdPlace", "Hilfe zum Spiel um Platz 3 öffnen")}
+              </div>
               <div class="ata-small">Nur im KO-Modus: Halbfinal-Verlierer spielen um Platz 3. Ohne Option bleibt klassischer Single-Elimination-Baum.</div>
             </div>
             <input id="ata-enable-third-place" name="enableThirdPlaceMatch" type="checkbox" ${thirdPlaceChecked}>
           </div>
           <div class="ata-field" data-role="grand-final-field" data-mode-rule-group="grand_final">
-            <label for="ata-grand-final-reset-mode">Doppel-KO Grand Final</label>
+            <div class="ata-field-label-row">
+              <label for="ata-grand-final-reset-mode">Doppel-KO Grand Final</label>
+              ${renderCreateHelpTrigger("grandFinal", "Hilfe zum Doppel-KO Grand Final öffnen")}
+            </div>
             <select id="ata-grand-final-reset-mode" name="grandFinalResetMode">
               <option value="${GRAND_FINAL_RESET_IF_NEEDED}" ${grandFinalResetMode === GRAND_FINAL_RESET_IF_NEEDED ? "selected" : ""}>Reset-Finale falls nötig (empfohlen)</option>
               <option value="${GRAND_FINAL_RESET_SINGLE_MATCH}" ${grandFinalResetMode === GRAND_FINAL_RESET_SINGLE_MATCH ? "selected" : ""}>Ein einzelnes Grand Final</option>
             </select>
-            <p class="ata-small ata-create-help">Gilt für Doppel-KO: Beim Reset-Finale darf der Winners-Bracket-Sieger das erste Grand Final verlieren; dann entscheidet ein zweites Finale. Ein einzelnes Grand Final ist schneller, aber kein vollständiges klassisches Doppel-KO.</p>
           </div>
           <p class="ata-small ata-create-empty-rules" data-role="league-rules-empty" data-mode-rule-group="league_empty">Für den Ligamodus sind keine zusätzlichen Turnierregeln erforderlich.</p>
         </div>
@@ -15710,7 +16773,13 @@
     const expanded = state.createGameRulesExpanded === true;
     return `
       <section class="ata-create-section" data-create-section="game-rules" aria-labelledby="ata-create-game-rules-heading">
-        ${renderCreateFormSectionHeading(4, "Spielregeln", "Matchlänge und X01-Einstellungen prüfen oder anpassen.", "ata-create-game-rules-heading")}
+        ${renderCreateFormSectionHeading(
+          4,
+          "Spielregeln",
+          "Matchlänge und X01-Einstellungen prüfen oder anpassen.",
+          "ata-create-game-rules-heading",
+          renderCreateHelpTrigger("gameRules", "Hilfe zu Spielregeln und X01 öffnen"),
+        )}
         <div class="ata-create-section-body">
           <div class="ata-game-rules-summary" data-role="game-rules-summary" aria-live="polite">
             <p class="ata-game-rules-origin" data-role="game-rules-preset-origin"><strong>Format:</strong> ${escapeHtml(summary.presetLabel)}</p>
@@ -15804,26 +16873,31 @@
       tournamentTimeProfileOptions,
       durationEstimate,
       durationEstimateVisible,
-      modeLimitHelpLinks,
       modeLimitSummary,
     } = options;
+    const helpActive = Boolean(state.activeCreateHelpTopic);
     return `
-      <aside class="ata-create-overview" data-create-section="overview" aria-labelledby="ata-create-overview-heading">
+      <aside id="ata-create-overview" class="ata-create-overview" data-create-section="overview" aria-labelledby="ata-create-overview-heading" ${helpActive ? "hidden" : ""}>
         ${renderCreateFormSectionHeading(5, "Turnierübersicht", "Zeitbedarf prüfen und das Turnier anlegen.", "ata-create-overview-heading")}
         <div class="ata-create-overview-body">
           <div class="ata-grid-2 ata-create-overview-controls">
             <div class="ata-field">
-              <label for="ata-board-count">Boards für Zeitprognose</label>
+              <div class="ata-field-label-row">
+                <label for="ata-board-count">Boards für Zeitprognose</label>
+                ${renderCreateHelpTrigger("boardCount", "Hilfe zu Boards für die Zeitprognose öffnen")}
+              </div>
               <input id="ata-board-count" name="boardCount" type="number" min="1" max="${TOURNAMENT_DURATION_MAX_BOARD_COUNT}" step="1" value="${draft.boardCount}">
             </div>
             <div class="ata-field">
-              <label for="ata-create-time-profile">Zeitprofil</label>
+              <div class="ata-field-label-row">
+                <label for="ata-create-time-profile">Zeitprofil</label>
+                ${renderCreateHelpTrigger("timeProfile", "Hilfe zum Zeitprofil öffnen")}
+              </div>
               <select id="ata-create-time-profile" name="tournamentTimeProfile" data-action="set-duration-time-profile">${tournamentTimeProfileOptions}</select>
             </div>
           </div>
-          <p class="ata-small">Die Board-Zahl ist ausschließlich ein Kapazitätsparameter der Turnierzeitprognose. Es werden keine Boards oder parallelen Lobbys verwaltet.</p>
-          <div id="ata-create-duration-estimate">${renderTournamentDurationEstimate(durationEstimate, { visible: durationEstimateVisible })}</div>
-          <p class="ata-small">Modus-Limits ${modeLimitHelpLinks}: ${escapeHtml(modeLimitSummary)}.</p>
+          <div id="ata-create-duration-estimate">${renderTournamentDurationEstimate(durationEstimate, { visible: durationEstimateVisible, showHelpLinks: false })}</div>
+          <p class="ata-small">Modus-Limits: ${escapeHtml(modeLimitSummary)}.</p>
           <div class="ata-actions ata-create-primary-actions">
             <button type="submit" class="ata-btn ata-btn-primary">Turnier anlegen</button>
           </div>
@@ -15850,6 +16924,7 @@
     }).join("");
     if (!tournament) {
       const draft = normalizeCreateDraft(state.store?.ui?.createDraft, state.store?.settings);
+      reconcileCreateHelpState(draft);
       const modeLimitSummary = buildModeParticipantLimitSummary();
       const startScoreOptions = X01_START_SCORE_OPTIONS.map((score) => (
         `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${score}</option>`
@@ -15860,30 +16935,15 @@
       const bullModeHiddenInput = bullModeDisabled
         ? `<input type="hidden" id="ata-x01-bullmode-hidden" name="x01BullMode" value="${escapeHtml(draft.x01BullMode)}">`
         : "";
-      const createHeadingLinks = [
-        { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erklärung zur Turniererstellung öffnen", title: "README: Turnier anlegen" },
-        { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole öffnen", title: "README: Info-Symbole" },
-      ];
-      const modeHelpLinks = renderInfoLinks([
-        { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Erklärung der Modi öffnen", title: "README: Turniermodi" },
-        { href: DRA_GUI_RULE_MODE_FORMATS_URL, kind: "rule", label: "DRA-Regelerklärung zu Modus und Format öffnen", title: "DRA-Regeln in der GUI: Modus und Format" },
-      ]);
-      const drawHelpLinks = renderInfoLinks([
-        { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Open Draw und gesetzter Draw erklärt", title: "README: KO-Modus" },
-        { href: DRA_GUI_RULE_OPEN_DRAW_URL, kind: "rule", label: "DRA-Regelerklärung zu Open Draw öffnen", title: "DRA-Regeln in der GUI: Open Draw" },
-      ]);
-      const modeLimitHelpLinks = renderInfoLinks([
-        { href: DRA_GUI_RULE_PARTICIPANT_LIMITS_URL, kind: "rule", label: "DRA-Regelerklärung zu Limits öffnen", title: "DRA-Regeln in der GUI: Teilnehmerlimits" },
-      ]);
       return `
         <section class="ata-card tournamentCard ata-create-card">
-          ${renderSectionHeading("Neues Turnier erstellen", createHeadingLinks)}
+          ${renderSectionHeading("Neues Turnier erstellen")}
           <form id="ata-create-form" class="ata-create-form">
             <div class="ata-create-layout">
               <div class="ata-create-main">
-                ${renderCreateTournamentFormatSection(draft, modeHelpLinks)}
+                ${renderCreateTournamentFormatSection(draft)}
                 ${renderCreateParticipantsSection(draft)}
-                ${renderCreateAdditionalRulesSection(draft, drawHelpLinks)}
+                ${renderCreateAdditionalRulesSection(draft)}
                 ${renderCreateGameRulesSection({
                   draft,
                   startScoreOptions,
@@ -15891,14 +16951,16 @@
                   bullModeHiddenInput,
                 })}
               </div>
-              ${renderCreateTournamentOverview({
-                draft,
-                tournamentTimeProfileOptions,
-                durationEstimate,
-                durationEstimateVisible,
-                modeLimitHelpLinks,
-                modeLimitSummary,
-              })}
+              <div class="ata-create-side">
+                ${renderCreateTournamentOverview({
+                  draft,
+                  tournamentTimeProfileOptions,
+                  durationEstimate,
+                  durationEstimateVisible,
+                  modeLimitSummary,
+                })}
+                ${renderCreateHelpPanel(draft)}
+              </div>
             </div>
             <p class="ata-small ata-create-form-footnote">Bei Moduswechsel gelten die jeweiligen Grenzen sofort.</p>
           </form>
@@ -17004,6 +18066,7 @@
       refreshCreateFormGroupsKoPolicy(createForm);
       refreshCreateFormPreliminaryFinal(createForm);
       refreshCreateGameRulesSummary(createForm);
+      refreshCreateHelpUi(createForm);
       const handleDraftInputChange = (event) => {
         const target = event?.target;
         const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
@@ -17027,6 +18090,7 @@
             && target.checked
           ) {
             applySelectedPresetToCreateForm(createForm, target.value);
+            refreshCreateHelpUi(createForm);
           }
           return;
         }
@@ -17051,12 +18115,23 @@
         ) {
           refreshCreateFormPreliminaryFinal(createForm);
         }
+        refreshCreateHelpUi(createForm);
       };
       createForm.addEventListener("input", handleDraftInputChange);
       createForm.addEventListener("change", handleDraftInputChange);
       createForm.addEventListener("submit", (event) => {
         event.preventDefault();
         handleCreateTournament(createForm);
+      });
+      createForm.addEventListener("click", (event) => {
+        const target = event.target instanceof Element ? event.target.closest("button[data-action]") : null;
+        if (!(target instanceof HTMLButtonElement) || !createForm.contains(target)) return;
+        const action = target.getAttribute("data-action");
+        if (action === "open-create-help") {
+          handleOpenCreateHelp(target, createForm);
+        } else if (action === "close-create-help") {
+          closeCreateHelpPanel(createForm, { returnFocus: true });
+        }
       });
 
       const gameRulesToggle = createForm.querySelector("[data-action='toggle-game-rules-editor']");
@@ -17070,6 +18145,9 @@
 
     shadow.querySelectorAll("[data-action='set-duration-time-profile']").forEach((select) => {
       if (!(select instanceof HTMLSelectElement)) {
+        return;
+      }
+      if (select.closest("#ata-create-form")) {
         return;
       }
       select.addEventListener("change", () => {
@@ -17378,6 +18456,14 @@
   function handleDrawerKeydown(event) {
     if (event.key === "Escape") {
       event.preventDefault();
+      if (state.activeCreateHelpTopic) {
+        const createForm = state.shadowRoot?.getElementById("ata-create-form");
+        if (createForm instanceof HTMLFormElement) {
+          event.stopPropagation();
+          closeCreateHelpPanel(createForm, { returnFocus: true });
+          return;
+        }
+      }
       closeDrawer();
       return;
     }
@@ -17430,6 +18516,7 @@
   function closeDrawer() {
     state.drawerOpen = false;
     state.createGameRulesExpanded = false;
+    resetCreateHelpState();
     renderShell();
     if (state.lastFocused instanceof HTMLElement) {
       state.lastFocused.focus();
@@ -17595,6 +18682,70 @@
   }
 
 
+  function refreshCreateHelpUi(form, options = {}) {
+    if (!(form instanceof HTMLFormElement)) return null;
+    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
+    reconcileCreateHelpState(draft);
+    const model = resolveCreateHelpTopic(
+      state.activeCreateHelpTopic,
+      draft,
+      state.store?.settings,
+    );
+    const panel = form.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+    const overview = form.querySelector("#ata-create-overview");
+    if (panel instanceof HTMLElement) {
+      panel.innerHTML = renderCreateHelpPanelBody(model);
+      panel.hidden = !model;
+    }
+    if (overview instanceof HTMLElement) {
+      overview.hidden = Boolean(model);
+    }
+    form.querySelectorAll("[data-action='open-create-help'][data-help-topic]").forEach((trigger) => {
+      trigger.setAttribute(
+        "aria-expanded",
+        model && trigger.getAttribute("data-help-topic") === model.id ? "true" : "false",
+      );
+    });
+    if (model && options.focusTitle === true) {
+      const title = panel?.querySelector(`#${CREATE_HELP_TITLE_ID}`);
+      if (title instanceof HTMLElement) title.focus();
+    }
+    return model;
+  }
+
+
+  function handleOpenCreateHelp(trigger, form) {
+    if (!(trigger instanceof HTMLButtonElement) || !(form instanceof HTMLFormElement)) return false;
+    updateCreateDraftFromForm(form, true);
+    const topicId = trigger.getAttribute("data-help-topic");
+    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
+    const activated = activateCreateHelpTopic(topicId, trigger.id, draft);
+    if (!activated) return false;
+    refreshCreateHelpUi(form, { focusTitle: true });
+    return true;
+  }
+
+
+  function closeCreateHelpPanel(form, options = {}) {
+    if (!(form instanceof HTMLFormElement)) return false;
+    const triggerId = normalizeText(state.lastCreateHelpTriggerId || "");
+    const hadActiveTopic = Boolean(state.activeCreateHelpTopic);
+    resetCreateHelpState();
+    refreshCreateHelpUi(form);
+    if (options.returnFocus === true) {
+      const preferredTrigger = triggerId ? state.shadowRoot?.getElementById(triggerId) : null;
+      const fallbackTrigger = state.shadowRoot?.getElementById(getCreateHelpTriggerId("tournamentMode"));
+      const returnTarget = preferredTrigger instanceof HTMLButtonElement
+        && !preferredTrigger.disabled
+        && !preferredTrigger.closest("[hidden]")
+        ? preferredTrigger
+        : fallbackTrigger;
+      if (returnTarget instanceof HTMLElement) returnTarget.focus();
+    }
+    return hadActiveTopic;
+  }
+
+
   function applySelectedPresetToCreateForm(form, selectedPresetId = null) {
     if (!(form instanceof HTMLFormElement)) {
       return false;
@@ -17745,6 +18896,7 @@
     const estimate = estimateTournamentDurationFromDraft(draft, state.store.settings);
     estimateHost.innerHTML = renderTournamentDurationEstimate(estimate, {
       visible: state.store?.ui?.durationEstimateVisible !== false,
+      showHelpLinks: false,
     });
   }
 

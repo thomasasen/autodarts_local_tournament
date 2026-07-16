@@ -162,7 +162,7 @@
 
   function renderTournamentDurationEstimate(estimate, options = {}) {
     const visible = options?.visible !== false;
-    const helpLinks = renderInfoLinks([
+    const helpLinks = options?.showHelpLinks === false ? "" : renderInfoLinks([
       { href: README_TOURNAMENT_CREATE_URL, kind: "tech", label: "Erkl\u00e4rung zur Turnierzeit-Prognose \u00f6ffnen", title: "README: Turnier anlegen" },
       { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen f\u00fcr das Zeitprofil \u00f6ffnen", title: "README: Einstellungen" },
     ]);

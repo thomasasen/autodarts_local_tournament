@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.9.0
+- Die Turnieranlage besitzt einen zentralen, datengetriebenen Help-Topic-Katalog mit elf echten Themen: Turniermodus, Preset/Format, Teilnehmer, KO-Auslosung, Platz 3, Doppel-KO Grand Final, ungerade Gruppenfelder, Vorrunde + Finalphase, Spielregeln/X01, Board-Anzahl und Zeitprofil.
+- Einheitliche kreisförmige `?`-Buttons sind echte Buttons mit konkretem `aria-label`, stabilem `aria-controls`, synchronem `aria-expanded`, sichtbarem Tastaturfokus und vergrößertem Touch-Ziel. Einen globalen Hilfe-Schalter, Glühlampen oder eine Regelarten-Legende gibt es im Create-Formular nicht.
+- Ein Klick öffnet rechts eine ergänzende, nicht-modale Hilferegion und ersetzt dort vorübergehend die Turnierübersicht. Auf Tablet und Mobile bleibt das Panel im normalen Dokumentfluss; die Übersichtskontrollen bleiben beim Umschalten im Formular erhalten.
+- Jedes Thema zeigt mindestens Titel, Kurzbeschreibung, aktuelle Auswahl, direkte Turnierauswirkungen und konkret beschriftete Quellen. Regel- und Veranstalterbehauptungen werden fachlich eingeordnet; leere optionale Abschnitte werden nicht gerendert.
+- Der Inhalt eines aktiven Themas reagiert auf die zugehörigen Draft- und Einstellungswerte, ohne das Thema automatisch zu wechseln. Ein expliziter Klick auf einen anderen `?`-Button wechselt es; reiner Fokus ändert nichts.
+- Schließen-Button und `Escape` stellen die Übersicht wieder her und geben den Fokus stabil an den auslösenden Button zurück. Ein nach Moduswechsel unzulässiges Thema schließt ohne Fokusverschiebung. Drawer-Schließen, erfolgreiche Anlage, Import und Reset verwerfen den nicht persistierten Hilfezustand.
+- Die alten formularnahen Info-/Regellink-Gruppen an Überschrift, Modus, Draw, Moduslimits und Zeitprognose wurden ohne doppelte Hilfe entfernt. Bestehende Link-Icons außerhalb der Turnieranlage bleiben unverändert.
+- Domain- und Runtime-Tests decken Katalogvollständigkeit, Pflichtinhalte, unbekannte IDs, optionale Abschnitte, sichere Links, Öffnen, expliziten Themenwechsel, Live-Aktualisierung, Schließen, Fokus-Rückgabe, Escape und Modusinvalidierung ab. Storage-Schema 5 bleibt unverändert.
+- Erweiterte Abhängigkeiten, Beispiele und detaillierte Compliance-Hilfe bleiben bewusst Release 5 vorbehalten.
+
 ## 0.8.0
 - `Zusätzliche Turnierregeln` nutzt eine zentrale Zuordnung für alle fünf Modi: KO zeigt Draw und Platz 3, Doppel-KO Draw und Grand-Final-Regel, Liga nur eine kurze Leermeldung, `groups_ko` ausschließlich die vorhandene Gruppenpolicy/-analyse und `preliminary_final` ausschließlich seine bisherigen Spezialfelder.
 - Inaktive Regelgruppen sind nicht nur optisch verborgen, sondern mitsamt Controls deaktiviert. Dadurch verschwinden sie aus Tastaturreihenfolge, Browser-Validierung und `FormData`.

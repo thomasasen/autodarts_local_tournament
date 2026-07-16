@@ -496,6 +496,12 @@
         min-width: 0;
       }
 
+      .ata-create-side {
+        display: grid;
+        gap: var(--ata-space-3);
+        min-width: 0;
+      }
+
       .ata-create-section,
       .ata-create-overview {
         min-width: 0;
@@ -503,6 +509,111 @@
         border-radius: var(--ata-radius-md);
         background: rgba(255, 255, 255, 0.05);
         overflow: hidden;
+      }
+
+      .ata-create-overview[hidden],
+      .ata-create-help-panel[hidden] {
+        display: none !important;
+      }
+
+      .ata-create-help-panel {
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid rgba(153, 184, 245, 0.5);
+        border-radius: var(--ata-radius-md);
+        background:
+          radial-gradient(circle at 100% 0%, rgba(153, 184, 245, 0.16), transparent 42%),
+          rgba(13, 29, 65, 0.96);
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.24);
+      }
+
+      .ata-create-help-panel-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--ata-space-2);
+        padding: 13px 14px;
+        border-bottom: 1px solid rgba(153, 184, 245, 0.22);
+        background: rgba(153, 184, 245, 0.08);
+      }
+
+      .ata-create-help-panel-head h4 {
+        min-width: 0;
+        margin: 0;
+        color: var(--ata-color-text);
+        font-size: 20px;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+
+      .ata-create-help-panel-head h4:focus-visible {
+        outline: 2px solid var(--ata-color-focus);
+        outline-offset: 3px;
+        border-radius: 3px;
+      }
+
+      .ata-create-help-panel-body {
+        display: grid;
+        gap: 0;
+        padding: 2px 14px 14px;
+      }
+
+      .ata-create-help-section {
+        min-width: 0;
+        padding: 12px 0;
+        border-bottom: 1px solid rgba(185, 199, 236, 0.14);
+      }
+
+      .ata-create-help-section:last-child {
+        border-bottom: 0;
+      }
+
+      .ata-create-help-section h5 {
+        margin: 0 0 5px;
+        color: #cddaff;
+        font-size: 13px;
+        letter-spacing: 0.35px;
+        text-transform: uppercase;
+      }
+
+      .ata-create-help-section p,
+      .ata-create-help-section ul {
+        margin: 0;
+        color: var(--ata-color-text);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .ata-create-help-section ul {
+        display: grid;
+        gap: 5px;
+        padding-left: 19px;
+      }
+
+      .ata-create-help-current p,
+      .ata-create-help-classification-label {
+        color: #c9f8e2;
+        font-weight: 750;
+      }
+
+      .ata-create-help-classification p + p {
+        margin-top: 4px;
+      }
+
+      .ata-create-help-sources a {
+        color: #b9cbff;
+        text-underline-offset: 3px;
+        overflow-wrap: anywhere;
+      }
+
+      .ata-create-help-sources a:hover {
+        color: #e3eaff;
+      }
+
+      .ata-create-help-sources a:focus-visible {
+        outline: 2px solid var(--ata-color-focus);
+        outline-offset: 2px;
+        border-radius: 2px;
       }
 
       .ata-create-overview {
@@ -538,6 +649,73 @@
 
       .ata-create-section-title {
         min-width: 0;
+      }
+
+      .ata-create-section-title-row,
+      .ata-field-label-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+      }
+
+      .ata-create-section-title-row {
+        align-items: flex-start;
+      }
+
+      .ata-field-label-row > label,
+      .ata-field-label-row > strong,
+      .ata-field-label-row > h5 {
+        min-width: 0;
+      }
+
+      .ata-preliminary-final-heading {
+        margin-bottom: 10px;
+      }
+
+      .ata-preliminary-final-heading h5 {
+        margin: 0;
+        color: var(--ata-color-text);
+        font-size: 16px;
+      }
+
+      .ata-help-trigger {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 36px;
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        min-height: 36px;
+        margin: -8px 0;
+        padding: 0;
+        border: 1px solid rgba(153, 184, 245, 0.62);
+        border-radius: 999px;
+        background: rgba(153, 184, 245, 0.14);
+        color: #e8efff;
+        font: inherit;
+        font-size: 16px;
+        font-weight: 850;
+        line-height: 1;
+        cursor: pointer;
+        transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+      }
+
+      .ata-help-trigger:hover,
+      .ata-help-trigger[aria-expanded="true"] {
+        border-color: rgba(90, 210, 153, 0.82);
+        background: rgba(90, 210, 153, 0.22);
+        color: #d8ffed;
+      }
+
+      .ata-help-trigger:hover {
+        transform: translateY(-1px);
+      }
+
+      .ata-help-trigger:focus-visible {
+        outline: 2px solid var(--ata-color-focus);
+        outline-offset: 2px;
       }
 
       .ata-create-section-title h4 {
@@ -832,6 +1010,9 @@
       }
 
       .ata-preset-fieldset legend {
+        display: flex;
+        align-items: center;
+        gap: 7px;
         margin: 0 0 6px;
         padding: 0;
         color: var(--ata-color-muted);
@@ -1848,8 +2029,13 @@
         }
 
         .ata-create-section-body,
-        .ata-create-overview-body {
+        .ata-create-overview-body,
+        .ata-create-help-panel-body {
           padding: 11px 12px 12px;
+        }
+
+        .ata-create-help-panel-head {
+          padding: 11px 12px;
         }
 
         .ata-preset-card-grid {
@@ -1927,7 +2113,8 @@
         }
 
         .ata-create-layout,
-        .ata-create-main {
+        .ata-create-main,
+        .ata-create-side {
           gap: var(--ata-space-2);
         }
 
@@ -1948,8 +2135,18 @@
         }
 
         .ata-create-section-body,
-        .ata-create-overview-body {
+        .ata-create-overview-body,
+        .ata-create-help-panel-body {
           padding: 10px;
+        }
+
+        .ata-create-help-panel-head {
+          align-items: center;
+          padding: 10px;
+        }
+
+        .ata-create-help-panel-head h4 {
+          font-size: 18px;
         }
 
         .ata-create-fixed-summary-label {
@@ -1976,6 +2173,27 @@
         .ata-toggle input {
           flex: 0 0 auto;
           margin-top: 2px;
+        }
+      }
+
+      @media (pointer: coarse) {
+        .ata-help-trigger {
+          flex-basis: 44px;
+          width: 44px;
+          height: 44px;
+          min-width: 44px;
+          min-height: 44px;
+          margin: -10px 0;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .ata-help-trigger {
+          transition: none;
+        }
+
+        .ata-help-trigger:hover {
+          transform: none;
         }
       }
     

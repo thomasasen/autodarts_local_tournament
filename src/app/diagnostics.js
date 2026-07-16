@@ -271,6 +271,339 @@
       const previousStoredActiveTab = state.store.ui.activeTab;
       const previousGameRulesExpanded = state.createGameRulesExpanded;
       const previousDrawerOpen = state.drawerOpen;
+      const previousHelpTopic = state.activeCreateHelpTopic;
+      const previousHelpTriggerId = state.lastCreateHelpTriggerId;
+      const previousTimeProfile = state.store.settings.tournamentTimeProfile;
+      try {
+        state.store.tournament = null;
+        state.drawerOpen = true;
+        state.activeTab = "tournament";
+        state.store.ui.activeTab = "tournament";
+        state.createGameRulesExpanded = false;
+        resetCreateHelpState();
+        state.store.ui.createDraft = normalizeCreateDraft({
+          ...createDefaultCreateDraft(state.store.settings),
+          name: "Release 4 Regelhilfe",
+          mode: "ko",
+          participantsText: "A\nB\nC\nD\nE\nF\nG\nH",
+          x01Preset: X01_PRESET_CUSTOM,
+          bestOfLegs: 5,
+          randomizeKoRound1: false,
+          enableThirdPlaceMatch: true,
+        }, state.store.settings);
+        renderShell();
+
+        const createForm = state.shadowRoot?.getElementById("ata-create-form");
+        const drawer = state.shadowRoot?.querySelector(".ata-drawer");
+        const modeSelect = createForm?.querySelector("#ata-mode");
+        if (!(createForm instanceof HTMLFormElement)
+          || !(drawer instanceof HTMLElement)
+          || !(modeSelect instanceof HTMLSelectElement)) {
+          throw new Error("Create form, drawer or mode select missing.");
+        }
+        const catalogValidation = validateCreateHelpTopicCatalog();
+        const initialPanel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const initialOverview = createForm.querySelector("#ata-create-overview");
+        const formHelpLinks = createForm.querySelectorAll(".ata-help-links");
+        const expectedInitialTopics = [
+          "tournamentMode",
+          "presetFormat",
+          "participants",
+          "koDraw",
+          "thirdPlace",
+          "grandFinal",
+          "gameRules",
+          "boardCount",
+          "timeProfile",
+        ];
+        const initialTriggersOk = expectedInitialTopics.every((topicId) => {
+          const trigger = createForm.querySelector(`#${getCreateHelpTriggerId(topicId)}`);
+          return trigger instanceof HTMLButtonElement
+            && trigger.getAttribute("aria-controls") === CREATE_HELP_PANEL_ID
+            && trigger.getAttribute("aria-expanded") === "false"
+            && normalizeText(trigger.getAttribute("aria-label")).startsWith("Hilfe")
+            && normalizeText(trigger.textContent) === "?";
+        });
+        const forbiddenHelpChromeAbsent = !normalizeText(createForm.textContent).includes("💡")
+          && createForm.querySelector("[data-action='toggle-create-help'], [data-action='toggle-rule-help'], .ata-rule-types-legend") === null;
+        record(
+          "Create-UI Release 4: Katalog, echte Fragezeichen-Buttons und geschlossener Ausgangszustand",
+          catalogValidation.ok
+            && catalogValidation.topicIds.length === 11
+            && initialTriggersOk
+            && initialPanel instanceof HTMLElement
+            && initialPanel.hidden
+            && initialOverview instanceof HTMLElement
+            && !initialOverview.hidden
+            && formHelpLinks.length === 0
+            && forbiddenHelpChromeAbsent,
+          `topics=${catalogValidation.topicIds.length}, issues=${catalogValidation.issues.join("/") || "-"}, triggers=${initialTriggersOk}, oldLinks=${formHelpLinks.length}, forbidden=${!forbiddenHelpChromeAbsent}`,
+        );
+
+        const modeTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("tournamentMode")}`);
+        if (!(modeTrigger instanceof HTMLButtonElement)) throw new Error("Mode help trigger missing.");
+        modeTrigger.click();
+        let panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        let overview = createForm.querySelector("#ata-create-overview");
+        let title = panel?.querySelector(`#${CREATE_HELP_TITLE_ID}`);
+        const expandedTriggers = Array.from(createForm.querySelectorAll("[data-action='open-create-help'][aria-expanded='true']"));
+        const hiddenControlsRemainSubmittable = new FormData(createForm).has("boardCount")
+          && new FormData(createForm).has("tournamentTimeProfile");
+        const sources = Array.from(panel?.querySelectorAll(".ata-create-help-sources a") || []);
+        record(
+          "Create-UI Release 4: explizites Öffnen ersetzt die Übersicht nicht-modal und fokussiert den Titel",
+          state.activeCreateHelpTopic === "tournamentMode"
+            && panel instanceof HTMLElement
+            && !panel.hidden
+            && overview instanceof HTMLElement
+            && overview.hidden
+            && title instanceof HTMLElement
+            && state.shadowRoot?.activeElement === title
+            && expandedTriggers.length === 1
+            && expandedTriggers[0] === modeTrigger
+            && hiddenControlsRemainSubmittable
+            && sources.length >= 1
+            && sources.every((link) => link.target === "_blank" && link.rel.includes("noopener") && link.rel.includes("noreferrer")),
+          `topic=${state.activeCreateHelpTopic || "-"}, panel=${panel instanceof HTMLElement && !panel.hidden}, focus=${state.shadowRoot?.activeElement?.id || "-"}, expanded=${expandedTriggers.length}, sources=${sources.length}`,
+        );
+
+        const presetTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("presetFormat")}`);
+        const basicPreset = createForm.querySelector(`input[name='x01Preset'][value='${X01_PRESET_PDC_501_DOUBLE_OUT_BASIC}']`);
+        if (!(presetTrigger instanceof HTMLButtonElement) || !(basicPreset instanceof HTMLInputElement)) {
+          throw new Error("Preset help controls missing.");
+        }
+        presetTrigger.click();
+        presetTrigger.click();
+        const sameTriggerStable = state.activeCreateHelpTopic === "presetFormat"
+          && createForm.querySelectorAll("[data-action='open-create-help'][aria-expanded='true']").length === 1;
+        modeSelect.focus();
+        modeSelect.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+        const focusAndHoverStable = state.activeCreateHelpTopic === "presetFormat";
+        basicPreset.focus();
+        basicPreset.checked = true;
+        basicPreset.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const presetText = normalizeText(panel?.textContent || "");
+        record(
+          "Create-UI Release 4: expliziter Preset-Wechsel ist stabil; Fokus, Hover und Presetwert wechseln kein Thema",
+          sameTriggerStable
+            && focusAndHoverStable
+            && state.activeCreateHelpTopic === "presetFormat"
+            && presetText.includes("PDC 501 / Double Out (Basic)")
+            && presetText.includes("kein offizielles PDC-Eventformat")
+            && state.shadowRoot?.activeElement === basicPreset,
+          `same=${sameTriggerStable}, passive=${focusAndHoverStable}, topic=${state.activeCreateHelpTopic || "-"}, basic=${presetText.includes("Basic")}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        const drawTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("koDraw")}`);
+        const drawInput = createForm.querySelector("#ata-randomize-ko");
+        if (!(drawTrigger instanceof HTMLButtonElement) || !(drawInput instanceof HTMLInputElement)) {
+          throw new Error("KO draw help controls missing.");
+        }
+        drawTrigger.click();
+        drawInput.focus();
+        drawInput.checked = true;
+        drawInput.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const liveDrawText = normalizeText(panel?.textContent || "");
+        record(
+          "Create-UI Release 4: aktives Thema aktualisiert Sachwerte live ohne automatischen Themenwechsel",
+          state.activeCreateHelpTopic === "koDraw"
+            && liveDrawText.includes("Aktuelle Auswahl Open Draw")
+            && state.shadowRoot?.activeElement === drawInput
+            && createForm.querySelectorAll("[data-action='open-create-help'][aria-expanded='true']").length === 1,
+          `topic=${state.activeCreateHelpTopic || "-"}, openDraw=${liveDrawText.includes("Open Draw")}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        const gameRulesTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("gameRules")}`);
+        const gameRulesToggle = createForm.querySelector("#ata-game-rules-editor-toggle");
+        const bestOf = createForm.querySelector("#ata-bestof");
+        if (!(gameRulesTrigger instanceof HTMLButtonElement)
+          || !(gameRulesToggle instanceof HTMLButtonElement)
+          || !(bestOf instanceof HTMLInputElement)) {
+          throw new Error("Game-rules help controls missing.");
+        }
+        gameRulesTrigger.click();
+        gameRulesToggle.click();
+        bestOf.focus();
+        bestOf.value = "7";
+        bestOf.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const liveRulesText = normalizeText(panel?.textContent || "");
+        const closeButton = panel?.querySelector("[data-action='close-create-help']");
+        if (!(closeButton instanceof HTMLButtonElement)) throw new Error("Help close button missing.");
+        closeButton.click();
+        overview = createForm.querySelector("#ata-create-overview");
+        const explicitCloseOk = !state.activeCreateHelpTopic
+          && panel instanceof HTMLElement
+          && panel.hidden
+          && overview instanceof HTMLElement
+          && !overview.hidden
+          && state.shadowRoot?.activeElement === gameRulesTrigger;
+        record(
+          "Create-UI Release 4: Spielregelhilfe bleibt live; Schließen stellt Übersicht und Trigger-Fokus wieder her",
+          liveRulesText.includes("Best of 7 (First to 4)") && explicitCloseOk,
+          `rules=${liveRulesText.includes("Best of 7")}, closed=${explicitCloseOk}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        gameRulesTrigger.click();
+        modeSelect.focus();
+        modeSelect.value = "preliminary_final";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const preliminaryRulesText = normalizeText(panel?.textContent || "");
+        const gameRulesModeUpdateOk = state.activeCreateHelpTopic === "gameRules"
+          && preliminaryRulesText.includes("Vorrunde: 2 feste Legs")
+          && preliminaryRulesText.includes("Finalphase: Best of")
+          && state.shadowRoot?.activeElement === modeSelect;
+        panel?.querySelector("[data-action='close-create-help']")?.click();
+        modeSelect.value = "ko";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        record(
+          "Create-UI Release 4: Spielregelthema bleibt bei Moduswechsel aktiv und zeigt die wirksame Vorrundenkonfiguration",
+          gameRulesModeUpdateOk,
+          `topic=${state.activeCreateHelpTopic || "closed"}, preliminary=${preliminaryRulesText.includes("Vorrunde: 2 feste Legs")}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        const boardTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("boardCount")}`);
+        const boardInput = createForm.querySelector("#ata-board-count");
+        const timeTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("timeProfile")}`);
+        const timeSelect = createForm.querySelector("#ata-create-time-profile");
+        if (!(boardTrigger instanceof HTMLButtonElement)
+          || !(boardInput instanceof HTMLInputElement)
+          || !(timeTrigger instanceof HTMLButtonElement)
+          || !(timeSelect instanceof HTMLSelectElement)) {
+          throw new Error("Duration help controls missing.");
+        }
+        boardTrigger.click();
+        modeSelect.focus();
+        boardInput.value = "3";
+        boardInput.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const boardText = normalizeText(panel?.textContent || "");
+        const boardLiveOk = state.activeCreateHelpTopic === "boardCount"
+          && boardText.includes("Aktuelle Auswahl 3 Boards")
+          && state.shadowRoot?.activeElement === modeSelect;
+        panel?.querySelector("[data-action='close-create-help']")?.click();
+        timeTrigger.click();
+        modeSelect.focus();
+        timeSelect.value = TOURNAMENT_TIME_PROFILE_SLOW;
+        timeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const timeText = normalizeText(panel?.textContent || "");
+        const timeLiveOk = state.activeCreateHelpTopic === "timeProfile"
+          && timeText.includes("Aktuelle Auswahl Langsam")
+          && timeText.includes("keine Turnierregel")
+          && state.shadowRoot?.activeElement === modeSelect;
+        panel?.querySelector("[data-action='close-create-help']")?.click();
+        record(
+          "Create-UI Release 4: Board-Anzahl und Zeitprofil aktualisieren ihr aktives Thema ohne Fokuswechsel",
+          boardLiveOk && timeLiveOk,
+          `board=${boardLiveOk}, time=${timeLiveOk}, profile=${state.store.settings.tournamentTimeProfile}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        modeTrigger.click();
+        modeSelect.focus();
+        modeSelect.value = "double_ko";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const liveModeText = normalizeText(panel?.textContent || "");
+        const liveModeOk = state.activeCreateHelpTopic === "tournamentMode"
+          && liveModeText.includes("Aktuelle Auswahl Doppel-KO")
+          && state.shadowRoot?.activeElement === modeSelect;
+        title = createForm.querySelector(`#${CREATE_HELP_TITLE_ID}`);
+        title?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        const escapeOk = state.drawerOpen
+          && !state.activeCreateHelpTopic
+          && panel instanceof HTMLElement
+          && panel.hidden
+          && state.shadowRoot?.activeElement === modeTrigger;
+
+        modeSelect.value = "ko";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        const thirdPlaceTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("thirdPlace")}`);
+        if (!(thirdPlaceTrigger instanceof HTMLButtonElement)) throw new Error("Third-place help trigger missing.");
+        thirdPlaceTrigger.click();
+        modeSelect.focus();
+        modeSelect.value = "league";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        panel = createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+        overview = createForm.querySelector("#ata-create-overview");
+        const invalidationOk = !state.activeCreateHelpTopic
+          && panel instanceof HTMLElement
+          && panel.hidden
+          && overview instanceof HTMLElement
+          && !overview.hidden
+          && state.shadowRoot?.activeElement === modeSelect;
+
+        modeSelect.value = "double_ko";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        const grandFinalTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("grandFinal")}`);
+        if (!(grandFinalTrigger instanceof HTMLButtonElement)) throw new Error("Grand-final help trigger missing.");
+        grandFinalTrigger.click();
+        modeSelect.focus();
+        modeSelect.value = "ko";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        const grandFinalInvalidationOk = !state.activeCreateHelpTopic
+          && createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`)?.hidden
+          && state.shadowRoot?.activeElement === modeSelect;
+
+        modeSelect.value = "groups_ko";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        const groupsTrigger = createForm.querySelector(`#${getCreateHelpTriggerId("groupsKoOddParticipants")}`);
+        if (!(groupsTrigger instanceof HTMLButtonElement)) throw new Error("Groups help trigger missing.");
+        groupsTrigger.click();
+        modeSelect.focus();
+        modeSelect.value = "league";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        const groupsInvalidationOk = !state.activeCreateHelpTopic
+          && createForm.querySelector(`#${CREATE_HELP_PANEL_ID}`)?.hidden
+          && state.shadowRoot?.activeElement === modeSelect;
+
+        const fallbackActivated = activateCreateHelpTopic(
+          "presetFormat",
+          "ata-create-help-trigger-does-not-exist",
+          readCreateDraftInput(createForm),
+        );
+        refreshCreateHelpUi(createForm);
+        const fallbackClosed = closeCreateHelpPanel(createForm, { returnFocus: true });
+        const fallbackOk = fallbackActivated
+          && fallbackClosed
+          && state.shadowRoot?.activeElement === modeTrigger;
+        record(
+          "Create-UI Release 4: Escape, Modus-Liveupdate, drei Invalidierungen und Fokus-Fallback sind sicher",
+          liveModeOk
+            && escapeOk
+            && invalidationOk
+            && grandFinalInvalidationOk
+            && groupsInvalidationOk
+            && fallbackOk,
+          `mode=${liveModeOk}, escape=${escapeOk}, third=${invalidationOk}, grand=${grandFinalInvalidationOk}, groups=${groupsInvalidationOk}, fallback=${fallbackOk}, drawer=${state.drawerOpen}`,
+        );
+      } catch (error) {
+        record("Create-UI Release 4: kontextbezogene Regelhilfe", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+        state.store.ui.createDraft = previousDraft || createDefaultCreateDraft(state.store.settings);
+        state.activeTab = previousActiveTab;
+        state.store.ui.activeTab = previousStoredActiveTab;
+        state.createGameRulesExpanded = previousGameRulesExpanded;
+        state.drawerOpen = previousDrawerOpen;
+        state.activeCreateHelpTopic = previousHelpTopic;
+        state.lastCreateHelpTriggerId = previousHelpTriggerId;
+        state.store.settings.tournamentTimeProfile = previousTimeProfile;
+        renderShell();
+      }
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      const previousDraft = cloneSerializable(state.store.ui?.createDraft);
+      const previousActiveTab = state.activeTab;
+      const previousStoredActiveTab = state.store.ui.activeTab;
+      const previousGameRulesExpanded = state.createGameRulesExpanded;
+      const previousDrawerOpen = state.drawerOpen;
       try {
         state.store.tournament = null;
         state.drawerOpen = true;
@@ -480,7 +813,7 @@
         const presetFieldset = createForm.querySelector("fieldset[data-role='preset-selection']");
         const presetRadios = Array.from(createForm.querySelectorAll("input[name='x01Preset']"));
         const presetMarkupOk = presetFieldset instanceof HTMLFieldSetElement
-          && normalizeText(presetFieldset.querySelector("legend")?.textContent) === "Turnierformat auswählen"
+          && normalizeText(presetFieldset.querySelector("legend")?.textContent).startsWith("Turnierformat auswählen")
           && presetRadios.length === 3
           && presetRadios.every((radio) => radio instanceof HTMLInputElement
             && radio.type === "radio"
@@ -1007,7 +1340,7 @@
           && requireEvenHtml.includes("Gruppe B: 3 Spieler, 2 Spiele je Spieler, 2 von 3 qualifizieren sich.")
           && !requireEvenHtml.includes('name="groupsKoOddParticipantAcknowledged"')
           && allowUnequalHtml.includes('name="groupsKoOddParticipantAcknowledged"')
-          && allowUnequalHtml.includes("Andere offizielle Formate werden nicht automatisch angenähert")
+          && allowUnequalHtml.includes('data-help-topic="groupsKoOddParticipants"')
           && otherModeHtml === "",
         `require=${requireEvenHtml.length}, allow=${allowUnequalHtml.length}, other=${otherModeHtml.length}`,
       );

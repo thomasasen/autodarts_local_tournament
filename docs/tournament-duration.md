@@ -8,6 +8,7 @@ Diese Dokumentation beschreibt die Berechnungsgrundlage der Live-Prognose in `sr
 - Sie ist bewusst nicht normativ: DRA/PDC definieren kein allgemeines Minutenmodell für lokale Turnierdauer.
 - Ziel ist eine belastbare Vorab-Planung, keine sekundengenaue Laufzeitvorhersage.
 
+<a id="tournament-duration-parameters"></a>
 ## Verwendete Turnier-Parameter
 | Parameter | Wird genutzt | Warum |
 |---|---|---|
@@ -124,6 +125,7 @@ Die Staffelung ist bewusst stärker als zuvor. Hintergrund: externe Timing-Guide
 | `Bull-off` | `Normal` | `+0.40 min` |
 | `Bull-off` | `Official` | `+0.65 min` |
 
+<a id="tournament-duration-time-profiles"></a>
 ### Zeitprofile
 | Profil | Leg-Pace | Match-Übergang | Phasen-Multiplikator | Zweck |
 |---|---|---|---|---|

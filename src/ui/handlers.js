@@ -138,6 +138,7 @@
       refreshCreateFormGroupsKoPolicy(createForm);
       refreshCreateFormPreliminaryFinal(createForm);
       refreshCreateGameRulesSummary(createForm);
+      refreshCreateHelpUi(createForm);
       const handleDraftInputChange = (event) => {
         const target = event?.target;
         const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
@@ -161,6 +162,7 @@
             && target.checked
           ) {
             applySelectedPresetToCreateForm(createForm, target.value);
+            refreshCreateHelpUi(createForm);
           }
           return;
         }
@@ -185,12 +187,23 @@
         ) {
           refreshCreateFormPreliminaryFinal(createForm);
         }
+        refreshCreateHelpUi(createForm);
       };
       createForm.addEventListener("input", handleDraftInputChange);
       createForm.addEventListener("change", handleDraftInputChange);
       createForm.addEventListener("submit", (event) => {
         event.preventDefault();
         handleCreateTournament(createForm);
+      });
+      createForm.addEventListener("click", (event) => {
+        const target = event.target instanceof Element ? event.target.closest("button[data-action]") : null;
+        if (!(target instanceof HTMLButtonElement) || !createForm.contains(target)) return;
+        const action = target.getAttribute("data-action");
+        if (action === "open-create-help") {
+          handleOpenCreateHelp(target, createForm);
+        } else if (action === "close-create-help") {
+          closeCreateHelpPanel(createForm, { returnFocus: true });
+        }
       });
 
       const gameRulesToggle = createForm.querySelector("[data-action='toggle-game-rules-editor']");
@@ -204,6 +217,9 @@
 
     shadow.querySelectorAll("[data-action='set-duration-time-profile']").forEach((select) => {
       if (!(select instanceof HTMLSelectElement)) {
+        return;
+      }
+      if (select.closest("#ata-create-form")) {
         return;
       }
       select.addEventListener("change", () => {
@@ -512,6 +528,14 @@
   function handleDrawerKeydown(event) {
     if (event.key === "Escape") {
       event.preventDefault();
+      if (state.activeCreateHelpTopic) {
+        const createForm = state.shadowRoot?.getElementById("ata-create-form");
+        if (createForm instanceof HTMLFormElement) {
+          event.stopPropagation();
+          closeCreateHelpPanel(createForm, { returnFocus: true });
+          return;
+        }
+      }
       closeDrawer();
       return;
     }
@@ -564,6 +588,7 @@
   function closeDrawer() {
     state.drawerOpen = false;
     state.createGameRulesExpanded = false;
+    resetCreateHelpState();
     renderShell();
     if (state.lastFocused instanceof HTMLElement) {
       state.lastFocused.focus();
@@ -729,6 +754,70 @@
   }
 
 
+  function refreshCreateHelpUi(form, options = {}) {
+    if (!(form instanceof HTMLFormElement)) return null;
+    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
+    reconcileCreateHelpState(draft);
+    const model = resolveCreateHelpTopic(
+      state.activeCreateHelpTopic,
+      draft,
+      state.store?.settings,
+    );
+    const panel = form.querySelector(`#${CREATE_HELP_PANEL_ID}`);
+    const overview = form.querySelector("#ata-create-overview");
+    if (panel instanceof HTMLElement) {
+      panel.innerHTML = renderCreateHelpPanelBody(model);
+      panel.hidden = !model;
+    }
+    if (overview instanceof HTMLElement) {
+      overview.hidden = Boolean(model);
+    }
+    form.querySelectorAll("[data-action='open-create-help'][data-help-topic]").forEach((trigger) => {
+      trigger.setAttribute(
+        "aria-expanded",
+        model && trigger.getAttribute("data-help-topic") === model.id ? "true" : "false",
+      );
+    });
+    if (model && options.focusTitle === true) {
+      const title = panel?.querySelector(`#${CREATE_HELP_TITLE_ID}`);
+      if (title instanceof HTMLElement) title.focus();
+    }
+    return model;
+  }
+
+
+  function handleOpenCreateHelp(trigger, form) {
+    if (!(trigger instanceof HTMLButtonElement) || !(form instanceof HTMLFormElement)) return false;
+    updateCreateDraftFromForm(form, true);
+    const topicId = trigger.getAttribute("data-help-topic");
+    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
+    const activated = activateCreateHelpTopic(topicId, trigger.id, draft);
+    if (!activated) return false;
+    refreshCreateHelpUi(form, { focusTitle: true });
+    return true;
+  }
+
+
+  function closeCreateHelpPanel(form, options = {}) {
+    if (!(form instanceof HTMLFormElement)) return false;
+    const triggerId = normalizeText(state.lastCreateHelpTriggerId || "");
+    const hadActiveTopic = Boolean(state.activeCreateHelpTopic);
+    resetCreateHelpState();
+    refreshCreateHelpUi(form);
+    if (options.returnFocus === true) {
+      const preferredTrigger = triggerId ? state.shadowRoot?.getElementById(triggerId) : null;
+      const fallbackTrigger = state.shadowRoot?.getElementById(getCreateHelpTriggerId("tournamentMode"));
+      const returnTarget = preferredTrigger instanceof HTMLButtonElement
+        && !preferredTrigger.disabled
+        && !preferredTrigger.closest("[hidden]")
+        ? preferredTrigger
+        : fallbackTrigger;
+      if (returnTarget instanceof HTMLElement) returnTarget.focus();
+    }
+    return hadActiveTopic;
+  }
+
+
   function applySelectedPresetToCreateForm(form, selectedPresetId = null) {
     if (!(form instanceof HTMLFormElement)) {
       return false;
@@ -879,6 +968,7 @@
     const estimate = estimateTournamentDurationFromDraft(draft, state.store.settings);
     estimateHost.innerHTML = renderTournamentDurationEstimate(estimate, {
       visible: state.store?.ui?.durationEstimateVisible !== false,
+      showHelpLinks: false,
     });
   }
 

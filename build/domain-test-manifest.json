@@ -19,6 +19,8 @@
     "src/domain/rules-config.js",
     "src/bracket/payload.js",
     "src/ui/render-helpers.js",
+    "src/ui/tournament-help-topics.js",
+    "src/ui/render-tournament-help.js",
     "src/ui/render-view.js"
   ],
   "tests": [
@@ -35,6 +37,7 @@
     "tests/unit-rules-config.js",
     "tests/unit-standings-dra.js",
     "tests/unit-message-doc-links.js",
-    "tests/unit-match-start-tools.js"
+    "tests/unit-match-start-tools.js",
+    "tests/unit-tournament-help.js"
   ]
 }

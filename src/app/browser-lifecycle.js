@@ -17,6 +17,7 @@
 
 
   function cleanupRuntime() {
+    resetCreateHelpState();
     if (state.saveTimer) {
       clearTimeout(state.saveTimer);
       state.saveTimer = null;

@@ -141,7 +141,7 @@ $checkScript = @'
       : [];
     const presetMarkupOk = Boolean(presetFieldset)
       && presetFieldset.tagName === "FIELDSET"
-      && normalizeContractText(presetFieldset.querySelector("legend")?.textContent) === "Turnierformat ausw\u00e4hlen"
+      && normalizeContractText(presetFieldset.querySelector("legend")?.textContent).startsWith("Turnierformat ausw\u00e4hlen")
       && presetRadios.length === 3
       && presetRadios.every((radio) => radio.type === "radio"
         && radio.labels?.length === 1
@@ -150,6 +150,40 @@ $checkScript = @'
       && presetRadios.filter((radio) => radio.checked).length === 1
       && new FormData(createForm).get("x01Preset") === presetRadios.find((radio) => radio.checked)?.value;
     const sectionOrderOk = JSON.stringify(sectionOrder) === JSON.stringify(createUiContract.sectionOrder);
+    const helpPanel = createForm?.querySelector("#ata-create-help-panel") || null;
+    const overview = createForm?.querySelector("#ata-create-overview") || null;
+    const helpTriggers = createForm
+      ? Array.from(createForm.querySelectorAll("button[data-action='open-create-help'][data-help-topic]"))
+      : [];
+    const helpIds = helpTriggers.map((trigger) => trigger.id);
+    const helpInitialOk = Boolean(helpPanel)
+      && helpPanel.hidden
+      && Boolean(overview)
+      && !overview.hidden
+      && helpTriggers.length >= 9
+      && new Set(helpIds).size === helpIds.length
+      && helpTriggers.every((trigger) => normalizeContractText(trigger.textContent) === "?"
+        && trigger.getAttribute("aria-controls") === "ata-create-help-panel"
+        && trigger.getAttribute("aria-expanded") === "false")
+      && createForm.querySelector(".ata-help-links") === null;
+    const modeHelpTrigger = createForm?.querySelector("#ata-create-help-trigger-tournamentMode") || null;
+    modeHelpTrigger?.click();
+    const helpTitle = helpPanel?.querySelector("#ata-create-help-title") || null;
+    const helpOpenOk = Boolean(helpInitialOk)
+      && Boolean(helpPanel)
+      && !helpPanel.hidden
+      && Boolean(overview)
+      && overview.hidden
+      && modeHelpTrigger?.getAttribute("aria-expanded") === "true"
+      && shadowRoot?.activeElement === helpTitle
+      && helpPanel.querySelectorAll("a[target='_blank'][rel~='noopener'][rel~='noreferrer']").length >= 1;
+    const helpClose = helpPanel?.querySelector("[data-action='close-create-help']") || null;
+    helpClose?.click();
+    const helpCloseOk = Boolean(helpOpenOk)
+      && helpPanel.hidden
+      && !overview.hidden
+      && modeHelpTrigger?.getAttribute("aria-expanded") === "false"
+      && shadowRoot?.activeElement === modeHelpTrigger;
 
     result.createUi = {
       sectionOrder,
@@ -159,6 +193,9 @@ $checkScript = @'
       missingRequiredStyles,
       fixedSummaryOk,
       presetMarkupOk,
+      helpInitialOk,
+      helpOpenOk,
+      helpCloseOk,
       presetMarkupDetails: {
         fieldsetTag: presetFieldset?.tagName || "",
         legend: normalizeContractText(presetFieldset?.querySelector("legend")?.textContent || ""),
@@ -201,6 +238,10 @@ $checkScript = @'
     if (!presetMarkupOk) {
       result.ok = false;
       result.failures.push("Zugängliche Preset-Radio-Gruppe mit genau einer Auswahl und zugeordneten Beschreibungen fehlt.");
+    }
+    if (!helpInitialOk || !helpOpenOk || !helpCloseOk) {
+      result.ok = false;
+      result.failures.push(`Kontext-Regelhilfe verletzt Initial-, Öffnen- oder Schließen-Vertrag: initial=${helpInitialOk}, open=${helpOpenOk}, close=${helpCloseOk}.`);
     }
   }
 
