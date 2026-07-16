@@ -157,15 +157,19 @@ autodarts_local_tournament/
 |  |- architecture.md
 |  |- ata-api-probe-v2.js
 |  |- autodarts-api-capabilities.md
+|  |- begriffe.md
 |  |- changelog.md
 |  |- codebase-map.md
 |  |- dra-compliance-matrix.md
 |  |- dra-regeln-gui.md
+|  |- einstieg.md
 |  |- pdc-dra-compliance.md
 |  |- refactor-guide.md
 |  |- release-checklist.md
 |  |- selector-strategy.md
+|  |- status-und-fehler.md
 |  |- tournament-duration.md
+|  |- veranstalter-handbuch.md
 |  `- DRA-RULE_BOOK.pdf
 |- assets/
 |  |- Screenshots für README und Docs
@@ -517,7 +521,7 @@ Hier liegt die eigentliche Turnierlogik. Wenn sich eine fachliche Regel ändert,
 Diese Dateien sind keine aktive Logik, aber wichtig, um fachliche Spezialfälle reproduzierbar zu halten.
 
 ### `assets/*`
-- Screenshots für README und Doku
+- Screenshots für README und Doku; die aktuellen `gui-*.png` werden reproduzierbar mit `scripts/test-ui-viewports.ps1 -UpdateGuideScreenshots` aus der realen Oberfläche erzeugt
 - `pdc_logo.png` für das PDC-Badge im Bundle
 
 Assets erklären das Produkt und speisen zum Teil den Build, tragen aber keine Laufzeitlogik.

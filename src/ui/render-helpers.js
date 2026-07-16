@@ -16,6 +16,7 @@
       { anchor: "statusmeldung-kein-aktives-board", match: () => exact("Kein aktives Board") || exact("Board-ID fehlt. Bitte einmal manuell eine Lobby öffnen und Board auswählen.") },
       { anchor: "statusmeldung-auto-lobby-on", match: () => exact("Auto-Lobby ON") },
       { anchor: "statusmeldung-auto-lobby-off", match: () => exact("Auto-Lobby OFF") || exact("Auto-Lobby ist deaktiviert.") || exact("Auto-Lobby ist deaktiviert. Bitte im Tab Einstellungen aktivieren.") || exact("Auto-Lobby ist deaktiviert. Aktivieren Sie die Funktion im Tab Einstellungen.") },
+      { anchor: "statusmeldung-automatik-aus-manuelle-ergebnisfuehrung-aktiv", match: () => exact("Automatik aus · manuelle Ergebnisführung aktiv") },
       { anchor: "statusmeldung-runtime-hinweis-api-voraussetzungen", match: () => exact("Hinweis: Für API-Halbautomatik werden Auth-Token und aktives Board benötigt.") },
       { anchor: "statusmeldung-freilos-bye-kein-api-sync-erforderlich", match: () => exact("Freilos (Bye): kein API-Sync erforderlich") },
       { anchor: "statusmeldung-api-sync-abgeschlossen", match: () => exact("API-Sync: abgeschlossen") },
@@ -56,8 +57,8 @@
     }
 
     return {
-      href: `${README_BASE_URL}#${match.anchor}`,
-      title: `README: ${text}`,
+      href: `${STATUS_MESSAGES_DOC_URL}#${match.anchor}`,
+      title: `Statushilfe: ${text}`,
     };
   }
 
@@ -307,6 +308,9 @@
       : getCreatePresetLabel(activePresetId);
     return {
       presetLabel,
+      plainText: draft.mode === "preliminary_final"
+        ? `In der Vorrunde werden immer ${PRELIMINARY_FIXED_LEG_COUNT} Legs gespielt. In der Finalphase gewinnt, wer zuerst ${getLegsToWin(effectiveBestOf)} Legs gewinnt. Startwert ist ${draft.startScore}; ${draft.x01OutMode === "Double" ? "zum Beenden ist ein Doppel nötig" : `beendet wird mit ${draft.x01OutMode} Out`}.`
+        : `Wer zuerst ${getLegsToWin(effectiveBestOf)} Legs gewinnt, gewinnt das Match. Startwert ist ${draft.startScore}; ${draft.x01OutMode === "Double" ? "zum Beenden ist ein Doppel nötig" : `beendet wird mit ${draft.x01OutMode} Out`}.`,
       text: [
         ...leadingParts,
         `${draft.x01InMode} In`,

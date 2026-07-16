@@ -350,6 +350,7 @@
       syncCreateFormDependencies(createForm);
       refreshCreateFormGroupsKoPolicy(createForm);
       refreshCreateFormPreliminaryFinal(createForm);
+      refreshCreateModeQuickSummary(createForm);
       refreshCreateGameRulesSummary(createForm);
       refreshCreateValidationUi(createForm);
       refreshCreateHelpUi(createForm);
@@ -387,6 +388,7 @@
         resetGroupsKoOddParticipantAcknowledgementIfBasisChanged(createForm);
         syncCreateFormDependencies(createForm);
         updateCreateDraftFromForm(createForm, true);
+        refreshCreateModeQuickSummary(createForm);
         refreshCreateGameRulesSummary(createForm);
         refreshCreateFormGroupsKoPolicy(createForm);
         const preliminarySummaryFields = [
@@ -573,7 +575,7 @@
       debugToggle.addEventListener("change", () => {
         state.store.settings.debug = debugToggle.checked;
         schedulePersist();
-        setNotice("success", `Debug-Mode ${debugToggle.checked ? "aktiviert" : "deaktiviert"}.`, 1800);
+        setNotice("success", `Detailliertes Fehlerprotokoll ${debugToggle.checked ? "aktiviert" : "deaktiviert"}.`, 1800);
       });
     }
 
@@ -1169,6 +1171,7 @@
     refreshCreateGameRulesSummary(form);
     refreshCreateFormGroupsKoPolicy(form);
     refreshCreateFormPreliminaryFinal(form);
+    refreshCreateModeQuickSummary(form);
     refreshCreateValidationUi(form);
     return true;
   }
@@ -1258,16 +1261,27 @@
   }
 
 
+  function refreshCreateModeQuickSummary(form) {
+    if (!(form instanceof HTMLFormElement)) return;
+    const host = form.querySelector("[data-role='mode-quick-summary']");
+    if (!(host instanceof HTMLElement)) return;
+    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
+    host.textContent = getCreateModeQuickSummary(draft.mode);
+  }
+
+
   function refreshCreateGameRulesSummary(form) {
     if (!(form instanceof HTMLFormElement)) return;
     const summaryHost = form.querySelector("[data-role='game-rules-summary-text']");
+    const plainHost = form.querySelector("[data-role='game-rules-plain-text']");
     const presetHost = form.querySelector("[data-role='game-rules-preset-origin']");
-    if (!(summaryHost instanceof HTMLElement) || !(presetHost instanceof HTMLElement)) return;
+    if (!(summaryHost instanceof HTMLElement) || !(plainHost instanceof HTMLElement) || !(presetHost instanceof HTMLElement)) return;
     const rawInput = readCreateDraftInput(form);
     const validation = validateCreateConfiguration(rawInput, state.store.settings);
     const summary = buildCreateGameRulesSummary(state.store?.ui?.createDraft);
     const gameRulesInvalid = validation.issues.some((issue) => issue.section === "game-rules");
     summaryHost.textContent = gameRulesInvalid ? "Spielregeln prüfen – ungültige Eingabe" : summary.text;
+    plainHost.textContent = gameRulesInvalid ? "Bitte die markierten Spielregeln korrigieren." : summary.plainText;
     presetHost.innerHTML = `<strong>Format:</strong> ${escapeHtml(summary.presetLabel)}`;
   }
 
@@ -1489,12 +1503,12 @@
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `ata-export-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    anchor.download = `ata-sicherung-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
-    setNotice("success", "JSON-Datei exportiert.", 2000);
+    setNotice("success", "Sicherungsdatei heruntergeladen.", 2000);
   }
 
 
@@ -1503,11 +1517,33 @@
       const payload = exportDataPayload();
       const text = JSON.stringify(payload, null, 2);
       await navigator.clipboard.writeText(text);
-      setNotice("success", "JSON in Zwischenablage kopiert.", 2000);
+      setNotice("success", "Sicherungsdaten in die Zwischenablage kopiert.", 2000);
     } catch (error) {
       setNotice("error", "Kopieren in Zwischenablage fehlgeschlagen.");
       logWarn("io", "Clipboard write failed.", error);
     }
+  }
+
+
+  function confirmTournamentImport(rawObject) {
+    const candidate = rawObject?.tournament || (
+      rawObject?.mode && rawObject?.participants ? rawObject : null
+    );
+    if (!candidate || typeof candidate !== "object") {
+      return true;
+    }
+    const name = normalizeText(candidate.name || "Unbenanntes Turnier");
+    const modeLabel = Object.prototype.hasOwnProperty.call(MODE_PARTICIPANT_LIMITS, candidate.mode)
+      ? getModeParticipantLimits(candidate.mode).label
+      : `Unbekannter Modus (${normalizeText(candidate.mode || "fehlt")})`;
+    const participantCount = Array.isArray(candidate.participants) ? candidate.participants.length : 0;
+    const currentName = normalizeText(state.store?.tournament?.name || "");
+    const replacementNote = currentName
+      ? `\n\nDas aktive Turnier \"${currentName}\" wird dadurch ersetzt.`
+      : "";
+    return window.confirm(
+      `Sicherung wiederherstellen?\n\n${name}\n${modeLabel}\n${participantCount} Teilnehmer${replacementNote}`,
+    );
   }
 
 
@@ -1519,14 +1555,18 @@
 
     try {
       const parsed = JSON.parse(textarea.value);
+      if (!confirmTournamentImport(parsed)) {
+        setNotice("info", "Wiederherstellung abgebrochen.", 1800);
+        return;
+      }
       const result = importTournamentPayload(parsed);
       if (result.ok) {
-        setNotice("success", "JSON erfolgreich importiert.");
+        setNotice("success", "Sicherung erfolgreich wiederhergestellt.");
       } else {
         setNotice("error", result.message || "Import fehlgeschlagen.");
       }
     } catch (error) {
-      setNotice("error", "JSON konnte nicht geparst werden.");
+      setNotice("error", "Die eingefügten Sicherungsdaten sind kein gültiges JSON.");
       logWarn("io", "Import parse failed.", error);
     }
   }
@@ -1542,14 +1582,19 @@
     reader.onload = () => {
       try {
         const parsed = JSON.parse(String(reader.result || "{}"));
+        if (!confirmTournamentImport(parsed)) {
+          fileInput.value = "";
+          setNotice("info", "Wiederherstellung abgebrochen.", 1800);
+          return;
+        }
         const result = importTournamentPayload(parsed);
         if (result.ok) {
-          setNotice("success", "Datei erfolgreich importiert.");
+          setNotice("success", "Sicherung erfolgreich wiederhergestellt.");
         } else {
           setNotice("error", result.message || "Datei konnte nicht importiert werden.");
         }
       } catch (error) {
-        setNotice("error", "Datei enth\u00e4lt kein g\u00fcltiges JSON.");
+        setNotice("error", "Die Datei enth\u00e4lt keine g\u00fcltigen Sicherungsdaten.");
         logWarn("io", "File import parse failed.", error);
       }
     };

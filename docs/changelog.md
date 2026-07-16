@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Dokumentation um reproduzierbare GUI-Abbildungen für Turnieranlage, manuelle Ergebnisführung, Automatik, Kontext-Hilfe, Veranstalterregeln, Sicherung und Statuszustände ergänzt; Screenshot-Erzeugung und visueller Release-Check sind im Viewport-Skript beziehungsweise in der Release-Checkliste festgehalten.
+
+## 0.13.0
+
+- Die Oberfläche trennt Einsteiger- und Fachinformationen konsequent: Format- und Moduswahl erklären ihre Wirkung in Klartext, Spielregeln zeigen zuerst das Matchziel und technische Details erst danach, die kontextbezogene Hilfe klappt Beispiele, Einschränkungen, Regelstatus und Quellen progressiv auf.
+- `Lokaler Spieleabend - 501 / Best of 5` ist die neue, ehrlich als Produktprofil bezeichnete Standardvorlage. `PDC European Tour - Runden 1 bis 4` bleibt als ausdrücklich begrenztes offizielles Profil verfügbar; die stabile technische ID des lokalen Profils erhält alte Best-of-5-Daten kompatibel.
+- Manuelle Ergebnisführung ist sichtbar der robuste Standard: Scorefelder tragen Namen und Leg-Bedeutung, offene Slots werden ausgeschrieben und eine deaktivierte Automatik erzeugt keine roten Auth-/Boardwarnungen mehr.
+- Einstellungen sind nach Turnierablauf, Zeitplanung und Veranstalterregeln gegliedert. Diagnose, Debug und Speicherdetails liegen in einem erweiterten Bereich; die Draw-Lock-Erklärung nennt korrekt KO und Doppel-KO.
+- `Import/Export` heißt jetzt `Sichern`. Datei- und Textwiederherstellung zeigen vor dem Ersetzen Name, Modus und Teilnehmerzahl und verlangen eine Bestätigung.
+- Die frühere Lang-README wurde in eine kurze Projektseite, Einsteigerleitfaden, Veranstalter-Handbuch, Glossar und Status-/Fehlerreferenz getrennt. In-App-Links führen direkt in die passende Zieldokumentation.
+- Die lokale Regelwerkskopie wurde durch das offizielle `DRA Rules 2026`, in Kraft seit 31. März 2026, ersetzt. Die für die Anwendung relevanten Verweise 6.8.1, 6.12.1 und 6.16.1 bleiben auf den dokumentierten PDF-Seiten gültig.
+
 ## 0.12.1
 - Vollständige Ansichtswechsel besitzen jetzt explizite Fokusziele: Spieleüberschrift nach erfolgreicher Turnieranlage und Import, Turniererstellungsüberschrift nach Reset sowie der aktivierte Navigationsbutton nach Tabwechsel. Die Überschriften sind nur programmatisch über `tabindex="-1"` fokussierbar und erzeugen keinen zusätzlichen Tabstopp.
 - Der Shell-Fokus-Snapshot speichert den tatsächlich gerenderten View-Kontext. Der ordinale Fallback ist auf dieselbe Ansicht, denselben Elementtyp, fehlende explizite Fokusstrategie und widerspruchsfreie stabile Merkmale begrenzt; mehrdeutige Attributtreffer und Cross-View-Fallbacks werden verworfen. Feld-Re-Render erhalten weiterhin Fokus, Textauswahl und Scrollposition.

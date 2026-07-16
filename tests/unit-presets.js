@@ -10,7 +10,7 @@ test("Preset definitions: schema self-check passes for all shipped presets", () 
 test("Preset definitions: European Tour official stays pinned to the documented values", () => {
   const preset = getCreatePresetDefinition(X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL);
   assert(Boolean(preset), "European Tour preset should exist.");
-  assertEqual(preset.label, "PDC European Tour (Official)");
+  assertEqual(preset.label, "PDC European Tour - Runden 1 bis 4");
   assertDeepEqual(preset.apply, {
     mode: "ko",
     bestOfLegs: 11,
@@ -25,11 +25,11 @@ test("Preset definitions: European Tour official stays pinned to the documented 
 });
 
 
-test("Preset defaults: new create draft starts with European Tour official", () => {
+test("Preset defaults: new create draft starts with the local beginner profile", () => {
   const draft = createDefaultCreateDraft();
-  assertEqual(draft.x01Preset, X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL);
+  assertEqual(draft.x01Preset, X01_PRESET_PDC_501_DOUBLE_OUT_BASIC);
   assertEqual(draft.mode, "ko");
-  assertEqual(draft.bestOfLegs, 11);
+  assertEqual(draft.bestOfLegs, 5);
   assertEqual(draft.startScore, 501);
   assertEqual(draft.x01InMode, "Straight");
   assertEqual(draft.x01OutMode, "Double");
@@ -42,10 +42,10 @@ test("Preset defaults: new create draft starts with European Tour official", () 
 });
 
 
-test("Preset definitions: Basic compatibility profile stays pinned and is not labeled official", () => {
+test("Preset definitions: local beginner profile stays pinned and is not labeled official", () => {
   const preset = getCreatePresetDefinition(X01_PRESET_PDC_501_DOUBLE_OUT_BASIC);
   assert(Boolean(preset), "Basic compatibility preset should exist.");
-  assertEqual(preset.label, "PDC 501 / Double Out (Basic)");
+  assertEqual(preset.label, "Lokaler Spieleabend - 501 / Best of 5");
   assert(!preset.label.includes("Official"), "Basic compatibility preset must not be presented as official.");
   assertDeepEqual(preset.apply, {
     mode: "ko",
@@ -210,20 +210,25 @@ test("Preset normalization: a deviating stored preset draft becomes Custom witho
 
 
 test("Game-rules summary: European Tour and Basic expose preset origin plus First-to", () => {
-  const european = buildCreateGameRulesSummary(createDefaultCreateDraft());
+  const european = buildCreateGameRulesSummary(normalizeCreateDraft({
+    ...createDefaultCreateDraft(),
+    x01Preset: X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL,
+    bestOfLegs: 11,
+  }));
   const basic = buildCreateGameRulesSummary(normalizeCreateDraft({
     ...createDefaultCreateDraft(),
     x01Preset: X01_PRESET_PDC_501_DOUBLE_OUT_BASIC,
     bestOfLegs: 5,
   }));
 
-  assertEqual(european.presetLabel, "PDC European Tour (Official)");
+  assertEqual(european.presetLabel, "PDC European Tour - Runden 1 bis 4");
   assert(european.text.includes("501 · Best of 11 (First to 6)"));
   assert(european.text.includes("Straight In · Double Out"));
   assert(european.text.includes("Bull-off Normal · Bull 25/50"));
   assert(european.text.includes("Max. 50 Runden"));
-  assertEqual(basic.presetLabel, "PDC 501 / Double Out (Basic)");
+  assertEqual(basic.presetLabel, "Lokaler Spieleabend - 501 / Best of 5");
   assert(basic.text.includes("Best of 5 (First to 3)"));
+  assert(basic.plainText.includes("zuerst 3 Legs"));
 });
 
 

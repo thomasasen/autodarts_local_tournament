@@ -132,43 +132,28 @@
     return `
       ${renderUpdatePanel()}
       <section class="ata-card tournamentCard">
-        ${renderSectionHeading("Debug und Feature-Flags", [
+        ${renderSectionHeading("Turnierablauf und Automatik", [
           { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen-Dokumentation \u00f6ffnen", title: "README: Einstellungen" },
           { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole \u00f6ffnen", title: "README: Info-Symbole" },
         ])}
         <div class="ata-toggle">
           <div>
-            <strong id="ata-setting-debug-label">Debug-Mode</strong>
-            <div id="ata-setting-debug-description" class="ata-small">Aktiviert detaillierte Logs in der Browser-Konsole sowie ein persistiertes Matchstart-Debug-Protokoll ohne Auth-Token.</div>
-          </div>
-          <input type="checkbox" id="ata-setting-debug" data-action="toggle-debug" aria-labelledby="ata-setting-debug-label" aria-describedby="ata-setting-debug-description" ${debugEnabled}>
-        </div>
-        <div class="ata-actions ata-debug-actions">
-          <button type="button" class="ata-btn ata-btn-sm" data-action="copy-matchstart-debug" ${debugActionDisabledAttr}>Matchstart-Debug kopieren</button>
-          <button type="button" class="ata-btn ata-btn-sm" data-action="clear-matchstart-debug" ${debugActionDisabledAttr}>Matchstart-Debug leeren</button>
-        </div>
-        <p class="ata-small">Erfasst Vorprüfung, Lobby-Payload, API-Schritte, bullMode-Fallback, vorsichtiges Lobby-Cleanup und Fehlerdetails der letzten Matchstarts.</p>
-        ${hasMatchStartDebugSessions
-          ? `<pre class="ata-debug-log">${escapeHtml(debugReportText)}</pre>`
-          : `<p class="ata-small">Noch keine Matchstart-Debugdaten vorhanden. Debug-Mode aktivieren, Match testen und das Protokoll danach hier kopieren.</p>`}
-        <div class="ata-toggle">
-          <div>
-            <strong><span id="ata-setting-autolobby-label">Automatischer Lobby-Start + API-Sync</span> ${apiSyncHelpLinks}</strong>
-            <div id="ata-setting-autolobby-description" class="ata-small">Standard: AUS. Aktiviert Matchstart per Klick und automatische Ergebnis\u00fcbernahme aus der Autodarts-API.</div>
+            <strong><span id="ata-setting-autolobby-label">AutoDarts-Automatik f\u00fcr Matchstart und Ergebnis</span> ${apiSyncHelpLinks}</strong>
+            <div id="ata-setting-autolobby-description" class="ata-small">Standard: AUS. Ohne Automatik tr\u00e4gst du gewonnene Legs im Tab <code>Spiele</code> selbst ein. Mit Automatik werden Lobby und Ergebnis \u00fcber die AutoDarts-API verkn\u00fcpft.</div>
           </div>
           <input type="checkbox" id="ata-setting-autolobby" data-action="toggle-autolobby" aria-labelledby="ata-setting-autolobby-label" aria-describedby="ata-setting-autolobby-description" ${autoLobbyEnabled}>
         </div>
         <div class="ata-toggle">
           <div>
-            <strong><span id="ata-setting-randomize-ko-label">KO-Erstrunde zuf\u00e4llig mischen (Standard)</span> ${koDrawHelpLinks}</strong>
-            <div id="ata-setting-randomize-ko-description" class="ata-small">Standard: EIN. Neue KO-Turniere nutzen damit Open Draw. Freilose werden anhand des gespeicherten Seed-Placements deterministisch verteilt.</div>
+            <strong><span id="ata-setting-randomize-ko-label">KO-Erstrunde zuf\u00e4llig auslosen</span> ${koDrawHelpLinks}</strong>
+            <div id="ata-setting-randomize-ko-description" class="ata-small">Standard: EIN. Bei AUS entspricht die Reihenfolge der Teilnehmerliste der Setzreihenfolge. Freilose werden nachvollziehbar verteilt.</div>
           </div>
           <input type="checkbox" id="ata-setting-randomize-ko" data-action="toggle-randomize-ko" aria-labelledby="ata-setting-randomize-ko-label" aria-describedby="ata-setting-randomize-ko-description" ${randomizeKoEnabled}>
         </div>
         <div class="ata-toggle">
           <div>
-            <strong><span id="ata-setting-ko-draw-lock-default-label">KO-Draw sperren (Standard)</span> ${koDrawLockHelpLinks}</strong>
-            <div id="ata-setting-ko-draw-lock-default-description" class="ata-small">Standard: EIN. Neue KO-Turniere behalten den initialen Draw unver\u00e4ndert.</div>
+            <strong><span id="ata-setting-ko-draw-lock-default-label">Auslosung nach Turnierstart sperren</span> ${koDrawLockHelpLinks}</strong>
+            <div id="ata-setting-ko-draw-lock-default-description" class="ata-small">Standard: EIN. Neue KO- und Doppel-KO-Turniere behalten ihren erzeugten Turnierbaum unver\u00e4ndert.</div>
           </div>
           <input type="checkbox" id="ata-setting-ko-draw-lock-default" data-action="toggle-ko-draw-lock-default" aria-labelledby="ata-setting-ko-draw-lock-default-label" aria-describedby="ata-setting-ko-draw-lock-default-description" ${koDrawLockDefaultEnabled}>
         </div>
@@ -182,7 +167,7 @@
         <p class="ata-small"><strong>Schnell:</strong> z\u00fcgige Abl\u00e4ufe. <strong>Normal:</strong> ausgewogener Standard. <strong>Langsam:</strong> konservativer f\u00fcr gemischte Felder und l\u00e4ngere Wechselzeiten.</p>
       </section>
       <section class="ata-card tournamentCard">
-        ${renderSectionHeading("KO Draw-Lock (aktives Turnier)", [
+        ${renderSectionHeading("Auslosung des aktiven Turniers", [
           { href: DRA_GUI_RULE_DRAW_LOCK_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zu Draw-Lock \u00f6ffnen", title: "DRA-Regeln in der GUI: Draw-Lock" },
         ])}
         <div class="ata-toggle">
@@ -192,22 +177,22 @@
           </div>
           <input type="checkbox" id="ata-setting-ko-draw-locked" data-action="set-ko-draw-locked" aria-labelledby="ata-setting-ko-draw-locked-label" aria-describedby="ata-setting-ko-draw-locked-description" ${activeKoDrawLocked} ${activeKoDrawLockDisabledAttr}>
         </div>
-        <p class="ata-small">Nur f\u00fcr den Modus KO (Straight Knockout) verf\u00fcgbar. Entsperren erfordert einen expliziten Promoter-Override mit Best\u00e4tigung (DRA 6.12.1).</p>
+        <p class="ata-small">F\u00fcr KO und Doppel-KO verf\u00fcgbar. Das Entsperren ist eine bewusste Entscheidung der Turnierleitung und muss best\u00e4tigt werden (DRA 6.12.1).</p>
       </section>
       <section class="ata-card tournamentCard">
-        ${renderSectionHeading("Veranstalter-Tie-Break-Profil", [
+        ${renderSectionHeading("Tabellenwertung bei Gleichstand", [
           { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zum Tie-Break \u00f6ffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
         ])}
         <div class="ata-field">
-          <label for="ata-setting-tiebreak">Profil pro Turnier</label>
+          <label for="ata-setting-tiebreak">Reihenfolge der Entscheidungskriterien</label>
           <select id="ata-setting-tiebreak" data-action="set-tiebreak-mode" ${tieBreakDisabledAttr}>
-            <option value="${TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE ? "selected" : ""}>Veranstalterprofil: Direktvergleich und Minitabelle (empfohlen)</option>
-            <option value="${TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF ? "selected" : ""}>Veranstalterprofil: Punkte und Leg-Differenz</option>
+            <option value="${TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE ? "selected" : ""}>Direktvergleich und Minitabelle (empfohlen)</option>
+            <option value="${TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF ? "selected" : ""}>Punkte und Leg-Differenz (vereinfacht)</option>
           </select>
         </div>
         <p class="ata-small"><strong>Direktvergleich und Minitabelle:</strong> Punkte (2/1/0), danach Direktvergleich (2er-Gleichstand), Teilgruppen-Leg-Differenz (3+), Gesamt-Leg-Differenz, Legs gewonnen; verbleibender Gleichstand = &bdquo;Playoff erforderlich&ldquo;.</p>
         <p class="ata-small"><strong>Punkte und Leg-Differenz:</strong> vereinfachte Sortierung \u00fcber Punkte, Gesamt-Leg-Differenz und Legs gewonnen (legacy-kompatibel).</p>
-        <p class="ata-small">DRA 6.16.1 schreibt keine universelle Reihenfolge vor; das ausgewählte Profil dokumentiert die Veranstalterregel.</p>
+        <p class="ata-small">DRA 6.16.1 schreibt keine universelle Reihenfolge vor. Deshalb legt die Turnierleitung dieses Profil vor dem ersten Gruppen- oder Ligaergebnis fest.</p>
         ${tieBreakLocked ? `<p class="ata-small">Profil gesperrt: Nach dem ersten abgeschlossenen Gruppen-/Liga-Ergebnis ist keine Profil\u00e4nderung mehr zul\u00e4ssig (DRA 6.16.1).</p>` : ""}
       </section>
       <section class="ata-card tournamentCard">
@@ -228,11 +213,33 @@
         <p class="ata-small">Aktive Modus-Limits: ${escapeHtml(modeLimitSummary)}.</p>
         <p class="ata-small">Die DRA-Regeln setzen kein fixes globales Teilnehmermaximum. Die Grenzen oben sind bewusst f\u00fcr faire Turnierdauer und stabile Darstellung gesetzt.</p>
       </section>
-      <section class="ata-card tournamentCard">
-        ${renderSectionHeading("Storage", [
-          { href: README_BASE_URL, kind: "tech", label: "Hinweise zu Storage und Import \u00f6ffnen", title: "README: Import, Migration und Persistenz" },
-        ])}
-        <p class="ata-small"><code>${escapeHtml(STORAGE_KEY)}</code>, schemaVersion ${STORAGE_SCHEMA_VERSION}</p>
-      </section>
+      <details class="ata-card tournamentCard ata-advanced-settings">
+        <summary>Erweitert: Diagnose, Debug und Speicher</summary>
+        <div class="ata-advanced-settings-body">
+          <section>
+            ${renderSectionHeading("Diagnose für technische Fehler")}
+            <div class="ata-toggle">
+              <div>
+                <strong id="ata-setting-debug-label">Detailliertes Fehlerprotokoll aktivieren</strong>
+                <div id="ata-setting-debug-description" class="ata-small">Nur bei der Fehlersuche nötig. Erfasst technische Matchstart-Schritte ohne Auth-Token.</div>
+              </div>
+              <input type="checkbox" id="ata-setting-debug" data-action="toggle-debug" aria-labelledby="ata-setting-debug-label" aria-describedby="ata-setting-debug-description" ${debugEnabled}>
+            </div>
+            <div class="ata-actions ata-debug-actions">
+              <button type="button" class="ata-btn ata-btn-sm" data-action="copy-matchstart-debug" ${debugActionDisabledAttr}>Fehlerprotokoll kopieren</button>
+              <button type="button" class="ata-btn ata-btn-sm" data-action="clear-matchstart-debug" ${debugActionDisabledAttr}>Fehlerprotokoll leeren</button>
+            </div>
+            ${hasMatchStartDebugSessions
+              ? `<pre class="ata-debug-log">${escapeHtml(debugReportText)}</pre>`
+              : `<p class="ata-small">Noch keine Diagnosedaten vorhanden. Erst aktivieren, dann den fehlerhaften Matchstart erneut testen.</p>`}
+          </section>
+          <section>
+            ${renderSectionHeading("Lokaler Speicher", [
+              { href: ORGANIZER_GUIDE_DOC_URL, kind: "tech", label: "Hinweise zu Sicherung und Speicher öffnen", title: "Veranstalter-Handbuch: Sicherung und Speicher" },
+            ])}
+            <p class="ata-small">Technischer Speicher: <code>${escapeHtml(STORAGE_KEY)}</code> · Datenformat ${STORAGE_SCHEMA_VERSION}. Sicherungen erstellst du im Tab <code>Sichern</code>.</p>
+          </section>
+        </div>
+      </details>
     `;
   }

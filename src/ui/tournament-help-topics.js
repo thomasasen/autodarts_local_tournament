@@ -175,9 +175,10 @@
     }
     if (presetId === X01_PRESET_PDC_501_DOUBLE_OUT_BASIC) {
       return {
-        status: CREATE_HELP_COMPLIANCE_STATUSES.COMPATIBILITY_PROFILE,
-        description: "Basic erhält ältere 501-/Double-Out-Konfigurationen kompatibel, ist aber kein offizielles PDC-Eventformat.",
-        scope: "Gilt als Produktprofil für lokale und bestehende gespeicherte Turniere.",
+        status: CREATE_HELP_COMPLIANCE_STATUSES.PRODUCT_STANDARD,
+        label: "Empfohlenes lokales Produktprofil",
+        description: "Die Vorlage ist für einen überschaubaren lokalen Spieleabend gedacht und kein offizielles PDC-Eventformat.",
+        scope: "Gilt als lokale Einstiegsvorlage und erhält zugleich ältere gespeicherte Best-of-5-Konfigurationen kompatibel.",
         enforcement: "Die hinterlegten Werte werden vollständig angewendet; eine externe Formatkonformität wird nicht behauptet.",
       };
     }
@@ -250,14 +251,14 @@
       },
       compliance: ({ draft }) => buildCreateHelpModeCompliance(draft),
       sources: [
-        { label: "README - Turniermodi und unterstützter Scope", href: README_TOURNAMENT_MODES_URL },
+        { label: "Einsteigerleitfaden - Turniermodi", href: README_TOURNAMENT_MODES_URL },
         { label: "DRA-Regeln in der GUI - KO, Round Robin und Veranstalterformate", href: DRA_GUI_RULE_MODE_FORMATS_URL },
       ],
     }),
     presetFormat: freezeCreateHelpTopic({
       id: "presetFormat",
       title: "Preset und Formatprofil",
-      shortDescription: "Ein Preset setzt Modus, Matchlänge und X01-Kernwerte gemeinsam; Custom behält die aktuellen manuellen Werte bei.",
+      shortDescription: "Eine Formatvorlage setzt Turnierart, Matchlänge und wichtige X01-Regeln gemeinsam. Manuell behält deine aktuellen Werte bei.",
       resolveCurrentSelection: ({ draft, modeMeta }) => {
         const presetId = getAppliedCreatePresetId(draft);
         const bestOf = draft.mode === "preliminary_final" ? draft.finalStageBestOfLegs : draft.bestOfLegs;
@@ -268,12 +269,12 @@
         const presetId = getAppliedCreatePresetId(draft);
         if (presetId === X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL) {
           return [
-            "European Tour setzt KO, Best of 11, 501, Straight In, Double Out und die hinterlegten technischen Lobbywerte.",
+            "Diese Vorlage setzt KO, Best of 11, 501, Straight In, Double Out und die hinterlegten technischen Lobbywerte. Sie gilt nur für die European-Tour-Runden 1 bis 4.",
           ];
         }
         if (presetId === X01_PRESET_PDC_501_DOUBLE_OUT_BASIC) {
           return [
-            "Basic setzt KO, Best of 5, 501, Straight In, Double Out und kompatible technische Lobbywerte.",
+            "Die lokale Vorlage setzt KO, Best of 5, 501, Straight In und Double Out. Ein Match gewinnt, wer zuerst drei Legs gewinnt.",
           ];
         }
         return [
@@ -286,7 +287,7 @@
           return ["European Tour bildet Best of 11 als First to 6 Legs ab; Halbfinal- und Finaldistanzen des Events sind nicht Teil dieses Presets."];
         }
         if (presetId === X01_PRESET_PDC_501_DOUBLE_OUT_BASIC) {
-          return ["Basic bildet Best of 5 als First to 3 mit 501 und Double Out ab, ohne offiziellen Eventformat-Anspruch."];
+          return ["Best of 5 bedeutet hier: Wer zuerst drei Legs gewinnt, gewinnt das Match. Gespielt wird 501 mit Double Out."];
         }
         return ["Custom kann zum Beispiel Best of " + draft.bestOfLegs + " mit " + draft.startScore + " Startpunkten beibehalten."];
       },
@@ -301,7 +302,7 @@
         "Eine manuelle Änderung an einem Preset-relevanten Wert aktiviert Custom.",
       ],
       limitations: [
-        "Basic ist kein offizielles PDC-Eventformat.",
+        "Die lokale Best-of-5-Vorlage ist kein offizielles PDC-Eventformat.",
         "Custom besitzt keine automatische Konformitätsgarantie.",
         "European Tour bildet nur den ausdrücklich beschriebenen Runden-Scope ab.",
       ],
@@ -311,7 +312,8 @@
       },
       compliance: ({ draft }) => buildCreateHelpPresetCompliance(draft),
       sources: [
-        { label: "README - Preset-Katalog und technische Abgrenzung", href: README_PRESET_CATALOG_URL },
+        { label: "Veranstalter-Handbuch - Formatvorlagen", href: README_PRESET_CATALOG_URL },
+        { label: "Begriffe - Best of, First to und X01", href: GLOSSARY_DOC_URL },
         { label: "PDC/DRA Compliance-Mapping - Preset-Logik", href: PDC_DRA_COMPLIANCE_PRESET_URL },
         { label: "PDC Europe - European Darts Open 2026 Format", href: PDC_EUROPEAN_TOUR_FORMAT_URL },
       ],
@@ -352,7 +354,7 @@
         "Eingabereihenfolge und Draw-Modus bestimmen die Seed-Wirkung.",
       ],
       limitations: [
-        "Dieses Release ergänzt keine neue Duplikat- oder Inline-Validierungsoberfläche.",
+        "Leere Zeilen werden ignoriert; doppelte oder reservierte Namen werden vor der Anlage sichtbar blockiert.",
         "Die Anwendung prüft keine vollständige externe Setz- oder Meldeordnung.",
       ],
       classification: {
@@ -366,7 +368,7 @@
         enforcement: "Die erkannten Einträge und ihre Reihenfolge werden technisch verwendet; darüber hinaus bleibt die Turnierleitung verantwortlich.",
       },
       sources: [
-        { label: "README - Turnier anlegen und Teilnehmer", href: README_TOURNAMENT_CREATE_URL },
+        { label: "Einsteigerleitfaden - Turnier anlegen", href: README_TOURNAMENT_CREATE_URL },
         { label: "DRA-Regeln in der GUI - Teilnehmerlimits und Veranstalterermessen", href: DRA_GUI_RULE_PARTICIPANT_LIMITS_URL },
       ],
     }),
@@ -421,7 +423,7 @@
         enforcement: "Draw-Stabilität wird im implementierten Draw-Lock-Scope unterstützt; eine externe Ziehung oder vollständige Eventprüfung findet nicht statt.",
       },
       sources: [
-        { label: "README - KO und Doppel-KO Draw", href: README_TOURNAMENT_MODES_URL },
+        { label: "Einsteigerleitfaden - KO und Doppel-KO", href: README_TOURNAMENT_MODES_URL },
         { label: "DRA-Regeln in der GUI - Draw und Stabilität (DRA 6.12.1, Seite 19)", href: DRA_GUI_RULE_OPEN_DRAW_URL },
         { label: "DRA-Regeln in der GUI - Freilos und projektinternes Seed-Placement", href: DRA_GUI_RULE_BYE_URL },
       ],
@@ -468,7 +470,7 @@
         enforcement: "Die Anwendung erzeugt das Match und hält es vom Champion-Pfad getrennt; die externe Turnierordnung wird nicht geprüft.",
       },
       sources: [
-        { label: "README - KO und optionales Spiel um Platz 3", href: README_TOURNAMENT_MODES_URL },
+        { label: "Einsteigerleitfaden - KO und Spiel um Platz 3", href: README_TOURNAMENT_MODES_URL },
         { label: "DRA-Regeln in der GUI - Platz 3 und separate Turnierregeln", href: DRA_GUI_RULE_THIRD_PLACE_URL },
       ],
     }),
@@ -520,7 +522,7 @@
         enforcement: "Die Anwendung erzeugt ein Reset-Finale bedarfsgesteuert oder beendet das Turnier nach dem gewählten Einzelmatch.",
       }),
       sources: [
-        { label: "README - Doppel-KO und Grand-Final-Regel", href: README_TOURNAMENT_MODES_URL },
+        { label: "Einsteigerleitfaden - Doppel-KO", href: README_TOURNAMENT_MODES_URL },
         { label: "PDC/DRA Compliance-Mapping - KO und Veranstalterregeln", href: PDC_DRA_COMPLIANCE_KO_URL },
       ],
     }),
@@ -666,14 +668,14 @@
         enforcement: "Mathematische Verteilung und Parameter werden technisch validiert; die externe Turnierordnung bleibt Verantwortung der Turnierleitung.",
       },
       sources: [
-        { label: "README - Vorrunde + Finalphase", href: README_TOURNAMENT_MODES_URL },
+        { label: "Einsteigerleitfaden - Vorrunde und Finalphase", href: README_TOURNAMENT_MODES_URL },
         { label: "PDC/DRA Compliance-Mapping - Vorrunde + Finalphase", href: PDC_DRA_COMPLIANCE_PRELIMINARY_FINAL_URL },
       ],
     }),
     gameRules: freezeCreateHelpTopic({
       id: "gameRules",
       title: "Spielregeln und X01",
-      shortDescription: "Matchlänge und X01-Werte steuern Lobbykonfiguration und Zeitprognose; technische Lobbywerte bleiben von offiziellen Formatwerten getrennt.",
+      shortDescription: "Hier legst du fest, wie ein Match gewonnen, begonnen und beendet wird. Diese Werte beeinflussen außerdem die Zeitprognose.",
       resolveCurrentSelection: ({ gameRulesSummary }) => (
         gameRulesSummary.presetLabel + " · " + gameRulesSummary.text
       ),
@@ -720,7 +722,8 @@
       },
       compliance: ({ draft }) => buildCreateHelpPresetCompliance(draft),
       sources: [
-        { label: "README - Spielregeln und Feldinhalte", href: README_TOURNAMENT_CREATE_URL },
+        { label: "Einsteigerleitfaden - Spielregeln", href: README_TOURNAMENT_CREATE_URL },
+        { label: "Begriffe - Legs, X01, In, Out und Bull-off", href: GLOSSARY_DOC_URL },
         { label: "PDC/DRA Compliance-Mapping - Preset-Logik und technische Abgrenzung", href: PDC_DRA_COMPLIANCE_PRESET_URL },
         { label: "PDC Europe - European Darts Open 2026 Format", href: PDC_EUROPEAN_TOUR_FORMAT_URL },
       ],
@@ -779,7 +782,7 @@
       },
       sources: [
         { label: "Dokumentation - verwendete Parameter der Turnierzeit-Prognose", href: TOURNAMENT_DURATION_PARAMETERS_URL },
-        { label: "README - Voraussichtliche Turnierzeit", href: README_TOURNAMENT_CREATE_URL },
+        { label: "Einsteigerleitfaden - Zeitplanung", href: README_TOURNAMENT_CREATE_URL },
       ],
     }),
     timeProfile: freezeCreateHelpTopic({

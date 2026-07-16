@@ -102,13 +102,13 @@
       lobbyVisibility: "private",
     });
 
-    assert(official.currentSelection.includes("PDC European Tour (Official)"));
+    assert(official.currentSelection.includes("PDC European Tour - Runden 1 bis 4"));
     assert(official.currentSelection.includes("Best of 11"));
     assertEqual(official.compliance.status, CREATE_HELP_COMPLIANCE_STATUSES.OFFICIAL_FORMAT_PROFILE);
     assert(official.compliance.scope.includes("Halbfinal"));
 
-    assert(basic.currentSelection.includes("PDC 501 / Double Out (Basic)"));
-    assertEqual(basic.compliance.status, CREATE_HELP_COMPLIANCE_STATUSES.COMPATIBILITY_PROFILE);
+    assert(basic.currentSelection.includes("Lokaler Spieleabend - 501 / Best of 5"));
+    assertEqual(basic.compliance.status, CREATE_HELP_COMPLIANCE_STATUSES.PRODUCT_STANDARD);
     assert(basic.compliance.description.includes("kein offizielles PDC-Eventformat"));
 
     assert(custom.currentSelection.includes("Individuell"));
@@ -319,24 +319,34 @@
       x01Preset: X01_PRESET_CUSTOM,
     }));
     const html = renderCreateHelpPanelBody(model);
-    const headings = [
+    const basicHeadings = [
       "Kurz erklärt",
       "Aktuelle Auswahl",
       "Auswirkung auf dein Turnier",
+    ];
+    let previousIndex = -1;
+    basicHeadings.forEach((heading) => {
+      const index = html.indexOf(heading);
+      assert(index > previousIndex, "Basisabschnitt fehlt oder Reihenfolge falsch: " + heading);
+      previousIndex = index;
+    });
+    assert(html.includes("Mehr Beispiele und Hinweise"));
+    assert(html.includes("Regelstatus und Quellen für die Turnierleitung"));
+    const detailedHeadings = [
       "Beispiele",
       "Tipps",
       "Abhängigkeiten",
       "Einschränkungen",
       "Herkunft der Einstellung",
-      "Regelstatus und Konformität",
-      "Quellen",
     ];
-    let previousIndex = -1;
-    headings.forEach((heading) => {
+    previousIndex = -1;
+    detailedHeadings.forEach((heading) => {
       const index = html.indexOf(heading);
-      assert(index > previousIndex, "Abschnitt fehlt oder Reihenfolge falsch: " + heading);
+      assert(index > previousIndex, "Detailabschnitt fehlt oder Reihenfolge falsch: " + heading);
       previousIndex = index;
     });
+    assert(html.indexOf("Regelstatus und Konformität") < html.indexOf("ata-create-help-sources"));
+    assertEqual((html.match(/<details/g) || []).length, 2);
     assert(html.includes("ata-create-help-classification"));
     assert(html.includes("ata-create-help-compliance"));
     assert(html.includes("Geltungsbereich:"));

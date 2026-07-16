@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.12.1
+// @version      0.13.0
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -22,7 +22,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.12.1";
+  const APP_VERSION = "0.13.0";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 5;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
@@ -42,12 +42,16 @@
   const API_REQUEST_TIMEOUT_MS = 12000;
   const REPO_BLOB_BASE_URL = "https://github.com/thomasasen/autodarts_local_tournament/blob/main";
   const README_BASE_URL = "https://github.com/thomasasen/autodarts_local_tournament/blob/main/README.md";
-  const README_SETTINGS_URL = `${README_BASE_URL}#einstellungen`;
-  const README_INFO_SYMBOLS_URL = `${README_BASE_URL}#info-symbole`;
-  const README_TOURNAMENT_MODES_URL = `${README_BASE_URL}#turniermodi`;
-  const README_TOURNAMENT_CREATE_URL = `${README_BASE_URL}#turnier-anlegen`;
-  const README_PRESET_CATALOG_URL = `${README_BASE_URL}#preset-katalog`;
-  const README_API_AUTOMATION_URL = `${README_BASE_URL}#api-halbautomatik`;
+  const USER_GUIDE_DOC_URL = `${REPO_BLOB_BASE_URL}/docs/einstieg.md`;
+  const ORGANIZER_GUIDE_DOC_URL = `${REPO_BLOB_BASE_URL}/docs/veranstalter-handbuch.md`;
+  const GLOSSARY_DOC_URL = `${REPO_BLOB_BASE_URL}/docs/begriffe.md`;
+  const STATUS_MESSAGES_DOC_URL = `${REPO_BLOB_BASE_URL}/docs/status-und-fehler.md`;
+  const README_SETTINGS_URL = `${ORGANIZER_GUIDE_DOC_URL}#einstellungen-und-automatik`;
+  const README_INFO_SYMBOLS_URL = `${USER_GUIDE_DOC_URL}#hilfe-direkt-in-der-oberflaeche`;
+  const README_TOURNAMENT_MODES_URL = `${USER_GUIDE_DOC_URL}#welcher-turniermodus-passt`;
+  const README_TOURNAMENT_CREATE_URL = `${USER_GUIDE_DOC_URL}#erstes-turnier-in-fuenf-minuten`;
+  const README_PRESET_CATALOG_URL = `${ORGANIZER_GUIDE_DOC_URL}#formatvorlagen-und-spielregeln`;
+  const README_API_AUTOMATION_URL = `${USER_GUIDE_DOC_URL}#match-starten-und-ergebnis-speichern`;
   const DRA_GUI_RULES_DOC_URL = `${REPO_BLOB_BASE_URL}/docs/dra-regeln-gui.md`;
   const DRA_GUI_RULE_MODE_FORMATS_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-mode-formats`;
   const DRA_GUI_RULE_OPEN_DRAW_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-open-draw`;
@@ -657,6 +661,38 @@
         border-bottom: 0;
       }
 
+      .ata-create-help-details {
+        border-bottom: 1px solid rgba(185, 199, 236, 0.14);
+      }
+
+      .ata-create-help-details summary {
+        padding: 12px 0;
+        color: #cddaff;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 750;
+        line-height: 1.35;
+      }
+
+      .ata-create-help-details summary:hover {
+        color: #f0f4ff;
+      }
+
+      .ata-create-help-details summary:focus-visible {
+        outline: 2px solid var(--ata-color-focus);
+        outline-offset: 3px;
+        border-radius: 3px;
+      }
+
+      .ata-create-help-details-body {
+        padding: 0 0 4px 13px;
+        border-left: 2px solid rgba(153, 184, 245, 0.22);
+      }
+
+      .ata-create-help-details-body .ata-create-help-section:first-child {
+        padding-top: 2px;
+      }
+
       .ata-create-help-section h5 {
         margin: 0 0 5px;
         color: #cddaff;
@@ -940,6 +976,25 @@
         background: rgba(43, 122, 86, 0.14);
       }
 
+      .ata-create-preflight {
+        display: grid;
+        gap: 6px;
+        border: 1px solid rgba(185, 199, 236, 0.24);
+        border-radius: var(--ata-radius-sm);
+        padding: 10px 11px;
+        background: rgba(10, 23, 53, 0.42);
+      }
+
+      .ata-create-preflight ul {
+        display: grid;
+        gap: 5px;
+        margin: 0;
+        padding-left: 20px;
+        color: var(--ata-color-muted);
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
       .ata-create-overview-summary-list {
         display: grid;
         gap: 0;
@@ -1054,6 +1109,7 @@
       }
 
       .ata-game-rules-origin,
+      .ata-game-rules-plain,
       .ata-game-rules-summary-text {
         margin: 0;
       }
@@ -1063,10 +1119,17 @@
         font-size: 13px;
       }
 
-      .ata-game-rules-summary-text {
+      .ata-game-rules-plain {
         color: var(--ata-color-text);
         font-size: 15px;
         line-height: 1.45;
+        overflow-wrap: anywhere;
+      }
+
+      .ata-game-rules-summary-text {
+        color: var(--ata-color-muted);
+        font-size: 12px;
+        line-height: 1.4;
         overflow-wrap: anywhere;
       }
 
@@ -1264,6 +1327,11 @@
         font-weight: 700;
         letter-spacing: 0.35px;
         text-transform: uppercase;
+      }
+
+      .ata-preset-intro,
+      .ata-mode-quick-summary {
+        margin: 0 0 8px;
       }
 
       .ata-preset-card-grid {
@@ -1962,21 +2030,41 @@
 
       .ata-score-grid {
         display: grid;
-        grid-template-columns: repeat(2, 58px);
-        gap: 6px;
+        grid-template-columns: repeat(2, minmax(130px, 1fr));
+        gap: 8px;
         min-width: 0;
-        align-items: center;
-        width: auto;
-        flex: 0 0 auto;
+        align-items: end;
+        width: 100%;
       }
 
       .ata-match-editor {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
+        display: grid;
+        grid-template-columns: minmax(260px, 1fr) auto;
+        align-items: end;
         gap: 8px;
         flex: 1 1 100%;
         min-width: 0;
+      }
+
+      .ata-match-score-help {
+        grid-column: 1 / -1;
+        margin: 0;
+        color: var(--ata-color-muted);
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .ata-score-entry {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+        color: var(--ata-color-muted);
+        font-size: 12px;
+        line-height: 1.3;
+      }
+
+      .ata-score-entry span {
+        overflow-wrap: anywhere;
       }
 
       .ata-editor-actions {
@@ -1995,7 +2083,7 @@
 
       .ata-score-grid input[type="number"] {
         width: 100%;
-        max-width: 58px;
+        max-width: 88px;
         min-height: 30px;
         padding: 4px 7px;
         font-size: 14px;
@@ -2016,6 +2104,56 @@
 
       .ata-debug-actions {
         margin-bottom: var(--ata-space-2);
+      }
+
+      .ata-advanced-settings > summary {
+        color: var(--ata-color-text);
+        cursor: pointer;
+        font-size: 17px;
+        font-weight: 800;
+      }
+
+      .ata-advanced-settings > summary:focus-visible {
+        outline: 2px solid var(--ata-color-focus);
+        outline-offset: 4px;
+        border-radius: 3px;
+      }
+
+      .ata-advanced-settings-body {
+        display: grid;
+        gap: 16px;
+        padding-top: 16px;
+      }
+
+      .ata-advanced-settings-body > section + section {
+        border-top: 1px solid var(--ata-color-border);
+        padding-top: 16px;
+      }
+
+      .ata-io-warning {
+        border-left: 3px solid #ffd34f;
+        border-radius: 0 var(--ata-radius-sm) var(--ata-radius-sm) 0;
+        padding: 9px 11px;
+        background: rgba(255, 211, 79, 0.09);
+        color: #fff1bd;
+      }
+
+      .ata-io-advanced {
+        margin-top: 14px;
+        border-top: 1px solid var(--ata-color-border);
+        padding-top: 12px;
+      }
+
+      .ata-io-advanced > summary {
+        margin-bottom: 12px;
+        color: var(--ata-color-muted);
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      .ata-io-advanced[open] {
+        display: grid;
+        gap: 10px;
       }
 
       .ata-debug-log {
@@ -2218,8 +2356,8 @@
         }
 
         .ata-score-grid {
-          grid-template-columns: repeat(2, 58px);
-          width: auto;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          width: 100%;
         }
 
         .ata-match-editor {
@@ -2329,7 +2467,7 @@
         }
 
         .ata-score-grid {
-          grid-template-columns: repeat(2, 58px);
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
         .ata-editor-actions {
@@ -2554,7 +2692,7 @@
     { id: "tournament", label: "Turnier" },
     { id: "matches", label: "Spiele" },
     { id: "view", label: "Turnierbaum" },
-    { id: "io", label: "Import/Export" },
+    { id: "io", label: "Sichern" },
     { id: "settings", label: "Einstellungen" },
   ]);
 
@@ -3507,7 +3645,7 @@
   }
 
   // Source of truth for shipped presets:
-  // - "PDC European Tour (Official)" models the first four rounds through the quarter-finals:
+  // - "PDC European Tour - Runden 1 bis 4" models the first four rounds through the quarter-finals:
   //   KO, Best of 11 Legs, 501, Straight In, Double Out. Later event rounds use longer formats.
   // - PDC World Championship style set-play is intentionally not shipped as an "official" preset here,
   //   because the AutoDarts lobby payload only supports legs/first-to-N, not sets.
@@ -3515,13 +3653,13 @@
     return Object.freeze({
       [X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL]: Object.freeze({
         id: X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL,
-        label: "PDC European Tour (Official)",
-        shortLabel: "PDC European Tour",
-        description: "European Tour rounds one to four (through the quarter-finals): KO, Best of 11 Legs (First to 6), 501, Straight In, Double Out, Bull 25/50.",
+        label: "PDC European Tour - Runden 1 bis 4",
+        shortLabel: "PDC European Tour R1-4",
+        description: "Offizielles Rundenprofil bis einschließlich Viertelfinale: KO, Best of 11 Legs (First to 6), 501, Straight In, Double Out, Bull 25/50.",
         notes: Object.freeze([
-          "Semi-finals and the final use longer event formats and are not represented by this single-round preset.",
-          "Bull-off Normal is the AutoDarts mapping used by this preset.",
-          "Max Runden 50 remains a technical AutoDarts limit and is not part of the PDC rule claim.",
+          "Halbfinale und Finale verwenden längere Distanzen und werden von dieser Vorlage nicht abgebildet.",
+          "Bull-off Normal ist die in dieser Vorlage verwendete AutoDarts-Abbildung.",
+          "Max Runden 50 ist ein technisches AutoDarts-Limit und kein Teil des PDC-Formatanspruchs.",
         ]),
         apply: Object.freeze({
           mode: "ko",
@@ -3537,12 +3675,12 @@
       }),
       [X01_PRESET_PDC_501_DOUBLE_OUT_BASIC]: Object.freeze({
         id: X01_PRESET_PDC_501_DOUBLE_OUT_BASIC,
-        label: "PDC 501 / Double Out (Basic)",
-        shortLabel: "PDC 501 / DO Basic",
-        description: "Compatibility preset for the former 'PDC-Standard': KO, Best of 5 Legs, 501, Straight In, Double Out, Bull 25/50.",
+        label: "Lokaler Spieleabend - 501 / Best of 5",
+        shortLabel: "Lokales 501 / Best of 5",
+        description: "Empfohlene, überschaubare Vorlage für lokale Turniere: KO, Best of 5 Legs (First to 3), 501, Straight In, Double Out, Bull 25/50.",
         notes: Object.freeze([
-          "This is not an official PDC event format.",
-          "Kept to preserve older saved drafts and tournaments without silently changing their match length.",
+          "Dies ist ein lokales Produktprofil und kein offizielles PDC-Eventformat.",
+          "Die technische ID bleibt erhalten, damit ältere Entwürfe und Turniere ihre Matchlänge nicht still ändern.",
         ]),
         apply: Object.freeze({
           mode: "ko",
@@ -3576,7 +3714,7 @@
 
 
   function getDefaultCreatePresetId() {
-    return X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL;
+    return X01_PRESET_PDC_501_DOUBLE_OUT_BASIC;
   }
 
 
@@ -10629,7 +10767,7 @@
           sameTriggerStable
             && focusAndHoverStable
             && state.activeCreateHelpTopic === "presetFormat"
-            && presetText.includes("PDC 501 / Double Out (Basic)")
+            && presetText.includes("Lokaler Spieleabend - 501 / Best of 5")
             && presetText.includes("kein offizielles PDC-Eventformat")
             && state.shadowRoot?.activeElement === basicPreset,
           `same=${sameTriggerStable}, passive=${focusAndHoverStable}, topic=${state.activeCreateHelpTopic || "-"}, basic=${presetText.includes("Basic")}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
@@ -11073,7 +11211,7 @@
         const liveSummaryOk = customSummary.includes("Best of 5 (First to 3)")
           && customOrigin.includes("Individuell / Manuell")
           && basicSummary.includes("501 · Best of 5 (First to 3)")
-          && basicOrigin.includes("PDC 501 / Double Out (Basic)")
+          && basicOrigin.includes("Lokaler Spieleabend - 501 / Best of 5")
           && state.createGameRulesExpanded === true
           && !editor.hidden;
         record(
@@ -11161,7 +11299,7 @@
         const presetFieldset = createForm.querySelector("fieldset[data-role='preset-selection']");
         const presetRadios = Array.from(createForm.querySelectorAll("input[name='x01Preset']"));
         const presetMarkupOk = presetFieldset instanceof HTMLFieldSetElement
-          && normalizeText(presetFieldset.querySelector("legend")?.textContent).startsWith("Turnierformat auswählen")
+          && normalizeText(presetFieldset.querySelector("legend")?.textContent).startsWith("Formatvorlage auswählen")
           && presetRadios.length === 3
           && presetRadios.every((radio) => radio instanceof HTMLInputElement
             && radio.type === "radio"
@@ -11561,15 +11699,15 @@
           `semantics=${navSemanticsOk}, focus=${navFocusOk}`,
         );
 
-        const debugCheckbox = state.shadowRoot?.getElementById("ata-setting-debug");
-        if (!(debugCheckbox instanceof HTMLInputElement)) throw new Error("Debug-Schalter fehlt.");
-        debugCheckbox.focus();
+        const settingsCheckbox = state.shadowRoot?.getElementById("ata-setting-autolobby");
+        if (!(settingsCheckbox instanceof HTMLInputElement)) throw new Error("Automatik-Schalter fehlt.");
+        settingsCheckbox.focus();
         renderShell();
-        const restoredDebugCheckbox = state.shadowRoot?.getElementById("ata-setting-debug");
-        const settingsLabelOk = restoredDebugCheckbox instanceof HTMLInputElement
-          && restoredDebugCheckbox.getAttribute("aria-labelledby") === "ata-setting-debug-label"
-          && restoredDebugCheckbox.getAttribute("aria-describedby") === "ata-setting-debug-description"
-          && state.shadowRoot?.activeElement === restoredDebugCheckbox;
+        const restoredSettingsCheckbox = state.shadowRoot?.getElementById("ata-setting-autolobby");
+        const settingsLabelOk = restoredSettingsCheckbox instanceof HTMLInputElement
+          && restoredSettingsCheckbox.getAttribute("aria-labelledby") === "ata-setting-autolobby-label"
+          && restoredSettingsCheckbox.getAttribute("aria-describedby") === "ata-setting-autolobby-description"
+          && state.shadowRoot?.activeElement === restoredSettingsCheckbox;
 
         const tournamentTab = state.shadowRoot?.querySelector("[data-tab='tournament']");
         if (!(tournamentTab instanceof HTMLButtonElement)) throw new Error("Turnier-Navigation fehlt.");
@@ -13662,10 +13800,19 @@
 
   function renderRuntimeStatusBar() {
     const status = collectRuntimeStatus();
+    if (!status.autoEnabled) {
+      return `
+        <div class="ata-runtime-statusbar">
+          ${renderDocLinkableMessage("Automatik aus · manuelle Ergebnisführung aktiv", {
+            tagName: "span",
+            className: "ata-status-pill ata-status-neutral",
+          })}
+        </div>
+      `;
+    }
     const apiStateClass = status.hasToken && !status.authBlocked ? "ata-status-ok" : "ata-status-warn";
     const boardStateClass = status.hasBoard ? "ata-status-ok" : "ata-status-warn";
-    const autoStateClass = status.autoEnabled ? "ata-status-info" : "ata-status-neutral";
-    const hint = status.autoEnabled && (!status.hasToken || !status.hasBoard)
+    const hint = !status.hasToken || !status.hasBoard
       ? renderDocLinkableMessage("Hinweis: F\u00fcr API-Halbautomatik werden Auth-Token und aktives Board ben\u00f6tigt.", {
         tagName: "span",
         className: "ata-runtime-hint",
@@ -13683,7 +13830,7 @@
         })}
         ${renderDocLinkableMessage(status.autoLabel, {
           tagName: "span",
-          className: `ata-status-pill ${autoStateClass}`,
+          className: "ata-status-pill ata-status-info",
         })}
         ${hint}
       </div>
@@ -17027,6 +17174,7 @@
       { anchor: "statusmeldung-kein-aktives-board", match: () => exact("Kein aktives Board") || exact("Board-ID fehlt. Bitte einmal manuell eine Lobby öffnen und Board auswählen.") },
       { anchor: "statusmeldung-auto-lobby-on", match: () => exact("Auto-Lobby ON") },
       { anchor: "statusmeldung-auto-lobby-off", match: () => exact("Auto-Lobby OFF") || exact("Auto-Lobby ist deaktiviert.") || exact("Auto-Lobby ist deaktiviert. Bitte im Tab Einstellungen aktivieren.") || exact("Auto-Lobby ist deaktiviert. Aktivieren Sie die Funktion im Tab Einstellungen.") },
+      { anchor: "statusmeldung-automatik-aus-manuelle-ergebnisfuehrung-aktiv", match: () => exact("Automatik aus · manuelle Ergebnisführung aktiv") },
       { anchor: "statusmeldung-runtime-hinweis-api-voraussetzungen", match: () => exact("Hinweis: Für API-Halbautomatik werden Auth-Token und aktives Board benötigt.") },
       { anchor: "statusmeldung-freilos-bye-kein-api-sync-erforderlich", match: () => exact("Freilos (Bye): kein API-Sync erforderlich") },
       { anchor: "statusmeldung-api-sync-abgeschlossen", match: () => exact("API-Sync: abgeschlossen") },
@@ -17067,8 +17215,8 @@
     }
 
     return {
-      href: `${README_BASE_URL}#${match.anchor}`,
-      title: `README: ${text}`,
+      href: `${STATUS_MESSAGES_DOC_URL}#${match.anchor}`,
+      title: `Statushilfe: ${text}`,
     };
   }
 
@@ -17318,6 +17466,9 @@
       : getCreatePresetLabel(activePresetId);
     return {
       presetLabel,
+      plainText: draft.mode === "preliminary_final"
+        ? `In der Vorrunde werden immer ${PRELIMINARY_FIXED_LEG_COUNT} Legs gespielt. In der Finalphase gewinnt, wer zuerst ${getLegsToWin(effectiveBestOf)} Legs gewinnt. Startwert ist ${draft.startScore}; ${draft.x01OutMode === "Double" ? "zum Beenden ist ein Doppel nötig" : `beendet wird mit ${draft.x01OutMode} Out`}.`
+        : `Wer zuerst ${getLegsToWin(effectiveBestOf)} Legs gewinnt, gewinnt das Match. Startwert ist ${draft.startScore}; ${draft.x01OutMode === "Double" ? "zum Beenden ist ein Doppel nötig" : `beendet wird mit ${draft.x01OutMode} Out`}.`,
       text: [
         ...leadingParts,
         `${draft.x01InMode} In`,
@@ -17505,9 +17656,10 @@
     }
     if (presetId === X01_PRESET_PDC_501_DOUBLE_OUT_BASIC) {
       return {
-        status: CREATE_HELP_COMPLIANCE_STATUSES.COMPATIBILITY_PROFILE,
-        description: "Basic erhält ältere 501-/Double-Out-Konfigurationen kompatibel, ist aber kein offizielles PDC-Eventformat.",
-        scope: "Gilt als Produktprofil für lokale und bestehende gespeicherte Turniere.",
+        status: CREATE_HELP_COMPLIANCE_STATUSES.PRODUCT_STANDARD,
+        label: "Empfohlenes lokales Produktprofil",
+        description: "Die Vorlage ist für einen überschaubaren lokalen Spieleabend gedacht und kein offizielles PDC-Eventformat.",
+        scope: "Gilt als lokale Einstiegsvorlage und erhält zugleich ältere gespeicherte Best-of-5-Konfigurationen kompatibel.",
         enforcement: "Die hinterlegten Werte werden vollständig angewendet; eine externe Formatkonformität wird nicht behauptet.",
       };
     }
@@ -17580,14 +17732,14 @@
       },
       compliance: ({ draft }) => buildCreateHelpModeCompliance(draft),
       sources: [
-        { label: "README - Turniermodi und unterstützter Scope", href: README_TOURNAMENT_MODES_URL },
+        { label: "Einsteigerleitfaden - Turniermodi", href: README_TOURNAMENT_MODES_URL },
         { label: "DRA-Regeln in der GUI - KO, Round Robin und Veranstalterformate", href: DRA_GUI_RULE_MODE_FORMATS_URL },
       ],
     }),
     presetFormat: freezeCreateHelpTopic({
       id: "presetFormat",
       title: "Preset und Formatprofil",
-      shortDescription: "Ein Preset setzt Modus, Matchlänge und X01-Kernwerte gemeinsam; Custom behält die aktuellen manuellen Werte bei.",
+      shortDescription: "Eine Formatvorlage setzt Turnierart, Matchlänge und wichtige X01-Regeln gemeinsam. Manuell behält deine aktuellen Werte bei.",
       resolveCurrentSelection: ({ draft, modeMeta }) => {
         const presetId = getAppliedCreatePresetId(draft);
         const bestOf = draft.mode === "preliminary_final" ? draft.finalStageBestOfLegs : draft.bestOfLegs;
@@ -17598,12 +17750,12 @@
         const presetId = getAppliedCreatePresetId(draft);
         if (presetId === X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL) {
           return [
-            "European Tour setzt KO, Best of 11, 501, Straight In, Double Out und die hinterlegten technischen Lobbywerte.",
+            "Diese Vorlage setzt KO, Best of 11, 501, Straight In, Double Out und die hinterlegten technischen Lobbywerte. Sie gilt nur für die European-Tour-Runden 1 bis 4.",
           ];
         }
         if (presetId === X01_PRESET_PDC_501_DOUBLE_OUT_BASIC) {
           return [
-            "Basic setzt KO, Best of 5, 501, Straight In, Double Out und kompatible technische Lobbywerte.",
+            "Die lokale Vorlage setzt KO, Best of 5, 501, Straight In und Double Out. Ein Match gewinnt, wer zuerst drei Legs gewinnt.",
           ];
         }
         return [
@@ -17616,7 +17768,7 @@
           return ["European Tour bildet Best of 11 als First to 6 Legs ab; Halbfinal- und Finaldistanzen des Events sind nicht Teil dieses Presets."];
         }
         if (presetId === X01_PRESET_PDC_501_DOUBLE_OUT_BASIC) {
-          return ["Basic bildet Best of 5 als First to 3 mit 501 und Double Out ab, ohne offiziellen Eventformat-Anspruch."];
+          return ["Best of 5 bedeutet hier: Wer zuerst drei Legs gewinnt, gewinnt das Match. Gespielt wird 501 mit Double Out."];
         }
         return ["Custom kann zum Beispiel Best of " + draft.bestOfLegs + " mit " + draft.startScore + " Startpunkten beibehalten."];
       },
@@ -17631,7 +17783,7 @@
         "Eine manuelle Änderung an einem Preset-relevanten Wert aktiviert Custom.",
       ],
       limitations: [
-        "Basic ist kein offizielles PDC-Eventformat.",
+        "Die lokale Best-of-5-Vorlage ist kein offizielles PDC-Eventformat.",
         "Custom besitzt keine automatische Konformitätsgarantie.",
         "European Tour bildet nur den ausdrücklich beschriebenen Runden-Scope ab.",
       ],
@@ -17641,7 +17793,8 @@
       },
       compliance: ({ draft }) => buildCreateHelpPresetCompliance(draft),
       sources: [
-        { label: "README - Preset-Katalog und technische Abgrenzung", href: README_PRESET_CATALOG_URL },
+        { label: "Veranstalter-Handbuch - Formatvorlagen", href: README_PRESET_CATALOG_URL },
+        { label: "Begriffe - Best of, First to und X01", href: GLOSSARY_DOC_URL },
         { label: "PDC/DRA Compliance-Mapping - Preset-Logik", href: PDC_DRA_COMPLIANCE_PRESET_URL },
         { label: "PDC Europe - European Darts Open 2026 Format", href: PDC_EUROPEAN_TOUR_FORMAT_URL },
       ],
@@ -17682,7 +17835,7 @@
         "Eingabereihenfolge und Draw-Modus bestimmen die Seed-Wirkung.",
       ],
       limitations: [
-        "Dieses Release ergänzt keine neue Duplikat- oder Inline-Validierungsoberfläche.",
+        "Leere Zeilen werden ignoriert; doppelte oder reservierte Namen werden vor der Anlage sichtbar blockiert.",
         "Die Anwendung prüft keine vollständige externe Setz- oder Meldeordnung.",
       ],
       classification: {
@@ -17696,7 +17849,7 @@
         enforcement: "Die erkannten Einträge und ihre Reihenfolge werden technisch verwendet; darüber hinaus bleibt die Turnierleitung verantwortlich.",
       },
       sources: [
-        { label: "README - Turnier anlegen und Teilnehmer", href: README_TOURNAMENT_CREATE_URL },
+        { label: "Einsteigerleitfaden - Turnier anlegen", href: README_TOURNAMENT_CREATE_URL },
         { label: "DRA-Regeln in der GUI - Teilnehmerlimits und Veranstalterermessen", href: DRA_GUI_RULE_PARTICIPANT_LIMITS_URL },
       ],
     }),
@@ -17751,7 +17904,7 @@
         enforcement: "Draw-Stabilität wird im implementierten Draw-Lock-Scope unterstützt; eine externe Ziehung oder vollständige Eventprüfung findet nicht statt.",
       },
       sources: [
-        { label: "README - KO und Doppel-KO Draw", href: README_TOURNAMENT_MODES_URL },
+        { label: "Einsteigerleitfaden - KO und Doppel-KO", href: README_TOURNAMENT_MODES_URL },
         { label: "DRA-Regeln in der GUI - Draw und Stabilität (DRA 6.12.1, Seite 19)", href: DRA_GUI_RULE_OPEN_DRAW_URL },
         { label: "DRA-Regeln in der GUI - Freilos und projektinternes Seed-Placement", href: DRA_GUI_RULE_BYE_URL },
       ],
@@ -17798,7 +17951,7 @@
         enforcement: "Die Anwendung erzeugt das Match und hält es vom Champion-Pfad getrennt; die externe Turnierordnung wird nicht geprüft.",
       },
       sources: [
-        { label: "README - KO und optionales Spiel um Platz 3", href: README_TOURNAMENT_MODES_URL },
+        { label: "Einsteigerleitfaden - KO und Spiel um Platz 3", href: README_TOURNAMENT_MODES_URL },
         { label: "DRA-Regeln in der GUI - Platz 3 und separate Turnierregeln", href: DRA_GUI_RULE_THIRD_PLACE_URL },
       ],
     }),
@@ -17850,7 +18003,7 @@
         enforcement: "Die Anwendung erzeugt ein Reset-Finale bedarfsgesteuert oder beendet das Turnier nach dem gewählten Einzelmatch.",
       }),
       sources: [
-        { label: "README - Doppel-KO und Grand-Final-Regel", href: README_TOURNAMENT_MODES_URL },
+        { label: "Einsteigerleitfaden - Doppel-KO", href: README_TOURNAMENT_MODES_URL },
         { label: "PDC/DRA Compliance-Mapping - KO und Veranstalterregeln", href: PDC_DRA_COMPLIANCE_KO_URL },
       ],
     }),
@@ -17996,14 +18149,14 @@
         enforcement: "Mathematische Verteilung und Parameter werden technisch validiert; die externe Turnierordnung bleibt Verantwortung der Turnierleitung.",
       },
       sources: [
-        { label: "README - Vorrunde + Finalphase", href: README_TOURNAMENT_MODES_URL },
+        { label: "Einsteigerleitfaden - Vorrunde und Finalphase", href: README_TOURNAMENT_MODES_URL },
         { label: "PDC/DRA Compliance-Mapping - Vorrunde + Finalphase", href: PDC_DRA_COMPLIANCE_PRELIMINARY_FINAL_URL },
       ],
     }),
     gameRules: freezeCreateHelpTopic({
       id: "gameRules",
       title: "Spielregeln und X01",
-      shortDescription: "Matchlänge und X01-Werte steuern Lobbykonfiguration und Zeitprognose; technische Lobbywerte bleiben von offiziellen Formatwerten getrennt.",
+      shortDescription: "Hier legst du fest, wie ein Match gewonnen, begonnen und beendet wird. Diese Werte beeinflussen außerdem die Zeitprognose.",
       resolveCurrentSelection: ({ gameRulesSummary }) => (
         gameRulesSummary.presetLabel + " · " + gameRulesSummary.text
       ),
@@ -18050,7 +18203,8 @@
       },
       compliance: ({ draft }) => buildCreateHelpPresetCompliance(draft),
       sources: [
-        { label: "README - Spielregeln und Feldinhalte", href: README_TOURNAMENT_CREATE_URL },
+        { label: "Einsteigerleitfaden - Spielregeln", href: README_TOURNAMENT_CREATE_URL },
+        { label: "Begriffe - Legs, X01, In, Out und Bull-off", href: GLOSSARY_DOC_URL },
         { label: "PDC/DRA Compliance-Mapping - Preset-Logik und technische Abgrenzung", href: PDC_DRA_COMPLIANCE_PRESET_URL },
         { label: "PDC Europe - European Darts Open 2026 Format", href: PDC_EUROPEAN_TOUR_FORMAT_URL },
       ],
@@ -18109,7 +18263,7 @@
       },
       sources: [
         { label: "Dokumentation - verwendete Parameter der Turnierzeit-Prognose", href: TOURNAMENT_DURATION_PARAMETERS_URL },
-        { label: "README - Voraussichtliche Turnierzeit", href: README_TOURNAMENT_CREATE_URL },
+        { label: "Einsteigerleitfaden - Zeitplanung", href: README_TOURNAMENT_CREATE_URL },
       ],
     }),
     timeProfile: freezeCreateHelpTopic({
@@ -18432,13 +18586,23 @@
         ${renderCreateHelpTextSection("Kurz erklärt", model.shortDescription)}
         ${renderCreateHelpTextSection("Aktuelle Auswahl", model.currentSelection, "ata-create-help-current")}
         ${renderCreateHelpListSection("Auswirkung auf dein Turnier", model.effects)}
-        ${renderCreateHelpListSection("Beispiele", model.examples)}
-        ${renderCreateHelpListSection("Tipps", model.tips, "ata-create-help-tips")}
-        ${renderCreateHelpListSection("Abhängigkeiten", model.dependencies)}
-        ${renderCreateHelpListSection("Einschränkungen", model.limitations)}
-        ${renderCreateHelpClassification(model.classification)}
-        ${renderCreateHelpCompliance(model.compliance)}
-        ${renderCreateHelpSources(model.sources)}
+        <details class="ata-create-help-details">
+          <summary>Mehr Beispiele und Hinweise</summary>
+          <div class="ata-create-help-details-body">
+            ${renderCreateHelpListSection("Beispiele", model.examples)}
+            ${renderCreateHelpListSection("Tipps", model.tips, "ata-create-help-tips")}
+            ${renderCreateHelpListSection("Abhängigkeiten", model.dependencies)}
+            ${renderCreateHelpListSection("Einschränkungen", model.limitations)}
+            ${renderCreateHelpClassification(model.classification)}
+          </div>
+        </details>
+        <details class="ata-create-help-details ata-create-help-rules">
+          <summary>Regelstatus und Quellen für die Turnierleitung</summary>
+          <div class="ata-create-help-details-body">
+            ${renderCreateHelpCompliance(model.compliance)}
+            ${renderCreateHelpSources(model.sources)}
+          </div>
+        </details>
       </div>
     `;
   }
@@ -18943,8 +19107,12 @@
   function getCreatePresetCardSummary(preset) {
     const apply = preset?.apply || {};
     const modeLabel = apply.mode === "ko" ? "KO" : normalizeText(apply.mode || "").toUpperCase();
+    const scopeLabel = preset?.id === X01_PRESET_PDC_501_DOUBLE_OUT_BASIC
+      ? "Empfohlen für lokale Turniere"
+      : "Offizielles Profil für Runden 1 bis 4";
     return [
-      modeLabel,
+      scopeLabel,
+      `setzt ${modeLabel}`,
       `Best of ${apply.bestOfLegs}`,
       apply.startScore,
       `${apply.x01InMode} In`,
@@ -18992,13 +19160,26 @@
     return `
       <fieldset class="ata-preset-fieldset ata-field-span-2" data-role="preset-selection">
         <legend>
-          <span>Turnierformat auswählen</span>
+          <span>Formatvorlage auswählen</span>
           ${renderCreateHelpTrigger("presetFormat", "Hilfe zu Presets und Formatprofilen öffnen")}
         </legend>
+        <p class="ata-small ata-preset-intro">Eine Vorlage setzt auch Modus und Spielregeln. Mit &bdquo;Individuell / Manuell&ldquo; bleiben deine aktuellen Werte erhalten.</p>
         <div class="ata-preset-card-grid">${cardsHtml}</div>
         ${renderCreateFieldValidation("x01Preset")}
       </fieldset>
     `;
+  }
+
+
+  function getCreateModeQuickSummary(mode) {
+    const summaries = {
+      ko: "Eine Niederlage beendet das Turnier. Gut für einen schnellen, klaren Ablauf.",
+      double_ko: "Erst nach der zweiten Niederlage scheidet eine Person aus. Fairer, aber deutlich mehr Matches.",
+      league: "Alle spielen gegeneinander. Sehr aussagekräftig, bei großen Feldern jedoch zeitintensiv.",
+      groups_ko: "Zuerst Gruppen, danach eine KO-Finalrunde. Verbindet mehrere Spiele pro Person mit einem Finale.",
+      preliminary_final: "Eine planbare Vorrunde bestimmt die Qualifikation für eine frei wählbare Finalphase.",
+    };
+    return summaries[normalizeText(mode)] || summaries.ko;
   }
 
 
@@ -19019,12 +19200,13 @@
               ${renderCreateHelpTrigger("tournamentMode", "Hilfe zum Turniermodus öffnen")}
             </div>
             <select id="ata-mode" name="mode">
-              <option value="ko" ${draft.mode === "ko" ? "selected" : ""}>KO</option>
-              <option value="double_ko" ${draft.mode === "double_ko" ? "selected" : ""}>Doppel-KO</option>
-              <option value="league" ${draft.mode === "league" ? "selected" : ""}>Liga</option>
-              <option value="groups_ko" ${draft.mode === "groups_ko" ? "selected" : ""}>Gruppenphase + KO</option>
-              <option value="preliminary_final" ${draft.mode === "preliminary_final" ? "selected" : ""}>Vorrunde + Finalphase</option>
+              <option value="ko" ${draft.mode === "ko" ? "selected" : ""}>KO – schnell, eine Niederlage</option>
+              <option value="double_ko" ${draft.mode === "double_ko" ? "selected" : ""}>Doppel-KO – zweite Chance</option>
+              <option value="league" ${draft.mode === "league" ? "selected" : ""}>Liga – alle gegen alle</option>
+              <option value="groups_ko" ${draft.mode === "groups_ko" ? "selected" : ""}>Gruppenphase + KO – Gruppen und Finale</option>
+              <option value="preliminary_final" ${draft.mode === "preliminary_final" ? "selected" : ""}>Vorrunde + Finalphase – flexibel planbar</option>
             </select>
+            <p class="ata-small ata-mode-quick-summary" data-role="mode-quick-summary">${escapeHtml(getCreateModeQuickSummary(draft.mode))}</p>
             ${renderCreateFieldValidation("mode")}
           </div>
         </div>
@@ -19128,6 +19310,7 @@
         <div class="ata-create-section-body">
           <div class="ata-game-rules-summary" data-role="game-rules-summary">
             <p class="ata-game-rules-origin" data-role="game-rules-preset-origin"><strong>Format:</strong> ${escapeHtml(summary.presetLabel)}</p>
+            <p class="ata-game-rules-plain" data-role="game-rules-plain-text">${escapeHtml(summary.plainText)}</p>
             <p class="ata-game-rules-summary-text" data-role="game-rules-summary-text">${escapeHtml(summary.text)}</p>
           </div>
           <div class="ata-game-rules-actions">
@@ -19239,15 +19422,16 @@
           <div class="ata-grid-2 ata-create-overview-controls">
             <div class="ata-field">
               <div class="ata-field-label-row">
-                <label for="ata-board-count">Boards für Zeitprognose</label>
+                <label for="ata-board-count">Gleichzeitig nutzbare Boards (nur Zeitplanung)</label>
                 ${renderCreateHelpTrigger("boardCount", "Hilfe zu Boards für die Zeitprognose öffnen")}
               </div>
               <input id="ata-board-count" name="boardCount" type="number" min="1" max="${TOURNAMENT_DURATION_MAX_BOARD_COUNT}" step="1" value="${draft.boardCount}">
+              <p class="ata-small">Legt keine AutoDarts-Boards oder Lobbys an, sondern verfeinert nur die Schätzung.</p>
               ${renderCreateFieldValidation("boardCount")}
             </div>
             <div class="ata-field">
               <div class="ata-field-label-row">
-                <label for="ata-create-time-profile">Zeitprofil</label>
+                <label for="ata-create-time-profile">Spieltempo für die Schätzung</label>
                 ${renderCreateHelpTrigger("timeProfile", "Hilfe zum Zeitprofil öffnen")}
               </div>
               <select id="ata-create-time-profile" name="tournamentTimeProfile" data-action="set-duration-time-profile">${tournamentTimeProfileOptions}</select>
@@ -19255,6 +19439,14 @@
             </div>
           </div>
           <div id="ata-create-duration-estimate">${renderTournamentDurationEstimate(durationEstimate, { visible: durationEstimateVisible, showHelpLinks: false })}</div>
+          <div class="ata-create-preflight" aria-label="Kontrolle vor der Turnieranlage">
+            <strong>Vor dem Start kurz prüfen</strong>
+            <ul>
+              <li>${escapeHtml(String(validationSnapshot.summary.participantCount))} Teilnehmernamen · ${escapeHtml(validationSnapshot.summary.modeLabel)}</li>
+              <li>${escapeHtml(validationSnapshot.summary.presetLabel)} · ${escapeHtml(buildCreateGameRulesSummary(draft).plainText)}</li>
+              <li>${escapeHtml(String(draft.boardCount))} ${draft.boardCount === 1 ? "Board" : "Boards"} dienen nur der Zeitplanung; Haus- und Sonderregeln vorher ankündigen.</li>
+            </ul>
+          </div>
           <p class="ata-small">Modus-Limits: ${escapeHtml(modeLimitSummary)}.</p>
           <div class="ata-actions ata-create-primary-actions">
             <button type="submit" class="ata-btn ata-btn-primary" ${validationSnapshot.valid ? "" : "disabled"} aria-disabled="${validationSnapshot.valid ? "false" : "true"}" aria-describedby="ata-create-submit-status">Turnier anlegen</button>
@@ -19276,9 +19468,11 @@
     const tournamentTimeProfileOptions = TOURNAMENT_TIME_PROFILES.map((profileId) => {
       const profileMeta = getTournamentTimeProfileMeta(profileId);
       const selectedAttr = tournamentTimeProfile === profileId ? "selected" : "";
-      const label = profileId === TOURNAMENT_TIME_PROFILE_NORMAL
-        ? `${profileMeta.label} (empfohlen)`
-        : profileMeta.label;
+      const label = profileId === TOURNAMENT_TIME_PROFILE_FAST
+        ? `${profileMeta.label} – zügiger Ablauf`
+        : profileId === TOURNAMENT_TIME_PROFILE_SLOW
+          ? `${profileMeta.label} – längere Wechsel und Pausen`
+          : `${profileMeta.label} – ausgewogener Standard (empfohlen)`;
       return `<option value="${profileMeta.id}" ${selectedAttr}>${escapeHtml(label)}</option>`;
     }).join("");
     if (!tournament) {
@@ -19474,6 +19668,7 @@
     }
 
     const activeStartedMatch = findActiveStartedMatch(tournament);
+    const autoLobbyEnabled = state.store?.settings?.featureFlags?.autoLobbyStart === true;
     const sortMode = sanitizeMatchesSortMode(state.store?.ui?.matchesSortMode, MATCH_SORT_MODE_READY_FIRST);
     const sortOptions = [
       { id: MATCH_SORT_MODE_READY_FIRST, label: "Spielbar zuerst" },
@@ -19609,7 +19804,7 @@
         const classes = ["ata-pairing-player"];
         if (isOpenSlot(name)) {
           classes.push("ata-open-slot");
-          return `<span class="${classes.join(" ")}">${escapeHtml(name)}</span>`;
+          return `<span class="${classes.join(" ")}">Teilnehmer steht noch nicht fest</span>`;
         }
         if (isCompleted && match.winnerId) {
           if (participantId === match.winnerId) {
@@ -19640,30 +19835,37 @@
       const regularEditorHtml = editable && !isFixedPreliminary
         ? `
           <div class="ata-match-editor">
+            <p class="ata-match-score-help">Matchziel: zuerst ${escapeHtml(String(matchLegsToWin))} Legs. Bitte gewonnene Legs eintragen, nicht Wurfpunkte.</p>
             <div class="ata-score-grid">
-              <input
-                type="number"
-                min="0"
-                max="${matchLegsToWin}"
-                data-field="legs-p1"
-                data-match-id="${escapeHtml(match.id)}"
-                value="${match.legs.p1}"
-                aria-label="${escapeHtml(legsP1HelpText)}"
-                title="${escapeHtml(legsP1HelpText)}"
-              >
-              <input
-                type="number"
-                min="0"
-                max="${matchLegsToWin}"
-                data-field="legs-p2"
-                data-match-id="${escapeHtml(match.id)}"
-                value="${match.legs.p2}"
-                aria-label="${escapeHtml(legsP2HelpText)}"
-                title="${escapeHtml(legsP2HelpText)}"
-              >
+              <label class="ata-score-entry">
+                <span>${escapeHtml(player1)}: gewonnene Legs</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="${matchLegsToWin}"
+                  data-field="legs-p1"
+                  data-match-id="${escapeHtml(match.id)}"
+                  value="${match.legs.p1}"
+                  aria-label="${escapeHtml(legsP1HelpText)}"
+                  title="${escapeHtml(legsP1HelpText)}"
+                >
+              </label>
+              <label class="ata-score-entry">
+                <span>${escapeHtml(player2)}: gewonnene Legs</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="${matchLegsToWin}"
+                  data-field="legs-p2"
+                  data-match-id="${escapeHtml(match.id)}"
+                  value="${match.legs.p2}"
+                  aria-label="${escapeHtml(legsP2HelpText)}"
+                  title="${escapeHtml(legsP2HelpText)}"
+                >
+              </label>
             </div>
             <div class="ata-editor-actions">
-              <button type="button" class="ata-btn" data-action="save-match" data-match-id="${escapeHtml(match.id)}" title="${escapeHtml(saveHelpText)}">Speichern</button>
+              <button type="button" class="ata-btn" data-action="save-match" data-match-id="${escapeHtml(match.id)}" title="${escapeHtml(saveHelpText)}">Ergebnis speichern</button>
               <button type="button" class="ata-btn ata-btn-primary" data-action="start-match" data-match-id="${escapeHtml(match.id)}" ${startDisabledAttr} ${startTitleAttr}>${escapeHtml(startUi.label)}</button>
             </div>
           </div>
@@ -19678,7 +19880,7 @@
         ? `<span class="${escapeHtml(advanceClasses)}">${escapeHtml(summaryText)}</span>`
         : "";
       const nextPillHtml = isSuggestedNext
-        ? `<span class="ata-match-next-pill" title="Empfohlene n\u00e4chste Paarung (PDC: Next Match)">N\u00e4chstes Match</span>`
+        ? `<span class="ata-match-next-pill" title="Empfohlene n\u00e4chste spielbare Paarung">N\u00e4chstes Match</span>`
         : "";
       const finalPillHtml = isKoFinal
         ? `<span class="ata-match-final-pill" title="Finale">🏆 Finale</span>`
@@ -19712,15 +19914,15 @@
 
     const cardsHtml = cards || `<p class="ata-small">Keine Matches vorhanden.</p>`;
     const resultHeadingLinks = [
-      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Erklärung zur API-Halbautomatik öffnen", title: "README: API-Halbautomatik" },
+      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Erklärung zu manueller Eingabe und Automatik öffnen", title: "Einsteigerleitfaden: Ergebnisführung" },
       { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
     ];
     const nextMatchHelpLinks = renderInfoLinks([
-      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Ablauf der Ergebnisführung öffnen", title: "README: API-Halbautomatik und Ergebnisführung" },
-      { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Turniermodus-Kontext öffnen", title: "README: Turniermodi" },
+      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Ablauf der Ergebnisführung öffnen", title: "Einsteigerleitfaden: Ergebnisführung" },
+      { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Turniermodus-Kontext öffnen", title: "Einsteigerleitfaden: Turniermodi" },
     ]);
     const nextHintHtml = suggestedNextMatchId
-      ? `<p class="ata-small ata-next-hint">Hinweis: Die Markierung "Nächstes Match" zeigt die empfohlene nächste Paarung (PDC: Next Match) ${nextMatchHelpLinks}.</p>`
+      ? `<p class="ata-small ata-next-hint">Die Markierung &bdquo;Nächstes Match&ldquo; zeigt die empfohlene nächste spielbare Paarung ${nextMatchHelpLinks}.</p>`
       : "";
     const sortButtonsHtml = sortOptions.map((option) => `
       <button type="button" class="ata-segmented-btn" data-action="set-matches-sort" data-sort-mode="${option.id}" data-active="${sortMode === option.id ? "1" : "0"}" aria-pressed="${sortMode === option.id ? "true" : "false"}">${escapeHtml(option.label)}</button>
@@ -19732,8 +19934,10 @@
           id: "ata-matches-heading",
           programmaticFocus: true,
         })}
-        <p class="ata-small">API-Halbautomatik: Match per Klick starten, Ergebnis wird automatisch synchronisiert. Manuelle Eingabe bleibt als Fallback aktiv. ${renderInfoLinks([
-          { href: README_API_AUTOMATION_URL, kind: "tech", label: "Voraussetzungen und Ablauf öffnen", title: "README: API-Halbautomatik" },
+        <p class="ata-small">${autoLobbyEnabled
+          ? "Automatik aktiv: Match per Klick starten; das Ergebnis wird nach Matchende synchronisiert. Die manuelle Eingabe bleibt als Fallback verfügbar."
+          : "Manuelle Ergebnisführung: Trage für beide Personen die gewonnenen Legs ein und speichere das Ergebnis. Die optionale AutoDarts-Automatik kannst du in den Einstellungen aktivieren."} ${renderInfoLinks([
+          { href: README_API_AUTOMATION_URL, kind: "tech", label: "Voraussetzungen und Ablauf öffnen", title: "Einsteigerleitfaden: Ergebnisführung" },
         ])}</p>
         <div class="ata-matches-toolbar">
           <div class="ata-segmented" role="group" aria-label="Match-Sortierung">${sortButtonsHtml}</div>
@@ -20038,28 +20242,43 @@
     return html || `<section class="ata-card tournamentCard"><h3>Turnierbaum</h3><p>Keine Daten.</p></section>`;
   }
 
+// Presentation for local tournament backups and recovery.
   function renderIOTab() {
+    const tournament = state.store?.tournament;
+    const participantCount = Array.isArray(tournament?.participants) ? tournament.participants.length : 0;
+    const tournamentSummary = tournament
+      ? `${normalizeText(tournament.name || "Unbenanntes Turnier")} · ${getModeParticipantLimits(tournament.mode).label} · ${participantCount} Teilnehmer`
+      : "Noch kein aktives Turnier. Eine Sicherung enthält erst nach der Turnieranlage Daten.";
     return `
       <section class="ata-card tournamentCard">
-        <h3>Export</h3>
+        ${renderSectionHeading("Turnier sichern", [
+          { href: ORGANIZER_GUIDE_DOC_URL, kind: "tech", label: "Anleitung zu Sicherung und Wiederherstellung öffnen", title: "Veranstalter-Handbuch: Sicherung" },
+        ])}
+        <p>Speichert das aktuelle Turnier mit Paarungen, Ergebnissen und Fortschritt als Datei.</p>
+        <p class="ata-small"><strong>Aktueller Stand:</strong> ${escapeHtml(tournamentSummary)}</p>
         <div class="ata-actions">
-          <button type="button" class="ata-btn ata-btn-primary" data-action="export-file">JSON herunterladen</button>
-          <button type="button" class="ata-btn" data-action="export-clipboard">JSON in Zwischenablage</button>
+          <button type="button" class="ata-btn ata-btn-primary" data-action="export-file" ${tournament ? "" : "disabled"}>Sicherungsdatei herunterladen</button>
+          <button type="button" class="ata-btn" data-action="export-clipboard" ${tournament ? "" : "disabled"}>Sicherungsdaten kopieren</button>
         </div>
       </section>
       <section class="ata-card tournamentCard">
-        <h3>Import</h3>
+        <h3>Sicherung wiederherstellen</h3>
+        <p>Eine Sicherungsdatei stellt ein früheres Turnier wieder her. Vor dem Ersetzen zeigt die Anwendung Name, Modus und Teilnehmerzahl zur Bestätigung an.</p>
+        ${tournament ? `<p class="ata-io-warning"><strong>Achtung:</strong> Das aktuell aktive Turnier wird nach deiner Bestätigung ersetzt. Lade vorher eine Sicherung herunter, wenn du es behalten möchtest.</p>` : ""}
         <div class="ata-field">
-          <label for="ata-import-file">Datei importieren</label>
+          <label for="ata-import-file">Sicherungsdatei auswählen</label>
           <input id="ata-import-file" type="file" accept=".json,application/json">
         </div>
-        <div class="ata-field" style="margin-top: 10px;">
-          <label for="ata-import-text">JSON einf\u00fcgen</label>
-          <textarea id="ata-import-text" placeholder="{ ... }"></textarea>
-        </div>
-        <div class="ata-actions" style="margin-top: 10px;">
-          <button type="button" class="ata-btn" data-action="import-text">Eingef\u00fcgtes JSON importieren</button>
-        </div>
+        <details class="ata-io-advanced">
+          <summary>Erweitert: Sicherungsdaten als JSON einfügen</summary>
+          <div class="ata-field">
+            <label for="ata-import-text">JSON-Sicherungsdaten</label>
+            <textarea id="ata-import-text" placeholder="{ ... }"></textarea>
+          </div>
+          <div class="ata-actions">
+            <button type="button" class="ata-btn" data-action="import-text">Eingefügte Sicherung prüfen</button>
+          </div>
+        </details>
       </section>
     `;
   }
@@ -20197,43 +20416,28 @@
     return `
       ${renderUpdatePanel()}
       <section class="ata-card tournamentCard">
-        ${renderSectionHeading("Debug und Feature-Flags", [
+        ${renderSectionHeading("Turnierablauf und Automatik", [
           { href: README_SETTINGS_URL, kind: "tech", label: "Einstellungen-Dokumentation \u00f6ffnen", title: "README: Einstellungen" },
           { href: README_INFO_SYMBOLS_URL, kind: "tech", label: "Legende der Info-Symbole \u00f6ffnen", title: "README: Info-Symbole" },
         ])}
         <div class="ata-toggle">
           <div>
-            <strong id="ata-setting-debug-label">Debug-Mode</strong>
-            <div id="ata-setting-debug-description" class="ata-small">Aktiviert detaillierte Logs in der Browser-Konsole sowie ein persistiertes Matchstart-Debug-Protokoll ohne Auth-Token.</div>
-          </div>
-          <input type="checkbox" id="ata-setting-debug" data-action="toggle-debug" aria-labelledby="ata-setting-debug-label" aria-describedby="ata-setting-debug-description" ${debugEnabled}>
-        </div>
-        <div class="ata-actions ata-debug-actions">
-          <button type="button" class="ata-btn ata-btn-sm" data-action="copy-matchstart-debug" ${debugActionDisabledAttr}>Matchstart-Debug kopieren</button>
-          <button type="button" class="ata-btn ata-btn-sm" data-action="clear-matchstart-debug" ${debugActionDisabledAttr}>Matchstart-Debug leeren</button>
-        </div>
-        <p class="ata-small">Erfasst Vorprüfung, Lobby-Payload, API-Schritte, bullMode-Fallback, vorsichtiges Lobby-Cleanup und Fehlerdetails der letzten Matchstarts.</p>
-        ${hasMatchStartDebugSessions
-          ? `<pre class="ata-debug-log">${escapeHtml(debugReportText)}</pre>`
-          : `<p class="ata-small">Noch keine Matchstart-Debugdaten vorhanden. Debug-Mode aktivieren, Match testen und das Protokoll danach hier kopieren.</p>`}
-        <div class="ata-toggle">
-          <div>
-            <strong><span id="ata-setting-autolobby-label">Automatischer Lobby-Start + API-Sync</span> ${apiSyncHelpLinks}</strong>
-            <div id="ata-setting-autolobby-description" class="ata-small">Standard: AUS. Aktiviert Matchstart per Klick und automatische Ergebnis\u00fcbernahme aus der Autodarts-API.</div>
+            <strong><span id="ata-setting-autolobby-label">AutoDarts-Automatik f\u00fcr Matchstart und Ergebnis</span> ${apiSyncHelpLinks}</strong>
+            <div id="ata-setting-autolobby-description" class="ata-small">Standard: AUS. Ohne Automatik tr\u00e4gst du gewonnene Legs im Tab <code>Spiele</code> selbst ein. Mit Automatik werden Lobby und Ergebnis \u00fcber die AutoDarts-API verkn\u00fcpft.</div>
           </div>
           <input type="checkbox" id="ata-setting-autolobby" data-action="toggle-autolobby" aria-labelledby="ata-setting-autolobby-label" aria-describedby="ata-setting-autolobby-description" ${autoLobbyEnabled}>
         </div>
         <div class="ata-toggle">
           <div>
-            <strong><span id="ata-setting-randomize-ko-label">KO-Erstrunde zuf\u00e4llig mischen (Standard)</span> ${koDrawHelpLinks}</strong>
-            <div id="ata-setting-randomize-ko-description" class="ata-small">Standard: EIN. Neue KO-Turniere nutzen damit Open Draw. Freilose werden anhand des gespeicherten Seed-Placements deterministisch verteilt.</div>
+            <strong><span id="ata-setting-randomize-ko-label">KO-Erstrunde zuf\u00e4llig auslosen</span> ${koDrawHelpLinks}</strong>
+            <div id="ata-setting-randomize-ko-description" class="ata-small">Standard: EIN. Bei AUS entspricht die Reihenfolge der Teilnehmerliste der Setzreihenfolge. Freilose werden nachvollziehbar verteilt.</div>
           </div>
           <input type="checkbox" id="ata-setting-randomize-ko" data-action="toggle-randomize-ko" aria-labelledby="ata-setting-randomize-ko-label" aria-describedby="ata-setting-randomize-ko-description" ${randomizeKoEnabled}>
         </div>
         <div class="ata-toggle">
           <div>
-            <strong><span id="ata-setting-ko-draw-lock-default-label">KO-Draw sperren (Standard)</span> ${koDrawLockHelpLinks}</strong>
-            <div id="ata-setting-ko-draw-lock-default-description" class="ata-small">Standard: EIN. Neue KO-Turniere behalten den initialen Draw unver\u00e4ndert.</div>
+            <strong><span id="ata-setting-ko-draw-lock-default-label">Auslosung nach Turnierstart sperren</span> ${koDrawLockHelpLinks}</strong>
+            <div id="ata-setting-ko-draw-lock-default-description" class="ata-small">Standard: EIN. Neue KO- und Doppel-KO-Turniere behalten ihren erzeugten Turnierbaum unver\u00e4ndert.</div>
           </div>
           <input type="checkbox" id="ata-setting-ko-draw-lock-default" data-action="toggle-ko-draw-lock-default" aria-labelledby="ata-setting-ko-draw-lock-default-label" aria-describedby="ata-setting-ko-draw-lock-default-description" ${koDrawLockDefaultEnabled}>
         </div>
@@ -20247,7 +20451,7 @@
         <p class="ata-small"><strong>Schnell:</strong> z\u00fcgige Abl\u00e4ufe. <strong>Normal:</strong> ausgewogener Standard. <strong>Langsam:</strong> konservativer f\u00fcr gemischte Felder und l\u00e4ngere Wechselzeiten.</p>
       </section>
       <section class="ata-card tournamentCard">
-        ${renderSectionHeading("KO Draw-Lock (aktives Turnier)", [
+        ${renderSectionHeading("Auslosung des aktiven Turniers", [
           { href: DRA_GUI_RULE_DRAW_LOCK_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zu Draw-Lock \u00f6ffnen", title: "DRA-Regeln in der GUI: Draw-Lock" },
         ])}
         <div class="ata-toggle">
@@ -20257,22 +20461,22 @@
           </div>
           <input type="checkbox" id="ata-setting-ko-draw-locked" data-action="set-ko-draw-locked" aria-labelledby="ata-setting-ko-draw-locked-label" aria-describedby="ata-setting-ko-draw-locked-description" ${activeKoDrawLocked} ${activeKoDrawLockDisabledAttr}>
         </div>
-        <p class="ata-small">Nur f\u00fcr den Modus KO (Straight Knockout) verf\u00fcgbar. Entsperren erfordert einen expliziten Promoter-Override mit Best\u00e4tigung (DRA 6.12.1).</p>
+        <p class="ata-small">F\u00fcr KO und Doppel-KO verf\u00fcgbar. Das Entsperren ist eine bewusste Entscheidung der Turnierleitung und muss best\u00e4tigt werden (DRA 6.12.1).</p>
       </section>
       <section class="ata-card tournamentCard">
-        ${renderSectionHeading("Veranstalter-Tie-Break-Profil", [
+        ${renderSectionHeading("Tabellenwertung bei Gleichstand", [
           { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerkl\u00e4rung zum Tie-Break \u00f6ffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
         ])}
         <div class="ata-field">
-          <label for="ata-setting-tiebreak">Profil pro Turnier</label>
+          <label for="ata-setting-tiebreak">Reihenfolge der Entscheidungskriterien</label>
           <select id="ata-setting-tiebreak" data-action="set-tiebreak-mode" ${tieBreakDisabledAttr}>
-            <option value="${TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE ? "selected" : ""}>Veranstalterprofil: Direktvergleich und Minitabelle (empfohlen)</option>
-            <option value="${TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF ? "selected" : ""}>Veranstalterprofil: Punkte und Leg-Differenz</option>
+            <option value="${TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE ? "selected" : ""}>Direktvergleich und Minitabelle (empfohlen)</option>
+            <option value="${TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF}" ${tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_POINTS_LEGDIFF ? "selected" : ""}>Punkte und Leg-Differenz (vereinfacht)</option>
           </select>
         </div>
         <p class="ata-small"><strong>Direktvergleich und Minitabelle:</strong> Punkte (2/1/0), danach Direktvergleich (2er-Gleichstand), Teilgruppen-Leg-Differenz (3+), Gesamt-Leg-Differenz, Legs gewonnen; verbleibender Gleichstand = &bdquo;Playoff erforderlich&ldquo;.</p>
         <p class="ata-small"><strong>Punkte und Leg-Differenz:</strong> vereinfachte Sortierung \u00fcber Punkte, Gesamt-Leg-Differenz und Legs gewonnen (legacy-kompatibel).</p>
-        <p class="ata-small">DRA 6.16.1 schreibt keine universelle Reihenfolge vor; das ausgewählte Profil dokumentiert die Veranstalterregel.</p>
+        <p class="ata-small">DRA 6.16.1 schreibt keine universelle Reihenfolge vor. Deshalb legt die Turnierleitung dieses Profil vor dem ersten Gruppen- oder Ligaergebnis fest.</p>
         ${tieBreakLocked ? `<p class="ata-small">Profil gesperrt: Nach dem ersten abgeschlossenen Gruppen-/Liga-Ergebnis ist keine Profil\u00e4nderung mehr zul\u00e4ssig (DRA 6.16.1).</p>` : ""}
       </section>
       <section class="ata-card tournamentCard">
@@ -20293,12 +20497,34 @@
         <p class="ata-small">Aktive Modus-Limits: ${escapeHtml(modeLimitSummary)}.</p>
         <p class="ata-small">Die DRA-Regeln setzen kein fixes globales Teilnehmermaximum. Die Grenzen oben sind bewusst f\u00fcr faire Turnierdauer und stabile Darstellung gesetzt.</p>
       </section>
-      <section class="ata-card tournamentCard">
-        ${renderSectionHeading("Storage", [
-          { href: README_BASE_URL, kind: "tech", label: "Hinweise zu Storage und Import \u00f6ffnen", title: "README: Import, Migration und Persistenz" },
-        ])}
-        <p class="ata-small"><code>${escapeHtml(STORAGE_KEY)}</code>, schemaVersion ${STORAGE_SCHEMA_VERSION}</p>
-      </section>
+      <details class="ata-card tournamentCard ata-advanced-settings">
+        <summary>Erweitert: Diagnose, Debug und Speicher</summary>
+        <div class="ata-advanced-settings-body">
+          <section>
+            ${renderSectionHeading("Diagnose für technische Fehler")}
+            <div class="ata-toggle">
+              <div>
+                <strong id="ata-setting-debug-label">Detailliertes Fehlerprotokoll aktivieren</strong>
+                <div id="ata-setting-debug-description" class="ata-small">Nur bei der Fehlersuche nötig. Erfasst technische Matchstart-Schritte ohne Auth-Token.</div>
+              </div>
+              <input type="checkbox" id="ata-setting-debug" data-action="toggle-debug" aria-labelledby="ata-setting-debug-label" aria-describedby="ata-setting-debug-description" ${debugEnabled}>
+            </div>
+            <div class="ata-actions ata-debug-actions">
+              <button type="button" class="ata-btn ata-btn-sm" data-action="copy-matchstart-debug" ${debugActionDisabledAttr}>Fehlerprotokoll kopieren</button>
+              <button type="button" class="ata-btn ata-btn-sm" data-action="clear-matchstart-debug" ${debugActionDisabledAttr}>Fehlerprotokoll leeren</button>
+            </div>
+            ${hasMatchStartDebugSessions
+              ? `<pre class="ata-debug-log">${escapeHtml(debugReportText)}</pre>`
+              : `<p class="ata-small">Noch keine Diagnosedaten vorhanden. Erst aktivieren, dann den fehlerhaften Matchstart erneut testen.</p>`}
+          </section>
+          <section>
+            ${renderSectionHeading("Lokaler Speicher", [
+              { href: ORGANIZER_GUIDE_DOC_URL, kind: "tech", label: "Hinweise zu Sicherung und Speicher öffnen", title: "Veranstalter-Handbuch: Sicherung und Speicher" },
+            ])}
+            <p class="ata-small">Technischer Speicher: <code>${escapeHtml(STORAGE_KEY)}</code> · Datenformat ${STORAGE_SCHEMA_VERSION}. Sicherungen erstellst du im Tab <code>Sichern</code>.</p>
+          </section>
+        </div>
+      </details>
     `;
   }
 
@@ -20653,6 +20879,7 @@
       syncCreateFormDependencies(createForm);
       refreshCreateFormGroupsKoPolicy(createForm);
       refreshCreateFormPreliminaryFinal(createForm);
+      refreshCreateModeQuickSummary(createForm);
       refreshCreateGameRulesSummary(createForm);
       refreshCreateValidationUi(createForm);
       refreshCreateHelpUi(createForm);
@@ -20690,6 +20917,7 @@
         resetGroupsKoOddParticipantAcknowledgementIfBasisChanged(createForm);
         syncCreateFormDependencies(createForm);
         updateCreateDraftFromForm(createForm, true);
+        refreshCreateModeQuickSummary(createForm);
         refreshCreateGameRulesSummary(createForm);
         refreshCreateFormGroupsKoPolicy(createForm);
         const preliminarySummaryFields = [
@@ -20876,7 +21104,7 @@
       debugToggle.addEventListener("change", () => {
         state.store.settings.debug = debugToggle.checked;
         schedulePersist();
-        setNotice("success", `Debug-Mode ${debugToggle.checked ? "aktiviert" : "deaktiviert"}.`, 1800);
+        setNotice("success", `Detailliertes Fehlerprotokoll ${debugToggle.checked ? "aktiviert" : "deaktiviert"}.`, 1800);
       });
     }
 
@@ -21472,6 +21700,7 @@
     refreshCreateGameRulesSummary(form);
     refreshCreateFormGroupsKoPolicy(form);
     refreshCreateFormPreliminaryFinal(form);
+    refreshCreateModeQuickSummary(form);
     refreshCreateValidationUi(form);
     return true;
   }
@@ -21561,16 +21790,27 @@
   }
 
 
+  function refreshCreateModeQuickSummary(form) {
+    if (!(form instanceof HTMLFormElement)) return;
+    const host = form.querySelector("[data-role='mode-quick-summary']");
+    if (!(host instanceof HTMLElement)) return;
+    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
+    host.textContent = getCreateModeQuickSummary(draft.mode);
+  }
+
+
   function refreshCreateGameRulesSummary(form) {
     if (!(form instanceof HTMLFormElement)) return;
     const summaryHost = form.querySelector("[data-role='game-rules-summary-text']");
+    const plainHost = form.querySelector("[data-role='game-rules-plain-text']");
     const presetHost = form.querySelector("[data-role='game-rules-preset-origin']");
-    if (!(summaryHost instanceof HTMLElement) || !(presetHost instanceof HTMLElement)) return;
+    if (!(summaryHost instanceof HTMLElement) || !(plainHost instanceof HTMLElement) || !(presetHost instanceof HTMLElement)) return;
     const rawInput = readCreateDraftInput(form);
     const validation = validateCreateConfiguration(rawInput, state.store.settings);
     const summary = buildCreateGameRulesSummary(state.store?.ui?.createDraft);
     const gameRulesInvalid = validation.issues.some((issue) => issue.section === "game-rules");
     summaryHost.textContent = gameRulesInvalid ? "Spielregeln prüfen – ungültige Eingabe" : summary.text;
+    plainHost.textContent = gameRulesInvalid ? "Bitte die markierten Spielregeln korrigieren." : summary.plainText;
     presetHost.innerHTML = `<strong>Format:</strong> ${escapeHtml(summary.presetLabel)}`;
   }
 
@@ -21792,12 +22032,12 @@
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `ata-export-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    anchor.download = `ata-sicherung-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
-    setNotice("success", "JSON-Datei exportiert.", 2000);
+    setNotice("success", "Sicherungsdatei heruntergeladen.", 2000);
   }
 
 
@@ -21806,11 +22046,33 @@
       const payload = exportDataPayload();
       const text = JSON.stringify(payload, null, 2);
       await navigator.clipboard.writeText(text);
-      setNotice("success", "JSON in Zwischenablage kopiert.", 2000);
+      setNotice("success", "Sicherungsdaten in die Zwischenablage kopiert.", 2000);
     } catch (error) {
       setNotice("error", "Kopieren in Zwischenablage fehlgeschlagen.");
       logWarn("io", "Clipboard write failed.", error);
     }
+  }
+
+
+  function confirmTournamentImport(rawObject) {
+    const candidate = rawObject?.tournament || (
+      rawObject?.mode && rawObject?.participants ? rawObject : null
+    );
+    if (!candidate || typeof candidate !== "object") {
+      return true;
+    }
+    const name = normalizeText(candidate.name || "Unbenanntes Turnier");
+    const modeLabel = Object.prototype.hasOwnProperty.call(MODE_PARTICIPANT_LIMITS, candidate.mode)
+      ? getModeParticipantLimits(candidate.mode).label
+      : `Unbekannter Modus (${normalizeText(candidate.mode || "fehlt")})`;
+    const participantCount = Array.isArray(candidate.participants) ? candidate.participants.length : 0;
+    const currentName = normalizeText(state.store?.tournament?.name || "");
+    const replacementNote = currentName
+      ? `\n\nDas aktive Turnier \"${currentName}\" wird dadurch ersetzt.`
+      : "";
+    return window.confirm(
+      `Sicherung wiederherstellen?\n\n${name}\n${modeLabel}\n${participantCount} Teilnehmer${replacementNote}`,
+    );
   }
 
 
@@ -21822,14 +22084,18 @@
 
     try {
       const parsed = JSON.parse(textarea.value);
+      if (!confirmTournamentImport(parsed)) {
+        setNotice("info", "Wiederherstellung abgebrochen.", 1800);
+        return;
+      }
       const result = importTournamentPayload(parsed);
       if (result.ok) {
-        setNotice("success", "JSON erfolgreich importiert.");
+        setNotice("success", "Sicherung erfolgreich wiederhergestellt.");
       } else {
         setNotice("error", result.message || "Import fehlgeschlagen.");
       }
     } catch (error) {
-      setNotice("error", "JSON konnte nicht geparst werden.");
+      setNotice("error", "Die eingefügten Sicherungsdaten sind kein gültiges JSON.");
       logWarn("io", "Import parse failed.", error);
     }
   }
@@ -21845,14 +22111,19 @@
     reader.onload = () => {
       try {
         const parsed = JSON.parse(String(reader.result || "{}"));
+        if (!confirmTournamentImport(parsed)) {
+          fileInput.value = "";
+          setNotice("info", "Wiederherstellung abgebrochen.", 1800);
+          return;
+        }
         const result = importTournamentPayload(parsed);
         if (result.ok) {
-          setNotice("success", "Datei erfolgreich importiert.");
+          setNotice("success", "Sicherung erfolgreich wiederhergestellt.");
         } else {
           setNotice("error", result.message || "Datei konnte nicht importiert werden.");
         }
       } catch (error) {
-        setNotice("error", "Datei enth\u00e4lt kein g\u00fcltiges JSON.");
+        setNotice("error", "Die Datei enth\u00e4lt keine g\u00fcltigen Sicherungsdaten.");
         logWarn("io", "File import parse failed.", error);
       }
     };

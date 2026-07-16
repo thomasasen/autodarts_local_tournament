@@ -5,7 +5,7 @@ Diese manuelle Checkliste ergänzt die lokale und GitHub-basierte QA um Prüfung
 ## Installation und Start
 
 - [ ] Loader beziehungsweise Userscript aktualisieren.
-- [ ] Version `0.12.1` im Assistant prüfen.
+- [ ] Version `0.13.0` im Assistant prüfen.
 - [ ] Assistant öffnen und schließen.
 - [ ] Fokus-Rückgabe an den Seitenauslöser prüfen.
 
@@ -16,6 +16,12 @@ Diese manuelle Checkliste ergänzt die lokale und GitHub-basierte QA um Prüfung
 - [ ] Erstes `Escape` schließt nur die Hilfe; der Spielregel-Editor bleibt offen.
 - [ ] Zweites `Escape` schließt den Drawer.
 - [ ] Fokus kehrt zum ursprünglichen Seitenauslöser zurück.
+
+## Dokumentation und GUI-Abbildungen
+
+- [ ] Nach sichtbaren GUI- oder Hilfetextänderungen die Anleitungsscreenshots mit `powershell -ExecutionPolicy Bypass -File scripts/test-ui-viewports.ps1 -UpdateGuideScreenshots` neu erzeugen.
+- [ ] Alle in `README.md`, `docs/einstieg.md`, `docs/veranstalter-handbuch.md`, `docs/status-und-fehler.md` und `docs/dra-regeln-gui.md` eingebundenen Bilder visuell auf Lesbarkeit, korrekten Zustand und aktuelle Bezeichnungen prüfen.
+- [ ] Sicherstellen, dass Bildunterschriften den relevanten Ausschnitt erklären und alle notwendigen Informationen zusätzlich als Text vorhanden bleiben.
 
 ## Turniererstellung
 

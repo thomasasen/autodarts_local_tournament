@@ -43,12 +43,16 @@
   const API_REQUEST_TIMEOUT_MS = 12000;
   const REPO_BLOB_BASE_URL = "https://github.com/thomasasen/autodarts_local_tournament/blob/main";
   const README_BASE_URL = "https://github.com/thomasasen/autodarts_local_tournament/blob/main/README.md";
-  const README_SETTINGS_URL = `${README_BASE_URL}#einstellungen`;
-  const README_INFO_SYMBOLS_URL = `${README_BASE_URL}#info-symbole`;
-  const README_TOURNAMENT_MODES_URL = `${README_BASE_URL}#turniermodi`;
-  const README_TOURNAMENT_CREATE_URL = `${README_BASE_URL}#turnier-anlegen`;
-  const README_PRESET_CATALOG_URL = `${README_BASE_URL}#preset-katalog`;
-  const README_API_AUTOMATION_URL = `${README_BASE_URL}#api-halbautomatik`;
+  const USER_GUIDE_DOC_URL = `${REPO_BLOB_BASE_URL}/docs/einstieg.md`;
+  const ORGANIZER_GUIDE_DOC_URL = `${REPO_BLOB_BASE_URL}/docs/veranstalter-handbuch.md`;
+  const GLOSSARY_DOC_URL = `${REPO_BLOB_BASE_URL}/docs/begriffe.md`;
+  const STATUS_MESSAGES_DOC_URL = `${REPO_BLOB_BASE_URL}/docs/status-und-fehler.md`;
+  const README_SETTINGS_URL = `${ORGANIZER_GUIDE_DOC_URL}#einstellungen-und-automatik`;
+  const README_INFO_SYMBOLS_URL = `${USER_GUIDE_DOC_URL}#hilfe-direkt-in-der-oberflaeche`;
+  const README_TOURNAMENT_MODES_URL = `${USER_GUIDE_DOC_URL}#welcher-turniermodus-passt`;
+  const README_TOURNAMENT_CREATE_URL = `${USER_GUIDE_DOC_URL}#erstes-turnier-in-fuenf-minuten`;
+  const README_PRESET_CATALOG_URL = `${ORGANIZER_GUIDE_DOC_URL}#formatvorlagen-und-spielregeln`;
+  const README_API_AUTOMATION_URL = `${USER_GUIDE_DOC_URL}#match-starten-und-ergebnis-speichern`;
   const DRA_GUI_RULES_DOC_URL = `${REPO_BLOB_BASE_URL}/docs/dra-regeln-gui.md`;
   const DRA_GUI_RULE_MODE_FORMATS_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-mode-formats`;
   const DRA_GUI_RULE_OPEN_DRAW_URL = `${DRA_GUI_RULES_DOC_URL}#dra-gui-rule-open-draw`;
@@ -148,7 +152,7 @@
     { id: "tournament", label: "Turnier" },
     { id: "matches", label: "Spiele" },
     { id: "view", label: "Turnierbaum" },
-    { id: "io", label: "Import/Export" },
+    { id: "io", label: "Sichern" },
     { id: "settings", label: "Einstellungen" },
   ]);
 

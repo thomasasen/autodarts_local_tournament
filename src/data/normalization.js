@@ -1,6 +1,6 @@
 ﻿// Auto-generated module split from dist source.
   // Source of truth for shipped presets:
-  // - "PDC European Tour (Official)" models the first four rounds through the quarter-finals:
+  // - "PDC European Tour - Runden 1 bis 4" models the first four rounds through the quarter-finals:
   //   KO, Best of 11 Legs, 501, Straight In, Double Out. Later event rounds use longer formats.
   // - PDC World Championship style set-play is intentionally not shipped as an "official" preset here,
   //   because the AutoDarts lobby payload only supports legs/first-to-N, not sets.
@@ -8,13 +8,13 @@
     return Object.freeze({
       [X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL]: Object.freeze({
         id: X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL,
-        label: "PDC European Tour (Official)",
-        shortLabel: "PDC European Tour",
-        description: "European Tour rounds one to four (through the quarter-finals): KO, Best of 11 Legs (First to 6), 501, Straight In, Double Out, Bull 25/50.",
+        label: "PDC European Tour - Runden 1 bis 4",
+        shortLabel: "PDC European Tour R1-4",
+        description: "Offizielles Rundenprofil bis einschließlich Viertelfinale: KO, Best of 11 Legs (First to 6), 501, Straight In, Double Out, Bull 25/50.",
         notes: Object.freeze([
-          "Semi-finals and the final use longer event formats and are not represented by this single-round preset.",
-          "Bull-off Normal is the AutoDarts mapping used by this preset.",
-          "Max Runden 50 remains a technical AutoDarts limit and is not part of the PDC rule claim.",
+          "Halbfinale und Finale verwenden längere Distanzen und werden von dieser Vorlage nicht abgebildet.",
+          "Bull-off Normal ist die in dieser Vorlage verwendete AutoDarts-Abbildung.",
+          "Max Runden 50 ist ein technisches AutoDarts-Limit und kein Teil des PDC-Formatanspruchs.",
         ]),
         apply: Object.freeze({
           mode: "ko",
@@ -30,12 +30,12 @@
       }),
       [X01_PRESET_PDC_501_DOUBLE_OUT_BASIC]: Object.freeze({
         id: X01_PRESET_PDC_501_DOUBLE_OUT_BASIC,
-        label: "PDC 501 / Double Out (Basic)",
-        shortLabel: "PDC 501 / DO Basic",
-        description: "Compatibility preset for the former 'PDC-Standard': KO, Best of 5 Legs, 501, Straight In, Double Out, Bull 25/50.",
+        label: "Lokaler Spieleabend - 501 / Best of 5",
+        shortLabel: "Lokales 501 / Best of 5",
+        description: "Empfohlene, überschaubare Vorlage für lokale Turniere: KO, Best of 5 Legs (First to 3), 501, Straight In, Double Out, Bull 25/50.",
         notes: Object.freeze([
-          "This is not an official PDC event format.",
-          "Kept to preserve older saved drafts and tournaments without silently changing their match length.",
+          "Dies ist ein lokales Produktprofil und kein offizielles PDC-Eventformat.",
+          "Die technische ID bleibt erhalten, damit ältere Entwürfe und Turniere ihre Matchlänge nicht still ändern.",
         ]),
         apply: Object.freeze({
           mode: "ko",
@@ -69,7 +69,7 @@
 
 
   function getDefaultCreatePresetId() {
-    return X01_PRESET_PDC_EUROPEAN_TOUR_OFFICIAL;
+    return X01_PRESET_PDC_501_DOUBLE_OUT_BASIC;
   }
 
 

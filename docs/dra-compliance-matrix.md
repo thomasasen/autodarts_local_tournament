@@ -1,8 +1,8 @@
 # DRA Compliance Matrix
 
-Stand: Release `0.12.1` / `schemaVersion 5` / KO-Engine `v3` mit vollständiger KO-Materialisierung.
+Stand: Release `0.13.0` / DRA Rules `2026` / `schemaVersion 5` / KO-Engine `v3` mit vollständiger KO-Materialisierung.
 
-Release `0.12.1` ändert keine Turnierregel, Reason-Code-Wirkung oder Compliance-Einstufung. Die gehärtete Fokusführung bei Anlage, Import, Reset und Tabwechsel macht die vorhandenen Hinweise, Regelquellen und Veranstaltergrenzen eindeutiger erreichbar; `enforced`, `assisted` und `not_applicable_to_software` bleiben fachlich unverändert.
+Release `0.13.0` ändert keine Turnierregel, Reason-Code-Wirkung oder Compliance-Einstufung. Die lokale Best-of-5-Vorlage wird als Produktprofil zum verständlichen Standard; das offizielle European-Tour-Profil ist sichtbar auf Runden 1 bis 4 begrenzt. Progressive Regelhilfe und neue Zielgruppendokumentation machen `enforced`, `assisted` und organisatorische Grenzen schneller erkennbar.
 
 Statuswerte:
 - `enforced`: technisch erzwungen

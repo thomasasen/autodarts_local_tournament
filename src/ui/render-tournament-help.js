@@ -104,13 +104,23 @@
         ${renderCreateHelpTextSection("Kurz erklärt", model.shortDescription)}
         ${renderCreateHelpTextSection("Aktuelle Auswahl", model.currentSelection, "ata-create-help-current")}
         ${renderCreateHelpListSection("Auswirkung auf dein Turnier", model.effects)}
-        ${renderCreateHelpListSection("Beispiele", model.examples)}
-        ${renderCreateHelpListSection("Tipps", model.tips, "ata-create-help-tips")}
-        ${renderCreateHelpListSection("Abhängigkeiten", model.dependencies)}
-        ${renderCreateHelpListSection("Einschränkungen", model.limitations)}
-        ${renderCreateHelpClassification(model.classification)}
-        ${renderCreateHelpCompliance(model.compliance)}
-        ${renderCreateHelpSources(model.sources)}
+        <details class="ata-create-help-details">
+          <summary>Mehr Beispiele und Hinweise</summary>
+          <div class="ata-create-help-details-body">
+            ${renderCreateHelpListSection("Beispiele", model.examples)}
+            ${renderCreateHelpListSection("Tipps", model.tips, "ata-create-help-tips")}
+            ${renderCreateHelpListSection("Abhängigkeiten", model.dependencies)}
+            ${renderCreateHelpListSection("Einschränkungen", model.limitations)}
+            ${renderCreateHelpClassification(model.classification)}
+          </div>
+        </details>
+        <details class="ata-create-help-details ata-create-help-rules">
+          <summary>Regelstatus und Quellen für die Turnierleitung</summary>
+          <div class="ata-create-help-details-body">
+            ${renderCreateHelpCompliance(model.compliance)}
+            ${renderCreateHelpSources(model.sources)}
+          </div>
+        </details>
       </div>
     `;
   }

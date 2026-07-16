@@ -1,5 +1,6 @@
 param(
   [switch]$UpdateScreenshot,
+  [switch]$UpdateGuideScreenshots,
   [switch]$KeepArtifacts
 )
 
@@ -85,7 +86,7 @@ $frameHtml = @'
           }
           selectors.forEach((selector) => {
             shadowRoot.querySelectorAll(selector).forEach((element, index) => {
-              if (element.closest("[hidden]") || window.getComputedStyle(element).display === "none") return;
+              if (element.closest("[hidden], details:not([open])") || window.getComputedStyle(element).display === "none") return;
               const rect = element.getBoundingClientRect();
               if (element.scrollWidth > element.clientWidth + 1) {
                 const offender = Array.from(element.querySelectorAll("*"))
@@ -140,6 +141,8 @@ $frameHtml = @'
           const host = document.getElementById("ata-ui-host");
           const shadowRoot = host?.shadowRoot;
           if (!shadowRoot) throw new Error("Shadow Root fehlt.");
+          const screenshotScenario = new URLSearchParams(window.location.search).get("screenshot") || "";
+          const screenshotMode = Boolean(screenshotScenario);
 
           let form = shadowRoot.getElementById("ata-create-form");
           if (!(form instanceof HTMLFormElement)) throw new Error("Create-Formular fehlt.");
@@ -153,19 +156,107 @@ $frameHtml = @'
             "Gabriele vom Nachbarverein",
             "Hannah Testperson Nummer Acht",
           ];
+          const guideNames = [
+            "Anna",
+            "Ben",
+            "Clara",
+            "David",
+            "Emma",
+            "Felix",
+            "Greta",
+            "Hasan",
+          ];
           const nameInput = form.querySelector("#ata-name");
           const participants = form.querySelector("#ata-participants");
           if (!(nameInput instanceof HTMLInputElement) || !(participants instanceof HTMLTextAreaElement)) {
             throw new Error("Pflichtfelder fehlen.");
           }
-          nameInput.value = "Release 7 - sehr langes lokales Abschlussturnier";
+          nameInput.value = "Freitagsturnier des Dartvereins";
           nameInput.dispatchEvent(new Event("input", { bubbles: true }));
-          participants.value = longNames.join("\n");
+          participants.value = (screenshotMode ? guideNames : longNames).join("\n");
           participants.dispatchEvent(new Event("input", { bubbles: true }));
           measureStage("create", shadowRoot);
 
-          if (new URLSearchParams(window.location.search).get("screenshot") === "1") {
-            shadowRoot.querySelector(".ata-content")?.scrollTo(0, 0);
+          if (screenshotMode) {
+            const waitForRender = async () => await wait(80);
+            const createTournament = async () => {
+              shadowRoot.querySelector("#ata-create-form button[type='submit']")?.click();
+              await waitForRender();
+            };
+            const openTab = async (tabId) => {
+              shadowRoot.querySelector(`[data-tab='${tabId}']`)?.click();
+              await waitForRender();
+            };
+            const scrollToHeading = (headingText) => {
+              const content = shadowRoot.querySelector(".ata-content");
+              const heading = Array.from(shadowRoot.querySelectorAll(".ata-content h3"))
+                .find((candidate) => String(candidate.textContent || "").trim() === headingText);
+              const section = heading?.closest("section");
+              if (content instanceof HTMLElement && section instanceof HTMLElement) {
+                content.scrollTo(0, Math.max(0, section.offsetTop - content.offsetTop - 10));
+              }
+            };
+            const showOnlyStatusArea = () => {
+              const statusBar = shadowRoot.querySelector(".ata-runtime-statusbar");
+              const root = shadowRoot.querySelector(".ata-root");
+              if (statusBar instanceof HTMLElement && root instanceof HTMLElement) {
+                root.innerHTML = statusBar.outerHTML;
+                root.style.display = "block";
+                root.style.pointerEvents = "auto";
+                root.style.width = "100vw";
+                root.style.minHeight = "100vh";
+                root.style.background = "#263b73";
+                document.documentElement.style.background = "#263b73";
+                document.body.style.background = "#263b73";
+              }
+            };
+
+            if (screenshotScenario === "help") {
+              form.querySelector("#ata-create-help-trigger-presetFormat")?.click();
+              await waitForRender();
+            } else if (screenshotScenario === "matches") {
+              await createTournament();
+            } else if (screenshotScenario === "automation-settings") {
+              await openTab("settings");
+              scrollToHeading("Turnierablauf und Automatik");
+            } else if (screenshotScenario === "organizer-rules") {
+              await createTournament();
+              await openTab("settings");
+              const organizerMarkup = Array.from(shadowRoot.querySelectorAll(".ata-content > section"))
+                .slice(4, 7)
+                .map((section) => section.outerHTML)
+                .join("");
+              const showOrganizerRulesArea = () => {
+                const root = shadowRoot.querySelector(".ata-root");
+                if (!(root instanceof HTMLElement) || !organizerMarkup) return;
+                root.innerHTML = `<main class="ata-content" style="height:100vh;overflow:hidden;padding:20px;background:#263b73">${organizerMarkup}</main>`;
+                root.style.display = "block";
+                root.style.width = "100vw";
+                root.style.minHeight = "100vh";
+                root.style.background = "#263b73";
+                document.documentElement.style.background = "#263b73";
+                document.body.style.background = "#263b73";
+              };
+              showOrganizerRulesArea();
+              window.setInterval(showOrganizerRulesArea, 50);
+            } else if (screenshotScenario === "backup") {
+              await createTournament();
+              await openTab("io");
+            } else if (screenshotScenario === "status-auto") {
+              await openTab("settings");
+              const autoToggle = shadowRoot.querySelector("#ata-setting-autolobby");
+              if (autoToggle instanceof HTMLInputElement && !autoToggle.checked) autoToggle.click();
+              await waitForRender();
+              showOnlyStatusArea();
+              window.setInterval(showOnlyStatusArea, 50);
+            } else if (screenshotScenario === "status-manual") {
+              showOnlyStatusArea();
+              window.setInterval(showOnlyStatusArea, 50);
+            }
+
+            if (["create", "help", "matches", "backup"].includes(screenshotScenario)) {
+              shadowRoot.querySelector(".ata-content")?.scrollTo(0, 0);
+            }
             document.documentElement.setAttribute("data-ata-screenshot-ready", "1");
             document.title = "ATA Screenshot Ready";
             return;
@@ -187,7 +278,7 @@ $frameHtml = @'
           form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
           measureStage("validation", shadowRoot);
 
-          nameInput.value = `Release 7 ${frameId}`;
+          nameInput.value = `Viewport-Test ${frameId}`;
           nameInput.dispatchEvent(new Event("input", { bubbles: true }));
           form.querySelector("button[type='submit']")?.click();
           await wait(0);
@@ -204,7 +295,7 @@ $frameHtml = @'
           if (coarsePointer) {
             const targetSelectors = ".ata-close-btn, .ata-tab, .ata-btn, .ata-help-link, .ata-help-trigger, .ata-segmented-btn, .ata-toggle input[type='checkbox']";
             shadowRoot.querySelectorAll(targetSelectors).forEach((element) => {
-              if (element.closest("[hidden]") || window.getComputedStyle(element).display === "none") return;
+              if (element.closest("[hidden], details:not([open])") || window.getComputedStyle(element).display === "none") return;
               const rect = element.getBoundingClientRect();
               if (rect.width < 43.5 || rect.height < 43.5) {
                 failures.push(`touch-target: ${element.className || element.id} ${Math.round(rect.width)}x${Math.round(rect.height)}`);
@@ -360,7 +451,7 @@ if ($UpdateScreenshot) {
     "--window-size=1366,768",
     "--virtual-time-budget=4000",
     "--screenshot=$screenshotPath",
-    "$($frameUri.AbsoluteUri)?screenshot=1#1366x768"
+    "$($frameUri.AbsoluteUri)?screenshot=create#1366x768"
   )
   Start-Process -FilePath $browserPath `
     -ArgumentList $screenshotArguments `
@@ -373,6 +464,47 @@ if ($UpdateScreenshot) {
     throw "Screenshot wurde nicht erzeugt."
   }
   Write-Host "Screenshot updated: assets/ss_Turnier_anlage-neu.png"
+}
+
+if ($UpdateGuideScreenshots) {
+  $frameUri = [System.Uri]::new((Resolve-Path $framePath).Path)
+  $guideScreenshots = @(
+    @{ Scenario = "help"; FileName = "gui-kontexthilfe-formatvorlage.png"; Width = 1366; Height = 768 },
+    @{ Scenario = "matches"; FileName = "gui-ergebnisfuehrung-manuell.png"; Width = 1366; Height = 768 },
+    @{ Scenario = "automation-settings"; FileName = "gui-einstellungen-automatik.png"; Width = 1366; Height = 768 },
+    @{ Scenario = "organizer-rules"; FileName = "gui-einstellungen-turnierregeln.png"; Width = 1366; Height = 768 },
+    @{ Scenario = "backup"; FileName = "gui-sicherung-wiederherstellen.png"; Width = 1366; Height = 768 },
+    @{ Scenario = "status-manual"; FileName = "gui-status-manuell.png"; Width = 1100; Height = 58 },
+    @{ Scenario = "status-auto"; FileName = "gui-status-automatik.png"; Width = 1100; Height = 58 }
+  )
+
+  foreach ($entry in $guideScreenshots) {
+    $screenshotPath = Resolve-RepoPath (Join-Path "assets" $entry.FileName)
+    $safeScenario = [System.Uri]::EscapeDataString($entry.Scenario)
+    $stdoutPath = Join-Path $tempRoot ("guide-{0}.stdout.txt" -f $entry.Scenario)
+    $stderrPath = Join-Path $tempRoot ("guide-{0}.stderr.txt" -f $entry.Scenario)
+    $arguments = @(
+      "--headless=new",
+      "--disable-gpu",
+      "--allow-file-access-from-files",
+      "--force-device-scale-factor=1",
+      "--window-size=$($entry.Width),$($entry.Height)",
+      "--virtual-time-budget=5000",
+      "--screenshot=$screenshotPath",
+      "$($frameUri.AbsoluteUri)?screenshot=$safeScenario#$($entry.Width)x$($entry.Height)"
+    )
+    Start-Process -FilePath $browserPath `
+      -ArgumentList $arguments `
+      -RedirectStandardOutput $stdoutPath `
+      -RedirectStandardError $stderrPath `
+      -PassThru `
+      -Wait `
+      -NoNewWindow | Out-Null
+    if (-not (Test-Path -LiteralPath $screenshotPath) -or (Get-Item -LiteralPath $screenshotPath).Length -lt 1024) {
+      throw "Guide-Screenshot wurde nicht erzeugt: $($entry.FileName)"
+    }
+    Write-Host "Guide screenshot updated: assets/$($entry.FileName)"
+  }
 }
 
 if (-not $KeepArtifacts) {

@@ -1,6 +1,7 @@
 # DRA-Regelerklärungen für die GUI
 
 Diese Datei ist die zentrale Regelhilfe für die Regel-Icons in der Oberfläche.
+Grundlage ist `DRA Rules 2026`, in Kraft seit 31. März 2026. Die lokale PDF-Kopie wurde gegen die offizielle DRA-Ausgabe geprüft; die hier verwendeten Regeln 6.8.1, 6.12.1 und 6.16.1 befinden sich weiterhin auf den genannten PDF-Seiten.
 Jeder Abschnitt enthält:
 1. GUI-Stellen
 2. DRA-Referenz (Kapitel/Punkt/Seite)
@@ -14,17 +15,18 @@ Jeder Abschnitt enthält:
 | ![Info-Symbol](../assets/ss_info.png) | `Info-Icon` = technische Information | Bedienung, Workflow, Projektdoku |
 | ![Regel-Symbol](../assets/ss_regeln.png) | `Regel-Icon` = Regelwerk | DRA-Bezug mit Kapitel/Punkt/Seite |
 
-Screenshot-Kontext:
-
-![Einstellungen mit Regel- und Info-Hilfelinks](../assets/ss_Einstellungen.png)
-
 ## Zugängliche Nutzung der Regelhilfe
 
 - Die kontextbezogenen `?`-Auslöser in der Turnieranlage sind echte Buttons mit konkretem zugänglichem Namen, `aria-controls` und synchronem `aria-expanded`.
+- Das Panel zeigt zuerst Kurzbeschreibung, aktuelle Auswahl und unmittelbare Wirkung. Beispiele und Einschränkungen sowie Regelstatus und Quellen liegen in zwei nativen, tastaturbedienbaren Detailbereichen. Die fachliche Information bleibt vollständig, ohne den Einstieg zu überladen.
 - Beim Öffnen erhält die Panelüberschrift den Fokus. `Hilfe schließen` oder das erste `Escape` stellt die Turnierübersicht wieder her und gibt den Fokus an den auslösenden Button zurück; ein geöffnetes Spielregel-Disclosure bleibt dabei unverändert. Ein weiteres `Escape` schließt den Assistant-Drawer.
 - Nach Anlage oder Import erhält die Spieleüberschrift den Fokus, nach Reset die Überschrift der Turniererstellung und nach Tabwechsel der aktivierte Navigationsbutton. Normale Feldaktualisierungen erhalten Fokus und Textauswahl innerhalb derselben Ansicht.
 - Quellenlinks, Formularfelder und Drawer-Navigation sind vollständig per Tastatur erreichbar und besitzen sichtbaren Fokus. Reduced Motion, Forced Colors und 44-px-Grobzeigerziele werden unterstützt.
 - Diese Bedienhilfen ändern keine DRA-/PDC-Regelwirkung und keine Einstufung in der Compliance-Matrix. Sie machen ausschließlich die vorhandenen Erklärungen und Veranstaltergrenzen zugänglicher.
+
+![Kontextbezogene Formatvorlagen-Hilfe mit Kurzinfo und geschlossenen Fachdetails](../assets/gui-kontexthilfe-formatvorlage.png)
+
+_Die erste Ebene beantwortet Auswahl und Auswirkung. Beispiele, Grenzen, Regelstatus und Quellen bleiben in getrennten, tastaturbedienbaren Detailbereichen verfügbar._
 
 <a id="dra-gui-rule-mode-formats"></a>
 ## Modus und Format
@@ -100,7 +102,7 @@ Screenshot-Kontext:
 
 ### GUI-Stellen
 - Einstellungen > KO-Draw sperren (Standard)
-- Einstellungen > KO Draw-Lock (aktives Turnier)
+- Einstellungen > Auslosung des aktiven Turniers
 
 ### DRA-Referenz (Kapitel/Punkt/Seite)
 - `6.12.1`, Seite `19`
@@ -196,7 +198,6 @@ Screenshot-Kontext:
 - [DRA-RULE_BOOK.pdf#page=4](DRA-RULE_BOOK.pdf#page=4)
 - [DRA-RULE_BOOK.pdf#page=19](DRA-RULE_BOOK.pdf#page=19)
 
-![Turnierbaum mit Freilos-Markierung](../assets/ss_Turnierbaum_neu-gestartet.png)
 
 <a id="dra-gui-rule-tie-break"></a>
 ## Tie-Break
@@ -226,15 +227,9 @@ Screenshot-Kontext:
 ### Nachprüfen im PDF
 - [DRA-RULE_BOOK.pdf#page=21](DRA-RULE_BOOK.pdf#page=21)
 
-Screenshot-Kontext:
+![Einstellungen für Veranstalter-Tie-Break, DRA-Checkliste und Produktlimits](../assets/gui-einstellungen-turnierregeln.png)
 
-Liga-Ansicht mit Tabelle, Spielplan und sichtbarer Tie-Break-Spalte:
-
-![Liga-Tabelle und Spielplan im Turnierbaum](../assets/ss_Turnierbaum_Liga.png)
-
-Gruppenphase + KO mit Gruppentabellen und nachgelagertem KO-Turnierbaum:
-
-![Gruppentabellen und KO-Baum im Turnierbaum](../assets/ss_Turnierbaum_Gruppenphaseplusko.png)
+_Der Screenshot zeigt die fachliche Trennung: Die Turnierleitung wählt und veröffentlicht das Tie-Break-Profil; organisatorische DRA-Punkte bleiben als Checkliste sichtbar und werden nicht als automatisiert ausgegeben._
 
 <a id="dra-gui-rule-checklist"></a>
 ## DRA-Checkliste (manuelle Entscheidungen)

@@ -2,7 +2,7 @@
 
 ## Quellen
 - DRA Rulebook (offiziell): https://www.thedra.co.uk/dra-rulebook
-- DRA PDF (Projektkopie): [DRA-RULE_BOOK.pdf](DRA-RULE_BOOK.pdf)
+- DRA Rules 2026, in Kraft seit 31. März 2026 (Projektkopie): [DRA-RULE_BOOK.pdf](DRA-RULE_BOOK.pdf)
 - Detailmatrix: [dra-compliance-matrix.md](dra-compliance-matrix.md)
 
 ## Umgesetzte Punkte
@@ -63,7 +63,7 @@
 <a id="pdc-dra-preset-logic"></a>
 5. **Preset-Logik (ehrlich statt irreführend)**
 - Offizielles Preset in der UI:
-  - `PDC European Tour (Official)`
+  - `PDC European Tour - Runden 1 bis 4`
   - Format der ersten vier Runden bis einschließlich Viertelfinale: `KO`, `Best of 11 Legs (First to 6)`, `501`, `Straight In`, `Double Out`, `Bull 25/50`
   - Halbfinale (`Best of 13`) und Finale (`Best of 15`) sind längere Eventrunden und werden von diesem Einzelrunden-Preset nicht abgebildet.
 - PDC-Europe-Quelle: [European Darts Open 2026 – Format](https://www.pdc-europe.tv/tournaments/et-2026-en/european-darts-open-2026/)
@@ -71,19 +71,21 @@
   - `Bull-off Normal` ist die technische Lobby-Abbildung im Tool
   - `Max Runden 50` ist **kein** PDC-Regelpunkt, sondern nur ein technisches Limit für die Lobby
 - Das frühere irreführende `PDC Standard` wurde nicht als offizielles Preset weitergeführt:
-  - alte gespeicherte Daten mit `pdc_standard` landen jetzt ehrlich bei `PDC 501 / Double Out (Basic)`
+  - alte gespeicherte Daten mit `pdc_standard` landen jetzt ehrlich bei `Lokaler Spieleabend - 501 / Best of 5`
   - damit bleiben ältere `Best of 5`-Entwürfe kompatibel, ohne still auf `Best of 11` umzuschalten
+  - dieses lokale Produktprofil ist der verständliche Standard für neue Turniere und kein offizielles PDC-Eventformat
 
 ## Bewusste Nicht-Automatisierung
 - Bei vollständigem Deadlock wird keine automatische Entscheidung getroffen.
 - Der Systemstatus ist `playoff_required` und erfordert eine manuelle Turnierentscheidung.
 - `PDC World Championship` wird nicht als offizielles Preset behauptet, weil das reale Format `Sets` benötigt und die AutoDarts-/ATA-Integration hier nur `Legs / First to N` abbilden kann.
-- MultiBoard ist nicht Bestandteil von Version `0.12.1`. Die Board-Anzahl ist ausschließlich ein Kapazitätsparameter der Zeitprognose; Board-Zuweisung, parallele Lobbyverwaltung und mehrere gleichzeitig gestartete Matches bleiben außerhalb des Scopes.
+- MultiBoard ist nicht Bestandteil von Version `0.13.0`. Die Board-Anzahl ist ausschließlich ein Kapazitätsparameter der Zeitprognose; Board-Zuweisung, parallele Lobbyverwaltung und mehrere gleichzeitig gestartete Matches bleiben außerhalb des Scopes.
 
-## Accessibility-Abschluss in Release 7
+## Zugänglichkeit und progressive Regelhilfe
 
 - Die Regel- und Compliance-Aussagen sind über echte Buttons/Links, sichtbaren Fokus, vollständige Drawer-Tastaturführung und programmatische Formularbeschriftungen erreichbar.
 - Hilfe-Escape wird vor Drawer-Escape behandelt; Fokus kehrt zum auslösenden Hilfebutton beziehungsweise beim Drawer-Schließen zum ursprünglichen Seitenauslöser zurück.
-- Seit Release `0.12.1` fokussieren strukturelle Ansichtswechsel explizit die resultierende Spiele- oder Turniererstellungsüberschrift beziehungsweise den aktivierten Navigationsbutton; ein DOM-Positionsfallback ist über Ansichtsgrenzen gesperrt.
+- Strukturelle Ansichtswechsel fokussieren explizit die resultierende Spiele- oder Turniererstellungsüberschrift beziehungsweise den aktivierten Navigationsbutton; ein DOM-Positionsfallback ist über Ansichtsgrenzen gesperrt.
+- Release `0.13.0` zeigt die unmittelbare Wirkung einer Einstellung zuerst. Beispiele, Einschränkungen, Regelstatus und Quellen bleiben in zwei nativen, tastaturbedienbaren Detailbereichen vollständig erreichbar.
 - Live-Regionen kündigen nur veränderliche Teilnehmer- und globale Statusinformationen sowie echte Fehler an. Statische Regelzusammenfassungen werden nicht mehrfach vorgelesen.
 - Diese Änderungen verbessern ausschließlich Bedienbarkeit und Wahrnehmbarkeit. Sie automatisieren keine Veranstalterentscheidung, erweitern kein offizielles Format und ändern keine DRA-/PDC-Compliance-Einstufung.

@@ -6,6 +6,7 @@
     }
 
     const activeStartedMatch = findActiveStartedMatch(tournament);
+    const autoLobbyEnabled = state.store?.settings?.featureFlags?.autoLobbyStart === true;
     const sortMode = sanitizeMatchesSortMode(state.store?.ui?.matchesSortMode, MATCH_SORT_MODE_READY_FIRST);
     const sortOptions = [
       { id: MATCH_SORT_MODE_READY_FIRST, label: "Spielbar zuerst" },
@@ -141,7 +142,7 @@
         const classes = ["ata-pairing-player"];
         if (isOpenSlot(name)) {
           classes.push("ata-open-slot");
-          return `<span class="${classes.join(" ")}">${escapeHtml(name)}</span>`;
+          return `<span class="${classes.join(" ")}">Teilnehmer steht noch nicht fest</span>`;
         }
         if (isCompleted && match.winnerId) {
           if (participantId === match.winnerId) {
@@ -172,30 +173,37 @@
       const regularEditorHtml = editable && !isFixedPreliminary
         ? `
           <div class="ata-match-editor">
+            <p class="ata-match-score-help">Matchziel: zuerst ${escapeHtml(String(matchLegsToWin))} Legs. Bitte gewonnene Legs eintragen, nicht Wurfpunkte.</p>
             <div class="ata-score-grid">
-              <input
-                type="number"
-                min="0"
-                max="${matchLegsToWin}"
-                data-field="legs-p1"
-                data-match-id="${escapeHtml(match.id)}"
-                value="${match.legs.p1}"
-                aria-label="${escapeHtml(legsP1HelpText)}"
-                title="${escapeHtml(legsP1HelpText)}"
-              >
-              <input
-                type="number"
-                min="0"
-                max="${matchLegsToWin}"
-                data-field="legs-p2"
-                data-match-id="${escapeHtml(match.id)}"
-                value="${match.legs.p2}"
-                aria-label="${escapeHtml(legsP2HelpText)}"
-                title="${escapeHtml(legsP2HelpText)}"
-              >
+              <label class="ata-score-entry">
+                <span>${escapeHtml(player1)}: gewonnene Legs</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="${matchLegsToWin}"
+                  data-field="legs-p1"
+                  data-match-id="${escapeHtml(match.id)}"
+                  value="${match.legs.p1}"
+                  aria-label="${escapeHtml(legsP1HelpText)}"
+                  title="${escapeHtml(legsP1HelpText)}"
+                >
+              </label>
+              <label class="ata-score-entry">
+                <span>${escapeHtml(player2)}: gewonnene Legs</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="${matchLegsToWin}"
+                  data-field="legs-p2"
+                  data-match-id="${escapeHtml(match.id)}"
+                  value="${match.legs.p2}"
+                  aria-label="${escapeHtml(legsP2HelpText)}"
+                  title="${escapeHtml(legsP2HelpText)}"
+                >
+              </label>
             </div>
             <div class="ata-editor-actions">
-              <button type="button" class="ata-btn" data-action="save-match" data-match-id="${escapeHtml(match.id)}" title="${escapeHtml(saveHelpText)}">Speichern</button>
+              <button type="button" class="ata-btn" data-action="save-match" data-match-id="${escapeHtml(match.id)}" title="${escapeHtml(saveHelpText)}">Ergebnis speichern</button>
               <button type="button" class="ata-btn ata-btn-primary" data-action="start-match" data-match-id="${escapeHtml(match.id)}" ${startDisabledAttr} ${startTitleAttr}>${escapeHtml(startUi.label)}</button>
             </div>
           </div>
@@ -210,7 +218,7 @@
         ? `<span class="${escapeHtml(advanceClasses)}">${escapeHtml(summaryText)}</span>`
         : "";
       const nextPillHtml = isSuggestedNext
-        ? `<span class="ata-match-next-pill" title="Empfohlene n\u00e4chste Paarung (PDC: Next Match)">N\u00e4chstes Match</span>`
+        ? `<span class="ata-match-next-pill" title="Empfohlene n\u00e4chste spielbare Paarung">N\u00e4chstes Match</span>`
         : "";
       const finalPillHtml = isKoFinal
         ? `<span class="ata-match-final-pill" title="Finale">🏆 Finale</span>`
@@ -244,15 +252,15 @@
 
     const cardsHtml = cards || `<p class="ata-small">Keine Matches vorhanden.</p>`;
     const resultHeadingLinks = [
-      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Erklärung zur API-Halbautomatik öffnen", title: "README: API-Halbautomatik" },
+      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Erklärung zu manueller Eingabe und Automatik öffnen", title: "Einsteigerleitfaden: Ergebnisführung" },
       { href: DRA_GUI_RULE_TIE_BREAK_URL, kind: "rule", label: "DRA-Regelerklärung zum Tie-Break öffnen", title: "DRA-Regeln in der GUI: Tie-Break" },
     ];
     const nextMatchHelpLinks = renderInfoLinks([
-      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Ablauf der Ergebnisführung öffnen", title: "README: API-Halbautomatik und Ergebnisführung" },
-      { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Turniermodus-Kontext öffnen", title: "README: Turniermodi" },
+      { href: README_API_AUTOMATION_URL, kind: "tech", label: "Ablauf der Ergebnisführung öffnen", title: "Einsteigerleitfaden: Ergebnisführung" },
+      { href: README_TOURNAMENT_MODES_URL, kind: "tech", label: "Turniermodus-Kontext öffnen", title: "Einsteigerleitfaden: Turniermodi" },
     ]);
     const nextHintHtml = suggestedNextMatchId
-      ? `<p class="ata-small ata-next-hint">Hinweis: Die Markierung "Nächstes Match" zeigt die empfohlene nächste Paarung (PDC: Next Match) ${nextMatchHelpLinks}.</p>`
+      ? `<p class="ata-small ata-next-hint">Die Markierung &bdquo;Nächstes Match&ldquo; zeigt die empfohlene nächste spielbare Paarung ${nextMatchHelpLinks}.</p>`
       : "";
     const sortButtonsHtml = sortOptions.map((option) => `
       <button type="button" class="ata-segmented-btn" data-action="set-matches-sort" data-sort-mode="${option.id}" data-active="${sortMode === option.id ? "1" : "0"}" aria-pressed="${sortMode === option.id ? "true" : "false"}">${escapeHtml(option.label)}</button>
@@ -264,8 +272,10 @@
           id: "ata-matches-heading",
           programmaticFocus: true,
         })}
-        <p class="ata-small">API-Halbautomatik: Match per Klick starten, Ergebnis wird automatisch synchronisiert. Manuelle Eingabe bleibt als Fallback aktiv. ${renderInfoLinks([
-          { href: README_API_AUTOMATION_URL, kind: "tech", label: "Voraussetzungen und Ablauf öffnen", title: "README: API-Halbautomatik" },
+        <p class="ata-small">${autoLobbyEnabled
+          ? "Automatik aktiv: Match per Klick starten; das Ergebnis wird nach Matchende synchronisiert. Die manuelle Eingabe bleibt als Fallback verfügbar."
+          : "Manuelle Ergebnisführung: Trage für beide Personen die gewonnenen Legs ein und speichere das Ergebnis. Die optionale AutoDarts-Automatik kannst du in den Einstellungen aktivieren."} ${renderInfoLinks([
+          { href: README_API_AUTOMATION_URL, kind: "tech", label: "Voraussetzungen und Ablauf öffnen", title: "Einsteigerleitfaden: Ergebnisführung" },
         ])}</p>
         <div class="ata-matches-toolbar">
           <div class="ata-segmented" role="group" aria-label="Match-Sortierung">${sortButtonsHtml}</div>

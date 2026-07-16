@@ -141,7 +141,7 @@ $checkScript = @'
       : [];
     const presetMarkupOk = Boolean(presetFieldset)
       && presetFieldset.tagName === "FIELDSET"
-      && normalizeContractText(presetFieldset.querySelector("legend")?.textContent).startsWith("Turnierformat ausw\u00e4hlen")
+      && normalizeContractText(presetFieldset.querySelector("legend")?.textContent).startsWith("Formatvorlage ausw\u00e4hlen")
       && presetRadios.length === 3
       && presetRadios.every((radio) => radio.type === "radio"
         && radio.labels?.length === 1

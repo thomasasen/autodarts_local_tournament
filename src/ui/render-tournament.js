@@ -150,8 +150,12 @@
   function getCreatePresetCardSummary(preset) {
     const apply = preset?.apply || {};
     const modeLabel = apply.mode === "ko" ? "KO" : normalizeText(apply.mode || "").toUpperCase();
+    const scopeLabel = preset?.id === X01_PRESET_PDC_501_DOUBLE_OUT_BASIC
+      ? "Empfohlen für lokale Turniere"
+      : "Offizielles Profil für Runden 1 bis 4";
     return [
-      modeLabel,
+      scopeLabel,
+      `setzt ${modeLabel}`,
       `Best of ${apply.bestOfLegs}`,
       apply.startScore,
       `${apply.x01InMode} In`,
@@ -199,13 +203,26 @@
     return `
       <fieldset class="ata-preset-fieldset ata-field-span-2" data-role="preset-selection">
         <legend>
-          <span>Turnierformat auswählen</span>
+          <span>Formatvorlage auswählen</span>
           ${renderCreateHelpTrigger("presetFormat", "Hilfe zu Presets und Formatprofilen öffnen")}
         </legend>
+        <p class="ata-small ata-preset-intro">Eine Vorlage setzt auch Modus und Spielregeln. Mit &bdquo;Individuell / Manuell&ldquo; bleiben deine aktuellen Werte erhalten.</p>
         <div class="ata-preset-card-grid">${cardsHtml}</div>
         ${renderCreateFieldValidation("x01Preset")}
       </fieldset>
     `;
+  }
+
+
+  function getCreateModeQuickSummary(mode) {
+    const summaries = {
+      ko: "Eine Niederlage beendet das Turnier. Gut für einen schnellen, klaren Ablauf.",
+      double_ko: "Erst nach der zweiten Niederlage scheidet eine Person aus. Fairer, aber deutlich mehr Matches.",
+      league: "Alle spielen gegeneinander. Sehr aussagekräftig, bei großen Feldern jedoch zeitintensiv.",
+      groups_ko: "Zuerst Gruppen, danach eine KO-Finalrunde. Verbindet mehrere Spiele pro Person mit einem Finale.",
+      preliminary_final: "Eine planbare Vorrunde bestimmt die Qualifikation für eine frei wählbare Finalphase.",
+    };
+    return summaries[normalizeText(mode)] || summaries.ko;
   }
 
 
@@ -226,12 +243,13 @@
               ${renderCreateHelpTrigger("tournamentMode", "Hilfe zum Turniermodus öffnen")}
             </div>
             <select id="ata-mode" name="mode">
-              <option value="ko" ${draft.mode === "ko" ? "selected" : ""}>KO</option>
-              <option value="double_ko" ${draft.mode === "double_ko" ? "selected" : ""}>Doppel-KO</option>
-              <option value="league" ${draft.mode === "league" ? "selected" : ""}>Liga</option>
-              <option value="groups_ko" ${draft.mode === "groups_ko" ? "selected" : ""}>Gruppenphase + KO</option>
-              <option value="preliminary_final" ${draft.mode === "preliminary_final" ? "selected" : ""}>Vorrunde + Finalphase</option>
+              <option value="ko" ${draft.mode === "ko" ? "selected" : ""}>KO – schnell, eine Niederlage</option>
+              <option value="double_ko" ${draft.mode === "double_ko" ? "selected" : ""}>Doppel-KO – zweite Chance</option>
+              <option value="league" ${draft.mode === "league" ? "selected" : ""}>Liga – alle gegen alle</option>
+              <option value="groups_ko" ${draft.mode === "groups_ko" ? "selected" : ""}>Gruppenphase + KO – Gruppen und Finale</option>
+              <option value="preliminary_final" ${draft.mode === "preliminary_final" ? "selected" : ""}>Vorrunde + Finalphase – flexibel planbar</option>
             </select>
+            <p class="ata-small ata-mode-quick-summary" data-role="mode-quick-summary">${escapeHtml(getCreateModeQuickSummary(draft.mode))}</p>
             ${renderCreateFieldValidation("mode")}
           </div>
         </div>
@@ -335,6 +353,7 @@
         <div class="ata-create-section-body">
           <div class="ata-game-rules-summary" data-role="game-rules-summary">
             <p class="ata-game-rules-origin" data-role="game-rules-preset-origin"><strong>Format:</strong> ${escapeHtml(summary.presetLabel)}</p>
+            <p class="ata-game-rules-plain" data-role="game-rules-plain-text">${escapeHtml(summary.plainText)}</p>
             <p class="ata-game-rules-summary-text" data-role="game-rules-summary-text">${escapeHtml(summary.text)}</p>
           </div>
           <div class="ata-game-rules-actions">
@@ -446,15 +465,16 @@
           <div class="ata-grid-2 ata-create-overview-controls">
             <div class="ata-field">
               <div class="ata-field-label-row">
-                <label for="ata-board-count">Boards für Zeitprognose</label>
+                <label for="ata-board-count">Gleichzeitig nutzbare Boards (nur Zeitplanung)</label>
                 ${renderCreateHelpTrigger("boardCount", "Hilfe zu Boards für die Zeitprognose öffnen")}
               </div>
               <input id="ata-board-count" name="boardCount" type="number" min="1" max="${TOURNAMENT_DURATION_MAX_BOARD_COUNT}" step="1" value="${draft.boardCount}">
+              <p class="ata-small">Legt keine AutoDarts-Boards oder Lobbys an, sondern verfeinert nur die Schätzung.</p>
               ${renderCreateFieldValidation("boardCount")}
             </div>
             <div class="ata-field">
               <div class="ata-field-label-row">
-                <label for="ata-create-time-profile">Zeitprofil</label>
+                <label for="ata-create-time-profile">Spieltempo für die Schätzung</label>
                 ${renderCreateHelpTrigger("timeProfile", "Hilfe zum Zeitprofil öffnen")}
               </div>
               <select id="ata-create-time-profile" name="tournamentTimeProfile" data-action="set-duration-time-profile">${tournamentTimeProfileOptions}</select>
@@ -462,6 +482,14 @@
             </div>
           </div>
           <div id="ata-create-duration-estimate">${renderTournamentDurationEstimate(durationEstimate, { visible: durationEstimateVisible, showHelpLinks: false })}</div>
+          <div class="ata-create-preflight" aria-label="Kontrolle vor der Turnieranlage">
+            <strong>Vor dem Start kurz prüfen</strong>
+            <ul>
+              <li>${escapeHtml(String(validationSnapshot.summary.participantCount))} Teilnehmernamen · ${escapeHtml(validationSnapshot.summary.modeLabel)}</li>
+              <li>${escapeHtml(validationSnapshot.summary.presetLabel)} · ${escapeHtml(buildCreateGameRulesSummary(draft).plainText)}</li>
+              <li>${escapeHtml(String(draft.boardCount))} ${draft.boardCount === 1 ? "Board" : "Boards"} dienen nur der Zeitplanung; Haus- und Sonderregeln vorher ankündigen.</li>
+            </ul>
+          </div>
           <p class="ata-small">Modus-Limits: ${escapeHtml(modeLimitSummary)}.</p>
           <div class="ata-actions ata-create-primary-actions">
             <button type="submit" class="ata-btn ata-btn-primary" ${validationSnapshot.valid ? "" : "disabled"} aria-disabled="${validationSnapshot.valid ? "false" : "true"}" aria-describedby="ata-create-submit-status">Turnier anlegen</button>
@@ -483,9 +511,11 @@
     const tournamentTimeProfileOptions = TOURNAMENT_TIME_PROFILES.map((profileId) => {
       const profileMeta = getTournamentTimeProfileMeta(profileId);
       const selectedAttr = tournamentTimeProfile === profileId ? "selected" : "";
-      const label = profileId === TOURNAMENT_TIME_PROFILE_NORMAL
-        ? `${profileMeta.label} (empfohlen)`
-        : profileMeta.label;
+      const label = profileId === TOURNAMENT_TIME_PROFILE_FAST
+        ? `${profileMeta.label} – zügiger Ablauf`
+        : profileId === TOURNAMENT_TIME_PROFILE_SLOW
+          ? `${profileMeta.label} – längere Wechsel und Pausen`
+          : `${profileMeta.label} – ausgewogener Standard (empfohlen)`;
       return `<option value="${profileMeta.id}" ${selectedAttr}>${escapeHtml(label)}</option>`;
     }).join("");
     if (!tournament) {

@@ -582,10 +582,19 @@
 
   function renderRuntimeStatusBar() {
     const status = collectRuntimeStatus();
+    if (!status.autoEnabled) {
+      return `
+        <div class="ata-runtime-statusbar">
+          ${renderDocLinkableMessage("Automatik aus · manuelle Ergebnisführung aktiv", {
+            tagName: "span",
+            className: "ata-status-pill ata-status-neutral",
+          })}
+        </div>
+      `;
+    }
     const apiStateClass = status.hasToken && !status.authBlocked ? "ata-status-ok" : "ata-status-warn";
     const boardStateClass = status.hasBoard ? "ata-status-ok" : "ata-status-warn";
-    const autoStateClass = status.autoEnabled ? "ata-status-info" : "ata-status-neutral";
-    const hint = status.autoEnabled && (!status.hasToken || !status.hasBoard)
+    const hint = !status.hasToken || !status.hasBoard
       ? renderDocLinkableMessage("Hinweis: F\u00fcr API-Halbautomatik werden Auth-Token und aktives Board ben\u00f6tigt.", {
         tagName: "span",
         className: "ata-runtime-hint",
@@ -603,7 +612,7 @@
         })}
         ${renderDocLinkableMessage(status.autoLabel, {
           tagName: "span",
-          className: `ata-status-pill ${autoStateClass}`,
+          className: "ata-status-pill ata-status-info",
         })}
         ${hint}
       </div>

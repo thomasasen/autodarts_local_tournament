@@ -389,7 +389,7 @@
           sameTriggerStable
             && focusAndHoverStable
             && state.activeCreateHelpTopic === "presetFormat"
-            && presetText.includes("PDC 501 / Double Out (Basic)")
+            && presetText.includes("Lokaler Spieleabend - 501 / Best of 5")
             && presetText.includes("kein offizielles PDC-Eventformat")
             && state.shadowRoot?.activeElement === basicPreset,
           `same=${sameTriggerStable}, passive=${focusAndHoverStable}, topic=${state.activeCreateHelpTopic || "-"}, basic=${presetText.includes("Basic")}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
@@ -833,7 +833,7 @@
         const liveSummaryOk = customSummary.includes("Best of 5 (First to 3)")
           && customOrigin.includes("Individuell / Manuell")
           && basicSummary.includes("501 · Best of 5 (First to 3)")
-          && basicOrigin.includes("PDC 501 / Double Out (Basic)")
+          && basicOrigin.includes("Lokaler Spieleabend - 501 / Best of 5")
           && state.createGameRulesExpanded === true
           && !editor.hidden;
         record(
@@ -921,7 +921,7 @@
         const presetFieldset = createForm.querySelector("fieldset[data-role='preset-selection']");
         const presetRadios = Array.from(createForm.querySelectorAll("input[name='x01Preset']"));
         const presetMarkupOk = presetFieldset instanceof HTMLFieldSetElement
-          && normalizeText(presetFieldset.querySelector("legend")?.textContent).startsWith("Turnierformat auswählen")
+          && normalizeText(presetFieldset.querySelector("legend")?.textContent).startsWith("Formatvorlage auswählen")
           && presetRadios.length === 3
           && presetRadios.every((radio) => radio instanceof HTMLInputElement
             && radio.type === "radio"
@@ -1321,15 +1321,15 @@
           `semantics=${navSemanticsOk}, focus=${navFocusOk}`,
         );
 
-        const debugCheckbox = state.shadowRoot?.getElementById("ata-setting-debug");
-        if (!(debugCheckbox instanceof HTMLInputElement)) throw new Error("Debug-Schalter fehlt.");
-        debugCheckbox.focus();
+        const settingsCheckbox = state.shadowRoot?.getElementById("ata-setting-autolobby");
+        if (!(settingsCheckbox instanceof HTMLInputElement)) throw new Error("Automatik-Schalter fehlt.");
+        settingsCheckbox.focus();
         renderShell();
-        const restoredDebugCheckbox = state.shadowRoot?.getElementById("ata-setting-debug");
-        const settingsLabelOk = restoredDebugCheckbox instanceof HTMLInputElement
-          && restoredDebugCheckbox.getAttribute("aria-labelledby") === "ata-setting-debug-label"
-          && restoredDebugCheckbox.getAttribute("aria-describedby") === "ata-setting-debug-description"
-          && state.shadowRoot?.activeElement === restoredDebugCheckbox;
+        const restoredSettingsCheckbox = state.shadowRoot?.getElementById("ata-setting-autolobby");
+        const settingsLabelOk = restoredSettingsCheckbox instanceof HTMLInputElement
+          && restoredSettingsCheckbox.getAttribute("aria-labelledby") === "ata-setting-autolobby-label"
+          && restoredSettingsCheckbox.getAttribute("aria-describedby") === "ata-setting-autolobby-description"
+          && state.shadowRoot?.activeElement === restoredSettingsCheckbox;
 
         const tournamentTab = state.shadowRoot?.querySelector("[data-tab='tournament']");
         if (!(tournamentTab instanceof HTMLButtonElement)) throw new Error("Turnier-Navigation fehlt.");
