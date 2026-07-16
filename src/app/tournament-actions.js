@@ -63,7 +63,7 @@
   }
 
 
-  function finalizeTournamentMutation(tournament, activeTab = state.activeTab) {
+  function finalizeTournamentMutation(tournament, activeTab = state.activeTab, options = {}) {
     if (!tournament) {
       return;
     }
@@ -72,7 +72,15 @@
     state.activeTab = activeTab;
     state.store.ui.activeTab = activeTab;
     schedulePersist();
-    renderShell();
+    if (options.focusTarget) {
+      renderShell({
+        preserveFocus: false,
+        preserveScroll: false,
+        focusTarget: options.focusTarget,
+      });
+    } else {
+      renderShell();
+    }
   }
 
 
@@ -98,7 +106,14 @@
     state.activeTab = "matches";
     state.store.ui.activeTab = "matches";
     schedulePersist();
-    renderShell();
+    renderShell({
+      preserveFocus: false,
+      preserveScroll: false,
+      focusTarget: {
+        selector: "#ata-matches-heading",
+        fallbackSelector: '[data-tab="matches"]',
+      },
+    });
     return { ok: true, tournament };
   }
 
@@ -113,7 +128,14 @@
     state.activeTab = "tournament";
     state.store.ui.activeTab = "tournament";
     schedulePersist();
-    renderShell();
+    renderShell({
+      preserveFocus: false,
+      preserveScroll: false,
+      focusTarget: {
+        selector: "#ata-create-heading",
+        fallbackSelector: '[data-tab="tournament"]',
+      },
+    });
     return { ok: true };
   }
 
@@ -122,7 +144,9 @@
     const tournament = state.store.tournament;
     const result = generatePreliminaryFinalStage(tournament);
     if (!result.ok) return result;
-    finalizeTournamentMutation(tournament, "view");
+    finalizeTournamentMutation(tournament, "view", {
+      focusTarget: { selector: '[data-tab="view"]' },
+    });
     return result;
   }
 
@@ -131,7 +155,9 @@
     const tournament = state.store.tournament;
     const result = recordPreliminaryQualificationResolution(tournament, orderedParticipantIds, reason);
     if (!result.ok) return result;
-    finalizeTournamentMutation(tournament, "view");
+    finalizeTournamentMutation(tournament, "view", {
+      focusTarget: { selector: '[data-tab="view"]' },
+    });
     return result;
   }
 
@@ -140,7 +166,12 @@
     const tournament = state.store.tournament;
     const result = resetPreliminaryMatchForCorrection(tournament, matchId);
     if (!result.ok) return result;
-    finalizeTournamentMutation(tournament, "matches");
+    finalizeTournamentMutation(tournament, "matches", {
+      focusTarget: {
+        selector: "#ata-matches-heading",
+        fallbackSelector: '[data-tab="matches"]',
+      },
+    });
     return result;
   }
 
@@ -191,7 +222,14 @@
     state.activeTab = "matches";
     state.store.ui.activeTab = "matches";
     schedulePersist();
-    renderShell();
+    renderShell({
+      preserveFocus: false,
+      preserveScroll: false,
+      focusTarget: {
+        selector: "#ata-matches-heading",
+        fallbackSelector: '[data-tab="matches"]',
+      },
+    });
     return { ok: true, tournament: normalizedTournament };
   }
 

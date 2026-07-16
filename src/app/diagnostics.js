@@ -1383,6 +1383,86 @@
           `focus=${state.shadowRoot?.activeElement?.id || "-"}, selection=${restoredParticipants?.selectionStart || 0}-${restoredParticipants?.selectionEnd || 0}, scroll=${restoredContent?.scrollTop || 0}`,
         );
 
+        const anonymousFocusButton = document.createElement("button");
+        anonymousFocusButton.type = "button";
+        anonymousFocusButton.textContent = "Temporäres Fokusziel";
+        restoredContent?.prepend(anonymousFocusButton);
+        anonymousFocusButton.focus();
+        state.activeTab = "settings";
+        state.store.ui.activeTab = "settings";
+        renderShell();
+        const noCrossViewOrdinalFallback = !(state.shadowRoot?.activeElement instanceof HTMLElement);
+        record(
+          "Fokusstrategie 0.12.1: Ordinal-Fallback greift nicht über Ansichtsgrenzen",
+          noCrossViewOrdinalFallback,
+          `focus=${state.shadowRoot?.activeElement?.id || state.shadowRoot?.activeElement?.tagName || "none"}`,
+        );
+
+        state.store.tournament = null;
+        state.activeTab = "tournament";
+        state.store.ui.activeTab = "tournament";
+        renderShell({
+          preserveFocus: false,
+          preserveScroll: false,
+          focusTarget: { selector: "#ata-create-heading" },
+        });
+
+        const focusCreateInput = {
+          ...createDefaultCreateDraft(state.store.settings),
+          name: "Fokusstrategie 0.12.1",
+          mode: "ko",
+          x01Preset: X01_PRESET_CUSTOM,
+          participantsText: "Ada\nBerta\nClara\nDora",
+          tournamentTimeProfile: state.store.settings.tournamentTimeProfile,
+        };
+        const focusCreateValidation = validateCreateConfiguration(focusCreateInput, state.store.settings);
+        const focusCreateResult = focusCreateValidation.valid
+          ? createTournamentSession({
+            ...focusCreateValidation.config,
+            participants: parseParticipantLines(focusCreateInput.participantsText),
+          })
+          : { ok: false };
+        const createdTournamentPayload = focusCreateResult.ok
+          ? { schemaVersion: STORAGE_SCHEMA_VERSION, tournament: cloneSerializable(focusCreateResult.tournament) }
+          : null;
+        const createFocusHeading = state.shadowRoot?.getElementById("ata-matches-heading");
+        const createFocusOk = focusCreateResult.ok
+          && createFocusHeading instanceof HTMLElement
+          && createFocusHeading.getAttribute("tabindex") === "-1"
+          && state.shadowRoot?.activeElement === createFocusHeading;
+        record(
+          "Fokusstrategie 0.12.1: erfolgreiche Turnieranlage fokussiert die Spieleansicht",
+          createFocusOk,
+          `created=${focusCreateResult.ok}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        const resetFocusResult = resetTournamentSession();
+        const resetFocusHeading = state.shadowRoot?.getElementById("ata-create-heading");
+        const resetFocusOk = resetFocusResult.ok
+          && resetFocusHeading instanceof HTMLElement
+          && resetFocusHeading.getAttribute("tabindex") === "-1"
+          && state.shadowRoot?.activeElement === resetFocusHeading;
+        record(
+          "Fokusstrategie 0.12.1: Turnier-Reset fokussiert die Turniererstellung",
+          resetFocusOk,
+          `reset=${resetFocusResult.ok}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        const importFocusResult = importTournamentPayload(createdTournamentPayload);
+        const importFocusHeading = state.shadowRoot?.getElementById("ata-matches-heading");
+        const importFocusOk = importFocusResult.ok
+          && importFocusHeading instanceof HTMLElement
+          && state.shadowRoot?.activeElement === importFocusHeading;
+        record(
+          "Fokusstrategie 0.12.1: Import fokussiert die resultierende Spieleansicht",
+          importFocusOk,
+          `import=${importFocusResult.ok}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        resetTournamentSession();
+        form = state.shadowRoot?.getElementById("ata-create-form");
+        if (!(form instanceof HTMLFormElement)) throw new Error("Create-Formular nach Fokusstrategie-Test fehlt.");
+
         drawer = state.shadowRoot?.querySelector(".ata-drawer");
         if (!(drawer instanceof HTMLElement)) throw new Error("Drawer fehlt.");
         const hiddenEditor = state.shadowRoot?.getElementById("ata-game-rules-editor");
@@ -1450,8 +1530,13 @@
         externalTrigger = null;
         record(
           "Accessibility Release 7: Öffnen, Escape-Priorität und Fokus-Rückgabe sind robust",
-          initialFocusOk && helpEscapedFirst && drawerEscapedSecond && removedTriggerFallbackOk,
-          `initial=${initialFocusOk}, helpFirst=${helpEscapedFirst}, drawerSecond=${drawerEscapedSecond}, fallback=${removedTriggerFallbackOk}`,
+          initialFocusOk && helpEscapedFirst && drawerEscapedSecond,
+          `initial=${initialFocusOk}, helpFirst=${helpEscapedFirst}, drawerSecond=${drawerEscapedSecond}`,
+        );
+        record(
+          "Fokusstrategie 0.12.1: entfernter Drawer-Auslöser nutzt den sicheren Host-Fallback",
+          removedTriggerFallbackOk,
+          `fallback=${removedTriggerFallbackOk}, focus=${document.activeElement?.id || "-"}`,
         );
 
         state.drawerOpen = true;

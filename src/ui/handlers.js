@@ -35,8 +35,15 @@
   }
 
 
+  function isElementProgrammaticallyFocusable(element) {
+    return isElementAvailableForFocus(element) && element.matches(
+      "a[href], button, input:not([type='hidden']), select, textarea, [tabindex], [contenteditable='true']",
+    );
+  }
+
+
   function focusElementWithoutScrolling(element) {
-    if (!isElementAvailableForFocus(element)) {
+    if (!isElementProgrammaticallyFocusable(element)) {
       return false;
     }
     try {
@@ -44,7 +51,8 @@
     } catch (_error) {
       element.focus();
     }
-    return true;
+    const root = element.getRootNode();
+    return root?.activeElement === element || document.activeElement === element;
   }
 
 
@@ -67,15 +75,13 @@
     const attributes = {};
     [
       "name",
-      "type",
-      "value",
       "data-tab",
       "data-action",
       "data-field",
       "data-match-id",
       "data-sort-mode",
       "data-participant-id",
-      "data-create-help-topic",
+      "data-help-topic",
       "data-role",
     ].forEach((name) => {
       if (activeElement.hasAttribute(name)) {
@@ -86,6 +92,7 @@
     const snapshot = {
       id: activeElement.id || "",
       tagName: activeElement.tagName,
+      viewContext: normalizeText(shadow.querySelector(".ata-root")?.getAttribute("data-active-tab") || ""),
       attributes,
       ordinal: sameTag.indexOf(activeElement),
       selectionStart: null,
@@ -101,26 +108,73 @@
   }
 
 
-  function findShellFocusTarget(snapshot) {
+  function hasShellFocusSnapshotContradiction(candidate, snapshot) {
+    if (!(candidate instanceof HTMLElement) || !snapshot) {
+      return true;
+    }
+    if (snapshot.id && candidate.id !== snapshot.id) {
+      return true;
+    }
+    return Object.entries(snapshot.attributes).some(
+      ([name, value]) => candidate.getAttribute(name) !== value,
+    );
+  }
+
+
+  function findShellFocusTarget(snapshot, options = {}) {
     const shadow = state.shadowRoot;
     if (!shadow || !snapshot) {
       return null;
     }
     if (snapshot.id) {
       const byId = shadow.getElementById(snapshot.id);
-      if (isElementAvailableForFocus(byId)) {
+      if (isElementProgrammaticallyFocusable(byId)) {
         return byId;
       }
     }
     const candidates = Array.from(shadow.querySelectorAll(snapshot.tagName.toLowerCase()));
-    const exact = candidates.find((candidate) => Object.entries(snapshot.attributes).every(
-      ([name, value]) => candidate.getAttribute(name) === value,
-    ));
-    if (isElementAvailableForFocus(exact)) {
+    const stableAttributes = Object.entries(snapshot.attributes);
+    const exactMatches = stableAttributes.length
+      ? candidates.filter((candidate) => stableAttributes.every(
+        ([name, value]) => candidate.getAttribute(name) === value,
+      ))
+      : [];
+    const exact = exactMatches.length === 1 ? exactMatches[0] : null;
+    if (isElementProgrammaticallyFocusable(exact)) {
       return exact;
     }
     const ordinal = candidates[snapshot.ordinal];
-    return isElementAvailableForFocus(ordinal) ? ordinal : null;
+    const currentViewContext = normalizeText(
+      shadow.querySelector(".ata-root")?.getAttribute("data-active-tab") || "",
+    );
+    const allowOrdinal = options.allowOrdinal !== false
+      && Boolean(snapshot.viewContext)
+      && snapshot.viewContext === currentViewContext
+      && ordinal?.tagName === snapshot.tagName
+      && !hasShellFocusSnapshotContradiction(ordinal, snapshot);
+    return allowOrdinal && isElementProgrammaticallyFocusable(ordinal) ? ordinal : null;
+  }
+
+
+  function findExplicitShellFocusTarget(focusTarget) {
+    const shadow = state.shadowRoot;
+    if (!shadow || !focusTarget || typeof focusTarget !== "object") {
+      return null;
+    }
+    const selectors = [focusTarget.selector, focusTarget.fallbackSelector]
+      .map((selector) => normalizeText(selector || ""))
+      .filter(Boolean);
+    for (const selector of selectors) {
+      try {
+        const candidate = shadow.querySelector(selector);
+        if (isElementProgrammaticallyFocusable(candidate)) {
+          return candidate;
+        }
+      } catch (_error) {
+        // Explicit selectors are controlled by the application; an invalid one fails safely.
+      }
+    }
+    return null;
   }
 
 
@@ -156,7 +210,8 @@
       return;
     }
 
-    const preserveFocus = options.preserveFocus !== false && state.drawerOpen;
+    const hasExplicitFocusStrategy = Boolean(options.focusTarget && typeof options.focusTarget === "object");
+    const preserveFocus = options.preserveFocus !== false && state.drawerOpen && !hasExplicitFocusStrategy;
     const preserveScroll = options.preserveScroll !== false && state.drawerOpen;
     const focusSnapshot = preserveFocus ? createShellFocusSnapshot() : null;
     const scrollPositions = preserveScroll ? captureShellScrollPositions() : [];
@@ -168,11 +223,14 @@
       syncBracketFallbackVisibility();
     }
     restoreShellScrollPositions(scrollPositions);
-    const focusTarget = findShellFocusTarget(focusSnapshot);
+    const focusTarget = hasExplicitFocusStrategy
+      ? findExplicitShellFocusTarget(options.focusTarget)
+      : findShellFocusTarget(focusSnapshot, { allowOrdinal: true });
     if (focusElementWithoutScrolling(focusTarget)) {
       try {
         if (
-          Number.isInteger(focusSnapshot.selectionStart)
+          focusSnapshot
+          && Number.isInteger(focusSnapshot.selectionStart)
           && Number.isInteger(focusSnapshot.selectionEnd)
           && typeof focusTarget.setSelectionRange === "function"
         ) {
@@ -267,7 +325,11 @@
         state.activeTab = tabId;
         state.store.ui.activeTab = tabId;
         schedulePersist();
-        renderShell();
+        renderShell({
+          preserveFocus: false,
+          preserveScroll: false,
+          focusTarget: { selector: `[data-tab="${tabId}"]` },
+        });
       });
     });
 
@@ -1193,23 +1255,6 @@
     if (persist) {
       schedulePersist();
     }
-  }
-
-
-  function refreshCreateFormDurationEstimate(form) {
-    if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
-    const estimateHost = form.querySelector("#ata-create-duration-estimate");
-    if (!(estimateHost instanceof HTMLElement)) {
-      return;
-    }
-    const validation = validateCreateConfiguration(readCreateDraftInput(form), state.store.settings);
-    const estimate = validation.summary.durationEstimate;
-    estimateHost.innerHTML = renderTournamentDurationEstimate(estimate, {
-      visible: state.store?.ui?.durationEstimateVisible !== false,
-      showHelpLinks: false,
-    });
   }
 
 

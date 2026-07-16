@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.12.0
+// @version      0.12.1
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -22,7 +22,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.12.0";
+  const APP_VERSION = "0.12.1";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 5;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
@@ -8032,18 +8032,6 @@
     return Boolean(sourceMatch && sourceMatch.status === STATUS_COMPLETED && isCompletedMatchResultValid(tournament, sourceMatch));
   }
 
-
-  function isDynamicallyResolvedBye(tournament, virtualMatch, p1, p2) {
-    const hasP1 = Boolean(p1);
-    const hasP2 = Boolean(p2);
-    if (hasP1 === hasP2) {
-      return false;
-    }
-    return isVirtualCompetitorRefResolved(tournament, virtualMatch?.competitors?.p1)
-      && isVirtualCompetitorRefResolved(tournament, virtualMatch?.competitors?.p2);
-  }
-
-
   function isVirtualCompetitorRefResolvedWithSet(tournament, competitorRef, resolvedVirtualMatchIds) {
     if (!competitorRef || competitorRef.type === "participant") {
       return true;
@@ -9713,7 +9701,7 @@
   }
 
 
-  function finalizeTournamentMutation(tournament, activeTab = state.activeTab) {
+  function finalizeTournamentMutation(tournament, activeTab = state.activeTab, options = {}) {
     if (!tournament) {
       return;
     }
@@ -9722,7 +9710,15 @@
     state.activeTab = activeTab;
     state.store.ui.activeTab = activeTab;
     schedulePersist();
-    renderShell();
+    if (options.focusTarget) {
+      renderShell({
+        preserveFocus: false,
+        preserveScroll: false,
+        focusTarget: options.focusTarget,
+      });
+    } else {
+      renderShell();
+    }
   }
 
 
@@ -9748,7 +9744,14 @@
     state.activeTab = "matches";
     state.store.ui.activeTab = "matches";
     schedulePersist();
-    renderShell();
+    renderShell({
+      preserveFocus: false,
+      preserveScroll: false,
+      focusTarget: {
+        selector: "#ata-matches-heading",
+        fallbackSelector: '[data-tab="matches"]',
+      },
+    });
     return { ok: true, tournament };
   }
 
@@ -9763,7 +9766,14 @@
     state.activeTab = "tournament";
     state.store.ui.activeTab = "tournament";
     schedulePersist();
-    renderShell();
+    renderShell({
+      preserveFocus: false,
+      preserveScroll: false,
+      focusTarget: {
+        selector: "#ata-create-heading",
+        fallbackSelector: '[data-tab="tournament"]',
+      },
+    });
     return { ok: true };
   }
 
@@ -9772,7 +9782,9 @@
     const tournament = state.store.tournament;
     const result = generatePreliminaryFinalStage(tournament);
     if (!result.ok) return result;
-    finalizeTournamentMutation(tournament, "view");
+    finalizeTournamentMutation(tournament, "view", {
+      focusTarget: { selector: '[data-tab="view"]' },
+    });
     return result;
   }
 
@@ -9781,7 +9793,9 @@
     const tournament = state.store.tournament;
     const result = recordPreliminaryQualificationResolution(tournament, orderedParticipantIds, reason);
     if (!result.ok) return result;
-    finalizeTournamentMutation(tournament, "view");
+    finalizeTournamentMutation(tournament, "view", {
+      focusTarget: { selector: '[data-tab="view"]' },
+    });
     return result;
   }
 
@@ -9790,7 +9804,12 @@
     const tournament = state.store.tournament;
     const result = resetPreliminaryMatchForCorrection(tournament, matchId);
     if (!result.ok) return result;
-    finalizeTournamentMutation(tournament, "matches");
+    finalizeTournamentMutation(tournament, "matches", {
+      focusTarget: {
+        selector: "#ata-matches-heading",
+        fallbackSelector: '[data-tab="matches"]',
+      },
+    });
     return result;
   }
 
@@ -9841,7 +9860,14 @@
     state.activeTab = "matches";
     state.store.ui.activeTab = "matches";
     schedulePersist();
-    renderShell();
+    renderShell({
+      preserveFocus: false,
+      preserveScroll: false,
+      focusTarget: {
+        selector: "#ata-matches-heading",
+        fallbackSelector: '[data-tab="matches"]',
+      },
+    });
     return { ok: true, tournament: normalizedTournament };
   }
 
@@ -10098,12 +10124,6 @@
     state.matchReturnShortcut.inlineSyncingByLobby = {};
     state.matchReturnShortcut.inlineOutcomeByLobby = {};
   }
-
-
-  function renderMatchReturnShortcut() {
-    removeMatchReturnShortcut();
-  }
-
 
   function cleanupRuntime() {
     resetCreateHelpState();
@@ -11603,6 +11623,86 @@
           `focus=${state.shadowRoot?.activeElement?.id || "-"}, selection=${restoredParticipants?.selectionStart || 0}-${restoredParticipants?.selectionEnd || 0}, scroll=${restoredContent?.scrollTop || 0}`,
         );
 
+        const anonymousFocusButton = document.createElement("button");
+        anonymousFocusButton.type = "button";
+        anonymousFocusButton.textContent = "Temporäres Fokusziel";
+        restoredContent?.prepend(anonymousFocusButton);
+        anonymousFocusButton.focus();
+        state.activeTab = "settings";
+        state.store.ui.activeTab = "settings";
+        renderShell();
+        const noCrossViewOrdinalFallback = !(state.shadowRoot?.activeElement instanceof HTMLElement);
+        record(
+          "Fokusstrategie 0.12.1: Ordinal-Fallback greift nicht über Ansichtsgrenzen",
+          noCrossViewOrdinalFallback,
+          `focus=${state.shadowRoot?.activeElement?.id || state.shadowRoot?.activeElement?.tagName || "none"}`,
+        );
+
+        state.store.tournament = null;
+        state.activeTab = "tournament";
+        state.store.ui.activeTab = "tournament";
+        renderShell({
+          preserveFocus: false,
+          preserveScroll: false,
+          focusTarget: { selector: "#ata-create-heading" },
+        });
+
+        const focusCreateInput = {
+          ...createDefaultCreateDraft(state.store.settings),
+          name: "Fokusstrategie 0.12.1",
+          mode: "ko",
+          x01Preset: X01_PRESET_CUSTOM,
+          participantsText: "Ada\nBerta\nClara\nDora",
+          tournamentTimeProfile: state.store.settings.tournamentTimeProfile,
+        };
+        const focusCreateValidation = validateCreateConfiguration(focusCreateInput, state.store.settings);
+        const focusCreateResult = focusCreateValidation.valid
+          ? createTournamentSession({
+            ...focusCreateValidation.config,
+            participants: parseParticipantLines(focusCreateInput.participantsText),
+          })
+          : { ok: false };
+        const createdTournamentPayload = focusCreateResult.ok
+          ? { schemaVersion: STORAGE_SCHEMA_VERSION, tournament: cloneSerializable(focusCreateResult.tournament) }
+          : null;
+        const createFocusHeading = state.shadowRoot?.getElementById("ata-matches-heading");
+        const createFocusOk = focusCreateResult.ok
+          && createFocusHeading instanceof HTMLElement
+          && createFocusHeading.getAttribute("tabindex") === "-1"
+          && state.shadowRoot?.activeElement === createFocusHeading;
+        record(
+          "Fokusstrategie 0.12.1: erfolgreiche Turnieranlage fokussiert die Spieleansicht",
+          createFocusOk,
+          `created=${focusCreateResult.ok}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        const resetFocusResult = resetTournamentSession();
+        const resetFocusHeading = state.shadowRoot?.getElementById("ata-create-heading");
+        const resetFocusOk = resetFocusResult.ok
+          && resetFocusHeading instanceof HTMLElement
+          && resetFocusHeading.getAttribute("tabindex") === "-1"
+          && state.shadowRoot?.activeElement === resetFocusHeading;
+        record(
+          "Fokusstrategie 0.12.1: Turnier-Reset fokussiert die Turniererstellung",
+          resetFocusOk,
+          `reset=${resetFocusResult.ok}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        const importFocusResult = importTournamentPayload(createdTournamentPayload);
+        const importFocusHeading = state.shadowRoot?.getElementById("ata-matches-heading");
+        const importFocusOk = importFocusResult.ok
+          && importFocusHeading instanceof HTMLElement
+          && state.shadowRoot?.activeElement === importFocusHeading;
+        record(
+          "Fokusstrategie 0.12.1: Import fokussiert die resultierende Spieleansicht",
+          importFocusOk,
+          `import=${importFocusResult.ok}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        resetTournamentSession();
+        form = state.shadowRoot?.getElementById("ata-create-form");
+        if (!(form instanceof HTMLFormElement)) throw new Error("Create-Formular nach Fokusstrategie-Test fehlt.");
+
         drawer = state.shadowRoot?.querySelector(".ata-drawer");
         if (!(drawer instanceof HTMLElement)) throw new Error("Drawer fehlt.");
         const hiddenEditor = state.shadowRoot?.getElementById("ata-game-rules-editor");
@@ -11670,8 +11770,13 @@
         externalTrigger = null;
         record(
           "Accessibility Release 7: Öffnen, Escape-Priorität und Fokus-Rückgabe sind robust",
-          initialFocusOk && helpEscapedFirst && drawerEscapedSecond && removedTriggerFallbackOk,
-          `initial=${initialFocusOk}, helpFirst=${helpEscapedFirst}, drawerSecond=${drawerEscapedSecond}, fallback=${removedTriggerFallbackOk}`,
+          initialFocusOk && helpEscapedFirst && drawerEscapedSecond,
+          `initial=${initialFocusOk}, helpFirst=${helpEscapedFirst}, drawerSecond=${drawerEscapedSecond}`,
+        );
+        record(
+          "Fokusstrategie 0.12.1: entfernter Drawer-Auslöser nutzt den sicheren Host-Fallback",
+          removedTriggerFallbackOk,
+          `fallback=${removedTriggerFallbackOk}, focus=${document.activeElement?.id || "-"}`,
         );
 
         state.drawerOpen = true;
@@ -17033,10 +17138,13 @@
   }
 
 
-  function renderSectionHeading(title, links = []) {
+  function renderSectionHeading(title, links = [], options = {}) {
+    const headingId = normalizeText(options?.id || "");
+    const idAttribute = headingId ? ` id="${escapeHtml(headingId)}"` : "";
+    const tabindexAttribute = options?.programmaticFocus === true ? ' tabindex="-1"' : "";
     return `
       <div class="ata-heading-row">
-        <h3>${escapeHtml(title)}</h3>
+        <h3${idAttribute}${tabindexAttribute}>${escapeHtml(title)}</h3>
         ${renderInfoLinks(links)}
       </div>
     `;
@@ -18650,7 +18758,7 @@
 
     return `
       <style>${buildStyles()}</style>
-      <div class="ata-root" data-open="${state.drawerOpen ? "1" : "0"}">
+      <div class="ata-root" data-open="${state.drawerOpen ? "1" : "0"}" data-active-tab="${escapeHtml(state.activeTab)}">
         <div class="ata-overlay" data-action="close-drawer"></div>
         <aside class="ata-drawer" role="dialog" aria-modal="true" aria-label="Autodarts Tournament Assistant" tabindex="-1">
           <header class="ata-header">
@@ -19193,7 +19301,10 @@
         : "";
       return `
         <section class="ata-card tournamentCard ata-create-card">
-          ${renderSectionHeading("Neues Turnier erstellen")}
+          ${renderSectionHeading("Neues Turnier erstellen", [], {
+            id: "ata-create-heading",
+            programmaticFocus: true,
+          })}
           <form id="ata-create-form" class="ata-create-form">
             <div id="ata-create-error-summary" class="ata-create-error-summary" tabindex="-1" hidden></div>
             <div class="ata-create-layout">
@@ -19617,7 +19728,10 @@
 
     return `
       <section class="ata-card tournamentCard ata-matches-card">
-        ${renderSectionHeading("Ergebnisführung", resultHeadingLinks)}
+        ${renderSectionHeading("Ergebnisführung", resultHeadingLinks, {
+          id: "ata-matches-heading",
+          programmaticFocus: true,
+        })}
         <p class="ata-small">API-Halbautomatik: Match per Klick starten, Ergebnis wird automatisch synchronisiert. Manuelle Eingabe bleibt als Fallback aktiv. ${renderInfoLinks([
           { href: README_API_AUTOMATION_URL, kind: "tech", label: "Voraussetzungen und Ablauf öffnen", title: "README: API-Halbautomatik" },
         ])}</p>
@@ -20224,8 +20338,15 @@
   }
 
 
+  function isElementProgrammaticallyFocusable(element) {
+    return isElementAvailableForFocus(element) && element.matches(
+      "a[href], button, input:not([type='hidden']), select, textarea, [tabindex], [contenteditable='true']",
+    );
+  }
+
+
   function focusElementWithoutScrolling(element) {
-    if (!isElementAvailableForFocus(element)) {
+    if (!isElementProgrammaticallyFocusable(element)) {
       return false;
     }
     try {
@@ -20233,7 +20354,8 @@
     } catch (_error) {
       element.focus();
     }
-    return true;
+    const root = element.getRootNode();
+    return root?.activeElement === element || document.activeElement === element;
   }
 
 
@@ -20256,15 +20378,13 @@
     const attributes = {};
     [
       "name",
-      "type",
-      "value",
       "data-tab",
       "data-action",
       "data-field",
       "data-match-id",
       "data-sort-mode",
       "data-participant-id",
-      "data-create-help-topic",
+      "data-help-topic",
       "data-role",
     ].forEach((name) => {
       if (activeElement.hasAttribute(name)) {
@@ -20275,6 +20395,7 @@
     const snapshot = {
       id: activeElement.id || "",
       tagName: activeElement.tagName,
+      viewContext: normalizeText(shadow.querySelector(".ata-root")?.getAttribute("data-active-tab") || ""),
       attributes,
       ordinal: sameTag.indexOf(activeElement),
       selectionStart: null,
@@ -20290,26 +20411,73 @@
   }
 
 
-  function findShellFocusTarget(snapshot) {
+  function hasShellFocusSnapshotContradiction(candidate, snapshot) {
+    if (!(candidate instanceof HTMLElement) || !snapshot) {
+      return true;
+    }
+    if (snapshot.id && candidate.id !== snapshot.id) {
+      return true;
+    }
+    return Object.entries(snapshot.attributes).some(
+      ([name, value]) => candidate.getAttribute(name) !== value,
+    );
+  }
+
+
+  function findShellFocusTarget(snapshot, options = {}) {
     const shadow = state.shadowRoot;
     if (!shadow || !snapshot) {
       return null;
     }
     if (snapshot.id) {
       const byId = shadow.getElementById(snapshot.id);
-      if (isElementAvailableForFocus(byId)) {
+      if (isElementProgrammaticallyFocusable(byId)) {
         return byId;
       }
     }
     const candidates = Array.from(shadow.querySelectorAll(snapshot.tagName.toLowerCase()));
-    const exact = candidates.find((candidate) => Object.entries(snapshot.attributes).every(
-      ([name, value]) => candidate.getAttribute(name) === value,
-    ));
-    if (isElementAvailableForFocus(exact)) {
+    const stableAttributes = Object.entries(snapshot.attributes);
+    const exactMatches = stableAttributes.length
+      ? candidates.filter((candidate) => stableAttributes.every(
+        ([name, value]) => candidate.getAttribute(name) === value,
+      ))
+      : [];
+    const exact = exactMatches.length === 1 ? exactMatches[0] : null;
+    if (isElementProgrammaticallyFocusable(exact)) {
       return exact;
     }
     const ordinal = candidates[snapshot.ordinal];
-    return isElementAvailableForFocus(ordinal) ? ordinal : null;
+    const currentViewContext = normalizeText(
+      shadow.querySelector(".ata-root")?.getAttribute("data-active-tab") || "",
+    );
+    const allowOrdinal = options.allowOrdinal !== false
+      && Boolean(snapshot.viewContext)
+      && snapshot.viewContext === currentViewContext
+      && ordinal?.tagName === snapshot.tagName
+      && !hasShellFocusSnapshotContradiction(ordinal, snapshot);
+    return allowOrdinal && isElementProgrammaticallyFocusable(ordinal) ? ordinal : null;
+  }
+
+
+  function findExplicitShellFocusTarget(focusTarget) {
+    const shadow = state.shadowRoot;
+    if (!shadow || !focusTarget || typeof focusTarget !== "object") {
+      return null;
+    }
+    const selectors = [focusTarget.selector, focusTarget.fallbackSelector]
+      .map((selector) => normalizeText(selector || ""))
+      .filter(Boolean);
+    for (const selector of selectors) {
+      try {
+        const candidate = shadow.querySelector(selector);
+        if (isElementProgrammaticallyFocusable(candidate)) {
+          return candidate;
+        }
+      } catch (_error) {
+        // Explicit selectors are controlled by the application; an invalid one fails safely.
+      }
+    }
+    return null;
   }
 
 
@@ -20345,7 +20513,8 @@
       return;
     }
 
-    const preserveFocus = options.preserveFocus !== false && state.drawerOpen;
+    const hasExplicitFocusStrategy = Boolean(options.focusTarget && typeof options.focusTarget === "object");
+    const preserveFocus = options.preserveFocus !== false && state.drawerOpen && !hasExplicitFocusStrategy;
     const preserveScroll = options.preserveScroll !== false && state.drawerOpen;
     const focusSnapshot = preserveFocus ? createShellFocusSnapshot() : null;
     const scrollPositions = preserveScroll ? captureShellScrollPositions() : [];
@@ -20357,11 +20526,14 @@
       syncBracketFallbackVisibility();
     }
     restoreShellScrollPositions(scrollPositions);
-    const focusTarget = findShellFocusTarget(focusSnapshot);
+    const focusTarget = hasExplicitFocusStrategy
+      ? findExplicitShellFocusTarget(options.focusTarget)
+      : findShellFocusTarget(focusSnapshot, { allowOrdinal: true });
     if (focusElementWithoutScrolling(focusTarget)) {
       try {
         if (
-          Number.isInteger(focusSnapshot.selectionStart)
+          focusSnapshot
+          && Number.isInteger(focusSnapshot.selectionStart)
           && Number.isInteger(focusSnapshot.selectionEnd)
           && typeof focusTarget.setSelectionRange === "function"
         ) {
@@ -20456,7 +20628,11 @@
         state.activeTab = tabId;
         state.store.ui.activeTab = tabId;
         schedulePersist();
-        renderShell();
+        renderShell({
+          preserveFocus: false,
+          preserveScroll: false,
+          focusTarget: { selector: `[data-tab="${tabId}"]` },
+        });
       });
     });
 
@@ -21382,23 +21558,6 @@
     if (persist) {
       schedulePersist();
     }
-  }
-
-
-  function refreshCreateFormDurationEstimate(form) {
-    if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
-    const estimateHost = form.querySelector("#ata-create-duration-estimate");
-    if (!(estimateHost instanceof HTMLElement)) {
-      return;
-    }
-    const validation = validateCreateConfiguration(readCreateDraftInput(form), state.store.settings);
-    const estimate = validation.summary.durationEstimate;
-    estimateHost.innerHTML = renderTournamentDurationEstimate(estimate, {
-      visible: state.store?.ui?.durationEstimateVisible !== false,
-      showHelpLinks: false,
-    });
   }
 
 

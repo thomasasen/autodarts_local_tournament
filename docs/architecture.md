@@ -74,7 +74,9 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
   - `src/ui/render-tournament-help.js` rendert Herkunft und Regelstatus als getrennte Abschnitte; ein Topic-Status ist keine Gesamtbewertung des Turniers
 - Accessibility- und Fokus-Lebenszyklus:
   - `src/ui/render-shell.js` rendert den Drawer als modalen Dialog, die Bereichswahl als natives `nav`-Landmark mit `aria-current="page"` und typgerechte Status-/Alert-Semantik
-  - `src/ui/handlers.js` kapselt Fokusierbarkeit, Fokusfalle, Initialfokus, Fokus-Rückgabe sowie Fokus-/Auswahl-/Scroll-Erhalt bei vollständigem Shell-Re-Render; verborgene oder deaktivierte Controls werden nicht in die Fokusgrenze aufgenommen
+  - `src/ui/handlers.js` kapselt Fokusierbarkeit, Fokusfalle, Initialfokus, Fokus-Rückgabe sowie Fokus-/Auswahl-/Scroll-Erhalt bei Shell-Re-Render; verborgene oder deaktivierte Controls werden nicht in die Fokusgrenze aufgenommen
+  - vollständige Ansichtswechsel verwenden explizite stabile Fokusziele: Spieleüberschrift nach Anlage/Import, Turniererstellungsüberschrift nach Reset und aktivierter Navigationsbutton nach Tabwechsel
+  - der Snapshot speichert den gerenderten View-Kontext. Der ordinale Fallback ist nur innerhalb derselben Ansicht ohne explizite Strategie und ohne Widerspruch zu stabilen Merkmalen zulässig
   - `Escape` priorisiert die nicht-modale Kontext-Hilfe vor dem Drawer. Der Spielregel-Disclosure wird dabei nicht separat geschlossen; erst das Drawer-Schließen verwirft seine flüchtigen UI-Zustände
   - `src/ui/styles/main.css` definiert gemeinsame `:focus-visible`-/Forced-Colors-Regeln, deaktiviert Bewegung unter `prefers-reduced-motion`, vergrößert wesentliche Grobzeiger-Ziele auf 44 px und hält Karten/Formulare bis 320 CSS-Pixel ohne unbeabsichtigten horizontalen Overflow
   - Die Autodarts-Seite wird nicht pauschal per `inert` verändert: Der Assistent kontrolliert nur seinen eigenen Shadow-DOM-Dialog und vermeidet dadurch Eingriffe in unbekannte Host-Lifecycles
@@ -130,5 +132,7 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
 - `scripts/test-runtime-contract.ps1`: Runtime-API-, Selftest- und Turnieranlage-DOM-Contract gegen `dist/*`
 - `scripts/test-ui-viewports.ps1`: echte Edge-Matrix für zwölf Viewports, 200-%-Reflow-Äquivalent, alle Haupttabs/Zustände, horizontalen Overflow und erzwungene Grobzeiger-Touchziele
 - `scripts/qa-build-discipline.ps1`: Versionsquelle und generiertes `dist/*`
+- `scripts/qa-repository-hygiene.ps1`: temporäre Artefakte, abgeschlossene Pläne und lokale Markdown-Datei-/Ankerziele
+- `.github/workflows/qa.yml`: unabhängiges Windows-Gate für `scripts/qa.ps1` und den anschließenden Source-vs-Dist-Diff
 - `tests/unit-update-check.js`: Regressionen für Versionvergleich, TTL, Fallback und Cache-Busting
 - Runtime-Selbsttests: `window.__ATA_RUNTIME.runSelfTests()`

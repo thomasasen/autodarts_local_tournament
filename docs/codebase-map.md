@@ -43,6 +43,7 @@ autodarts_local_tournament/
 |  |  |- constants.js
 |  |  |- state.js
 |  |  |- utils.js
+|  |  |- match-start-tools.js
 |  |  |- logging.js
 |  |  `- events.js
 |  |- data/
@@ -116,44 +117,66 @@ autodarts_local_tournament/
 |  |- qa-architecture.ps1
 |  |- qa-build-discipline.ps1
 |  |- qa-encoding.ps1
+|  |- qa-repository-hygiene.ps1
 |  |- qa-regelcheck.ps1
 |  |- test-domain.ps1
 |  |- test-runtime-contract.ps1
 |  `- test-ui-viewports.ps1
 |- tests/
 |  |- contracts/
+|  |  |- globals-contract.js
+|  |  `- runtime-api-contract.js
+|  |- fixtures/
+|  |  |- group-deadlock-playoff.json
+|  |  |- ko-seeded-9.json
+|  |  `- migration-v2-to-v3.json
 |  |- selftest-runtime.js
 |  |- test-harness.js
 |  |- domain-isolation.js
+|  |- unit-bracket-payload.js
+|  |- unit-create-validation.js
+|  |- unit-groups-ko-policy.js
 |  |- unit-ko-engine.js
-|  |- unit-update-check.js
-|  |- unit-tournament-duration.js
+|  |- unit-match-start-tools.js
+|  |- unit-message-doc-links.js
+|  |- unit-preliminary-final.js
+|  |- unit-presets.js
 |  |- unit-rules-config.js
-|  `- unit-standings-dra.js
-|  `- fixtures/
-|     |- group-deadlock-playoff.json
-|     |- ko-seeded-9.json
-|     `- migration-v2-to-v3.json
+|  |- unit-standings-dra.js
+|  |- unit-tournament-duration.js
+|  |- unit-tournament-help.js
+|  |- unit-tournament-scenarios.js
+|  `- unit-update-check.js
 |- installer/
 |  `- Autodarts Tournament Assistant Loader.user.js
 |- dist/
 |  |- autodarts-tournament-assistant.meta.js
 |  `- autodarts-tournament-assistant.user.js
 |- docs/
+|  |- api-documentation-playbook.md
 |  |- architecture.md
+|  |- ata-api-probe-v2.js
+|  |- autodarts-api-capabilities.md
+|  |- changelog.md
 |  |- codebase-map.md
-|  |- refactor-guide.md
-|  |- selector-strategy.md
-|  |- pdc-dra-compliance.md
 |  |- dra-compliance-matrix.md
 |  |- dra-regeln-gui.md
-|  |- changelog.md
+|  |- pdc-dra-compliance.md
+|  |- refactor-guide.md
+|  |- release-checklist.md
+|  |- selector-strategy.md
+|  |- tournament-duration.md
 |  `- DRA-RULE_BOOK.pdf
 |- assets/
-|  |- Screenshots fuer README und Docs
-|  |- pdc_logo.png
-|  `- ata-export-*.json
+|  |- Screenshots für README und Docs
+|  `- pdc_logo.png
+|- .github/
+|  `- workflows/
+|     `- qa.yml
+|- .gitignore
+|- AGENTS.md
 |- README.md
+|- SKILL.md
 `- LICENSE
 ```
 
@@ -334,14 +357,17 @@ Die Tabellen unten beschreiben pro Datei:
 | `build/version.json` | zentrale Versionsquelle | liefert `APP_VERSION` für Runtime-Header, Runtime-Code und Meta-Datei | `scripts/build.ps1`, `src/core/constants.js`, `dist/autodarts-tournament-assistant.user.js`, `dist/autodarts-tournament-assistant.meta.js` |
 | `build/domain-test-manifest.json` | Test-Bundle-Vertrag | definiert, welche Dateien in den isolierten Domain-Harness geladen werden | `scripts/test-domain.ps1`, `tests/test-harness.js`, `tests/unit-*.js` |
 | `scripts/build.ps1` | Build-Orchestrierung | liest Manifest und Version, fügt Module zusammen, injiziert Version, bettet CSS und Logo ein, schreibt Runtime- und Meta-Artefakte nach `dist/*` | `build/manifest.json`, `build/version.json`, `src/ui/styles/main.css`, `assets/pdc_logo.png`, `dist/autodarts-tournament-assistant.user.js`, `dist/autodarts-tournament-assistant.meta.js` |
-| `scripts/qa.ps1` | Gesamt-QA | ruft Build, Architektur-QA, Encoding, Regelcheck, Domain-Harness, Runtime-Contract, UI-Viewport-Matrix und Build-Disziplin auf | `scripts/build.ps1`, `scripts/qa-architecture.ps1`, `scripts/test-domain.ps1`, `scripts/test-runtime-contract.ps1`, `scripts/test-ui-viewports.ps1`, `scripts/qa-build-discipline.ps1` |
+| `scripts/qa.ps1` | Gesamt-QA | ruft Build, Architektur-QA, Encoding, Regelcheck, Repository-Hygiene, Domain-Harness, Runtime-Contract, UI-Viewport-Matrix und Build-Disziplin auf | `scripts/build.ps1`, `scripts/qa-architecture.ps1`, `scripts/qa-repository-hygiene.ps1`, `scripts/test-domain.ps1`, `scripts/test-runtime-contract.ps1`, `scripts/test-ui-viewports.ps1`, `scripts/qa-build-discipline.ps1` |
 | `scripts/qa-architecture.ps1` | Architektur-Gate | prüft Domain-Reinheit, Runtime-/Bracket-/Storage-Grenzen und UI-Renderer-Regeln | `src/domain/*`, `src/bracket/*`, `src/data/storage.js`, `src/runtime/*`, `src/ui/render-*.js` |
 | `scripts/qa-encoding.ps1` | Zeichensatz- und Terminologie-Prüfung | prüft UTF-8, Mojibake und zentrale UI-Begriffe in Quell-, Dist- und Doku-Dateien | `src/*`, `dist/autodarts-tournament-assistant.user.js`, `docs/*`, `README.md` |
+| `scripts/qa-repository-hygiene.ps1` | Repository-Hygiene | blockiert temporäre Artefakte, abgeschlossene Pläne, alte Release-Zukunftshinweise und kaputte lokale Markdown-Datei-/Ankerziele ohne Netzabfragen | Markdown-Dateien, `.gitignore`, `scripts/qa.ps1` |
 | `scripts/qa-regelcheck.ps1` | fachlicher Regex-Check | prüft in `dist/*`, ob zentrale Regelmappings, KO-Logik und Terminologie im Bundle vorkommen | `dist/autodarts-tournament-assistant.user.js`, Domain-Logik aus `src/domain/*` |
 | `scripts/test-domain.ps1` | isolierter Domain-Harness | baut einen no-deps Test-Bundle für pure Domain-Logik und führt ihn im Headless-Browser aus | `build/domain-test-manifest.json`, `tests/test-harness.js`, `tests/domain-isolation.js`, `tests/unit-*.js` |
 | `scripts/test-runtime-contract.ps1` | Runtime-Contract-Test | lädt `dist/*` im Headless-Browser und prüft `window.__ATA_RUNTIME` plus `runSelfTests()` | `dist/autodarts-tournament-assistant.user.js`, `tests/contracts/*` |
 | `scripts/test-ui-viewports.ps1` | Responsive-/Touch-Browsermatrix | prüft im echten Edge zwölf Desktop-/Tablet-/Mobil-/Querformatgrößen samt 200-%-Reflow-Äquivalent, alle Hauptzustände, Overflow und erzwungene 44-px-Grobzeigerziele | `dist/autodarts-tournament-assistant.user.js`, `src/ui/styles/main.css`, `scripts/qa.ps1` |
 | `scripts/qa-build-discipline.ps1` | Build-Disziplin | prüft Placeholder-Nutzung, Versionseinbau und generierte Runtime-/Meta-Artefakte | `build/version.json`, `src/core/constants.js`, `dist/autodarts-tournament-assistant.user.js`, `dist/autodarts-tournament-assistant.meta.js` |
+| `.github/workflows/qa.yml` | unabhängiges CI-Gate | führt auf `windows-latest` das autoritative `scripts/qa.ps1` und danach `git diff --exit-code` aus | GitHub Actions, `dist/*`, `scripts/qa.ps1` |
+| `.gitignore` | lokale Artefaktgrenze | ignoriert nur typische Temp-, Log-, Backup- und Patchreste; `dist/*`, `build/*`, Tests, Assets und Installer bleiben versioniert | lokale Entwicklung, `scripts/qa-repository-hygiene.ps1` |
 | `installer/Autodarts Tournament Assistant Loader.user.js` | Loader-Skript, nicht App-Logik | lädt die veröffentlichte Dist-Datei remote, validiert sie, cached sie lokal und erzeugt den Menü-Einstieg | `dist/autodarts-tournament-assistant.user.js`, GitHub Raw URL, Tampermonkey GM APIs |
 | `dist/autodarts-tournament-assistant.user.js` | generiertes Auslieferungsartefakt | enthält das komplette Userscript als eine Datei; ist Loader-kompatibel und direkt installierbar | `scripts/build.ps1`, `installer/Autodarts Tournament Assistant Loader.user.js`, Browser/Tampermonkey |
 | `dist/autodarts-tournament-assistant.meta.js` | leichtgewichtiges Versionsartefakt | enthält nur den Userscript-Header für Update-Checks und `@updateURL` | `scripts/build.ps1`, `src/infra/update-check.js`, Tampermonkey/GitHub Raw |
@@ -354,10 +380,20 @@ Die Tabellen unten beschreiben pro Datei:
 | `tests/contracts/globals-contract.js` | Global-Vertrag | hält die erwarteten ATA-Globals und verbotene neue Keys fest | `scripts/test-runtime-contract.ps1`, Browser-Globalobjekt |
 | `tests/test-harness.js` | minimaler Test-Runner | registriert Tests, Assertions und Ergebnisaggregation für den no-deps Harness | `scripts/test-domain.ps1`, `tests/domain-isolation.js`, `tests/unit-*.js` |
 | `tests/domain-isolation.js` | Isolations-Tests | prüft, dass Domain-Funktionen ohne Runtime-State, DOM-Mocks und Persistenz ausgeführt werden können | `src/domain/*`, `tests/test-harness.js` |
+| `tests/unit-bracket-payload.js` | Bracket-Payload-Tests | prüft Viewer-Payloads für KO-, Doppel-KO- und Platzierungsstrukturen | `src/bracket/payload.js`, `tests/test-harness.js` |
+| `tests/unit-create-validation.js` | Create-Validation-Tests | prüft Reason-Codes, Rohwerte, Teilnehmeranalyse, Modusgrenzen und Zusammenfassungen | `src/domain/create-validation.js`, `tests/test-harness.js` |
+| `tests/unit-groups-ko-policy.js` | Gruppenpolicy-Tests | prüft gerade/ungerade Gruppenfelder, Bestätigung und Legacy-Verhalten | `src/domain/tournament-create.js`, `tests/test-harness.js` |
 | `tests/unit-ko-engine.js` | KO-Unit-Tests | prüft Seeded-9, Draw-Lock, Winner-Advancement und KO-Migration v3 | `src/domain/ko-engine.js`, `src/domain/tournament-create.js`, `tests/test-harness.js` |
+| `tests/unit-match-start-tools.js` | Matchstart-Tests | prüft Payload-, Ablauf- und Debug-Helfer ohne Live-API | `src/core/match-start-tools.js`, `tests/test-harness.js` |
+| `tests/unit-message-doc-links.js` | Dokumentlink-Tests | prüft die Zuordnung klickbarer Runtime-Meldungen zu README-Ankern | `src/ui/render-helpers.js`, `README.md`, `tests/test-harness.js` |
+| `tests/unit-preliminary-final.js` | Vorrunden-/Finalphasen-Tests | prüft Paarungsplan, Wertung, Qualifikation und Finalphasenerzeugung | `src/domain/preliminary-*.js`, `tests/test-harness.js` |
+| `tests/unit-presets.js` | Preset-Tests | prüft Katalog, Anwendung, Custom-Umschaltung und Legacy-Alias | `src/data/normalization.js`, `src/domain/tournament-create.js`, `tests/test-harness.js` |
 | `tests/unit-update-check.js` | Update-Check-Unit-Tests | prüft Versionsvergleich, Cache-Busting, Fallback und TTL ohne Netzabhängigkeit | `src/infra/update-check.js`, `tests/test-harness.js` |
 | `tests/unit-rules-config.js` | Rules-Unit-Tests | prüft pure Tie-Break- und Draw-Lock-Mutationen | `src/domain/rules-config.js`, `tests/test-harness.js` |
 | `tests/unit-standings-dra.js` | Standings-Unit-Tests | prüft H2H/Mini-Tabelle, Legacy-Profil und `playoff_required` | `src/domain/standings-dra.js`, `tests/test-harness.js` |
+| `tests/unit-tournament-duration.js` | Dauerprognose-Tests | prüft Matchanzahl, Taskgraph, Board-Limit und Zeitprofile | `src/domain/tournament-duration.js`, `tests/test-harness.js` |
+| `tests/unit-tournament-help.js` | Regelhilfe-Tests | prüft elf Topics, dynamische Ableitungen, Grenzen, Status und Quellen | `src/ui/tournament-help-topics.js`, `tests/test-harness.js` |
+| `tests/unit-tournament-scenarios.js` | Modusszenarien | führt vollständige Flows für die unterstützten Turniermodi aus | `src/domain/*`, `tests/test-harness.js` |
 | `tests/selftest-runtime.js` | Browser-Konsole-Helfer | ruft `window.__ATA_RUNTIME.runSelfTests()` auf und formatiert das Ergebnis für `console.table` | `src/app/diagnostics.js`, `dist/autodarts-tournament-assistant.user.js` |
 
 ### Core
@@ -367,6 +403,7 @@ Die Tabellen unten beschreiben pro Datei:
 | `src/core/constants.js` | technischer Einstieg des Bundles | Userscript-Header, IIFE-Start, globale Keys, URLs, Konfiguration, feste Optionen und Begriffe | `build/manifest.json`, alle folgenden `src/*`-Dateien, `src/runtime/bootstrap.js` |
 | `src/core/state.js` | zentraler Laufzeitzustand | hält Drawer-, Tab-, Notice-, Bracket-, API-, Observer- und Store-State | `src/core/utils.js`, `src/data/normalization.js`, `src/data/storage.js`, `src/ui/handlers.js` |
 | `src/core/utils.js` | Querschnitts-Helfer | Sanitizing, HTML-Escaping, IDs, Zufall, verlustfreie Teilnehmeranalyse/-Parsing und Routing-Key | `src/data/normalization.js`, `src/domain/*`, `src/ui/*`, `src/infra/*`, `src/runtime/*` |
+| `src/core/match-start-tools.js` | pure Matchstart-Helfer | baut Matchstart-Abläufe, Debug-Sessions und sichere Fehlerdetails ohne Live-Request | `src/infra/api-automation.js`, `src/app/diagnostics.js`, `tests/unit-match-start-tools.js` |
 | `src/core/logging.js` | Debug- und Fehlerlogging | `logDebug`, `logWarn`, `logError` mit ATA-Präfixen | `src/data/storage.js`, `src/domain/ko-engine.js`, `src/infra/*`, `src/runtime/*`, `src/ui/handlers.js` |
 | `src/core/events.js` | Cleanup- und Lifecycle-Utilities | registriert Cleanup-Funktionen, Listener, Intervalle und Observer zentral | `src/infra/route-hooks.js`, `src/runtime/bootstrap.js`, `src/runtime/lifecycle.js`, `src/runtime/public-api.js` |
 
@@ -445,7 +482,7 @@ Hier liegt die eigentliche Turnierlogik. Wenn sich eine fachliche Regel ändert,
 | `src/ui/render-view.js` | Tabellen- und Bracket-Ansicht | rendert Liga-/Gruppentabellen, Fallback-Bracket und den Einstieg ins iframe-Bracket | `src/domain/standings-dra.js`, `src/domain/groups.js`, `src/domain/ko-engine.js`, `src/bracket/*` |
 | `src/ui/render-io.js` | Import/Export-Tab | rendert Export- und Import-Oberfläche | `src/ui/handlers.js`, `src/data/storage.js` |
 | `src/ui/render-settings.js` | Settings-Tab | rendert Debug-Flag, API-Automation, GitHub-Update-Panel, KO-Defaults, Zeitprofil, Tie-Break-Profil und Storage-Hinweise | `src/data/normalization.js`, `src/domain/tournament-duration.js`, `src/ui/render-helpers.js`, `src/app/update-status.js`, `src/ui/handlers.js` |
-| `src/ui/handlers.js` | UI-Orchestrator | erstellt Host, bindet Events, kapselt Drawer-Fokusfalle/-Rückgabe sowie Fokus-/Auswahl-/Scroll-Erhalt, synchronisiert Modusgruppen/Disclosure, wendet Presets an und aktualisiert Validierung, Übersicht, Hilfe sowie Live-Prognose; Submit revalidiert autoritativ und fokussiert das erste Problem | `src/ui/render-shell.js`, `src/ui/render-create-validation.js`, `src/ui/render-tournament-help.js`, `src/app/tournament-actions.js`, `src/app/match-actions.js`, `src/infra/api-automation.js`, `src/infra/update-check.js`, `src/app/bracket-controller.js`, `src/domain/create-validation.js` |
+| `src/ui/handlers.js` | UI-Orchestrator | erstellt Host, bindet Events, kapselt Drawer-Fokusfalle/-Rückgabe, explizite View-Fokusziele sowie kontextgebundenen Fokus-/Auswahl-/Scroll-Erhalt, synchronisiert Modusgruppen/Disclosure, wendet Presets an und aktualisiert Validierung, Übersicht, Hilfe sowie Live-Prognose; Submit revalidiert autoritativ und fokussiert das erste Problem | `src/ui/render-shell.js`, `src/ui/render-create-validation.js`, `src/ui/render-tournament-help.js`, `src/app/tournament-actions.js`, `src/app/match-actions.js`, `src/infra/api-automation.js`, `src/infra/update-check.js`, `src/app/bracket-controller.js`, `src/domain/create-validation.js` |
 
 `handlers.js` ist die Datei, in der Bedienung, State-Änderung und Re-Render zusammenlaufen. Die Render-Dateien bleiben dagegen weitgehend beschreibend.
 
@@ -482,9 +519,13 @@ Diese Dateien sind keine aktive Logik, aber wichtig, um fachliche Spezialfälle 
 ### `assets/*`
 - Screenshots für README und Doku
 - `pdc_logo.png` für das PDC-Badge im Bundle
-- Beispiel-Export `ata-export-*.json` als Referenzmaterial
 
 Assets erklären das Produkt und speisen zum Teil den Build, tragen aber keine Laufzeitlogik.
+
+### Wartungs- und Release-Dokumente
+- `docs/release-checklist.md` bündelt den manuellen authentifizierten Live-Smoke und reale Hardwareprüfungen.
+- `SKILL.md` hält die repositoryspezifische Qualitäts- und Compliance-Arbeitsweise für unterstützende Werkzeuge fest.
+- Ein aktiver `plan/`-Ordner ist nach Abschluss des UX-Projekts nicht mehr Teil des Repositories.
 
 ### `docs/DRA-RULE_BOOK.pdf`
 - lokale Regelreferenz im Repository

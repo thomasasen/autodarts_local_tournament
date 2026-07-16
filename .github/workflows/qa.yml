@@ -1,0 +1,30 @@
+name: QA
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qa:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Run authoritative QA
+        run: powershell -ExecutionPolicy Bypass -File scripts/qa.ps1
+
+      - name: Verify generated artifacts are committed
+        run: git diff --exit-code

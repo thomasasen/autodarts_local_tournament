@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.12.1
+- Vollständige Ansichtswechsel besitzen jetzt explizite Fokusziele: Spieleüberschrift nach erfolgreicher Turnieranlage und Import, Turniererstellungsüberschrift nach Reset sowie der aktivierte Navigationsbutton nach Tabwechsel. Die Überschriften sind nur programmatisch über `tabindex="-1"` fokussierbar und erzeugen keinen zusätzlichen Tabstopp.
+- Der Shell-Fokus-Snapshot speichert den tatsächlich gerenderten View-Kontext. Der ordinale Fallback ist auf dieselbe Ansicht, denselben Elementtyp, fehlende explizite Fokusstrategie und widerspruchsfreie stabile Merkmale begrenzt; mehrdeutige Attributtreffer und Cross-View-Fallbacks werden verworfen. Feld-Re-Render erhalten weiterhin Fokus, Textauswahl und Scrollposition.
+- Runtime-Selftests decken Anlage, Reset, Import, Navigation, Cross-View-Schutz, Textauswahl, Hilfe-/Drawer-Escape sowie den Host-Fallback bei entferntem Auslöser ab. Der Runtime-Vertrag prüft zusätzlich das programmatische Fokusziel der Turniererstellung.
+- `.github/workflows/qa.yml` führt das autoritative `scripts/qa.ps1` auf `windows-latest` aus und prüft anschließend per `git diff --exit-code` die reproduzierbare Distribution. Berechtigungen und Concurrency sind minimal gehalten; es gibt weder Secrets noch Commit, Push oder Veröffentlichung.
+- Ein dependency-freies `scripts/qa-repository-hygiene.ps1` prüft temporäre Artefakte, abgeschlossene Pläne, veraltete Release-7-Zukunftshinweise und lokale Markdown-Datei-/Ankerziele. `.gitignore` schützt die typischen lokalen Temp-, Log- und Patch-Artefakte.
+- Der abgeschlossene UX-Plan, drei versehentlich versionierte Internet-Scan-Gitlinks und ein unreferenzierter Export auf Schema 4 wurden entfernt. Drei nachweislich unreferenzierte Funktionen sowie ein veraltetes Fokus-Snapshot-Attribut wurden bereinigt; referenzierte Screenshots, PDC-Logo, Compliance-Quellen und fachliche States bleiben erhalten.
+- Die manuelle Release-Checkliste bündelt den authentifizierten Live-Smoke sowie physische Tastatur-, Touch- und Screenreader-Grenzen. Storage-Schema 5, Turnierregeln, Modi und Compliance-Einstufungen bleiben unverändert.
+
 ## 0.12.0
 - Der Assistant-Drawer besitzt einen vollständigen Fokuslebenszyklus: definierter Initialfokus, sichtbare-Controls-Fokusfalle in beide Richtungen, Hilfe-vor-Drawer-Escape, offen bleibender Spielregel-Editor beim Schließen der Hilfe sowie sichere Rückgabe an den Auslöser oder den Assistant-Host, falls der Auslöser entfernt wurde.
 - Shell-Re-Render erhalten den aktiven Tab beziehungsweise das aktive Control, Textauswahl und relevante Scrollpositionen. Die native Navigation bleibt ein `nav`-Landmark mit genau einem `aria-current="page"`; es werden bewusst keine unvollständigen Tab-ARIA-Rollen simuliert.

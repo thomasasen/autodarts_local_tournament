@@ -1,8 +1,8 @@
 # DRA Compliance Matrix
 
-Stand: Release `0.12.0` / `schemaVersion 5` / KO-Engine `v3` mit vollständiger KO-Materialisierung.
+Stand: Release `0.12.1` / `schemaVersion 5` / KO-Engine `v3` mit vollständiger KO-Materialisierung.
 
-Release 7 ändert keine Turnierregel, Reason-Code-Wirkung oder Compliance-Einstufung. Der abschließende Accessibility-/Responsive-Pass macht die vorhandenen Hinweise, Regelquellen und Veranstaltergrenzen per Tastatur, Fokusführung, klaren Beschriftungen und sparsamem Live-Feedback zugänglicher; `enforced`, `assisted` und `not_applicable_to_software` bleiben fachlich unverändert.
+Release `0.12.1` ändert keine Turnierregel, Reason-Code-Wirkung oder Compliance-Einstufung. Die gehärtete Fokusführung bei Anlage, Import, Reset und Tabwechsel macht die vorhandenen Hinweise, Regelquellen und Veranstaltergrenzen eindeutiger erreichbar; `enforced`, `assisted` und `not_applicable_to_software` bleiben fachlich unverändert.
 
 Statuswerte:
 - `enforced`: technisch erzwungen

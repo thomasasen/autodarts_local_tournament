@@ -10,12 +10,6 @@
     state.matchReturnShortcut.inlineOutcomeByLobby = {};
   }
 
-
-  function renderMatchReturnShortcut() {
-    removeMatchReturnShortcut();
-  }
-
-
   function cleanupRuntime() {
     resetCreateHelpState();
     if (state.saveTimer) {

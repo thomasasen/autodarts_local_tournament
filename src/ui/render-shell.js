@@ -21,7 +21,7 @@
 
     return `
       <style>${buildStyles()}</style>
-      <div class="ata-root" data-open="${state.drawerOpen ? "1" : "0"}">
+      <div class="ata-root" data-open="${state.drawerOpen ? "1" : "0"}" data-active-tab="${escapeHtml(state.activeTab)}">
         <div class="ata-overlay" data-action="close-drawer"></div>
         <aside class="ata-drawer" role="dialog" aria-modal="true" aria-label="Autodarts Tournament Assistant" tabindex="-1">
           <header class="ata-header">

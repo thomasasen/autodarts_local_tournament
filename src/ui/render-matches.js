@@ -260,7 +260,10 @@
 
     return `
       <section class="ata-card tournamentCard ata-matches-card">
-        ${renderSectionHeading("Ergebnisführung", resultHeadingLinks)}
+        ${renderSectionHeading("Ergebnisführung", resultHeadingLinks, {
+          id: "ata-matches-heading",
+          programmaticFocus: true,
+        })}
         <p class="ata-small">API-Halbautomatik: Match per Klick starten, Ergebnis wird automatisch synchronisiert. Manuelle Eingabe bleibt als Fallback aktiv. ${renderInfoLinks([
           { href: README_API_AUTOMATION_URL, kind: "tech", label: "Voraussetzungen und Ablauf öffnen", title: "README: API-Halbautomatik" },
         ])}</p>

@@ -2,7 +2,7 @@
 
 Lokales Turniermanagement direkt in `https://play.autodarts.io` als Userscript.
 
-Aktuelle Releaseversion: `0.12.0`.
+Aktuelle Releaseversion: `0.12.1`.
 
 [![Installieren](https://img.shields.io/badge/Installieren-Autodarts%20Tournament%20Assistant%20Loader-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js)
 
@@ -238,7 +238,7 @@ Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten b
 
 - Beim Öffnen erhält der sichtbare Schließen-Button den Fokus. `Tab` und `Umschalt+Tab` bleiben bei geöffnetem Drawer in dessen sichtbaren, aktivierbaren Controls; verborgene Modusfelder, Hilfeinhalte und der geschlossene Spielregel-Editor sind nicht Teil der Fokusreihenfolge.
 - `Escape` schließt zuerst eine geöffnete Kontext-Hilfe und gibt den Fokus an deren `?`-Button zurück. Ein geöffneter Spielregel-Editor bleibt dabei offen. Erst ein weiteres `Escape` schließt den Drawer und gibt den Fokus an den ursprünglichen Seitenauslöser zurück.
-- Tabwechsel und andere vollständige Shell-Aktualisierungen erhalten Fokus, Textauswahl und Scrollposition bestmöglich. Die Hauptnavigation ist ein natives `nav`-Landmark; der aktuelle Bereich ist über `aria-current="page"` ausgezeichnet.
+- Tabwechsel fokussieren weiterhin den aktivierten Navigationsbutton. Erfolgreiche Turnieranlage und Import fokussieren die Überschrift der Spieleansicht; ein Reset fokussiert die Überschrift der Turniererstellung. Normale Aktualisierungen innerhalb derselben Ansicht erhalten Fokus, Textauswahl und Scrollposition. Die Hauptnavigation ist ein natives `nav`-Landmark; der aktuelle Bereich ist über `aria-current="page"` ausgezeichnet.
 - Felder und Schalter besitzen sichtbare sowie programmatisch zugeordnete Bezeichnungen. Fehler werden feldnah verknüpft, der erste Submit-Fehler fokussiert und echte Fehlerzusammenfassungen angekündigt. Laufende Live-Ankündigungen bleiben bewusst auf den Teilnehmerstatus und globale Statusmeldungen begrenzt.
 - Sichtbarer Tastaturfokus, Forced Colors und `prefers-reduced-motion` werden unterstützt. Bei grober Zeigereingabe wachsen wesentliche Buttons, Links und Checkboxen auf mindestens `44 × 44 px`.
 - Die Release-QA prüft in echtem Microsoft Edge zwölf Viewports: `1920 × 1080`, `1366 × 768`, `1024 × 768`, `768 × 1024`, `800 × 360`, `430 × 932`, `390 × 844`, `360 × 800`, `320 × 800`, `1024 × 600`, `1366 × 600` sowie ein `1366 × 768`-Reflow-Äquivalent bei `200 %`. Breite Tabellen und der Tabstreifen dürfen innerhalb ihres ausdrücklich scrollbaren Bereichs horizontal scrollen; Seite, Drawer, Formulare, Karten und Hilfepanel tun dies nicht unbeabsichtigt.
@@ -683,9 +683,11 @@ autodarts_local_tournament/
 |  |- qa-architecture.ps1
 |  |- qa-build-discipline.ps1
 |  |- qa-encoding.ps1
+|  |- qa-repository-hygiene.ps1
 |  |- qa-regelcheck.ps1
 |  |- test-domain.ps1
-|  `- test-runtime-contract.ps1
+|  |- test-runtime-contract.ps1
+|  `- test-ui-viewports.ps1
 |- tests/
 |  |- fixtures/
 |  |- selftest-runtime.js
@@ -706,10 +708,14 @@ autodarts_local_tournament/
 |  |- dra-compliance-matrix.md
 |  |- dra-regeln-gui.md
 |  |- pdc-dra-compliance.md
+|  |- release-checklist.md
 |  |- refactor-guide.md
 |  |- selector-strategy.md
 |  |- changelog.md
+|- .github/
+|  `- workflows/qa.yml
 |- assets/
+|- .gitignore
 |- README.md
 |- LICENSE
 ```
@@ -734,6 +740,7 @@ Gezielte Checks:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/qa-architecture.ps1
+powershell -ExecutionPolicy Bypass -File scripts/qa-repository-hygiene.ps1
 powershell -ExecutionPolicy Bypass -File scripts/test-domain.ps1
 powershell -ExecutionPolicy Bypass -File scripts/test-runtime-contract.ps1
 powershell -ExecutionPolicy Bypass -File scripts/test-ui-viewports.ps1
@@ -757,7 +764,7 @@ powershell -ExecutionPolicy Bypass -File scripts/test-ui-viewports.ps1
 - Technisches Hard-Cap: `128` Teilnehmer
 - API-Halbautomatik basiert auf in der Praxis verwendeten Endpunkten (Inference), siehe [docs/autodarts-api-capabilities.md](docs/autodarts-api-capabilities.md)
 - DOM-Autodetect bleibt best-effort
-- MultiBoard ist nicht Bestandteil von Version `0.12.0`. `Boards für Zeitprognose` ist ausschließlich ein Kapazitätsparameter der Schätzung. Board-Zuweisung, parallele Lobbyverwaltung, mehrere gleichzeitig gestartete Matches, Mehrgeräte-Synchronisierung und Mehrbrowser-Bearbeitung sind nicht implementiert.
+- MultiBoard ist nicht Bestandteil von Version `0.12.1`. `Boards für Zeitprognose` ist ausschließlich ein Kapazitätsparameter der Schätzung. Board-Zuweisung, parallele Lobbyverwaltung, mehrere gleichzeitig gestartete Matches, Mehrgeräte-Synchronisierung und Mehrbrowser-Bearbeitung sind nicht implementiert.
 - Eine physische Screenreader-Abnahme und ein authentifizierter Live-Account-Test sind nicht Teil der automatisierten lokalen QA. Native Semantik, Fokusführung, Tastaturereignisse, Forced Colors, Reduced Motion und Grobzeiger-Touchziele werden browsergestützt geprüft; Lobby-/Board-/API-Integration wurde in Release 7 nicht fachlich verändert.
 
 ## Quellen

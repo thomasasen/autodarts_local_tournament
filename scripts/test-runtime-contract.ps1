@@ -209,6 +209,9 @@ $checkScript = @'
       && allIds.length === new Set(allIds).size
       && liveRegions.length === 1
       && liveRegions[0].id === "ata-create-participant-status";
+    const createFocusHeading = shadowRoot?.querySelector(createUiContract.focusTargets.createHeadingSelector) || null;
+    const explicitFocusMarkupOk = createFocusHeading instanceof HTMLElement
+      && createFocusHeading.getAttribute("tabindex") === createUiContract.focusTargets.programmaticTabIndex;
     const drawer = shadowRoot?.querySelector(".ata-drawer") || null;
     const initialDrawerFocusOk = shadowRoot?.activeElement?.classList?.contains("ata-close-btn") === true;
     const isVisibleFocusable = (element) => !element.hasAttribute("disabled")
@@ -264,6 +267,7 @@ $checkScript = @'
       validationInitialOk,
       navigationOk,
       accessibilityMarkupOk,
+      explicitFocusMarkupOk,
       drawerKeyboardOk,
       presetMarkupDetails: {
         fieldsetTag: presetFieldset?.tagName || "",
@@ -323,6 +327,10 @@ $checkScript = @'
     if (!accessibilityMarkupOk) {
       result.ok = false;
       result.failures.push("Formular verletzt Beschriftungs-, ID- oder Live-Region-Vertrag.");
+    }
+    if (!explicitFocusMarkupOk) {
+      result.ok = false;
+      result.failures.push("Explizites programmatisches Fokusziel der Turniererstellung fehlt.");
     }
     if (!drawerKeyboardOk) {
       result.ok = false;

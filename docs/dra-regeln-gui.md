@@ -22,6 +22,7 @@ Screenshot-Kontext:
 
 - Die kontextbezogenen `?`-Auslöser in der Turnieranlage sind echte Buttons mit konkretem zugänglichem Namen, `aria-controls` und synchronem `aria-expanded`.
 - Beim Öffnen erhält die Panelüberschrift den Fokus. `Hilfe schließen` oder das erste `Escape` stellt die Turnierübersicht wieder her und gibt den Fokus an den auslösenden Button zurück; ein geöffnetes Spielregel-Disclosure bleibt dabei unverändert. Ein weiteres `Escape` schließt den Assistant-Drawer.
+- Nach Anlage oder Import erhält die Spieleüberschrift den Fokus, nach Reset die Überschrift der Turniererstellung und nach Tabwechsel der aktivierte Navigationsbutton. Normale Feldaktualisierungen erhalten Fokus und Textauswahl innerhalb derselben Ansicht.
 - Quellenlinks, Formularfelder und Drawer-Navigation sind vollständig per Tastatur erreichbar und besitzen sichtbaren Fokus. Reduced Motion, Forced Colors und 44-px-Grobzeigerziele werden unterstützt.
 - Diese Bedienhilfen ändern keine DRA-/PDC-Regelwirkung und keine Einstufung in der Compliance-Matrix. Sie machen ausschließlich die vorhandenen Erklärungen und Veranstaltergrenzen zugänglicher.
 

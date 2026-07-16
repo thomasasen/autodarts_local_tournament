@@ -28,6 +28,10 @@ const RUNTIME_API_CONTRACT = Object.freeze({
       "game-rules",
       "overview",
     ]),
+    focusTargets: Object.freeze({
+      createHeadingSelector: "#ata-create-heading",
+      programmaticTabIndex: "-1",
+    }),
     requiredSelectors: Object.freeze([
       "#ata-name",
       "#ata-mode",

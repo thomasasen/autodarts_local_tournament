@@ -6,15 +6,15 @@ Modulare Pflege des Userscripts ohne npm/Node mit reproduzierbarem Build.
 ## Arbeitsweise
 1. Änderungen in `src/*` durchführen.
 2. Versionsquelle bei Releases in `build/version.json` pflegen.
-2. Build ausführen:
+3. Build ausführen:
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/build.ps1
 ```
-3. Domänennahe Änderungen direkt mit dem Harness prüfen:
+4. Domänennahe Änderungen direkt mit dem Harness prüfen:
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/test-domain.ps1
 ```
-4. QA ausführen:
+5. QA ausführen:
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/qa.ps1
 ```
@@ -48,6 +48,14 @@ window.__ATA_RUNTIME?.runSelfTests?.()
   - `qa-architecture.ps1` prüft Layer-Regeln und Seiteneffekte
   - `qa-encoding.ps1` prüft Umlaute und Mojibake
   - `qa-regelcheck.ps1` prüft zentrale DRA/PDC-Mappings
+  - `qa-repository-hygiene.ps1` prüft temporäre Repository-Artefakte sowie lokale Markdown-Datei- und Ankerziele
   - `test-domain.ps1` prüft isolierbare Domain-Logik
   - `test-runtime-contract.ps1` prüft die öffentliche Runtime-API
   - `qa-build-discipline.ps1` prüft Versionsquelle und Dist-Disziplin
+
+## GitHub Actions und Release-Gates
+
+- `.github/workflows/qa.yml` läuft bei Pushes und Pull Requests gegen `main` sowie manuell per `workflow_dispatch`.
+- `scripts/qa.ps1` ist lokal und in GitHub Actions das autoritative Gate; danach muss `git diff --exit-code` bestätigen, dass die committed Distribution reproduzierbar ist.
+- Der Workflow verwendet `windows-latest`, weil die bestehenden PowerShell-Skripte und die Edge-/Chrome-Erkennung unverändert wiederverwendet werden.
+- Authentifizierte AutoDarts-Account-, Lobby-, Board- und API-Tests sowie physische Screenreader- und Touch-Prüfungen gehören nicht zur CI. Sie stehen in der [manuellen Release-Checkliste](release-checklist.md).

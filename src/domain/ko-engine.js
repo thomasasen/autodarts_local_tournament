@@ -177,18 +177,6 @@
     return Boolean(sourceMatch && sourceMatch.status === STATUS_COMPLETED && isCompletedMatchResultValid(tournament, sourceMatch));
   }
 
-
-  function isDynamicallyResolvedBye(tournament, virtualMatch, p1, p2) {
-    const hasP1 = Boolean(p1);
-    const hasP2 = Boolean(p2);
-    if (hasP1 === hasP2) {
-      return false;
-    }
-    return isVirtualCompetitorRefResolved(tournament, virtualMatch?.competitors?.p1)
-      && isVirtualCompetitorRefResolved(tournament, virtualMatch?.competitors?.p2);
-  }
-
-
   function isVirtualCompetitorRefResolvedWithSet(tournament, competitorRef, resolvedVirtualMatchIds) {
     if (!competitorRef || competitorRef.type === "participant") {
       return true;

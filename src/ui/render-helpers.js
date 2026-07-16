@@ -127,10 +127,13 @@
   }
 
 
-  function renderSectionHeading(title, links = []) {
+  function renderSectionHeading(title, links = [], options = {}) {
+    const headingId = normalizeText(options?.id || "");
+    const idAttribute = headingId ? ` id="${escapeHtml(headingId)}"` : "";
+    const tabindexAttribute = options?.programmaticFocus === true ? ' tabindex="-1"' : "";
     return `
       <div class="ata-heading-row">
-        <h3>${escapeHtml(title)}</h3>
+        <h3${idAttribute}${tabindexAttribute}>${escapeHtml(title)}</h3>
         ${renderInfoLinks(links)}
       </div>
     `;

@@ -508,7 +508,10 @@
         : "";
       return `
         <section class="ata-card tournamentCard ata-create-card">
-          ${renderSectionHeading("Neues Turnier erstellen")}
+          ${renderSectionHeading("Neues Turnier erstellen", [], {
+            id: "ata-create-heading",
+            programmaticFocus: true,
+          })}
           <form id="ata-create-form" class="ata-create-form">
             <div id="ata-create-error-summary" class="ata-create-error-summary" tabindex="-1" hidden></div>
             <div class="ata-create-layout">

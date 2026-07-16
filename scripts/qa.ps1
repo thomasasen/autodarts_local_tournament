@@ -13,6 +13,7 @@ $architectureScript = Resolve-RepoPath "scripts/qa-architecture.ps1"
 $buildDisciplineScript = Resolve-RepoPath "scripts/qa-build-discipline.ps1"
 $encodingScript = Resolve-RepoPath "scripts/qa-encoding.ps1"
 $rulesScript = Resolve-RepoPath "scripts/qa-regelcheck.ps1"
+$repositoryHygieneScript = Resolve-RepoPath "scripts/qa-repository-hygiene.ps1"
 $domainTestScript = Resolve-RepoPath "scripts/test-domain.ps1"
 $runtimeContractScript = Resolve-RepoPath "scripts/test-runtime-contract.ps1"
 $uiViewportScript = Resolve-RepoPath "scripts/test-ui-viewports.ps1"
@@ -22,6 +23,7 @@ $distPath = Resolve-RepoPath "dist/autodarts-tournament-assistant.user.js"
 & $architectureScript
 & $encodingScript
 & $rulesScript
+& $repositoryHygieneScript
 & $domainTestScript
 & $runtimeContractScript
 & $uiViewportScript
