@@ -166,6 +166,20 @@ $checkScript = @'
         && trigger.getAttribute("aria-controls") === "ata-create-help-panel"
         && trigger.getAttribute("aria-expanded") === "false")
       && createForm.querySelector(".ata-help-links") === null;
+    const createSubmitButton = createForm?.querySelector("button[type='submit']") || null;
+    const participantStatus = createForm?.querySelector("#ata-create-participant-status") || null;
+    const validationOverview = createForm?.querySelector("#ata-create-overview-summary") || null;
+    const validationSummary = createForm?.querySelector("#ata-create-error-summary") || null;
+    const validationInitialOk = Boolean(createSubmitButton)
+      && createSubmitButton.disabled
+      && createSubmitButton.getAttribute("aria-disabled") === "true"
+      && participantStatus?.getAttribute("role") === "status"
+      && participantStatus?.getAttribute("aria-live") === "polite"
+      && validationOverview?.getAttribute("role") === "status"
+      && validationOverview?.getAttribute("aria-live") === "polite"
+      && normalizeContractText(validationOverview?.textContent || "").includes("Noch nicht bereit")
+      && Boolean(validationSummary?.hidden)
+      && createForm.querySelector("[role='alert']") === null;
     const modeHelpTrigger = createForm?.querySelector("#ata-create-help-trigger-tournamentMode") || null;
     modeHelpTrigger?.click();
     const helpTitle = helpPanel?.querySelector("#ata-create-help-title") || null;
@@ -196,6 +210,7 @@ $checkScript = @'
       helpInitialOk,
       helpOpenOk,
       helpCloseOk,
+      validationInitialOk,
       presetMarkupDetails: {
         fieldsetTag: presetFieldset?.tagName || "",
         legend: normalizeContractText(presetFieldset?.querySelector("legend")?.textContent || ""),
@@ -242,6 +257,10 @@ $checkScript = @'
     if (!helpInitialOk || !helpOpenOk || !helpCloseOk) {
       result.ok = false;
       result.failures.push(`Kontext-Regelhilfe verletzt Initial-, Öffnen- oder Schließen-Vertrag: initial=${helpInitialOk}, open=${helpOpenOk}, close=${helpCloseOk}.`);
+    }
+    if (!validationInitialOk) {
+      result.ok = false;
+      result.failures.push("Live-Validierung verletzt Initial-, Status- oder Disabled-Vertrag.");
     }
   }
 

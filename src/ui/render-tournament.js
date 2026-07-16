@@ -25,8 +25,9 @@
       ? `
         <label class="ata-toggle ata-toggle-compact" data-role="groups-ko-odd-acknowledgement">
           <span>Ich bestätige, dass ungleiche Gruppengrößen und die daraus entstehenden unterschiedlichen Qualifikationsquoten der verwendeten Turnierordnung entsprechen.</span>
-          <input name="groupsKoOddParticipantAcknowledged" type="checkbox" ${draft.groupsKoOddParticipantAcknowledged ? "checked" : ""}>
+          <input id="ata-groups-ko-odd-acknowledgement" name="groupsKoOddParticipantAcknowledged" type="checkbox" ${draft.groupsKoOddParticipantAcknowledged ? "checked" : ""}>
         </label>
+        ${renderCreateFieldValidation("groupsKoOddParticipantAcknowledged")}
       `
       : "";
 
@@ -40,6 +41,7 @@
           <option value="${GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN}" ${policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN ? "selected" : ""}>Nur gerade Teilnehmerzahl zulassen (empfohlen)</option>
           <option value="${GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL}" ${policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL ? "selected" : ""}>Ungleiche Gruppengrößen zulassen (Veranstalterregel)</option>
         </select>
+        ${renderCreateFieldValidation("groupsKoOddParticipantPolicy")}
         ${analysisHtml}
         ${twoPlayerWarning}
         ${acknowledgementHtml}
@@ -81,18 +83,19 @@
           <div class="ata-field">
             <label for="ata-preliminary-match-count">Vorrundenspiele je Teilnehmer</label>
             <input id="ata-preliminary-match-count" name="preliminaryMatchesPerParticipant" type="number" min="4" max="8" step="1" value="${draft.preliminaryMatchesPerParticipant}">
+            ${renderCreateFieldValidation("preliminaryMatchesPerParticipant")}
             <p class="ata-small ata-create-help">Dies ist die Zahl real gespielter Matches je Teilnehmer, nicht die Zahl zeitlicher Scheduling-Runden.</p>
           </div>
           <div class="ata-field ata-field-span-3">
             <label>Vorrundenformat</label>
             <span class="ata-field-readonly">2 Legs fest \u2013 beide Legs werden gespielt, 1:1 m\u00f6glich</span>
           </div>
-          <div class="ata-field"><label for="ata-preliminary-win-points">Punkte f\u00fcr Sieg</label><input id="ata-preliminary-win-points" name="preliminaryWinPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryWinPoints}"></div>
-          <div class="ata-field"><label for="ata-preliminary-draw-points">Punkte f\u00fcr Unentschieden</label><input id="ata-preliminary-draw-points" name="preliminaryDrawPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryDrawPoints}"></div>
-          <div class="ata-field"><label for="ata-preliminary-loss-points">Punkte f\u00fcr Niederlage</label><input id="ata-preliminary-loss-points" name="preliminaryLossPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryLossPoints}"></div>
-          <div class="ata-field"><label for="ata-final-stage-type">Finalphase</label><select id="ata-final-stage-type" name="finalStageType"><option value="ko" ${draft.finalStageType === "ko" ? "selected" : ""}>KO</option><option value="double_ko" ${draft.finalStageType === "double_ko" ? "selected" : ""}>Doppel-KO</option></select></div>
-          <div class="ata-field"><label for="ata-final-stage-qualifiers">Anzahl Qualifikanten</label><input id="ata-final-stage-qualifiers" name="finalStageQualifierCount" type="number" min="2" max="${Math.max(2, participants.length)}" step="1" value="${draft.finalStageQualifierCount}"></div>
-          <div class="ata-field"><label for="ata-final-stage-bestof">Best of Legs der Finalphase</label><input id="ata-final-stage-bestof" name="finalStageBestOfLegs" type="number" min="1" max="21" step="2" value="${draft.finalStageBestOfLegs}"></div>
+          <div class="ata-field"><label for="ata-preliminary-win-points">Punkte f\u00fcr Sieg</label><input id="ata-preliminary-win-points" name="preliminaryWinPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryWinPoints}">${renderCreateFieldValidation("preliminaryWinPoints")}</div>
+          <div class="ata-field"><label for="ata-preliminary-draw-points">Punkte f\u00fcr Unentschieden</label><input id="ata-preliminary-draw-points" name="preliminaryDrawPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryDrawPoints}">${renderCreateFieldValidation("preliminaryDrawPoints")}</div>
+          <div class="ata-field"><label for="ata-preliminary-loss-points">Punkte f\u00fcr Niederlage</label><input id="ata-preliminary-loss-points" name="preliminaryLossPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryLossPoints}">${renderCreateFieldValidation("preliminaryLossPoints")}</div>
+          <div class="ata-field"><label for="ata-final-stage-type">Finalphase</label><select id="ata-final-stage-type" name="finalStageType"><option value="ko" ${draft.finalStageType === "ko" ? "selected" : ""}>KO</option><option value="double_ko" ${draft.finalStageType === "double_ko" ? "selected" : ""}>Doppel-KO</option></select>${renderCreateFieldValidation("finalStageType")}</div>
+          <div class="ata-field"><label for="ata-final-stage-qualifiers">Anzahl Qualifikanten</label><input id="ata-final-stage-qualifiers" name="finalStageQualifierCount" type="number" min="2" max="${Math.max(2, participants.length)}" step="1" value="${draft.finalStageQualifierCount}">${renderCreateFieldValidation("finalStageQualifierCount")}</div>
+          <div class="ata-field"><label for="ata-final-stage-bestof">Best of Legs der Finalphase</label><input id="ata-final-stage-bestof" name="finalStageBestOfLegs" type="number" min="1" max="21" step="2" value="${draft.finalStageBestOfLegs}">${renderCreateFieldValidation("finalStageBestOfLegs")}</div>
         </div>
         ${summary}
       </section>
@@ -200,6 +203,7 @@
           ${renderCreateHelpTrigger("presetFormat", "Hilfe zu Presets und Formatprofilen öffnen")}
         </legend>
         <div class="ata-preset-card-grid">${cardsHtml}</div>
+        ${renderCreateFieldValidation("x01Preset")}
       </fieldset>
     `;
   }
@@ -213,6 +217,7 @@
           <div class="ata-field ata-field-span-2">
             <label for="ata-name">Turniername</label>
             <input id="ata-name" name="name" type="text" placeholder="z. B. Freitagsturnier" value="${escapeHtml(draft.name)}" required>
+            ${renderCreateFieldValidation("name")}
           </div>
           ${renderCreatePresetSelection(draft)}
           <div class="ata-field">
@@ -227,6 +232,7 @@
               <option value="groups_ko" ${draft.mode === "groups_ko" ? "selected" : ""}>Gruppenphase + KO</option>
               <option value="preliminary_final" ${draft.mode === "preliminary_final" ? "selected" : ""}>Vorrunde + Finalphase</option>
             </select>
+            ${renderCreateFieldValidation("mode")}
           </div>
         </div>
       </section>
@@ -234,7 +240,8 @@
   }
 
 
-  function renderCreateParticipantsSection(draft) {
+  function renderCreateParticipantsSection(draft, validationSnapshot) {
+    const participantStatus = renderCreateParticipantStatus(validationSnapshot);
     return `
       <section class="ata-create-section" data-create-section="participants" aria-labelledby="ata-create-participants-heading">
         ${renderCreateFormSectionHeading(2, "Teilnehmer", "Eine Person pro Zeile; die Reihenfolge bleibt für gesetzte Draws erhalten.", "ata-create-participants-heading")}
@@ -245,6 +252,8 @@
               ${renderCreateHelpTrigger("participants", "Hilfe zur Teilnehmerliste öffnen")}
             </div>
             <textarea id="ata-participants" name="participants" placeholder="Max Mustermann&#10;Erika Musterfrau">${escapeHtml(draft.participantsText)}</textarea>
+            <p id="ata-create-participant-status" class="ata-create-participant-status" data-validation-state="${participantStatus.state}" role="status" aria-live="polite">${escapeHtml(participantStatus.text)}</p>
+            ${renderCreateFieldValidation("participants")}
           </div>
           <div class="ata-create-section-actions">
             <button type="button" class="ata-btn ata-btn-sm" data-action="shuffle-participants">Teilnehmer mischen</button>
@@ -296,6 +305,7 @@
               <option value="${GRAND_FINAL_RESET_IF_NEEDED}" ${grandFinalResetMode === GRAND_FINAL_RESET_IF_NEEDED ? "selected" : ""}>Reset-Finale falls nötig (empfohlen)</option>
               <option value="${GRAND_FINAL_RESET_SINGLE_MATCH}" ${grandFinalResetMode === GRAND_FINAL_RESET_SINGLE_MATCH ? "selected" : ""}>Ein einzelnes Grand Final</option>
             </select>
+            ${renderCreateFieldValidation("grandFinalResetMode")}
           </div>
           <p class="ata-small ata-create-empty-rules" data-role="league-rules-empty" data-mode-rule-group="league_empty">Für den Ligamodus sind keine zusätzlichen Turnierregeln erforderlich.</p>
         </div>
@@ -348,10 +358,12 @@
               <div class="ata-field" data-role="standard-bestof-field">
                 <label for="ata-bestof">Best of Legs</label>
                 <input id="ata-bestof" name="bestOfLegs" type="number" min="1" max="21" step="2" value="${draft.bestOfLegs}">
+                ${renderCreateFieldValidation("bestOfLegs")}
               </div>
               <div class="ata-field">
                 <label for="ata-startscore">Startpunkte</label>
                 <select id="ata-startscore" name="startScore">${startScoreOptions}</select>
+                ${renderCreateFieldValidation("startScore")}
               </div>
               <div class="ata-field">
                 <label for="ata-x01-inmode">In-Modus</label>
@@ -360,6 +372,7 @@
                   <option value="Double" ${draft.x01InMode === "Double" ? "selected" : ""}>Double</option>
                   <option value="Master" ${draft.x01InMode === "Master" ? "selected" : ""}>Master</option>
                 </select>
+                ${renderCreateFieldValidation("x01InMode")}
               </div>
               <div class="ata-field">
                 <label for="ata-x01-outmode">Out-Modus</label>
@@ -368,6 +381,7 @@
                   <option value="Double" ${draft.x01OutMode === "Double" ? "selected" : ""}>Double</option>
                   <option value="Master" ${draft.x01OutMode === "Master" ? "selected" : ""}>Master</option>
                 </select>
+                ${renderCreateFieldValidation("x01OutMode")}
               </div>
               <div class="ata-field">
                 <label for="ata-x01-bulloff">Bull-off</label>
@@ -376,6 +390,7 @@
                   <option value="Normal" ${draft.x01BullOffMode === "Normal" ? "selected" : ""}>Normal</option>
                   <option value="Official" ${draft.x01BullOffMode === "Official" ? "selected" : ""}>Official</option>
                 </select>
+                ${renderCreateFieldValidation("x01BullOffMode")}
               </div>
               <div class="ata-field">
                 <label for="ata-x01-bullmode">Bull-Modus</label>
@@ -384,6 +399,7 @@
                   <option value="50/50" ${draft.x01BullMode === "50/50" ? "selected" : ""}>50/50</option>
                 </select>
                 ${bullModeHiddenInput}
+                ${renderCreateFieldValidation("x01BullMode")}
               </div>
               <div class="ata-field">
                 <label for="ata-x01-maxrounds">Max Runden</label>
@@ -393,6 +409,7 @@
                   <option value="50" ${draft.x01MaxRounds === 50 ? "selected" : ""}>50</option>
                   <option value="80" ${draft.x01MaxRounds === 80 ? "selected" : ""}>80</option>
                 </select>
+                ${renderCreateFieldValidation("x01MaxRounds")}
               </div>
             </div>
             <div class="ata-create-fixed-summary" data-role="fixed-match-setup" role="group" aria-label="Festes technisches Spiel-Setup">
@@ -416,12 +433,16 @@
       durationEstimate,
       durationEstimateVisible,
       modeLimitSummary,
+      validationSnapshot,
     } = options;
     const helpActive = Boolean(state.activeCreateHelpTopic);
     return `
       <aside id="ata-create-overview" class="ata-create-overview" data-create-section="overview" aria-labelledby="ata-create-overview-heading" ${helpActive ? "hidden" : ""}>
         ${renderCreateFormSectionHeading(5, "Turnierübersicht", "Zeitbedarf prüfen und das Turnier anlegen.", "ata-create-overview-heading")}
         <div class="ata-create-overview-body">
+          <div id="ata-create-overview-summary" class="ata-create-overview-summary" data-validation-state="${validationSnapshot.valid ? "valid" : "invalid"}" role="status" aria-live="polite">
+            ${renderCreateValidationOverview(validationSnapshot)}
+          </div>
           <div class="ata-grid-2 ata-create-overview-controls">
             <div class="ata-field">
               <div class="ata-field-label-row">
@@ -429,6 +450,7 @@
                 ${renderCreateHelpTrigger("boardCount", "Hilfe zu Boards für die Zeitprognose öffnen")}
               </div>
               <input id="ata-board-count" name="boardCount" type="number" min="1" max="${TOURNAMENT_DURATION_MAX_BOARD_COUNT}" step="1" value="${draft.boardCount}">
+              ${renderCreateFieldValidation("boardCount")}
             </div>
             <div class="ata-field">
               <div class="ata-field-label-row">
@@ -436,13 +458,15 @@
                 ${renderCreateHelpTrigger("timeProfile", "Hilfe zum Zeitprofil öffnen")}
               </div>
               <select id="ata-create-time-profile" name="tournamentTimeProfile" data-action="set-duration-time-profile">${tournamentTimeProfileOptions}</select>
+              ${renderCreateFieldValidation("tournamentTimeProfile")}
             </div>
           </div>
           <div id="ata-create-duration-estimate">${renderTournamentDurationEstimate(durationEstimate, { visible: durationEstimateVisible, showHelpLinks: false })}</div>
           <p class="ata-small">Modus-Limits: ${escapeHtml(modeLimitSummary)}.</p>
           <div class="ata-actions ata-create-primary-actions">
-            <button type="submit" class="ata-btn ata-btn-primary">Turnier anlegen</button>
+            <button type="submit" class="ata-btn ata-btn-primary" ${validationSnapshot.valid ? "" : "disabled"} aria-disabled="${validationSnapshot.valid ? "false" : "true"}">Turnier anlegen</button>
           </div>
+          <p id="ata-create-submit-status" class="ata-create-submit-status" data-validation-state="${validationSnapshot.valid ? "valid" : "invalid"}" role="status" aria-live="polite">${validationSnapshot.valid ? "Alle Pflichtangaben sind gültig." : `${validationSnapshot.issues.length} ${validationSnapshot.issues.length === 1 ? "Punkt" : "Punkte"} offen: ${escapeHtml(validationSnapshot.issues[0]?.message || "Konfiguration prüfen.")}`}</p>
         </div>
       </aside>
     `;
@@ -471,7 +495,12 @@
       const startScoreOptions = X01_START_SCORE_OPTIONS.map((score) => (
         `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${score}</option>`
       )).join("");
-      const durationEstimate = estimateTournamentDurationFromDraft(draft, state.store.settings);
+      const validationSnapshot = validateCreateConfiguration({
+        ...draft,
+        tournamentTimeProfile,
+      }, state.store.settings);
+      state.createValidationSnapshot = validationSnapshot;
+      const durationEstimate = validationSnapshot.summary.durationEstimate;
       const bullModeDisabled = draft.x01BullOffMode === "Off";
       const bullModeDisabledAttr = bullModeDisabled ? "disabled" : "";
       const bullModeHiddenInput = bullModeDisabled
@@ -481,10 +510,11 @@
         <section class="ata-card tournamentCard ata-create-card">
           ${renderSectionHeading("Neues Turnier erstellen")}
           <form id="ata-create-form" class="ata-create-form">
+            <div id="ata-create-error-summary" class="ata-create-error-summary" tabindex="-1" hidden></div>
             <div class="ata-create-layout">
               <div class="ata-create-main">
                 ${renderCreateTournamentFormatSection(draft)}
-                ${renderCreateParticipantsSection(draft)}
+                ${renderCreateParticipantsSection(draft, validationSnapshot)}
                 ${renderCreateAdditionalRulesSection(draft)}
                 ${renderCreateGameRulesSection({
                   draft,
@@ -500,6 +530,7 @@
                   durationEstimate,
                   durationEstimateVisible,
                   modeLimitSummary,
+                  validationSnapshot,
                 })}
                 ${renderCreateHelpPanel(draft)}
               </div>

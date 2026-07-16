@@ -2,11 +2,64 @@
 
 ## Umsetzungsstatus
 
-- Aktueller Release: Release 5 – Dynamische Hilfe, Abhängigkeiten, Beispiele und Compliance
-- Zielversion: `0.10.0`
+- Aktueller Release: Release 6 – Live-Validierung und Turnierübersicht
+- Zielversion: `0.11.0`
 - Status: `ABGESCHLOSSEN`
 - Begonnen: 2026-07-16 CEST
-- Zuletzt aktualisiert: 2026-07-16 12:22 CEST
+- Zuletzt aktualisiert: 2026-07-16 13:18 CEST
+
+### Fortschritt Release 6
+
+- [x] Ausgangsstand und Abschluss von Release 5 geprüft
+- [x] Bestehende Submit- und Domainvalidierung vollständig analysiert
+- [x] Zentrale reine Create-Validation-Ableitung umgesetzt
+- [x] Teilnehmeranalyse ohne stille Deduplizierung umgesetzt
+- [x] Doppelte Namen mit Zeilenbezug erkannt
+- [x] Turniername live validiert
+- [x] Teilnehmerzahl und Modusgrenzen live validiert
+- [x] Gruppenphase vollständig live validiert
+- [x] Vorrunde + Finalphase vollständig live validiert
+- [x] Spielregeln und Rohwerte live validiert
+- [x] Board-Anzahl und Zeitprofil live validiert
+- [x] Transienten Touched-/Submit-Zustand umgesetzt
+- [x] Feldnahe Fehlermeldungen und ARIA-Verknüpfung umgesetzt
+- [x] Teilnehmerstatus live umgesetzt
+- [x] Erweiterte Turnierübersicht umgesetzt
+- [x] Spielanzahl aus vorhandener Domainlogik integriert
+- [x] Validierungsstatus und offene Punkte in Übersicht umgesetzt
+- [x] Submit-Button entspricht stets dem Validierungsstatus
+- [x] Autoritative Revalidierung beim Submit umgesetzt
+- [x] Fokus auf erstes Problem umgesetzt
+- [x] Geschlossenen Spielregel-Editor bei Fokusziel sicher geöffnet
+- [x] Hilfe-Panel bei notwendigem Übersichtsfokus sicher behandelt
+- [x] Domain-Reason-Codes in UI gemappt
+- [x] Release-1-bis-5-Funktionen regressionsfrei
+- [x] Automatisierte Tests ergänzt oder angepasst
+- [x] Domain-Tests erfolgreich
+- [x] Runtime-Contract-Tests erfolgreich
+- [x] Gesamtes QA-Skript erfolgreich
+- [x] Build erfolgreich erzeugt
+- [x] Dokumentation und Changelog aktualisiert
+- [x] Screenshot aktualisiert
+- [x] Manuelle Abnahmeszenarien geprüft
+- [x] Abschlussprüfung des Diffs durchgeführt
+
+### Arbeitsprotokoll Release 6
+
+| Zeitpunkt | Status | Arbeitsergebnis | Prüfung |
+|---|---|---|---|
+| 2026-07-16 12:37 CEST | IN ARBEIT | Verbindlichen Ausgangscommit `f5758971ad3d13ecb16b00bfe965ba161d24bb88`, sauberen Release-5-Abschluss, Repository-Anweisungen, Startprompt und vollständigen UX-Plan geprüft; Release 6 mit Zielversion `0.11.0` gestartet. | Exakter Ausgangscommit und sauberer Arbeitsbaum bestätigt; nur top-level `AGENTS.md` vorhanden; Release 7 nicht begonnen. |
+| 2026-07-16 13:05 CEST | IN ARBEIT | Pure zentrale Create-Validation, verlustfreie Teilnehmeranalyse, transiente Touched-/Submit-Steuerung, feldnahe ARIA-Fehler, Teilnehmerstatus, erweiterte Übersicht, Submit-Sperre und datengetriebene Fokusführung umgesetzt. Live-UI, Submit und Session-Erzeugung verwenden dieselbe Domainableitung. | Zwischenstand erfolgreich: 191 Domain-Tests, 67 browsergestützte Runtime-Selftests, Build sowie gesamtes QA; alle fünf Modi und die Release-1-bis-5-Verträge blieben grün. |
+| 2026-07-16 13:11 CEST | IN ARBEIT | Zusätzliche Reason-Code-, Übersichts-, Moduswechsel-, Hilfe-/Validation- und Late-Failure-Tests ergänzt. Ein Zwischen-Test behandelte `!!!` zunächst fälschlich als ungültigen Namen. | Domain-Gate meldete genau einen fehlgeschlagenen Test. Ursache war eine unzulässige neue Zeichenbeschränkung im Test, nicht Produktlogik; Test auf das sichere `participant_name_invalid`-Fallbackmapping ohne neues Namensverbot korrigiert, anschließend 194 Domain-Tests erfolgreich. |
+| 2026-07-16 13:18 CEST | ABGESCHLOSSEN | Release 6 als `0.11.0` finalisiert; README, Architektur, Codebase-Map, Changelog, generierte Distribution und Screenshot aktualisiert. Gesamtdiff gegen `f5758971ad3d13ecb16b00bfe965ba161d24bb88` auf Release-6-Scope, zentrale Reason-/Feldzuordnung, Rohwertschutz und fehlende stille Deduplizierung geprüft; Compliance-Dokumente blieben mangels geänderter Regelwirkung bewusst unverändert. | Gesamtes QA erfolgreich: Architektur-, Encoding- und Regelcheck, 194 Domain-Tests, 67 Edge-Runtime-Selftests, Build und Build-Disziplin. Fünf Viewports einschließlich echter `360 × 800`-Geräteemulation ohne horizontalen Overflow; Screenshot `1366 × 768` visuell geprüft; `git diff --check` ohne Fehler. Release 7 nicht begonnen. |
+
+### Prüfgrenze Release 6
+
+- Automatisiert und in echtem Microsoft Edge geprüft: neutraler Initialzustand, gültiges KO, Duplikate samt Zeilenbezug und Korrektur, Modusgrenzen ohne Fokusverlust, Gruppenpolicy/-bestätigung, ungültige Rohwerte, autoritative Submit-Revalidierung, Fehlerzusammenfassung, ARIA-Verknüpfung, Fokus auf Name/Teilnehmer/Gruppe/Spielregel/Übersicht, stabil geöffnetes Hilfe-Panel sowie Anlage aller fünf Modi.
+- Responsive geprüft bei `1920 × 1080`, `1366 × 768`, `1024 × 768`, `768 × 1024` und echter `360 × 800`-Geräteemulation: kein horizontaler Dokument-, Drawer-, Content-, Create-Layout-, Formular- oder Übersichts-Overflow; Status und Submit bleiben im normalen Scrollfluss erreichbar. Der neue `1366 × 768`-Screenshot wurde visuell kontrolliert.
+- Nicht gegen einen authentifizierten Live-Account ausgeführt wurden echter Lobby-/Board-/API-Start sowie eine physische Tastatur- und Screenreader-Abnahme. Release 6 ändert diese Integrationen nicht; der umfassende abschließende Accessibility-/Responsive-/Altcode-Audit bleibt Release 7 vorbehalten.
+
+### Historie Release 5
 
 ### Fortschritt Release 5
 

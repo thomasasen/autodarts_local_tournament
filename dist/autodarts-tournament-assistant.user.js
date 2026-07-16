@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.10.0
+// @version      0.11.0
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -22,7 +22,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.10.0";
+  const APP_VERSION = "0.11.0";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 5;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
@@ -841,6 +841,132 @@
 
       .ata-create-overview-controls {
         grid-template-columns: minmax(0, 1fr);
+      }
+
+      .ata-create-error-summary {
+        display: grid;
+        gap: 6px;
+        border: 1px solid rgba(255, 118, 118, 0.62);
+        border-radius: var(--ata-radius-sm);
+        padding: 11px 12px;
+        background: rgba(139, 31, 48, 0.22);
+        color: #ffe2e5;
+      }
+
+      .ata-create-error-summary[hidden],
+      .ata-create-field-error[hidden] {
+        display: none !important;
+      }
+
+      .ata-create-error-summary:focus-visible {
+        outline: 2px solid var(--ata-color-focus);
+        outline-offset: 2px;
+      }
+
+      .ata-create-error-summary strong,
+      .ata-create-error-summary ul,
+      .ata-create-field-error ul {
+        margin: 0;
+      }
+
+      .ata-create-error-summary ul,
+      .ata-create-field-error ul {
+        display: grid;
+        gap: 4px;
+        padding-left: 19px;
+      }
+
+      .ata-create-field-error {
+        color: #ffb9c0;
+        font-size: 13px;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+      }
+
+      .ata-create-form input[aria-invalid="true"],
+      .ata-create-form select[aria-invalid="true"],
+      .ata-create-form textarea[aria-invalid="true"] {
+        border-color: rgba(255, 104, 118, 0.86);
+        box-shadow: 0 0 0 1px rgba(255, 104, 118, 0.28);
+      }
+
+      .ata-create-participant-status,
+      .ata-create-submit-status {
+        margin: 0;
+        color: var(--ata-color-muted);
+        font-size: 13px;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+      }
+
+      .ata-create-participant-status[data-validation-state="valid"],
+      .ata-create-submit-status[data-validation-state="valid"] {
+        color: #baf5da;
+      }
+
+      .ata-create-participant-status[data-validation-state="invalid"],
+      .ata-create-submit-status[data-validation-state="invalid"] {
+        color: #ffd0d5;
+      }
+
+      .ata-create-overview-summary {
+        display: grid;
+        gap: 8px;
+        border: 1px solid rgba(185, 199, 236, 0.24);
+        border-radius: var(--ata-radius-sm);
+        padding: 10px;
+        background: rgba(10, 23, 53, 0.52);
+      }
+
+      .ata-create-overview-summary[data-validation-state="valid"] {
+        border-color: rgba(90, 210, 153, 0.48);
+        background: rgba(43, 122, 86, 0.14);
+      }
+
+      .ata-create-overview-summary-list {
+        display: grid;
+        gap: 0;
+        margin: 0;
+      }
+
+      .ata-create-overview-summary-list > div {
+        display: grid;
+        grid-template-columns: minmax(78px, 0.8fr) minmax(0, 1.4fr);
+        gap: 8px;
+        padding: 5px 0;
+        border-bottom: 1px solid rgba(185, 199, 236, 0.13);
+      }
+
+      .ata-create-overview-summary-list > div:last-child {
+        border-bottom: 0;
+      }
+
+      .ata-create-overview-summary-list dt {
+        color: var(--ata-color-muted);
+        font-size: 12px;
+        font-weight: 750;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      .ata-create-overview-summary-list dd {
+        min-width: 0;
+        margin: 0;
+        color: var(--ata-color-text);
+        font-size: 13px;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+
+      .ata-create-overview-open-items {
+        display: grid;
+        gap: 4px;
+        margin: 0;
+        padding: 8px 0 0 19px;
+        border-top: 1px solid rgba(185, 199, 236, 0.15);
+        color: #ffd0d5;
+        font-size: 12px;
+        line-height: 1.4;
       }
 
       .ata-create-rule-stack {
@@ -2426,6 +2552,10 @@
     createGameRulesExpanded: false,
     activeCreateHelpTopic: null,
     lastCreateHelpTriggerId: null,
+    createValidationTouchedFields: {},
+    createValidationRevealedFields: {},
+    createValidationSubmitAttempted: false,
+    createValidationSnapshot: null,
     lastFocused: null,
     notice: { type: "info", message: "" },
     noticeTimer: null,
@@ -2624,25 +2754,95 @@
   }
 
 
-  function parseParticipantLines(rawLines) {
-    const lines = String(rawLines || "").split(/\r?\n/);
-    const seen = new Set();
-    const participants = [];
+  function analyzeCreateParticipantEntries(rawEntries) {
+    const source = Array.isArray(rawEntries) ? rawEntries : [];
+    const lines = source.map((entry) => String(entry?.rawLine ?? entry?.name ?? entry ?? ""));
+    const nonEmptyEntries = [];
+    const invalidEntries = [];
+    const groupsByLookupKey = new Map();
 
-    lines.forEach((line) => {
-      const name = normalizeText(line);
-      if (!name) {
+    source.forEach((entry, index) => {
+      const originalLine = String(entry?.rawLine ?? entry?.name ?? entry ?? "");
+      const normalizedName = normalizeText(originalLine);
+      if (!normalizedName) {
         return;
       }
-      const key = normalizeLookup(name);
-      if (seen.has(key)) {
+      const lookupKey = normalizeLookup(normalizedName);
+      const analyzedEntry = {
+        originalLine,
+        normalizedName,
+        lookupKey,
+        lineNumber: Number.isInteger(entry?.lineNumber) ? entry.lineNumber : index + 1,
+        sourceIndex: Number.isInteger(entry?.sourceIndex) ? entry.sourceIndex : index,
+      };
+      nonEmptyEntries.push(analyzedEntry);
+
+      if (!lookupKey) {
+        invalidEntries.push({
+          ...analyzedEntry,
+          reasonCode: "participant_name_invalid",
+          message: `Der Eintrag in Zeile ${analyzedEntry.lineNumber} ergibt keinen gültigen Teilnehmernamen.`,
+        });
         return;
       }
-      seen.add(key);
-      participants.push({ id: uuid("p"), name });
+      const placeholderToken = normalizeToken(normalizedName);
+      if (placeholderToken && BYE_PLACEHOLDER_TOKENS.has(placeholderToken)) {
+        invalidEntries.push({
+          ...analyzedEntry,
+          reasonCode: "participant_name_reserved",
+          message: `„${normalizedName}“ in Zeile ${analyzedEntry.lineNumber} ist als Freilos-Platzhalter reserviert.`,
+        });
+        return;
+      }
+      if (!groupsByLookupKey.has(lookupKey)) {
+        groupsByLookupKey.set(lookupKey, []);
+      }
+      groupsByLookupKey.get(lookupKey).push(analyzedEntry);
     });
 
-    return participants;
+    const uniqueEntries = [];
+    const duplicateGroups = [];
+    groupsByLookupKey.forEach((entries, lookupKey) => {
+      uniqueEntries.push(entries[0]);
+      if (entries.length > 1) {
+        duplicateGroups.push({
+          lookupKey,
+          displayName: entries[0].normalizedName,
+          entries: entries.slice(),
+          lineNumbers: entries.map((entry) => entry.lineNumber),
+        });
+      }
+    });
+    uniqueEntries.sort((left, right) => left.sourceIndex - right.sourceIndex);
+    duplicateGroups.sort((left, right) => left.entries[0].sourceIndex - right.entries[0].sourceIndex);
+
+    return {
+      lines,
+      nonEmptyEntries,
+      uniqueEntries,
+      participantCount: uniqueEntries.length,
+      duplicateGroups,
+      invalidEntries,
+    };
+  }
+
+
+  function analyzeCreateParticipantInput(rawText) {
+    const lines = String(rawText || "").split(/\r?\n/);
+    return analyzeCreateParticipantEntries(lines.map((rawLine, index) => ({
+      rawLine,
+      lineNumber: index + 1,
+      sourceIndex: index,
+    })));
+  }
+
+
+  function parseParticipantLines(rawLines) {
+    const analysis = analyzeCreateParticipantInput(rawLines);
+    return analysis.uniqueEntries.map((entry) => ({
+      id: uuid("p"),
+      name: entry.normalizedName,
+    }));
   }
 
 
@@ -6752,6 +6952,404 @@
     }, settings);
   }
 
+// Pure create-form validation shared by live UI, submit and session creation.
+  const CREATE_VALIDATION_FIELD_ORDER = Object.freeze([
+    "name",
+    "participants",
+    "mode",
+    "x01Preset",
+    "groupsKoOddParticipantPolicy",
+    "groupsKoOddParticipantAcknowledged",
+    "grandFinalResetMode",
+    "preliminaryMatchesPerParticipant",
+    "preliminaryWinPoints",
+    "preliminaryDrawPoints",
+    "preliminaryLossPoints",
+    "finalStageType",
+    "finalStageQualifierCount",
+    "finalStageBestOfLegs",
+    "bestOfLegs",
+    "startScore",
+    "x01InMode",
+    "x01OutMode",
+    "x01BullOffMode",
+    "x01BullMode",
+    "x01MaxRounds",
+    "boardCount",
+    "tournamentTimeProfile",
+    "form",
+  ]);
+
+  const CREATE_VALIDATION_REASON_MAP = Object.freeze({
+    tournament_name_required: Object.freeze({ fieldName: "name", section: "format", message: "Bitte einen Turniernamen eingeben." }),
+    tournament_mode_invalid: Object.freeze({ fieldName: "mode", section: "format", message: "Bitte einen gültigen Turniermodus wählen." }),
+    x01_preset_invalid: Object.freeze({ fieldName: "x01Preset", section: "format", message: "Bitte ein gültiges Turnierformat wählen." }),
+    participant_count_invalid: Object.freeze({ fieldName: "participants", section: "participants", message: "Die Teilnehmerzahl liegt außerhalb der Grenzen des gewählten Modus." }),
+    participant_name_duplicate: Object.freeze({ fieldName: "participants", section: "participants", message: "Ein Teilnehmername steht mehrfach in der Liste." }),
+    participant_name_reserved: Object.freeze({ fieldName: "participants", section: "participants", message: "Ein reservierter Freilos-Platzhalter kann nicht als Teilnehmer verwendet werden." }),
+    participant_name_invalid: Object.freeze({ fieldName: "participants", section: "participants", message: "Ein Eintrag ergibt keinen gültigen Teilnehmernamen." }),
+    groups_ko_policy_invalid: Object.freeze({ fieldName: "groupsKoOddParticipantPolicy", section: "additional-rules", message: "Bitte eine gültige Gruppenregel wählen." }),
+    groups_ko_odd_participants_blocked: Object.freeze({ fieldName: "groupsKoOddParticipantPolicy", section: "additional-rules", message: "Für gleich große Gruppen ist eine gerade Teilnehmerzahl erforderlich." }),
+    groups_ko_unequal_groups_not_acknowledged: Object.freeze({ fieldName: "groupsKoOddParticipantAcknowledged", section: "additional-rules", message: "Bitte die Veranstalterregel für ungleiche Gruppen ausdrücklich bestätigen." }),
+    groups_ko_two_player_group: Object.freeze({ fieldName: "groupsKoOddParticipantPolicy", section: "additional-rules", message: "In einer Zweiergruppe qualifizieren sich bei Top 2 beide Teilnehmer." }),
+    grand_final_reset_mode_invalid: Object.freeze({ fieldName: "grandFinalResetMode", section: "additional-rules", message: "Bitte eine gültige Grand-Final-Regel wählen." }),
+    preliminary_match_count_out_of_range: Object.freeze({ fieldName: "preliminaryMatchesPerParticipant", section: "additional-rules", message: "Vorrundenspiele je Teilnehmer müssen als ganze Zahl zwischen 4 und 8 angegeben werden." }),
+    preliminary_match_count_exceeds_unique_opponents: Object.freeze({ fieldName: "preliminaryMatchesPerParticipant", section: "additional-rules", message: "Die Zahl der Vorrundenspiele übersteigt die möglichen unterschiedlichen Gegner." }),
+    preliminary_equal_distribution_impossible: Object.freeze({ fieldName: "preliminaryMatchesPerParticipant", section: "additional-rules", message: "Die Vorrundenmatches können mit dieser Teilnehmerzahl nicht gleich verteilt werden." }),
+    preliminary_scoring_invalid: Object.freeze({ fieldName: "preliminaryWinPoints", section: "additional-rules", message: "Punkte müssen ganze Zahlen von 0 bis 10 sein; Sieg > Unentschieden ≥ Niederlage." }),
+    final_stage_type_invalid: Object.freeze({ fieldName: "finalStageType", section: "additional-rules", message: "Finalphase muss KO oder Doppel-KO sein." }),
+    final_stage_qualifier_count_invalid: Object.freeze({ fieldName: "finalStageQualifierCount", section: "additional-rules", message: "Die Qualifikantenzahl passt nicht zur Teilnehmerzahl." }),
+    final_stage_best_of_invalid: Object.freeze({ fieldName: "finalStageBestOfLegs", section: "additional-rules", message: "Finalphasen-Best-of muss eine ungerade ganze Zahl zwischen 1 und 21 sein." }),
+    best_of_invalid: Object.freeze({ fieldName: "bestOfLegs", section: "game-rules", message: "Best of Legs muss eine ungerade ganze Zahl zwischen 1 und 21 sein." }),
+    start_score_invalid: Object.freeze({ fieldName: "startScore", section: "game-rules", message: "Bitte gültige Startpunkte wählen." }),
+    x01_in_mode_invalid: Object.freeze({ fieldName: "x01InMode", section: "game-rules", message: "Bitte einen gültigen In-Modus wählen." }),
+    x01_out_mode_invalid: Object.freeze({ fieldName: "x01OutMode", section: "game-rules", message: "Bitte einen gültigen Out-Modus wählen." }),
+    x01_bull_off_mode_invalid: Object.freeze({ fieldName: "x01BullOffMode", section: "game-rules", message: "Bitte einen gültigen Bull-off-Modus wählen." }),
+    x01_bull_mode_invalid: Object.freeze({ fieldName: "x01BullMode", section: "game-rules", message: "Bitte einen gültigen Bull-Modus wählen." }),
+    x01_max_rounds_invalid: Object.freeze({ fieldName: "x01MaxRounds", section: "game-rules", message: "Bitte einen gültigen Wert für Max Runden wählen." }),
+    board_count_invalid: Object.freeze({ fieldName: "boardCount", section: "overview", message: `Die Board-Anzahl muss eine ganze Zahl zwischen 1 und ${TOURNAMENT_DURATION_MAX_BOARD_COUNT} sein.` }),
+    tournament_time_profile_invalid: Object.freeze({ fieldName: "tournamentTimeProfile", section: "overview", message: "Bitte ein gültiges Zeitprofil wählen." }),
+    create_validation_unknown: Object.freeze({ fieldName: "form", section: "form", message: "Die Turnierkonfiguration konnte nicht validiert werden." }),
+  });
+
+
+  function getCreateValidationReasonMeta(reasonCode) {
+    return CREATE_VALIDATION_REASON_MAP[normalizeText(reasonCode || "")]
+      || CREATE_VALIDATION_REASON_MAP.create_validation_unknown;
+  }
+
+
+  function normalizeCreateValidationIssue(rawIssue, defaults = {}) {
+    const source = rawIssue && typeof rawIssue === "object" ? rawIssue : {};
+    const requestedReasonCode = normalizeText(source.reasonCode || defaults.reasonCode || "");
+    const knownReasonCode = CREATE_VALIDATION_REASON_MAP[requestedReasonCode]
+      ? requestedReasonCode
+      : (requestedReasonCode || "create_validation_unknown");
+    const meta = getCreateValidationReasonMeta(requestedReasonCode);
+    return {
+      ...source,
+      reasonCode: knownReasonCode,
+      fieldName: normalizeText(source.fieldName || defaults.fieldName || meta.fieldName) || "form",
+      section: normalizeText(source.section || defaults.section || meta.section) || "form",
+      severity: source.severity === "warning" || defaults.severity === "warning" ? "warning" : "error",
+      message: normalizeText(source.message || defaults.message || meta.message),
+      details: source.details && typeof source.details === "object" ? source.details : {},
+    };
+  }
+
+
+  function dedupeCreateValidationIssues(rawIssues) {
+    const seen = new Set();
+    const issues = [];
+    (Array.isArray(rawIssues) ? rawIssues : []).forEach((rawIssue, sourceIndex) => {
+      const issue = normalizeCreateValidationIssue(rawIssue);
+      const detailKey = issue.details?.lookupKey || issue.details?.lineNumber || "";
+      const key = `${issue.severity}|${issue.reasonCode}|${issue.fieldName}|${detailKey}|${issue.message}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      issues.push({ ...issue, sourceIndex });
+    });
+    const fieldOrder = new Map(CREATE_VALIDATION_FIELD_ORDER.map((fieldName, index) => [fieldName, index]));
+    return issues
+      .sort((left, right) => (
+        (fieldOrder.get(left.fieldName) ?? CREATE_VALIDATION_FIELD_ORDER.length)
+        - (fieldOrder.get(right.fieldName) ?? CREATE_VALIDATION_FIELD_ORDER.length)
+        || left.sourceIndex - right.sourceIndex
+      ))
+      .map(({ sourceIndex, ...issue }) => issue);
+  }
+
+
+  function formatCreateValidationLineNumbers(lineNumbers) {
+    const values = (Array.isArray(lineNumbers) ? lineNumbers : [])
+      .filter((value) => Number.isInteger(value) && value > 0);
+    if (!values.length) return "";
+    if (values.length === 1) return `Zeile ${values[0]}`;
+    if (values.length === 2) return `Zeilen ${values[0]} und ${values[1]}`;
+    return `Zeilen ${values.slice(0, -1).join(", ")} und ${values[values.length - 1]}`;
+  }
+
+
+  function analyzeCreateConfigurationParticipants(rawInput) {
+    if (Object.prototype.hasOwnProperty.call(rawInput || {}, "participantsText")) {
+      return analyzeCreateParticipantInput(rawInput?.participantsText);
+    }
+    if (Array.isArray(rawInput?.participants)) {
+      return analyzeCreateParticipantEntries(rawInput.participants.map((entry, index) => ({
+        rawLine: entry?.name ?? entry ?? "",
+        lineNumber: index + 1,
+        sourceIndex: index,
+      })));
+    }
+    return analyzeCreateParticipantInput("");
+  }
+
+
+  function buildCreateValidationConfig(rawInput, draft, participantAnalysis, settings = null) {
+    const source = rawInput && typeof rawInput === "object" ? rawInput : {};
+    const read = (fieldName) => Object.prototype.hasOwnProperty.call(source, fieldName)
+      ? source[fieldName]
+      : draft[fieldName];
+    const participants = participantAnalysis.uniqueEntries.map((entry, index) => {
+      const sourceParticipant = Array.isArray(source.participants)
+        ? source.participants[entry.sourceIndex]
+        : null;
+      return {
+        id: normalizeText(sourceParticipant?.id || `create-validation-p-${index + 1}`),
+        name: entry.normalizedName,
+      };
+    });
+    return scopeCreateConfigToMode({
+      name: read("name"),
+      mode: normalizeText(read("mode") || "").toLowerCase(),
+      bestOfLegs: read("bestOfLegs"),
+      startScore: read("startScore"),
+      x01Preset: read("x01Preset"),
+      x01InMode: read("x01InMode"),
+      x01OutMode: read("x01OutMode"),
+      x01BullMode: read("x01BullMode"),
+      x01MaxRounds: read("x01MaxRounds"),
+      x01BullOffMode: read("x01BullOffMode"),
+      lobbyVisibility: "private",
+      boardCount: read("boardCount"),
+      tournamentTimeProfile: Object.prototype.hasOwnProperty.call(source, "tournamentTimeProfile")
+        ? source.tournamentTimeProfile
+        : settings?.tournamentTimeProfile,
+      randomizeKoRound1: read("randomizeKoRound1") === true,
+      enableThirdPlaceMatch: read("enableThirdPlaceMatch") === true,
+      grandFinalResetMode: read("grandFinalResetMode"),
+      groupsKoOddParticipantPolicy: read("groupsKoOddParticipantPolicy"),
+      groupsKoOddParticipantAcknowledged: read("groupsKoOddParticipantAcknowledged") === true,
+      preliminaryMatchesPerParticipant: read("preliminaryMatchesPerParticipant"),
+      preliminaryWinPoints: read("preliminaryWinPoints"),
+      preliminaryDrawPoints: read("preliminaryDrawPoints"),
+      preliminaryLossPoints: read("preliminaryLossPoints"),
+      finalStageType: read("finalStageType"),
+      finalStageQualifierCount: read("finalStageQualifierCount"),
+      finalStageBestOfLegs: read("finalStageBestOfLegs"),
+      koDrawLocked: source.koDrawLocked,
+      participants,
+    });
+  }
+
+
+  function validateCreateRawFieldValues(rawInput, draft, config) {
+    const source = rawInput && typeof rawInput === "object" ? rawInput : {};
+    const issues = [];
+    const read = (fieldName) => Object.prototype.hasOwnProperty.call(source, fieldName)
+      ? source[fieldName]
+      : draft[fieldName];
+    const integerInRange = (value, min, max, odd = false) => {
+      if (value === null || value === undefined || (typeof value === "string" && !value.trim())) return false;
+      const parsed = Number(value);
+      return Number.isInteger(parsed) && parsed >= min && parsed <= max && (!odd || parsed % 2 === 1);
+    };
+
+    const requestedPreset = normalizeText(read("x01Preset") || "").toLowerCase();
+    if (requestedPreset !== X01_PRESET_CUSTOM && !getCreatePresetDefinition(requestedPreset)) {
+      issues.push({ reasonCode: "x01_preset_invalid" });
+    }
+    if (config.mode !== "preliminary_final" && !integerInRange(read("bestOfLegs"), 1, 21, true)) {
+      issues.push({ reasonCode: "best_of_invalid" });
+    }
+    if (!X01_START_SCORE_OPTIONS.includes(Number(read("startScore")))) {
+      issues.push({ reasonCode: "start_score_invalid" });
+    }
+    if (!X01_IN_MODES.includes(read("x01InMode"))) {
+      issues.push({ reasonCode: "x01_in_mode_invalid" });
+    }
+    if (!X01_OUT_MODES.includes(read("x01OutMode"))) {
+      issues.push({ reasonCode: "x01_out_mode_invalid" });
+    }
+    if (!X01_BULL_OFF_MODES.includes(read("x01BullOffMode"))) {
+      issues.push({ reasonCode: "x01_bull_off_mode_invalid" });
+    }
+    if (!X01_BULL_MODES.includes(read("x01BullMode"))) {
+      issues.push({ reasonCode: "x01_bull_mode_invalid" });
+    }
+    if (!X01_MAX_ROUNDS_OPTIONS.includes(Number(read("x01MaxRounds")))) {
+      issues.push({ reasonCode: "x01_max_rounds_invalid" });
+    }
+    if (!integerInRange(read("boardCount"), 1, TOURNAMENT_DURATION_MAX_BOARD_COUNT)) {
+      issues.push({ reasonCode: "board_count_invalid" });
+    }
+    const timeProfile = normalizeText(
+      Object.prototype.hasOwnProperty.call(source, "tournamentTimeProfile")
+        ? source.tournamentTimeProfile
+        : config.tournamentTimeProfile,
+    ).toLowerCase();
+    if (!TOURNAMENT_TIME_PROFILES.includes(timeProfile)) {
+      issues.push({ reasonCode: "tournament_time_profile_invalid" });
+    }
+    if (
+      config.mode === "groups_ko"
+      && !GROUPS_KO_ODD_PARTICIPANT_POLICIES.includes(read("groupsKoOddParticipantPolicy"))
+    ) {
+      issues.push({ reasonCode: "groups_ko_policy_invalid" });
+    }
+    if (
+      config.mode === "double_ko"
+      && ![GRAND_FINAL_RESET_IF_NEEDED, GRAND_FINAL_RESET_SINGLE_MATCH].includes(read("grandFinalResetMode"))
+    ) {
+      issues.push({ reasonCode: "grand_final_reset_mode_invalid" });
+    }
+    if (config.mode === "preliminary_final") {
+      ["preliminaryWinPoints", "preliminaryDrawPoints", "preliminaryLossPoints"].forEach((fieldName) => {
+        if (!integerInRange(read(fieldName), 0, 10)) {
+          issues.push({
+            reasonCode: "preliminary_scoring_invalid",
+            fieldName,
+            section: "additional-rules",
+            message: "Bitte eine ganze Punktzahl zwischen 0 und 10 eingeben.",
+          });
+        }
+      });
+    }
+    return issues.map((issue) => normalizeCreateValidationIssue(issue));
+  }
+
+
+  function buildCreateValidationEstimate(config, draft, issues, settings = null) {
+    const estimate = estimateTournamentDuration({
+      ...config,
+      bestOfLegs: draft.bestOfLegs,
+      startScore: draft.startScore,
+      x01Preset: draft.x01Preset,
+      x01InMode: draft.x01InMode,
+      x01OutMode: draft.x01OutMode,
+      x01BullMode: draft.x01BullMode,
+      x01MaxRounds: draft.x01MaxRounds,
+      x01BullOffMode: draft.x01BullOffMode,
+      boardCount: draft.boardCount,
+      grandFinalResetMode: draft.grandFinalResetMode,
+      enableThirdPlaceMatch: draft.enableThirdPlaceMatch,
+      preliminaryMatchesPerParticipant: draft.preliminaryMatchesPerParticipant,
+      finalStageQualifierCount: draft.finalStageQualifierCount,
+      finalStageType: draft.finalStageType,
+      finalStageBestOfLegs: draft.finalStageBestOfLegs,
+      tournamentTimeProfile: config.tournamentTimeProfile,
+    }, settings);
+    const estimateIgnoredFields = new Set(["name", "x01Preset"]);
+    const blockingIssue = issues.find((issue) => issue.severity === "error" && !estimateIgnoredFields.has(issue.fieldName));
+    if (!blockingIssue) return estimate;
+    return {
+      ...estimate,
+      ready: false,
+      reason: blockingIssue.message,
+      matchCount: 0,
+      likelyMinutes: 0,
+      lowMinutes: 0,
+      highMinutes: 0,
+    };
+  }
+
+
+  function validateCreateConfiguration(rawInput, settings = null) {
+    const source = rawInput && typeof rawInput === "object" ? rawInput : {};
+    const draft = normalizeCreateDraft(source, settings);
+    const participantAnalysis = analyzeCreateConfigurationParticipants(source);
+    const config = buildCreateValidationConfig(source, draft, participantAnalysis, settings);
+    const participantIssues = [];
+    participantAnalysis.duplicateGroups.forEach((group) => {
+      const lineText = formatCreateValidationLineNumbers(group.lineNumbers);
+      participantIssues.push(normalizeCreateValidationIssue({
+        reasonCode: "participant_name_duplicate",
+        message: `„${group.displayName}“ steht mehrfach in der Teilnehmerliste${lineText ? ` (${lineText})` : ""}.`,
+        details: {
+          lookupKey: group.lookupKey,
+          lineNumbers: group.lineNumbers.slice(),
+        },
+      }));
+    });
+    participantAnalysis.invalidEntries.forEach((entry) => {
+      participantIssues.push(normalizeCreateValidationIssue({
+        reasonCode: entry.reasonCode,
+        message: entry.message,
+        details: {
+          lookupKey: entry.lookupKey,
+          lineNumber: entry.lineNumber,
+        },
+      }));
+    });
+    const domainIssues = validateCreateConfigDetails(config)
+      .map((issue) => normalizeCreateValidationIssue(issue));
+    const rawValueIssues = validateCreateRawFieldValues(source, draft, config);
+    const issues = dedupeCreateValidationIssues([
+      ...participantIssues,
+      ...domainIssues,
+      ...rawValueIssues,
+    ]);
+    const warnings = [];
+    if (config.mode === "groups_ko") {
+      const groupAnalysis = analyzeGroupsKoParticipantDistribution(participantAnalysis.participantCount);
+      if (
+        groupAnalysis.hasTwoPlayerGroup
+        && participantAnalysis.participantCount >= getModeParticipantLimits(config.mode).min
+      ) {
+        warnings.push(normalizeCreateValidationIssue({
+          reasonCode: "groups_ko_two_player_group",
+          severity: "warning",
+          details: { analysis: groupAnalysis },
+        }));
+      }
+    }
+    const durationEstimate = buildCreateValidationEstimate(config, draft, issues, settings);
+    const limits = getModeParticipantLimits(config.mode);
+    const modeLabel = limits.label;
+    const activePresetId = getAppliedCreatePresetId(draft);
+    const valid = issues.length === 0;
+    return {
+      valid,
+      issues,
+      warnings: dedupeCreateValidationIssues(warnings),
+      participantAnalysis,
+      draft,
+      config,
+      summary: {
+        mode: config.mode,
+        modeLabel,
+        presetId: activePresetId,
+        presetLabel: activePresetId === X01_PRESET_CUSTOM
+          ? "Individuell / Manuell"
+          : getCreatePresetLabel(activePresetId),
+        participantCount: participantAnalysis.participantCount,
+        participantLimits: limits,
+        boardCount: Number.isInteger(Number(config.boardCount)) ? Number(config.boardCount) : draft.boardCount,
+        durationEstimate,
+        matchCount: durationEstimate.ready ? durationEstimate.matchCount : null,
+        valid,
+        openIssueCount: issues.length,
+      },
+    };
+  }
+
+
+  function mergeCreateValidationFailure(validation, result) {
+    const base = validation && typeof validation === "object"
+      ? validation
+      : validateCreateConfiguration({});
+    const details = Array.isArray(result?.validationDetails) && result.validationDetails.length
+      ? result.validationDetails
+      : [{
+        reasonCode: result?.reasonCode || "create_validation_unknown",
+        message: result?.message,
+      }];
+    const failureIssues = details.map((issue) => normalizeCreateValidationIssue(issue, {
+      message: result?.message,
+    }));
+    const issues = dedupeCreateValidationIssues([...(base.issues || []), ...failureIssues]);
+    return {
+      ...base,
+      valid: false,
+      issues,
+      summary: {
+        ...(base.summary || {}),
+        valid: false,
+        openIssueCount: issues.length,
+      },
+    };
+  }
+
   function standingsForMatches(tournament, matches, participantIds = null) {
     const allowedIds = Array.isArray(participantIds)
       ? new Set(participantIds.map((id) => normalizeText(id)).filter(Boolean))
@@ -9067,13 +9665,13 @@
 
   function createTournamentSession(config) {
     const scopedConfig = scopeCreateConfigToMode(config);
-    const validationDetails = validateCreateConfigDetails(scopedConfig);
-    if (validationDetails.length) {
+    const validation = validateCreateConfiguration(scopedConfig, state.store?.settings);
+    if (!validation.valid) {
       return {
         ok: false,
-        reasonCode: validationDetails[0].reasonCode,
-        validationDetails,
-        message: validationDetails.map((entry) => entry.message).join(" "),
+        reasonCode: validation.issues[0].reasonCode,
+        validationDetails: validation.issues,
+        message: validation.issues.map((entry) => entry.message).join(" "),
       };
     }
 
@@ -9083,6 +9681,7 @@
     state.store.tournament = tournament;
     clearTransientMatchShortcutState();
     resetCreateHelpState();
+    resetCreateValidationState();
     state.activeTab = "matches";
     state.store.ui.activeTab = "matches";
     schedulePersist();
@@ -9095,6 +9694,7 @@
     state.store.tournament = null;
     clearTransientMatchShortcutState();
     resetCreateHelpState();
+    resetCreateValidationState();
     state.apiAutomation.startingMatchId = "";
     state.apiAutomation.authBackoffUntil = 0;
     state.activeTab = "tournament";
@@ -9133,6 +9733,7 @@
 
 
   function importTournamentPayload(rawObject) {
+    resetCreateValidationState();
     if (!rawObject || typeof rawObject !== "object") {
       return { ok: false, message: "JSON ist leer oder ungültig." };
     }
@@ -9173,6 +9774,7 @@
     state.store.tournament = normalizedTournament;
     clearTransientMatchShortcutState();
     resetCreateHelpState();
+    resetCreateValidationState();
     state.activeTab = "matches";
     state.store.ui.activeTab = "matches";
     schedulePersist();
@@ -10617,6 +11219,268 @@
       } finally {
         state.store.tournament = previousTournament;
         state.store.ui.createDraft = previousDraft || createDefaultCreateDraft(state.store.settings);
+        state.activeTab = previousActiveTab;
+        state.store.ui.activeTab = previousStoredActiveTab;
+        renderShell();
+      }
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      const previousDraft = cloneSerializable(state.store.ui?.createDraft);
+      const previousActiveTab = state.activeTab;
+      const previousStoredActiveTab = state.store.ui.activeTab;
+      const previousDrawerOpen = state.drawerOpen;
+      const previousExpanded = state.createGameRulesExpanded;
+      const previousHelpTopic = state.activeCreateHelpTopic;
+      const previousHelpTrigger = state.lastCreateHelpTriggerId;
+      const previousTouched = { ...(state.createValidationTouchedFields || {}) };
+      const previousRevealed = { ...(state.createValidationRevealedFields || {}) };
+      const previousSubmitAttempted = state.createValidationSubmitAttempted;
+      const previousSnapshot = state.createValidationSnapshot;
+      try {
+        state.store.tournament = null;
+        state.activeTab = "tournament";
+        state.store.ui.activeTab = "tournament";
+        state.drawerOpen = true;
+        state.createGameRulesExpanded = false;
+        resetCreateHelpState();
+        resetCreateValidationState();
+        state.store.ui.createDraft = createDefaultCreateDraft(state.store.settings);
+        renderShell();
+        const form = state.shadowRoot?.getElementById("ata-create-form");
+        if (!(form instanceof HTMLFormElement)) throw new Error("Release-6-Create-Formular fehlt.");
+        let submitButton = form.querySelector("button[type='submit']");
+        const name = form.querySelector("#ata-name");
+        const participants = form.querySelector("#ata-participants");
+        const initialOverviewText = normalizeText(form.querySelector("#ata-create-overview-summary")?.textContent || "");
+        const initialNameError = form.querySelector(`#${getCreateValidationErrorId("name")}`);
+        const initialParticipantError = form.querySelector(`#${getCreateValidationErrorId("participants")}`);
+        const initialNeutral = submitButton instanceof HTMLButtonElement
+          && submitButton.disabled
+          && submitButton.getAttribute("aria-disabled") === "true"
+          && initialOverviewText.includes("Noch nicht bereit")
+          && initialOverviewText.includes("Turniername")
+          && initialOverviewText.includes("KO erfordert 2-128 Teilnehmer")
+          && initialNameError instanceof HTMLElement
+          && initialNameError.hidden
+          && initialParticipantError instanceof HTMLElement
+          && initialParticipantError.hidden
+          && form.querySelector("[role='alert']") === null;
+        record(
+          "Create-UI Release 6: leerer Initialzustand ist neutral, konkret und nativ deaktiviert",
+          initialNeutral,
+          `disabled=${submitButton instanceof HTMLButtonElement && submitButton.disabled}, overview=${initialOverviewText.includes("Noch nicht bereit")}, errorsHidden=${initialNameError?.hidden && initialParticipantError?.hidden}`,
+        );
+
+        if (!(submitButton instanceof HTMLButtonElement)
+          || !(name instanceof HTMLInputElement)
+          || !(participants instanceof HTMLTextAreaElement)) {
+          throw new Error("Release-6-Pflichtcontrols fehlen.");
+        }
+        submitButton.disabled = false;
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        const invalidSubmitSummary = form.querySelector("#ata-create-error-summary");
+        const nameSubmitFocusOk = state.shadowRoot?.activeElement === name
+          && invalidSubmitSummary instanceof HTMLElement
+          && !invalidSubmitSummary.hidden
+          && invalidSubmitSummary.getAttribute("role") === "alert"
+          && name.getAttribute("aria-invalid") === "true";
+
+        name.value = "Release 6 Live";
+        name.dispatchEvent(new Event("input", { bubbles: true }));
+        participants.focus();
+        participants.value = "Ada\nBerta\nClara\nDora";
+        participants.dispatchEvent(new Event("input", { bubbles: true }));
+        submitButton = form.querySelector("button[type='submit']");
+        const readyOverviewText = normalizeText(form.querySelector("#ata-create-overview-summary")?.textContent || "");
+        const validLive = submitButton instanceof HTMLButtonElement
+          && !submitButton.disabled
+          && state.createValidationSnapshot?.valid === true
+          && readyOverviewText.includes("Bereit zum Anlegen")
+          && readyOverviewText.includes("3")
+          && state.shadowRoot?.activeElement === participants
+          && form.querySelector("#ata-create-error-summary")?.hidden;
+
+        const modeForLimits = form.querySelector("#ata-mode");
+        if (!(modeForLimits instanceof HTMLSelectElement)) throw new Error("Mode-Control fehlt.");
+        modeForLimits.focus();
+        modeForLimits.value = "preliminary_final";
+        modeForLimits.dispatchEvent(new Event("change", { bubbles: true }));
+        const modeSwitchInvalid = form.querySelector("button[type='submit']")?.disabled === true
+          && normalizeText(form.querySelector("#ata-create-participant-status")?.textContent || "").includes("5–16")
+          && state.shadowRoot?.activeElement === modeForLimits;
+        modeForLimits.value = "ko";
+        modeForLimits.dispatchEvent(new Event("change", { bubbles: true }));
+        const modeSwitchCorrected = form.querySelector("button[type='submit']")?.disabled === false
+          && state.shadowRoot?.activeElement === modeForLimits;
+
+        participants.focus();
+        participants.value = "Ada\nBerta\nClara\nADA";
+        participants.dispatchEvent(new Event("input", { bubbles: true }));
+        const participantError = form.querySelector(`#${getCreateValidationErrorId("participants")}`);
+        const duplicateBlocked = form.querySelector("button[type='submit']")?.disabled === true
+          && participants.getAttribute("aria-invalid") === "true"
+          && normalizeText(participants.getAttribute("aria-describedby") || "").split(" ").includes(getCreateValidationErrorId("participants"))
+          && participantError instanceof HTMLElement
+          && !participantError.hidden
+          && normalizeText(participantError.textContent).includes("Zeilen 1 und 4")
+          && state.shadowRoot?.activeElement === participants
+          && form.querySelector("[role='alert']") === null;
+        participants.value = "Ada\nBerta\nClara\nDora";
+        participants.dispatchEvent(new Event("input", { bubbles: true }));
+        const duplicateCorrected = form.querySelector("button[type='submit']")?.disabled === false
+          && participants.getAttribute("aria-invalid") === null;
+        record(
+          "Create-UI Release 6: Live-Übersicht, Duplikatblocker, Korrektur und Fokus bleiben synchron",
+          nameSubmitFocusOk && validLive && modeSwitchInvalid && modeSwitchCorrected && duplicateBlocked && duplicateCorrected,
+          `nameFocus=${nameSubmitFocusOk}, ready=${validLive}, modeSwitch=${modeSwitchInvalid}/${modeSwitchCorrected}, duplicate=${duplicateBlocked}, corrected=${duplicateCorrected}`,
+        );
+
+        const bestOf = form.querySelector("#ata-bestof");
+        if (!(bestOf instanceof HTMLInputElement)) throw new Error("Best-of-Control fehlt.");
+        bestOf.value = "4";
+        bestOf.dispatchEvent(new Event("change", { bubbles: true }));
+        state.createGameRulesExpanded = false;
+        setCreateGameRulesExpanded(form, false);
+        submitButton = form.querySelector("button[type='submit']");
+        if (!(submitButton instanceof HTMLButtonElement)) throw new Error("Submit-Control fehlt.");
+        submitButton.disabled = false;
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        const gameEditor = form.querySelector("#ata-game-rules-editor");
+        const rawBestOfBlocked = state.store.tournament === null
+          && state.createValidationSnapshot?.issues?.some((issue) => issue.reasonCode === "best_of_invalid")
+          && gameEditor instanceof HTMLElement
+          && !gameEditor.hidden
+          && state.shadowRoot?.activeElement === bestOf;
+        bestOf.value = "5";
+        bestOf.dispatchEvent(new Event("change", { bubbles: true }));
+
+        const boardHelp = form.querySelector(`#${getCreateHelpTriggerId("boardCount")}`);
+        const board = form.querySelector("#ata-board-count");
+        if (!(boardHelp instanceof HTMLButtonElement) || !(board instanceof HTMLInputElement)) throw new Error("Board-Controls fehlen.");
+        boardHelp.click();
+        board.value = "0";
+        board.dispatchEvent(new Event("change", { bubbles: true }));
+        const helpStayedOpenDuringValidation = Boolean(state.activeCreateHelpTopic)
+          && !form.querySelector(`#${CREATE_HELP_PANEL_ID}`)?.hidden
+          && form.querySelector("#ata-create-overview")?.hidden
+          && normalizeText(form.querySelector("#ata-create-overview-summary")?.textContent || "").includes("Noch nicht bereit");
+        submitButton = form.querySelector("button[type='submit']");
+        if (!(submitButton instanceof HTMLButtonElement)) throw new Error("Submit-Control fehlt nach Board-Änderung.");
+        submitButton.disabled = false;
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        const overviewFocusOk = !state.activeCreateHelpTopic
+          && form.querySelector(`#${CREATE_HELP_PANEL_ID}`)?.hidden
+          && !form.querySelector("#ata-create-overview")?.hidden
+          && state.shadowRoot?.activeElement === board;
+        record(
+          "Create-UI Release 6: autoritativer Submit öffnet Spielregeln und behandelt verdeckte Übersicht sicher",
+          rawBestOfBlocked && helpStayedOpenDuringValidation && overviewFocusOk,
+          `bestOf=${rawBestOfBlocked}, helpStable=${helpStayedOpenDuringValidation}, overview=${overviewFocusOk}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        board.value = "1";
+        board.dispatchEvent(new Event("change", { bubbles: true }));
+        const mode = form.querySelector("#ata-mode");
+        if (!(mode instanceof HTMLSelectElement)) throw new Error("Mode-Control fehlt.");
+        mode.value = "groups_ko";
+        mode.dispatchEvent(new Event("change", { bubbles: true }));
+        participants.value = "A\nB\nC\nD\nE\nF\nG";
+        participants.dispatchEvent(new Event("input", { bubbles: true }));
+        let groupPolicy = form.querySelector("#ata-groups-ko-odd-policy");
+        if (!(groupPolicy instanceof HTMLSelectElement)) throw new Error("Gruppenpolicy fehlt.");
+        groupPolicy.value = GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL;
+        groupPolicy.dispatchEvent(new Event("change", { bubbles: true }));
+        const acknowledgement = form.querySelector("#ata-groups-ko-odd-acknowledgement");
+        submitButton = form.querySelector("button[type='submit']");
+        if (!(acknowledgement instanceof HTMLInputElement) || !(submitButton instanceof HTMLButtonElement)) throw new Error("Gruppenbestätigung fehlt.");
+        submitButton.disabled = false;
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        const groupFocusOk = state.shadowRoot?.activeElement === acknowledgement
+          && acknowledgement.getAttribute("aria-invalid") === "true";
+        acknowledgement.checked = true;
+        acknowledgement.dispatchEvent(new Event("change", { bubbles: true }));
+        const groupCorrected = form.querySelector("button[type='submit']")?.disabled === false;
+        record(
+          "Create-UI Release 6: Gruppenbestätigung ist feldnah, fokussierbar und korrigierbar",
+          groupFocusOk && groupCorrected,
+          `focus=${groupFocusOk}, corrected=${groupCorrected}`,
+        );
+      } catch (error) {
+        record("Create-UI Release 6: Live-Validierung und Fokusfluss", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+        state.store.ui.createDraft = previousDraft || createDefaultCreateDraft(state.store.settings);
+        state.activeTab = previousActiveTab;
+        state.store.ui.activeTab = previousStoredActiveTab;
+        state.drawerOpen = previousDrawerOpen;
+        state.createGameRulesExpanded = previousExpanded;
+        state.activeCreateHelpTopic = previousHelpTopic;
+        state.lastCreateHelpTriggerId = previousHelpTrigger;
+        state.createValidationTouchedFields = previousTouched;
+        state.createValidationRevealedFields = previousRevealed;
+        state.createValidationSubmitAttempted = previousSubmitAttempted;
+        state.createValidationSnapshot = previousSnapshot;
+        renderShell();
+      }
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      const previousActiveTab = state.activeTab;
+      const previousStoredActiveTab = state.store.ui.activeTab;
+      try {
+        const creationResults = [
+          ["ko", 8, {}],
+          ["double_ko", 8, {}],
+          ["league", 6, {}],
+          ["groups_ko", 8, {}],
+          ["preliminary_final", 8, { finalStageQualifierCount: 4 }],
+        ].map(([mode, count, overrides]) => {
+          state.store.tournament = null;
+          const input = {
+            ...createDefaultCreateDraft(state.store.settings),
+            name: `Release 6 ${mode}`,
+            mode,
+            x01Preset: X01_PRESET_CUSTOM,
+            participantsText: Array.from({ length: count }, (_, index) => `${mode} ${index + 1}`).join("\n"),
+            tournamentTimeProfile: state.store.settings.tournamentTimeProfile,
+            ...overrides,
+          };
+          const validation = validateCreateConfiguration(input, state.store.settings);
+          const result = validation.valid
+            ? createTournamentSession({
+              ...validation.config,
+              participants: parseParticipantLines(input.participantsText),
+            })
+            : { ok: false };
+          return result.ok && result.tournament?.mode === mode;
+        });
+        state.store.tournament = null;
+        const duplicateConfig = {
+          ...createDefaultCreateDraft(state.store.settings),
+          name: "Duplicate Session",
+          mode: "ko",
+          x01Preset: X01_PRESET_CUSTOM,
+          participants: [
+            { id: "A", name: "Max" },
+            { id: "B", name: "MAX" },
+          ],
+        };
+        delete duplicateConfig.participantsText;
+        const duplicateSession = createTournamentSession(duplicateConfig);
+        record(
+          "Create-Session Release 6: alle fünf Modi nutzen zentrale Validation und Duplikate bleiben blockiert",
+          creationResults.every(Boolean)
+            && duplicateSession?.ok === false
+            && duplicateSession?.reasonCode === "participant_name_duplicate",
+          `modes=${creationResults.join("/")}, duplicate=${duplicateSession?.reasonCode || "-"}`,
+        );
+      } catch (error) {
+        record("Create-Session Release 6: zentrale Validation", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
         state.activeTab = previousActiveTab;
         state.store.ui.activeTab = previousStoredActiveTab;
         renderShell();
@@ -17198,6 +18062,281 @@
     `;
   }
 
+// Transient create-validation interaction state. Never persisted.
+  function resetCreateValidationState() {
+    state.createValidationTouchedFields = {};
+    state.createValidationRevealedFields = {};
+    state.createValidationSubmitAttempted = false;
+    state.createValidationSnapshot = null;
+  }
+
+
+  function markCreateValidationFieldTouched(fieldName) {
+    const normalizedFieldName = normalizeText(fieldName || "");
+    if (!normalizedFieldName) return false;
+    if (!state.createValidationTouchedFields || typeof state.createValidationTouchedFields !== "object") {
+      state.createValidationTouchedFields = {};
+    }
+    state.createValidationTouchedFields[normalizedFieldName] = true;
+    return true;
+  }
+
+
+  function revealNewDependentCreateValidationIssues(previousSnapshot, nextSnapshot) {
+    if (!previousSnapshot || !nextSnapshot) return;
+    if (!state.createValidationRevealedFields || typeof state.createValidationRevealedFields !== "object") {
+      state.createValidationRevealedFields = {};
+    }
+    const previousInvalidFields = new Set((previousSnapshot.issues || []).map((issue) => issue.fieldName));
+    (nextSnapshot.issues || []).forEach((issue) => {
+      if (!previousInvalidFields.has(issue.fieldName)) {
+        state.createValidationRevealedFields[issue.fieldName] = true;
+      }
+    });
+  }
+
+
+  function shouldShowCreateValidationFieldIssue(fieldName) {
+    const normalizedFieldName = normalizeText(fieldName || "");
+    return state.createValidationSubmitAttempted === true
+      || state.createValidationTouchedFields?.[normalizedFieldName] === true
+      || state.createValidationRevealedFields?.[normalizedFieldName] === true;
+  }
+
+// Targeted rendering and focus behavior for create validation.
+  const CREATE_VALIDATION_FIELD_TARGETS = Object.freeze({
+    name: Object.freeze({ controlId: "ata-name", section: "format" }),
+    mode: Object.freeze({ controlId: "ata-mode", section: "format" }),
+    x01Preset: Object.freeze({ selector: "input[name='x01Preset']", section: "format" }),
+    participants: Object.freeze({ controlId: "ata-participants", section: "participants" }),
+    groupsKoOddParticipantPolicy: Object.freeze({ controlId: "ata-groups-ko-odd-policy", section: "additional-rules" }),
+    groupsKoOddParticipantAcknowledged: Object.freeze({ controlId: "ata-groups-ko-odd-acknowledgement", section: "additional-rules" }),
+    grandFinalResetMode: Object.freeze({ controlId: "ata-grand-final-reset-mode", section: "additional-rules" }),
+    preliminaryMatchesPerParticipant: Object.freeze({ controlId: "ata-preliminary-match-count", section: "additional-rules" }),
+    preliminaryWinPoints: Object.freeze({ controlId: "ata-preliminary-win-points", section: "additional-rules" }),
+    preliminaryDrawPoints: Object.freeze({ controlId: "ata-preliminary-draw-points", section: "additional-rules" }),
+    preliminaryLossPoints: Object.freeze({ controlId: "ata-preliminary-loss-points", section: "additional-rules" }),
+    finalStageType: Object.freeze({ controlId: "ata-final-stage-type", section: "additional-rules" }),
+    finalStageQualifierCount: Object.freeze({ controlId: "ata-final-stage-qualifiers", section: "additional-rules" }),
+    finalStageBestOfLegs: Object.freeze({ controlId: "ata-final-stage-bestof", section: "additional-rules" }),
+    bestOfLegs: Object.freeze({ controlId: "ata-bestof", section: "game-rules" }),
+    startScore: Object.freeze({ controlId: "ata-startscore", section: "game-rules" }),
+    x01InMode: Object.freeze({ controlId: "ata-x01-inmode", section: "game-rules" }),
+    x01OutMode: Object.freeze({ controlId: "ata-x01-outmode", section: "game-rules" }),
+    x01BullOffMode: Object.freeze({ controlId: "ata-x01-bulloff", section: "game-rules" }),
+    x01BullMode: Object.freeze({ controlId: "ata-x01-bullmode", section: "game-rules" }),
+    x01MaxRounds: Object.freeze({ controlId: "ata-x01-maxrounds", section: "game-rules" }),
+    boardCount: Object.freeze({ controlId: "ata-board-count", section: "overview" }),
+    tournamentTimeProfile: Object.freeze({ controlId: "ata-create-time-profile", section: "overview" }),
+    form: Object.freeze({ controlId: "ata-create-error-summary", section: "form" }),
+  });
+
+
+  function getCreateValidationErrorId(fieldName) {
+    return `ata-create-error-${normalizeText(fieldName || "form").replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+  }
+
+
+  function renderCreateFieldValidation(fieldName) {
+    return `<div id="${escapeHtml(getCreateValidationErrorId(fieldName))}" class="ata-create-field-error" data-validation-error-for="${escapeHtml(fieldName)}" hidden></div>`;
+  }
+
+
+  function renderCreateValidationOverview(snapshot) {
+    const summary = snapshot?.summary || {};
+    const limits = summary.participantLimits || getModeParticipantLimits(summary.mode);
+    const participantText = `${summary.participantCount || 0} · erlaubt ${limits.min}–${limits.max}`;
+    const matchText = Number.isInteger(summary.matchCount) ? String(summary.matchCount) : "noch nicht berechenbar";
+    const estimate = summary.durationEstimate;
+    const durationText = estimate?.ready ? `ca. ${formatDurationMinutes(estimate.likelyMinutes)}` : "noch nicht berechenbar";
+    const statusText = snapshot?.valid
+      ? "Bereit zum Anlegen"
+      : `Noch nicht bereit · ${snapshot?.issues?.length || 0} ${snapshot?.issues?.length === 1 ? "Punkt" : "Punkte"} offen`;
+    const compactIssues = (snapshot?.issues || []).slice(0, 3);
+    const compactIssuesHtml = compactIssues.length
+      ? `<ul class="ata-create-overview-open-items">${compactIssues.map((issue) => `<li>${escapeHtml(issue.message)}</li>`).join("")}</ul>`
+      : "";
+    return `
+      <dl class="ata-create-overview-summary-list">
+        <div><dt>Modus</dt><dd>${escapeHtml(summary.modeLabel || "KO")}</dd></div>
+        <div><dt>Format</dt><dd>${escapeHtml(summary.presetLabel || "Individuell / Manuell")}</dd></div>
+        <div><dt>Teilnehmer</dt><dd>${escapeHtml(participantText)}</dd></div>
+        <div><dt>Spiele</dt><dd>${escapeHtml(matchText)}</dd></div>
+        <div><dt>Boards</dt><dd>${escapeHtml(String(summary.boardCount || TOURNAMENT_DURATION_DEFAULT_BOARD_COUNT))}</dd></div>
+        <div><dt>Prognose</dt><dd>${escapeHtml(durationText)}</dd></div>
+        <div><dt>Status</dt><dd>${escapeHtml(statusText)}</dd></div>
+      </dl>
+      ${compactIssuesHtml}
+    `;
+  }
+
+
+  function renderCreateParticipantStatus(snapshot) {
+    const analysis = snapshot?.participantAnalysis || { participantCount: 0, duplicateGroups: [], invalidEntries: [] };
+    const summary = snapshot?.summary || {};
+    const limits = summary.participantLimits || getModeParticipantLimits(summary.mode);
+    const participantCount = analysis.participantCount || 0;
+    const participantIssues = (snapshot?.issues || []).filter((issue) => issue.fieldName === "participants");
+    let statusText = "bereit";
+    if (analysis.duplicateGroups?.length) {
+      statusText = `${analysis.duplicateGroups.length} ${analysis.duplicateGroups.length === 1 ? "Duplikat" : "Duplikate"} gefunden`;
+    } else if (analysis.invalidEntries?.length) {
+      statusText = `${analysis.invalidEntries.length} ${analysis.invalidEntries.length === 1 ? "ungültiger Eintrag" : "ungültige Einträge"}`;
+    } else if (participantCount < limits.min) {
+      const missing = limits.min - participantCount;
+      statusText = `mindestens ${missing} ${missing === 1 ? "Teilnehmer fehlt" : "Teilnehmer fehlen"}`;
+    } else if (participantCount > limits.max) {
+      const excess = participantCount - limits.max;
+      statusText = `${excess} ${excess === 1 ? "Teilnehmer zu viel" : "Teilnehmer zu viel"}`;
+    }
+    return {
+      text: `${participantCount} ${participantCount === 1 ? "Teilnehmer" : "Teilnehmer"} erkannt · erlaubt: ${limits.min}–${limits.max} für ${summary.modeLabel || limits.label} · ${statusText}`,
+      state: participantIssues.length ? "invalid" : (participantCount ? "valid" : "pending"),
+    };
+  }
+
+
+  function getCreateValidationControls(form, fieldName) {
+    const target = CREATE_VALIDATION_FIELD_TARGETS[fieldName];
+    if (!(form instanceof HTMLFormElement) || !target) return [];
+    if (target.controlId) {
+      const control = form.querySelector(`#${target.controlId}`);
+      return control instanceof HTMLElement ? [control] : [];
+    }
+    return Array.from(form.querySelectorAll(target.selector || "")).filter((control) => control instanceof HTMLElement);
+  }
+
+
+  function setCreateValidationDescribedBy(control, errorId, active) {
+    if (!(control instanceof HTMLElement)) return;
+    const values = normalizeText(control.getAttribute("aria-describedby") || "").split(" ").filter(Boolean);
+    const next = values.filter((value) => value !== errorId);
+    if (active) next.push(errorId);
+    if (next.length) control.setAttribute("aria-describedby", Array.from(new Set(next)).join(" "));
+    else control.removeAttribute("aria-describedby");
+  }
+
+
+  function refreshCreateValidationUi(form, options = {}) {
+    if (!(form instanceof HTMLFormElement)) return null;
+    const rawInput = readCreateDraftInput(form);
+    const timeProfileControl = form.querySelector("#ata-create-time-profile");
+    rawInput.tournamentTimeProfile = timeProfileControl instanceof HTMLSelectElement
+      ? timeProfileControl.value
+      : state.store?.settings?.tournamentTimeProfile;
+    const previousSnapshot = state.createValidationSnapshot;
+    const snapshot = options.snapshot || validateCreateConfiguration(rawInput, state.store?.settings);
+    if (!options.snapshot) revealNewDependentCreateValidationIssues(previousSnapshot, snapshot);
+    state.createValidationSnapshot = snapshot;
+
+    Object.keys(CREATE_VALIDATION_FIELD_TARGETS).forEach((fieldName) => {
+      if (fieldName === "form") return;
+      const fieldIssues = (snapshot.issues || []).filter((issue) => issue.fieldName === fieldName);
+      const visible = fieldIssues.length > 0 && shouldShowCreateValidationFieldIssue(fieldName);
+      const errorId = getCreateValidationErrorId(fieldName);
+      const errorHost = form.querySelector(`#${errorId}`);
+      if (errorHost instanceof HTMLElement) {
+        errorHost.hidden = !visible;
+        errorHost.innerHTML = visible
+          ? (fieldIssues.length === 1
+            ? escapeHtml(fieldIssues[0].message)
+            : `<ul>${fieldIssues.map((issue) => `<li>${escapeHtml(issue.message)}</li>`).join("")}</ul>`)
+          : "";
+      }
+      getCreateValidationControls(form, fieldName).forEach((control) => {
+        if (visible) control.setAttribute("aria-invalid", "true");
+        else control.removeAttribute("aria-invalid");
+        setCreateValidationDescribedBy(control, errorId, visible);
+      });
+    });
+
+    const participantStatus = renderCreateParticipantStatus(snapshot);
+    const participantStatusHost = form.querySelector("#ata-create-participant-status");
+    if (participantStatusHost instanceof HTMLElement) {
+      participantStatusHost.textContent = participantStatus.text;
+      participantStatusHost.setAttribute("data-validation-state", participantStatus.state);
+    }
+
+    const overviewSummary = form.querySelector("#ata-create-overview-summary");
+    if (overviewSummary instanceof HTMLElement) {
+      overviewSummary.innerHTML = renderCreateValidationOverview(snapshot);
+      overviewSummary.setAttribute("data-validation-state", snapshot.valid ? "valid" : "invalid");
+    }
+
+    const estimateHost = form.querySelector("#ata-create-duration-estimate");
+    if (estimateHost instanceof HTMLElement) {
+      estimateHost.innerHTML = renderTournamentDurationEstimate(snapshot.summary.durationEstimate, {
+        visible: state.store?.ui?.durationEstimateVisible !== false,
+        showHelpLinks: false,
+      });
+    }
+
+    const submitButton = form.querySelector("button[type='submit']");
+    if (submitButton instanceof HTMLButtonElement) {
+      submitButton.disabled = !snapshot.valid;
+      submitButton.setAttribute("aria-disabled", snapshot.valid ? "false" : "true");
+    }
+    const submitStatus = form.querySelector("#ata-create-submit-status");
+    if (submitStatus instanceof HTMLElement) {
+      submitStatus.textContent = snapshot.valid
+        ? "Alle Pflichtangaben sind gültig."
+        : `${snapshot.issues.length} ${snapshot.issues.length === 1 ? "Punkt" : "Punkte"} offen: ${snapshot.issues[0]?.message || "Konfiguration prüfen."}`;
+      submitStatus.setAttribute("data-validation-state", snapshot.valid ? "valid" : "invalid");
+    }
+
+    const summaryHost = form.querySelector("#ata-create-error-summary");
+    const showSubmitSummary = state.createValidationSubmitAttempted === true && !snapshot.valid;
+    if (summaryHost instanceof HTMLElement) {
+      summaryHost.hidden = !showSubmitSummary;
+      if (showSubmitSummary) {
+        if (options.announceSubmitFailure === true) summaryHost.setAttribute("role", "alert");
+        else summaryHost.removeAttribute("role");
+        summaryHost.innerHTML = `
+          <strong>Turnier kann noch nicht angelegt werden</strong>
+          <ul>${snapshot.issues.map((issue) => `<li>${escapeHtml(issue.message)}</li>`).join("")}</ul>
+        `;
+      } else {
+        summaryHost.removeAttribute("role");
+        summaryHost.innerHTML = "";
+      }
+    }
+    return snapshot;
+  }
+
+
+  function focusFirstCreateValidationIssue(form, snapshot) {
+    if (!(form instanceof HTMLFormElement) || !snapshot || snapshot.valid) return false;
+    for (const issue of snapshot.issues || []) {
+      const targetMeta = CREATE_VALIDATION_FIELD_TARGETS[issue.fieldName] || CREATE_VALIDATION_FIELD_TARGETS.form;
+      if (targetMeta.section === "game-rules") {
+        setCreateGameRulesExpanded(form, true);
+      }
+      if (targetMeta.section === "overview" && state.activeCreateHelpTopic) {
+        closeCreateHelpPanel(form, { returnFocus: false });
+      }
+      const controls = getCreateValidationControls(form, issue.fieldName);
+      const target = controls.find((control) => (
+        !control.hasAttribute("disabled")
+        && !control.closest("[hidden]")
+      ));
+      if (target instanceof HTMLElement) {
+        target.focus({ preventScroll: true });
+        const reduceMotion = typeof window.matchMedia === "function"
+          && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (typeof target.scrollIntoView === "function") {
+          target.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
+        }
+        return true;
+      }
+    }
+    const summaryHost = form.querySelector("#ata-create-error-summary");
+    if (summaryHost instanceof HTMLElement && !summaryHost.hidden) {
+      summaryHost.focus({ preventScroll: true });
+      return true;
+    }
+    return false;
+  }
+
   function buildStyles() {
     return ATA_UI_MAIN_CSS;
   }
@@ -17279,8 +18418,9 @@
       ? `
         <label class="ata-toggle ata-toggle-compact" data-role="groups-ko-odd-acknowledgement">
           <span>Ich bestätige, dass ungleiche Gruppengrößen und die daraus entstehenden unterschiedlichen Qualifikationsquoten der verwendeten Turnierordnung entsprechen.</span>
-          <input name="groupsKoOddParticipantAcknowledged" type="checkbox" ${draft.groupsKoOddParticipantAcknowledged ? "checked" : ""}>
+          <input id="ata-groups-ko-odd-acknowledgement" name="groupsKoOddParticipantAcknowledged" type="checkbox" ${draft.groupsKoOddParticipantAcknowledged ? "checked" : ""}>
         </label>
+        ${renderCreateFieldValidation("groupsKoOddParticipantAcknowledged")}
       `
       : "";
 
@@ -17294,6 +18434,7 @@
           <option value="${GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN}" ${policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_REQUIRE_EVEN ? "selected" : ""}>Nur gerade Teilnehmerzahl zulassen (empfohlen)</option>
           <option value="${GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL}" ${policy === GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL ? "selected" : ""}>Ungleiche Gruppengrößen zulassen (Veranstalterregel)</option>
         </select>
+        ${renderCreateFieldValidation("groupsKoOddParticipantPolicy")}
         ${analysisHtml}
         ${twoPlayerWarning}
         ${acknowledgementHtml}
@@ -17335,18 +18476,19 @@
           <div class="ata-field">
             <label for="ata-preliminary-match-count">Vorrundenspiele je Teilnehmer</label>
             <input id="ata-preliminary-match-count" name="preliminaryMatchesPerParticipant" type="number" min="4" max="8" step="1" value="${draft.preliminaryMatchesPerParticipant}">
+            ${renderCreateFieldValidation("preliminaryMatchesPerParticipant")}
             <p class="ata-small ata-create-help">Dies ist die Zahl real gespielter Matches je Teilnehmer, nicht die Zahl zeitlicher Scheduling-Runden.</p>
           </div>
           <div class="ata-field ata-field-span-3">
             <label>Vorrundenformat</label>
             <span class="ata-field-readonly">2 Legs fest \u2013 beide Legs werden gespielt, 1:1 m\u00f6glich</span>
           </div>
-          <div class="ata-field"><label for="ata-preliminary-win-points">Punkte f\u00fcr Sieg</label><input id="ata-preliminary-win-points" name="preliminaryWinPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryWinPoints}"></div>
-          <div class="ata-field"><label for="ata-preliminary-draw-points">Punkte f\u00fcr Unentschieden</label><input id="ata-preliminary-draw-points" name="preliminaryDrawPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryDrawPoints}"></div>
-          <div class="ata-field"><label for="ata-preliminary-loss-points">Punkte f\u00fcr Niederlage</label><input id="ata-preliminary-loss-points" name="preliminaryLossPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryLossPoints}"></div>
-          <div class="ata-field"><label for="ata-final-stage-type">Finalphase</label><select id="ata-final-stage-type" name="finalStageType"><option value="ko" ${draft.finalStageType === "ko" ? "selected" : ""}>KO</option><option value="double_ko" ${draft.finalStageType === "double_ko" ? "selected" : ""}>Doppel-KO</option></select></div>
-          <div class="ata-field"><label for="ata-final-stage-qualifiers">Anzahl Qualifikanten</label><input id="ata-final-stage-qualifiers" name="finalStageQualifierCount" type="number" min="2" max="${Math.max(2, participants.length)}" step="1" value="${draft.finalStageQualifierCount}"></div>
-          <div class="ata-field"><label for="ata-final-stage-bestof">Best of Legs der Finalphase</label><input id="ata-final-stage-bestof" name="finalStageBestOfLegs" type="number" min="1" max="21" step="2" value="${draft.finalStageBestOfLegs}"></div>
+          <div class="ata-field"><label for="ata-preliminary-win-points">Punkte f\u00fcr Sieg</label><input id="ata-preliminary-win-points" name="preliminaryWinPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryWinPoints}">${renderCreateFieldValidation("preliminaryWinPoints")}</div>
+          <div class="ata-field"><label for="ata-preliminary-draw-points">Punkte f\u00fcr Unentschieden</label><input id="ata-preliminary-draw-points" name="preliminaryDrawPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryDrawPoints}">${renderCreateFieldValidation("preliminaryDrawPoints")}</div>
+          <div class="ata-field"><label for="ata-preliminary-loss-points">Punkte f\u00fcr Niederlage</label><input id="ata-preliminary-loss-points" name="preliminaryLossPoints" type="number" min="0" max="10" step="1" value="${draft.preliminaryLossPoints}">${renderCreateFieldValidation("preliminaryLossPoints")}</div>
+          <div class="ata-field"><label for="ata-final-stage-type">Finalphase</label><select id="ata-final-stage-type" name="finalStageType"><option value="ko" ${draft.finalStageType === "ko" ? "selected" : ""}>KO</option><option value="double_ko" ${draft.finalStageType === "double_ko" ? "selected" : ""}>Doppel-KO</option></select>${renderCreateFieldValidation("finalStageType")}</div>
+          <div class="ata-field"><label for="ata-final-stage-qualifiers">Anzahl Qualifikanten</label><input id="ata-final-stage-qualifiers" name="finalStageQualifierCount" type="number" min="2" max="${Math.max(2, participants.length)}" step="1" value="${draft.finalStageQualifierCount}">${renderCreateFieldValidation("finalStageQualifierCount")}</div>
+          <div class="ata-field"><label for="ata-final-stage-bestof">Best of Legs der Finalphase</label><input id="ata-final-stage-bestof" name="finalStageBestOfLegs" type="number" min="1" max="21" step="2" value="${draft.finalStageBestOfLegs}">${renderCreateFieldValidation("finalStageBestOfLegs")}</div>
         </div>
         ${summary}
       </section>
@@ -17454,6 +18596,7 @@
           ${renderCreateHelpTrigger("presetFormat", "Hilfe zu Presets und Formatprofilen öffnen")}
         </legend>
         <div class="ata-preset-card-grid">${cardsHtml}</div>
+        ${renderCreateFieldValidation("x01Preset")}
       </fieldset>
     `;
   }
@@ -17467,6 +18610,7 @@
           <div class="ata-field ata-field-span-2">
             <label for="ata-name">Turniername</label>
             <input id="ata-name" name="name" type="text" placeholder="z. B. Freitagsturnier" value="${escapeHtml(draft.name)}" required>
+            ${renderCreateFieldValidation("name")}
           </div>
           ${renderCreatePresetSelection(draft)}
           <div class="ata-field">
@@ -17481,6 +18625,7 @@
               <option value="groups_ko" ${draft.mode === "groups_ko" ? "selected" : ""}>Gruppenphase + KO</option>
               <option value="preliminary_final" ${draft.mode === "preliminary_final" ? "selected" : ""}>Vorrunde + Finalphase</option>
             </select>
+            ${renderCreateFieldValidation("mode")}
           </div>
         </div>
       </section>
@@ -17488,7 +18633,8 @@
   }
 
 
-  function renderCreateParticipantsSection(draft) {
+  function renderCreateParticipantsSection(draft, validationSnapshot) {
+    const participantStatus = renderCreateParticipantStatus(validationSnapshot);
     return `
       <section class="ata-create-section" data-create-section="participants" aria-labelledby="ata-create-participants-heading">
         ${renderCreateFormSectionHeading(2, "Teilnehmer", "Eine Person pro Zeile; die Reihenfolge bleibt für gesetzte Draws erhalten.", "ata-create-participants-heading")}
@@ -17499,6 +18645,8 @@
               ${renderCreateHelpTrigger("participants", "Hilfe zur Teilnehmerliste öffnen")}
             </div>
             <textarea id="ata-participants" name="participants" placeholder="Max Mustermann&#10;Erika Musterfrau">${escapeHtml(draft.participantsText)}</textarea>
+            <p id="ata-create-participant-status" class="ata-create-participant-status" data-validation-state="${participantStatus.state}" role="status" aria-live="polite">${escapeHtml(participantStatus.text)}</p>
+            ${renderCreateFieldValidation("participants")}
           </div>
           <div class="ata-create-section-actions">
             <button type="button" class="ata-btn ata-btn-sm" data-action="shuffle-participants">Teilnehmer mischen</button>
@@ -17550,6 +18698,7 @@
               <option value="${GRAND_FINAL_RESET_IF_NEEDED}" ${grandFinalResetMode === GRAND_FINAL_RESET_IF_NEEDED ? "selected" : ""}>Reset-Finale falls nötig (empfohlen)</option>
               <option value="${GRAND_FINAL_RESET_SINGLE_MATCH}" ${grandFinalResetMode === GRAND_FINAL_RESET_SINGLE_MATCH ? "selected" : ""}>Ein einzelnes Grand Final</option>
             </select>
+            ${renderCreateFieldValidation("grandFinalResetMode")}
           </div>
           <p class="ata-small ata-create-empty-rules" data-role="league-rules-empty" data-mode-rule-group="league_empty">Für den Ligamodus sind keine zusätzlichen Turnierregeln erforderlich.</p>
         </div>
@@ -17602,10 +18751,12 @@
               <div class="ata-field" data-role="standard-bestof-field">
                 <label for="ata-bestof">Best of Legs</label>
                 <input id="ata-bestof" name="bestOfLegs" type="number" min="1" max="21" step="2" value="${draft.bestOfLegs}">
+                ${renderCreateFieldValidation("bestOfLegs")}
               </div>
               <div class="ata-field">
                 <label for="ata-startscore">Startpunkte</label>
                 <select id="ata-startscore" name="startScore">${startScoreOptions}</select>
+                ${renderCreateFieldValidation("startScore")}
               </div>
               <div class="ata-field">
                 <label for="ata-x01-inmode">In-Modus</label>
@@ -17614,6 +18765,7 @@
                   <option value="Double" ${draft.x01InMode === "Double" ? "selected" : ""}>Double</option>
                   <option value="Master" ${draft.x01InMode === "Master" ? "selected" : ""}>Master</option>
                 </select>
+                ${renderCreateFieldValidation("x01InMode")}
               </div>
               <div class="ata-field">
                 <label for="ata-x01-outmode">Out-Modus</label>
@@ -17622,6 +18774,7 @@
                   <option value="Double" ${draft.x01OutMode === "Double" ? "selected" : ""}>Double</option>
                   <option value="Master" ${draft.x01OutMode === "Master" ? "selected" : ""}>Master</option>
                 </select>
+                ${renderCreateFieldValidation("x01OutMode")}
               </div>
               <div class="ata-field">
                 <label for="ata-x01-bulloff">Bull-off</label>
@@ -17630,6 +18783,7 @@
                   <option value="Normal" ${draft.x01BullOffMode === "Normal" ? "selected" : ""}>Normal</option>
                   <option value="Official" ${draft.x01BullOffMode === "Official" ? "selected" : ""}>Official</option>
                 </select>
+                ${renderCreateFieldValidation("x01BullOffMode")}
               </div>
               <div class="ata-field">
                 <label for="ata-x01-bullmode">Bull-Modus</label>
@@ -17638,6 +18792,7 @@
                   <option value="50/50" ${draft.x01BullMode === "50/50" ? "selected" : ""}>50/50</option>
                 </select>
                 ${bullModeHiddenInput}
+                ${renderCreateFieldValidation("x01BullMode")}
               </div>
               <div class="ata-field">
                 <label for="ata-x01-maxrounds">Max Runden</label>
@@ -17647,6 +18802,7 @@
                   <option value="50" ${draft.x01MaxRounds === 50 ? "selected" : ""}>50</option>
                   <option value="80" ${draft.x01MaxRounds === 80 ? "selected" : ""}>80</option>
                 </select>
+                ${renderCreateFieldValidation("x01MaxRounds")}
               </div>
             </div>
             <div class="ata-create-fixed-summary" data-role="fixed-match-setup" role="group" aria-label="Festes technisches Spiel-Setup">
@@ -17670,12 +18826,16 @@
       durationEstimate,
       durationEstimateVisible,
       modeLimitSummary,
+      validationSnapshot,
     } = options;
     const helpActive = Boolean(state.activeCreateHelpTopic);
     return `
       <aside id="ata-create-overview" class="ata-create-overview" data-create-section="overview" aria-labelledby="ata-create-overview-heading" ${helpActive ? "hidden" : ""}>
         ${renderCreateFormSectionHeading(5, "Turnierübersicht", "Zeitbedarf prüfen und das Turnier anlegen.", "ata-create-overview-heading")}
         <div class="ata-create-overview-body">
+          <div id="ata-create-overview-summary" class="ata-create-overview-summary" data-validation-state="${validationSnapshot.valid ? "valid" : "invalid"}" role="status" aria-live="polite">
+            ${renderCreateValidationOverview(validationSnapshot)}
+          </div>
           <div class="ata-grid-2 ata-create-overview-controls">
             <div class="ata-field">
               <div class="ata-field-label-row">
@@ -17683,6 +18843,7 @@
                 ${renderCreateHelpTrigger("boardCount", "Hilfe zu Boards für die Zeitprognose öffnen")}
               </div>
               <input id="ata-board-count" name="boardCount" type="number" min="1" max="${TOURNAMENT_DURATION_MAX_BOARD_COUNT}" step="1" value="${draft.boardCount}">
+              ${renderCreateFieldValidation("boardCount")}
             </div>
             <div class="ata-field">
               <div class="ata-field-label-row">
@@ -17690,13 +18851,15 @@
                 ${renderCreateHelpTrigger("timeProfile", "Hilfe zum Zeitprofil öffnen")}
               </div>
               <select id="ata-create-time-profile" name="tournamentTimeProfile" data-action="set-duration-time-profile">${tournamentTimeProfileOptions}</select>
+              ${renderCreateFieldValidation("tournamentTimeProfile")}
             </div>
           </div>
           <div id="ata-create-duration-estimate">${renderTournamentDurationEstimate(durationEstimate, { visible: durationEstimateVisible, showHelpLinks: false })}</div>
           <p class="ata-small">Modus-Limits: ${escapeHtml(modeLimitSummary)}.</p>
           <div class="ata-actions ata-create-primary-actions">
-            <button type="submit" class="ata-btn ata-btn-primary">Turnier anlegen</button>
+            <button type="submit" class="ata-btn ata-btn-primary" ${validationSnapshot.valid ? "" : "disabled"} aria-disabled="${validationSnapshot.valid ? "false" : "true"}">Turnier anlegen</button>
           </div>
+          <p id="ata-create-submit-status" class="ata-create-submit-status" data-validation-state="${validationSnapshot.valid ? "valid" : "invalid"}" role="status" aria-live="polite">${validationSnapshot.valid ? "Alle Pflichtangaben sind gültig." : `${validationSnapshot.issues.length} ${validationSnapshot.issues.length === 1 ? "Punkt" : "Punkte"} offen: ${escapeHtml(validationSnapshot.issues[0]?.message || "Konfiguration prüfen.")}`}</p>
         </div>
       </aside>
     `;
@@ -17725,7 +18888,12 @@
       const startScoreOptions = X01_START_SCORE_OPTIONS.map((score) => (
         `<option value="${score}" ${draft.startScore === score ? "selected" : ""}>${score}</option>`
       )).join("");
-      const durationEstimate = estimateTournamentDurationFromDraft(draft, state.store.settings);
+      const validationSnapshot = validateCreateConfiguration({
+        ...draft,
+        tournamentTimeProfile,
+      }, state.store.settings);
+      state.createValidationSnapshot = validationSnapshot;
+      const durationEstimate = validationSnapshot.summary.durationEstimate;
       const bullModeDisabled = draft.x01BullOffMode === "Off";
       const bullModeDisabledAttr = bullModeDisabled ? "disabled" : "";
       const bullModeHiddenInput = bullModeDisabled
@@ -17735,10 +18903,11 @@
         <section class="ata-card tournamentCard ata-create-card">
           ${renderSectionHeading("Neues Turnier erstellen")}
           <form id="ata-create-form" class="ata-create-form">
+            <div id="ata-create-error-summary" class="ata-create-error-summary" tabindex="-1" hidden></div>
             <div class="ata-create-layout">
               <div class="ata-create-main">
                 ${renderCreateTournamentFormatSection(draft)}
-                ${renderCreateParticipantsSection(draft)}
+                ${renderCreateParticipantsSection(draft, validationSnapshot)}
                 ${renderCreateAdditionalRulesSection(draft)}
                 ${renderCreateGameRulesSection({
                   draft,
@@ -17754,6 +18923,7 @@
                   durationEstimate,
                   durationEstimateVisible,
                   modeLimitSummary,
+                  validationSnapshot,
                 })}
                 ${renderCreateHelpPanel(draft)}
               </div>
@@ -18858,16 +20028,17 @@
     const createForm = shadow.getElementById("ata-create-form");
     if (createForm instanceof HTMLFormElement) {
       syncCreateFormDependencies(createForm);
-      refreshCreateFormDurationEstimate(createForm);
       refreshCreateFormGroupsKoPolicy(createForm);
       refreshCreateFormPreliminaryFinal(createForm);
       refreshCreateGameRulesSummary(createForm);
+      refreshCreateValidationUi(createForm);
       refreshCreateHelpUi(createForm);
       const handleDraftInputChange = (event) => {
         const target = event?.target;
         const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
           ? normalizeText(target.name || "")
           : "";
+        markCreateValidationFieldTouched(fieldName);
         if (fieldName === "tournamentTimeProfile" && target instanceof HTMLSelectElement) {
           const profileId = sanitizeTournamentTimeProfile(
             target.value,
@@ -18896,7 +20067,6 @@
         resetGroupsKoOddParticipantAcknowledgementIfBasisChanged(createForm);
         syncCreateFormDependencies(createForm);
         updateCreateDraftFromForm(createForm, true);
-        refreshCreateFormDurationEstimate(createForm);
         refreshCreateGameRulesSummary(createForm);
         refreshCreateFormGroupsKoPolicy(createForm);
         const preliminarySummaryFields = [
@@ -18911,10 +20081,18 @@
         ) {
           refreshCreateFormPreliminaryFinal(createForm);
         }
+        refreshCreateValidationUi(createForm);
         refreshCreateHelpUi(createForm);
       };
       createForm.addEventListener("input", handleDraftInputChange);
       createForm.addEventListener("change", handleDraftInputChange);
+      createForm.addEventListener("focusout", (event) => {
+        const target = event?.target;
+        const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
+          ? normalizeText(target.name || "")
+          : "";
+        if (markCreateValidationFieldTouched(fieldName)) refreshCreateValidationUi(createForm);
+      });
       createForm.addEventListener("submit", (event) => {
         event.preventDefault();
         handleCreateTournament(createForm);
@@ -18927,6 +20105,10 @@
           handleOpenCreateHelp(target, createForm);
         } else if (action === "close-create-help") {
           closeCreateHelpPanel(createForm, { returnFocus: true });
+        } else if (action === "toggle-duration-estimate-visibility") {
+          state.store.ui.durationEstimateVisible = state.store.ui.durationEstimateVisible === false;
+          schedulePersist();
+          refreshCreateValidationUi(createForm);
         }
       });
 
@@ -18988,6 +20170,9 @@
     });
 
     shadow.querySelectorAll("[data-action='toggle-duration-estimate-visibility']").forEach((button) => {
+      if (button.closest("#ata-create-form")) {
+        return;
+      }
       button.addEventListener("click", () => {
         state.store.ui.durationEstimateVisible = state.store.ui.durationEstimateVisible === false;
         schedulePersist();
@@ -19313,6 +20498,7 @@
     state.drawerOpen = false;
     state.createGameRulesExpanded = false;
     resetCreateHelpState();
+    resetCreateValidationState();
     renderShell();
     if (state.lastFocused instanceof HTMLElement) {
       state.lastFocused.focus();
@@ -19511,7 +20697,18 @@
     if (!(form instanceof HTMLFormElement)) return;
     const host = form.querySelector("#ata-preliminary-final-fields-host");
     if (!(host instanceof HTMLElement)) return;
-    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
+    const rawInput = readCreateDraftInput(form);
+    const normalizedDraft = normalizeCreateDraft(rawInput, state.store.settings);
+    const draft = {
+      ...normalizedDraft,
+      preliminaryMatchesPerParticipant: rawInput.preliminaryMatchesPerParticipant,
+      preliminaryWinPoints: rawInput.preliminaryWinPoints,
+      preliminaryDrawPoints: rawInput.preliminaryDrawPoints,
+      preliminaryLossPoints: rawInput.preliminaryLossPoints,
+      finalStageType: rawInput.finalStageType,
+      finalStageQualifierCount: rawInput.finalStageQualifierCount,
+      finalStageBestOfLegs: rawInput.finalStageBestOfLegs,
+    };
     replaceCreateDynamicHostContent(host, renderPreliminaryFinalFields(draft));
   }
 
@@ -19596,8 +20793,8 @@
       setCreateFormPresetValue(form, X01_PRESET_CUSTOM);
       syncCreateFormDependencies(form);
       updateCreateDraftFromForm(form, true);
-      refreshCreateFormDurationEstimate(form);
       refreshCreateGameRulesSummary(form);
+      refreshCreateValidationUi(form);
       return true;
     }
     if (storedDraft.x01Preset === preset.id && matchesCreatePresetSetup(storedDraft, preset.id)) {
@@ -19627,10 +20824,10 @@
     resetGroupsKoOddParticipantAcknowledgementIfBasisChanged(form);
     syncCreateFormDependencies(form);
     updateCreateDraftFromForm(form, true);
-    refreshCreateFormDurationEstimate(form);
     refreshCreateGameRulesSummary(form);
     refreshCreateFormGroupsKoPolicy(form);
     refreshCreateFormPreliminaryFinal(form);
+    refreshCreateValidationUi(form);
     return true;
   }
 
@@ -19684,6 +20881,7 @@
       x01MaxRounds: formData.get("x01MaxRounds") ?? preserved.x01MaxRounds,
       x01BullOffMode: formData.get("x01BullOffMode") ?? preserved.x01BullOffMode,
       boardCount: formData.get("boardCount") ?? preserved.boardCount,
+      tournamentTimeProfile: formData.get("tournamentTimeProfile") ?? state.store?.settings?.tournamentTimeProfile,
       participantsText: String(formData.get("participants") ?? preserved.participantsText),
       randomizeKoRound1: readModeCheckbox("randomizeKoRound1"),
       enableThirdPlaceMatch: readModeCheckbox("enableThirdPlaceMatch"),
@@ -19726,8 +20924,8 @@
     if (!(estimateHost instanceof HTMLElement)) {
       return;
     }
-    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
-    const estimate = estimateTournamentDurationFromDraft(draft, state.store.settings);
+    const validation = validateCreateConfiguration(readCreateDraftInput(form), state.store.settings);
+    const estimate = validation.summary.durationEstimate;
     estimateHost.innerHTML = renderTournamentDurationEstimate(estimate, {
       visible: state.store?.ui?.durationEstimateVisible !== false,
       showHelpLinks: false,
@@ -19740,8 +20938,11 @@
     const summaryHost = form.querySelector("[data-role='game-rules-summary-text']");
     const presetHost = form.querySelector("[data-role='game-rules-preset-origin']");
     if (!(summaryHost instanceof HTMLElement) || !(presetHost instanceof HTMLElement)) return;
+    const rawInput = readCreateDraftInput(form);
+    const validation = validateCreateConfiguration(rawInput, state.store.settings);
     const summary = buildCreateGameRulesSummary(state.store?.ui?.createDraft);
-    summaryHost.textContent = summary.text;
+    const gameRulesInvalid = validation.issues.some((issue) => issue.section === "game-rules");
+    summaryHost.textContent = gameRulesInvalid ? "Spielregeln prüfen – ungültige Eingabe" : summary.text;
     presetHost.innerHTML = `<strong>Format:</strong> ${escapeHtml(summary.presetLabel)}`;
   }
 
@@ -19772,18 +20973,19 @@
     if (!(participantField instanceof HTMLTextAreaElement)) {
       return;
     }
-    const participants = parseParticipantLines(participantField.value);
-    if (participants.length < 2) {
+    const participantAnalysis = analyzeCreateParticipantInput(participantField.value);
+    if (participantAnalysis.nonEmptyEntries.length < 2) {
       setNotice("info", "Mindestens zwei Teilnehmer zum Mischen eingeben.", 2200);
       return;
     }
-    const shuffledNames = shuffleArray(participants.map((participant) => participant.name));
+    const shuffledNames = shuffleArray(participantAnalysis.nonEmptyEntries.map((entry) => entry.normalizedName));
     participantField.value = shuffledNames.join("\n");
+    markCreateValidationFieldTouched("participants");
     updateCreateDraftFromForm(form, true);
-    refreshCreateFormDurationEstimate(form);
     refreshCreateGameRulesSummary(form);
     refreshCreateFormGroupsKoPolicy(form);
     refreshCreateFormPreliminaryFinal(form);
+    refreshCreateValidationUi(form);
     refreshCreateHelpUi(form);
     setNotice("success", "Teilnehmer wurden zuf\u00e4llig gemischt.", 1800);
   }
@@ -19791,42 +20993,33 @@
 
   function handleCreateTournament(form) {
     syncCreateFormDependencies(form);
-    const formData = new FormData(form);
-    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
+    const rawInput = readCreateDraftInput(form);
+    const draft = normalizeCreateDraft(rawInput, state.store.settings);
     state.store.ui.createDraft = draft;
-    const participants = parseParticipantLines(formData.get("participants"));
+    state.createValidationSubmitAttempted = true;
+    let validation = refreshCreateValidationUi(form, { announceSubmitFailure: true });
+    if (!validation?.valid) {
+      focusFirstCreateValidationIssue(form, validation);
+      return;
+    }
+
+    const participants = parseParticipantLines(rawInput.participantsText);
     const config = scopeCreateConfigToMode({
-      name: draft.name,
-      mode: draft.mode,
-      bestOfLegs: draft.bestOfLegs,
-      startScore: draft.startScore,
-      x01Preset: draft.x01Preset,
-      x01InMode: draft.x01InMode,
-      x01OutMode: draft.x01OutMode,
-      x01BullMode: draft.x01BullMode,
-      x01MaxRounds: draft.x01MaxRounds,
-      x01BullOffMode: draft.x01BullOffMode,
-      lobbyVisibility: "private",
-      boardCount: draft.boardCount,
-      randomizeKoRound1: draft.randomizeKoRound1,
-      enableThirdPlaceMatch: draft.enableThirdPlaceMatch,
-      grandFinalResetMode: draft.grandFinalResetMode,
-      groupsKoOddParticipantPolicy: draft.groupsKoOddParticipantPolicy,
-      groupsKoOddParticipantAcknowledged: draft.groupsKoOddParticipantAcknowledged,
-      preliminaryMatchesPerParticipant: draft.preliminaryMatchesPerParticipant,
-      preliminaryWinPoints: draft.preliminaryWinPoints,
-      preliminaryDrawPoints: draft.preliminaryDrawPoints,
-      preliminaryLossPoints: draft.preliminaryLossPoints,
-      finalStageType: draft.finalStageType,
-      finalStageQualifierCount: draft.finalStageQualifierCount,
-      finalStageBestOfLegs: draft.finalStageBestOfLegs,
+      ...validation.config,
       koDrawLocked: state.store.settings.featureFlags.koDrawLockDefault !== false,
       participants,
     });
 
     const result = createTournamentSession(config);
     if (!result.ok) {
-      setNotice("error", result.message || "Turnier konnte nicht erstellt werden.");
+      if (result.reasonCode || (Array.isArray(result.validationDetails) && result.validationDetails.length)) {
+        validation = mergeCreateValidationFailure(validation, result);
+        state.createValidationSnapshot = validation;
+        refreshCreateValidationUi(form, { snapshot: validation, announceSubmitFailure: true });
+        focusFirstCreateValidationIssue(form, validation);
+      } else {
+        setNotice("error", result.message || "Turnier konnte nicht erstellt werden.");
+      }
       return;
     }
     setNotice("success", "Turnier wurde erstellt.");

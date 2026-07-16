@@ -134,16 +134,17 @@
     const createForm = shadow.getElementById("ata-create-form");
     if (createForm instanceof HTMLFormElement) {
       syncCreateFormDependencies(createForm);
-      refreshCreateFormDurationEstimate(createForm);
       refreshCreateFormGroupsKoPolicy(createForm);
       refreshCreateFormPreliminaryFinal(createForm);
       refreshCreateGameRulesSummary(createForm);
+      refreshCreateValidationUi(createForm);
       refreshCreateHelpUi(createForm);
       const handleDraftInputChange = (event) => {
         const target = event?.target;
         const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
           ? normalizeText(target.name || "")
           : "";
+        markCreateValidationFieldTouched(fieldName);
         if (fieldName === "tournamentTimeProfile" && target instanceof HTMLSelectElement) {
           const profileId = sanitizeTournamentTimeProfile(
             target.value,
@@ -172,7 +173,6 @@
         resetGroupsKoOddParticipantAcknowledgementIfBasisChanged(createForm);
         syncCreateFormDependencies(createForm);
         updateCreateDraftFromForm(createForm, true);
-        refreshCreateFormDurationEstimate(createForm);
         refreshCreateGameRulesSummary(createForm);
         refreshCreateFormGroupsKoPolicy(createForm);
         const preliminarySummaryFields = [
@@ -187,10 +187,18 @@
         ) {
           refreshCreateFormPreliminaryFinal(createForm);
         }
+        refreshCreateValidationUi(createForm);
         refreshCreateHelpUi(createForm);
       };
       createForm.addEventListener("input", handleDraftInputChange);
       createForm.addEventListener("change", handleDraftInputChange);
+      createForm.addEventListener("focusout", (event) => {
+        const target = event?.target;
+        const fieldName = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
+          ? normalizeText(target.name || "")
+          : "";
+        if (markCreateValidationFieldTouched(fieldName)) refreshCreateValidationUi(createForm);
+      });
       createForm.addEventListener("submit", (event) => {
         event.preventDefault();
         handleCreateTournament(createForm);
@@ -203,6 +211,10 @@
           handleOpenCreateHelp(target, createForm);
         } else if (action === "close-create-help") {
           closeCreateHelpPanel(createForm, { returnFocus: true });
+        } else if (action === "toggle-duration-estimate-visibility") {
+          state.store.ui.durationEstimateVisible = state.store.ui.durationEstimateVisible === false;
+          schedulePersist();
+          refreshCreateValidationUi(createForm);
         }
       });
 
@@ -264,6 +276,9 @@
     });
 
     shadow.querySelectorAll("[data-action='toggle-duration-estimate-visibility']").forEach((button) => {
+      if (button.closest("#ata-create-form")) {
+        return;
+      }
       button.addEventListener("click", () => {
         state.store.ui.durationEstimateVisible = state.store.ui.durationEstimateVisible === false;
         schedulePersist();
@@ -589,6 +604,7 @@
     state.drawerOpen = false;
     state.createGameRulesExpanded = false;
     resetCreateHelpState();
+    resetCreateValidationState();
     renderShell();
     if (state.lastFocused instanceof HTMLElement) {
       state.lastFocused.focus();
@@ -787,7 +803,18 @@
     if (!(form instanceof HTMLFormElement)) return;
     const host = form.querySelector("#ata-preliminary-final-fields-host");
     if (!(host instanceof HTMLElement)) return;
-    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
+    const rawInput = readCreateDraftInput(form);
+    const normalizedDraft = normalizeCreateDraft(rawInput, state.store.settings);
+    const draft = {
+      ...normalizedDraft,
+      preliminaryMatchesPerParticipant: rawInput.preliminaryMatchesPerParticipant,
+      preliminaryWinPoints: rawInput.preliminaryWinPoints,
+      preliminaryDrawPoints: rawInput.preliminaryDrawPoints,
+      preliminaryLossPoints: rawInput.preliminaryLossPoints,
+      finalStageType: rawInput.finalStageType,
+      finalStageQualifierCount: rawInput.finalStageQualifierCount,
+      finalStageBestOfLegs: rawInput.finalStageBestOfLegs,
+    };
     replaceCreateDynamicHostContent(host, renderPreliminaryFinalFields(draft));
   }
 
@@ -872,8 +899,8 @@
       setCreateFormPresetValue(form, X01_PRESET_CUSTOM);
       syncCreateFormDependencies(form);
       updateCreateDraftFromForm(form, true);
-      refreshCreateFormDurationEstimate(form);
       refreshCreateGameRulesSummary(form);
+      refreshCreateValidationUi(form);
       return true;
     }
     if (storedDraft.x01Preset === preset.id && matchesCreatePresetSetup(storedDraft, preset.id)) {
@@ -903,10 +930,10 @@
     resetGroupsKoOddParticipantAcknowledgementIfBasisChanged(form);
     syncCreateFormDependencies(form);
     updateCreateDraftFromForm(form, true);
-    refreshCreateFormDurationEstimate(form);
     refreshCreateGameRulesSummary(form);
     refreshCreateFormGroupsKoPolicy(form);
     refreshCreateFormPreliminaryFinal(form);
+    refreshCreateValidationUi(form);
     return true;
   }
 
@@ -960,6 +987,7 @@
       x01MaxRounds: formData.get("x01MaxRounds") ?? preserved.x01MaxRounds,
       x01BullOffMode: formData.get("x01BullOffMode") ?? preserved.x01BullOffMode,
       boardCount: formData.get("boardCount") ?? preserved.boardCount,
+      tournamentTimeProfile: formData.get("tournamentTimeProfile") ?? state.store?.settings?.tournamentTimeProfile,
       participantsText: String(formData.get("participants") ?? preserved.participantsText),
       randomizeKoRound1: readModeCheckbox("randomizeKoRound1"),
       enableThirdPlaceMatch: readModeCheckbox("enableThirdPlaceMatch"),
@@ -1002,8 +1030,8 @@
     if (!(estimateHost instanceof HTMLElement)) {
       return;
     }
-    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
-    const estimate = estimateTournamentDurationFromDraft(draft, state.store.settings);
+    const validation = validateCreateConfiguration(readCreateDraftInput(form), state.store.settings);
+    const estimate = validation.summary.durationEstimate;
     estimateHost.innerHTML = renderTournamentDurationEstimate(estimate, {
       visible: state.store?.ui?.durationEstimateVisible !== false,
       showHelpLinks: false,
@@ -1016,8 +1044,11 @@
     const summaryHost = form.querySelector("[data-role='game-rules-summary-text']");
     const presetHost = form.querySelector("[data-role='game-rules-preset-origin']");
     if (!(summaryHost instanceof HTMLElement) || !(presetHost instanceof HTMLElement)) return;
+    const rawInput = readCreateDraftInput(form);
+    const validation = validateCreateConfiguration(rawInput, state.store.settings);
     const summary = buildCreateGameRulesSummary(state.store?.ui?.createDraft);
-    summaryHost.textContent = summary.text;
+    const gameRulesInvalid = validation.issues.some((issue) => issue.section === "game-rules");
+    summaryHost.textContent = gameRulesInvalid ? "Spielregeln prüfen – ungültige Eingabe" : summary.text;
     presetHost.innerHTML = `<strong>Format:</strong> ${escapeHtml(summary.presetLabel)}`;
   }
 
@@ -1048,18 +1079,19 @@
     if (!(participantField instanceof HTMLTextAreaElement)) {
       return;
     }
-    const participants = parseParticipantLines(participantField.value);
-    if (participants.length < 2) {
+    const participantAnalysis = analyzeCreateParticipantInput(participantField.value);
+    if (participantAnalysis.nonEmptyEntries.length < 2) {
       setNotice("info", "Mindestens zwei Teilnehmer zum Mischen eingeben.", 2200);
       return;
     }
-    const shuffledNames = shuffleArray(participants.map((participant) => participant.name));
+    const shuffledNames = shuffleArray(participantAnalysis.nonEmptyEntries.map((entry) => entry.normalizedName));
     participantField.value = shuffledNames.join("\n");
+    markCreateValidationFieldTouched("participants");
     updateCreateDraftFromForm(form, true);
-    refreshCreateFormDurationEstimate(form);
     refreshCreateGameRulesSummary(form);
     refreshCreateFormGroupsKoPolicy(form);
     refreshCreateFormPreliminaryFinal(form);
+    refreshCreateValidationUi(form);
     refreshCreateHelpUi(form);
     setNotice("success", "Teilnehmer wurden zuf\u00e4llig gemischt.", 1800);
   }
@@ -1067,42 +1099,33 @@
 
   function handleCreateTournament(form) {
     syncCreateFormDependencies(form);
-    const formData = new FormData(form);
-    const draft = normalizeCreateDraft(readCreateDraftInput(form), state.store.settings);
+    const rawInput = readCreateDraftInput(form);
+    const draft = normalizeCreateDraft(rawInput, state.store.settings);
     state.store.ui.createDraft = draft;
-    const participants = parseParticipantLines(formData.get("participants"));
+    state.createValidationSubmitAttempted = true;
+    let validation = refreshCreateValidationUi(form, { announceSubmitFailure: true });
+    if (!validation?.valid) {
+      focusFirstCreateValidationIssue(form, validation);
+      return;
+    }
+
+    const participants = parseParticipantLines(rawInput.participantsText);
     const config = scopeCreateConfigToMode({
-      name: draft.name,
-      mode: draft.mode,
-      bestOfLegs: draft.bestOfLegs,
-      startScore: draft.startScore,
-      x01Preset: draft.x01Preset,
-      x01InMode: draft.x01InMode,
-      x01OutMode: draft.x01OutMode,
-      x01BullMode: draft.x01BullMode,
-      x01MaxRounds: draft.x01MaxRounds,
-      x01BullOffMode: draft.x01BullOffMode,
-      lobbyVisibility: "private",
-      boardCount: draft.boardCount,
-      randomizeKoRound1: draft.randomizeKoRound1,
-      enableThirdPlaceMatch: draft.enableThirdPlaceMatch,
-      grandFinalResetMode: draft.grandFinalResetMode,
-      groupsKoOddParticipantPolicy: draft.groupsKoOddParticipantPolicy,
-      groupsKoOddParticipantAcknowledged: draft.groupsKoOddParticipantAcknowledged,
-      preliminaryMatchesPerParticipant: draft.preliminaryMatchesPerParticipant,
-      preliminaryWinPoints: draft.preliminaryWinPoints,
-      preliminaryDrawPoints: draft.preliminaryDrawPoints,
-      preliminaryLossPoints: draft.preliminaryLossPoints,
-      finalStageType: draft.finalStageType,
-      finalStageQualifierCount: draft.finalStageQualifierCount,
-      finalStageBestOfLegs: draft.finalStageBestOfLegs,
+      ...validation.config,
       koDrawLocked: state.store.settings.featureFlags.koDrawLockDefault !== false,
       participants,
     });
 
     const result = createTournamentSession(config);
     if (!result.ok) {
-      setNotice("error", result.message || "Turnier konnte nicht erstellt werden.");
+      if (result.reasonCode || (Array.isArray(result.validationDetails) && result.validationDetails.length)) {
+        validation = mergeCreateValidationFailure(validation, result);
+        state.createValidationSnapshot = validation;
+        refreshCreateValidationUi(form, { snapshot: validation, announceSubmitFailure: true });
+        focusFirstCreateValidationIssue(form, validation);
+      } else {
+        setNotice("error", result.message || "Turnier konnte nicht erstellt werden.");
+      }
       return;
     }
     setNotice("success", "Turnier wurde erstellt.");

@@ -1068,6 +1068,268 @@
       }
     }
 
+    {
+      const previousTournament = state.store.tournament;
+      const previousDraft = cloneSerializable(state.store.ui?.createDraft);
+      const previousActiveTab = state.activeTab;
+      const previousStoredActiveTab = state.store.ui.activeTab;
+      const previousDrawerOpen = state.drawerOpen;
+      const previousExpanded = state.createGameRulesExpanded;
+      const previousHelpTopic = state.activeCreateHelpTopic;
+      const previousHelpTrigger = state.lastCreateHelpTriggerId;
+      const previousTouched = { ...(state.createValidationTouchedFields || {}) };
+      const previousRevealed = { ...(state.createValidationRevealedFields || {}) };
+      const previousSubmitAttempted = state.createValidationSubmitAttempted;
+      const previousSnapshot = state.createValidationSnapshot;
+      try {
+        state.store.tournament = null;
+        state.activeTab = "tournament";
+        state.store.ui.activeTab = "tournament";
+        state.drawerOpen = true;
+        state.createGameRulesExpanded = false;
+        resetCreateHelpState();
+        resetCreateValidationState();
+        state.store.ui.createDraft = createDefaultCreateDraft(state.store.settings);
+        renderShell();
+        const form = state.shadowRoot?.getElementById("ata-create-form");
+        if (!(form instanceof HTMLFormElement)) throw new Error("Release-6-Create-Formular fehlt.");
+        let submitButton = form.querySelector("button[type='submit']");
+        const name = form.querySelector("#ata-name");
+        const participants = form.querySelector("#ata-participants");
+        const initialOverviewText = normalizeText(form.querySelector("#ata-create-overview-summary")?.textContent || "");
+        const initialNameError = form.querySelector(`#${getCreateValidationErrorId("name")}`);
+        const initialParticipantError = form.querySelector(`#${getCreateValidationErrorId("participants")}`);
+        const initialNeutral = submitButton instanceof HTMLButtonElement
+          && submitButton.disabled
+          && submitButton.getAttribute("aria-disabled") === "true"
+          && initialOverviewText.includes("Noch nicht bereit")
+          && initialOverviewText.includes("Turniername")
+          && initialOverviewText.includes("KO erfordert 2-128 Teilnehmer")
+          && initialNameError instanceof HTMLElement
+          && initialNameError.hidden
+          && initialParticipantError instanceof HTMLElement
+          && initialParticipantError.hidden
+          && form.querySelector("[role='alert']") === null;
+        record(
+          "Create-UI Release 6: leerer Initialzustand ist neutral, konkret und nativ deaktiviert",
+          initialNeutral,
+          `disabled=${submitButton instanceof HTMLButtonElement && submitButton.disabled}, overview=${initialOverviewText.includes("Noch nicht bereit")}, errorsHidden=${initialNameError?.hidden && initialParticipantError?.hidden}`,
+        );
+
+        if (!(submitButton instanceof HTMLButtonElement)
+          || !(name instanceof HTMLInputElement)
+          || !(participants instanceof HTMLTextAreaElement)) {
+          throw new Error("Release-6-Pflichtcontrols fehlen.");
+        }
+        submitButton.disabled = false;
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        const invalidSubmitSummary = form.querySelector("#ata-create-error-summary");
+        const nameSubmitFocusOk = state.shadowRoot?.activeElement === name
+          && invalidSubmitSummary instanceof HTMLElement
+          && !invalidSubmitSummary.hidden
+          && invalidSubmitSummary.getAttribute("role") === "alert"
+          && name.getAttribute("aria-invalid") === "true";
+
+        name.value = "Release 6 Live";
+        name.dispatchEvent(new Event("input", { bubbles: true }));
+        participants.focus();
+        participants.value = "Ada\nBerta\nClara\nDora";
+        participants.dispatchEvent(new Event("input", { bubbles: true }));
+        submitButton = form.querySelector("button[type='submit']");
+        const readyOverviewText = normalizeText(form.querySelector("#ata-create-overview-summary")?.textContent || "");
+        const validLive = submitButton instanceof HTMLButtonElement
+          && !submitButton.disabled
+          && state.createValidationSnapshot?.valid === true
+          && readyOverviewText.includes("Bereit zum Anlegen")
+          && readyOverviewText.includes("3")
+          && state.shadowRoot?.activeElement === participants
+          && form.querySelector("#ata-create-error-summary")?.hidden;
+
+        const modeForLimits = form.querySelector("#ata-mode");
+        if (!(modeForLimits instanceof HTMLSelectElement)) throw new Error("Mode-Control fehlt.");
+        modeForLimits.focus();
+        modeForLimits.value = "preliminary_final";
+        modeForLimits.dispatchEvent(new Event("change", { bubbles: true }));
+        const modeSwitchInvalid = form.querySelector("button[type='submit']")?.disabled === true
+          && normalizeText(form.querySelector("#ata-create-participant-status")?.textContent || "").includes("5–16")
+          && state.shadowRoot?.activeElement === modeForLimits;
+        modeForLimits.value = "ko";
+        modeForLimits.dispatchEvent(new Event("change", { bubbles: true }));
+        const modeSwitchCorrected = form.querySelector("button[type='submit']")?.disabled === false
+          && state.shadowRoot?.activeElement === modeForLimits;
+
+        participants.focus();
+        participants.value = "Ada\nBerta\nClara\nADA";
+        participants.dispatchEvent(new Event("input", { bubbles: true }));
+        const participantError = form.querySelector(`#${getCreateValidationErrorId("participants")}`);
+        const duplicateBlocked = form.querySelector("button[type='submit']")?.disabled === true
+          && participants.getAttribute("aria-invalid") === "true"
+          && normalizeText(participants.getAttribute("aria-describedby") || "").split(" ").includes(getCreateValidationErrorId("participants"))
+          && participantError instanceof HTMLElement
+          && !participantError.hidden
+          && normalizeText(participantError.textContent).includes("Zeilen 1 und 4")
+          && state.shadowRoot?.activeElement === participants
+          && form.querySelector("[role='alert']") === null;
+        participants.value = "Ada\nBerta\nClara\nDora";
+        participants.dispatchEvent(new Event("input", { bubbles: true }));
+        const duplicateCorrected = form.querySelector("button[type='submit']")?.disabled === false
+          && participants.getAttribute("aria-invalid") === null;
+        record(
+          "Create-UI Release 6: Live-Übersicht, Duplikatblocker, Korrektur und Fokus bleiben synchron",
+          nameSubmitFocusOk && validLive && modeSwitchInvalid && modeSwitchCorrected && duplicateBlocked && duplicateCorrected,
+          `nameFocus=${nameSubmitFocusOk}, ready=${validLive}, modeSwitch=${modeSwitchInvalid}/${modeSwitchCorrected}, duplicate=${duplicateBlocked}, corrected=${duplicateCorrected}`,
+        );
+
+        const bestOf = form.querySelector("#ata-bestof");
+        if (!(bestOf instanceof HTMLInputElement)) throw new Error("Best-of-Control fehlt.");
+        bestOf.value = "4";
+        bestOf.dispatchEvent(new Event("change", { bubbles: true }));
+        state.createGameRulesExpanded = false;
+        setCreateGameRulesExpanded(form, false);
+        submitButton = form.querySelector("button[type='submit']");
+        if (!(submitButton instanceof HTMLButtonElement)) throw new Error("Submit-Control fehlt.");
+        submitButton.disabled = false;
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        const gameEditor = form.querySelector("#ata-game-rules-editor");
+        const rawBestOfBlocked = state.store.tournament === null
+          && state.createValidationSnapshot?.issues?.some((issue) => issue.reasonCode === "best_of_invalid")
+          && gameEditor instanceof HTMLElement
+          && !gameEditor.hidden
+          && state.shadowRoot?.activeElement === bestOf;
+        bestOf.value = "5";
+        bestOf.dispatchEvent(new Event("change", { bubbles: true }));
+
+        const boardHelp = form.querySelector(`#${getCreateHelpTriggerId("boardCount")}`);
+        const board = form.querySelector("#ata-board-count");
+        if (!(boardHelp instanceof HTMLButtonElement) || !(board instanceof HTMLInputElement)) throw new Error("Board-Controls fehlen.");
+        boardHelp.click();
+        board.value = "0";
+        board.dispatchEvent(new Event("change", { bubbles: true }));
+        const helpStayedOpenDuringValidation = Boolean(state.activeCreateHelpTopic)
+          && !form.querySelector(`#${CREATE_HELP_PANEL_ID}`)?.hidden
+          && form.querySelector("#ata-create-overview")?.hidden
+          && normalizeText(form.querySelector("#ata-create-overview-summary")?.textContent || "").includes("Noch nicht bereit");
+        submitButton = form.querySelector("button[type='submit']");
+        if (!(submitButton instanceof HTMLButtonElement)) throw new Error("Submit-Control fehlt nach Board-Änderung.");
+        submitButton.disabled = false;
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        const overviewFocusOk = !state.activeCreateHelpTopic
+          && form.querySelector(`#${CREATE_HELP_PANEL_ID}`)?.hidden
+          && !form.querySelector("#ata-create-overview")?.hidden
+          && state.shadowRoot?.activeElement === board;
+        record(
+          "Create-UI Release 6: autoritativer Submit öffnet Spielregeln und behandelt verdeckte Übersicht sicher",
+          rawBestOfBlocked && helpStayedOpenDuringValidation && overviewFocusOk,
+          `bestOf=${rawBestOfBlocked}, helpStable=${helpStayedOpenDuringValidation}, overview=${overviewFocusOk}, focus=${state.shadowRoot?.activeElement?.id || "-"}`,
+        );
+
+        board.value = "1";
+        board.dispatchEvent(new Event("change", { bubbles: true }));
+        const mode = form.querySelector("#ata-mode");
+        if (!(mode instanceof HTMLSelectElement)) throw new Error("Mode-Control fehlt.");
+        mode.value = "groups_ko";
+        mode.dispatchEvent(new Event("change", { bubbles: true }));
+        participants.value = "A\nB\nC\nD\nE\nF\nG";
+        participants.dispatchEvent(new Event("input", { bubbles: true }));
+        let groupPolicy = form.querySelector("#ata-groups-ko-odd-policy");
+        if (!(groupPolicy instanceof HTMLSelectElement)) throw new Error("Gruppenpolicy fehlt.");
+        groupPolicy.value = GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL;
+        groupPolicy.dispatchEvent(new Event("change", { bubbles: true }));
+        const acknowledgement = form.querySelector("#ata-groups-ko-odd-acknowledgement");
+        submitButton = form.querySelector("button[type='submit']");
+        if (!(acknowledgement instanceof HTMLInputElement) || !(submitButton instanceof HTMLButtonElement)) throw new Error("Gruppenbestätigung fehlt.");
+        submitButton.disabled = false;
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        const groupFocusOk = state.shadowRoot?.activeElement === acknowledgement
+          && acknowledgement.getAttribute("aria-invalid") === "true";
+        acknowledgement.checked = true;
+        acknowledgement.dispatchEvent(new Event("change", { bubbles: true }));
+        const groupCorrected = form.querySelector("button[type='submit']")?.disabled === false;
+        record(
+          "Create-UI Release 6: Gruppenbestätigung ist feldnah, fokussierbar und korrigierbar",
+          groupFocusOk && groupCorrected,
+          `focus=${groupFocusOk}, corrected=${groupCorrected}`,
+        );
+      } catch (error) {
+        record("Create-UI Release 6: Live-Validierung und Fokusfluss", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+        state.store.ui.createDraft = previousDraft || createDefaultCreateDraft(state.store.settings);
+        state.activeTab = previousActiveTab;
+        state.store.ui.activeTab = previousStoredActiveTab;
+        state.drawerOpen = previousDrawerOpen;
+        state.createGameRulesExpanded = previousExpanded;
+        state.activeCreateHelpTopic = previousHelpTopic;
+        state.lastCreateHelpTriggerId = previousHelpTrigger;
+        state.createValidationTouchedFields = previousTouched;
+        state.createValidationRevealedFields = previousRevealed;
+        state.createValidationSubmitAttempted = previousSubmitAttempted;
+        state.createValidationSnapshot = previousSnapshot;
+        renderShell();
+      }
+    }
+
+    {
+      const previousTournament = state.store.tournament;
+      const previousActiveTab = state.activeTab;
+      const previousStoredActiveTab = state.store.ui.activeTab;
+      try {
+        const creationResults = [
+          ["ko", 8, {}],
+          ["double_ko", 8, {}],
+          ["league", 6, {}],
+          ["groups_ko", 8, {}],
+          ["preliminary_final", 8, { finalStageQualifierCount: 4 }],
+        ].map(([mode, count, overrides]) => {
+          state.store.tournament = null;
+          const input = {
+            ...createDefaultCreateDraft(state.store.settings),
+            name: `Release 6 ${mode}`,
+            mode,
+            x01Preset: X01_PRESET_CUSTOM,
+            participantsText: Array.from({ length: count }, (_, index) => `${mode} ${index + 1}`).join("\n"),
+            tournamentTimeProfile: state.store.settings.tournamentTimeProfile,
+            ...overrides,
+          };
+          const validation = validateCreateConfiguration(input, state.store.settings);
+          const result = validation.valid
+            ? createTournamentSession({
+              ...validation.config,
+              participants: parseParticipantLines(input.participantsText),
+            })
+            : { ok: false };
+          return result.ok && result.tournament?.mode === mode;
+        });
+        state.store.tournament = null;
+        const duplicateConfig = {
+          ...createDefaultCreateDraft(state.store.settings),
+          name: "Duplicate Session",
+          mode: "ko",
+          x01Preset: X01_PRESET_CUSTOM,
+          participants: [
+            { id: "A", name: "Max" },
+            { id: "B", name: "MAX" },
+          ],
+        };
+        delete duplicateConfig.participantsText;
+        const duplicateSession = createTournamentSession(duplicateConfig);
+        record(
+          "Create-Session Release 6: alle fünf Modi nutzen zentrale Validation und Duplikate bleiben blockiert",
+          creationResults.every(Boolean)
+            && duplicateSession?.ok === false
+            && duplicateSession?.reasonCode === "participant_name_duplicate",
+          `modes=${creationResults.join("/")}, duplicate=${duplicateSession?.reasonCode || "-"}`,
+        );
+      } catch (error) {
+        record("Create-Session Release 6: zentrale Validation", false, String(error?.message || error));
+      } finally {
+        state.store.tournament = previousTournament;
+        state.activeTab = previousActiveTab;
+        state.store.ui.activeTab = previousStoredActiveTab;
+        renderShell();
+      }
+    }
+
     try {
       const tournament = createTournament({
         name: "PayloadMapping",

@@ -60,6 +60,13 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
   - der persistierte Draft behält inaktive modusspezifische Werte; DOM-Controls sind außerhalb ihres Modus verborgen und deaktiviert
   - `scopeCreateConfigToMode()` projiziert vor Validation und Domain-Factory ausschließlich die aktiven Zusatzregeln
   - `state.createGameRulesExpanded` ist flüchtiger UI-State und wird nicht im Storage-Schema persistiert
+- Zentrale Create-Validierung:
+  - `src/domain/create-validation.js` analysiert Teilnehmertext und rohe Formularwerte, führt bestehende Create-, Gruppen-, Vorrunden- und Dauerlogik zusammen und liefert geordnete Issues mit stabilen `reasonCode`, Feld- und Abschnittsbezügen
+  - Live-UI, Submit und `createTournamentSession()` verwenden dieselbe pure Ableitung; die Domain bleibt unabhängig von `window`, `document`, Rendering und Storage
+  - `src/ui/create-validation-state.js` hält berührte und bereits offengelegte Felder sowie den Submit-Versuch ausschließlich transient; das Storage-Schema bleibt unverändert
+  - `src/ui/render-create-validation.js` aktualisiert Inline-Meldungen, ARIA-Zustand, Teilnehmerstatus, Übersicht, Submit-Sperre und Fokusführung gezielt ohne Shell-Rerender
+  - Teilnehmer werden vor UUID-Erzeugung normalisiert analysiert. Leere Zeilen werden ignoriert; Duplikate und reservierte Platzhalter blockieren explizit und werden weder beim Mischen noch beim Submit still entfernt
+  - Zusätzliche stabile Codes für Release 6 sind `participant_name_duplicate`, `participant_name_reserved`, `participant_name_invalid`, `x01_preset_invalid`, `start_score_invalid`, `x01_in_mode_invalid`, `x01_out_mode_invalid`, `x01_bull_off_mode_invalid`, `x01_bull_mode_invalid`, `x01_max_rounds_invalid`, `board_count_invalid`, `tournament_time_profile_invalid`, `groups_ko_policy_invalid`, `grand_final_reset_mode_invalid` und `create_validation_unknown`; vorhandene Create-/Gruppen-/Vorrundencodes bleiben unverändert
 - Kontextbezogene Regelhilfe:
   - `src/ui/tournament-help-topics.js` enthält elf stabile Topic-IDs und reine Resolver für Auswahl, Auswirkungen, Beispiele, Tipps, Abhängigkeiten, Grenzen, Herkunft, Regelstatus und Quellen
   - Resolver normalisieren den Draft und verwenden bestehende pure Domain-Analysen für Limits, Gruppen, Vorrunde, Spielregeln und Zeitprognose; sie verändern weder Draft noch Domainzustand
@@ -81,7 +88,7 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
   - erwartete Legs pro Match aus `Best of`
   - X01-Setup (`Startscore`, `In`, `Out`, `Bull-off`, `Bull-Modus`, `Max Runden`)
   - globales Zeitprofil (`fast | normal | slow`)
-- Die UI rendert daraus einen Live-Block im Bereich `Turnierübersicht` des fünfstufig gegliederten Turnierformulars. Eine separate kompakte Spielregel-Zusammenfassung wird aus denselben Draft-Werten abgeleitet; der Inline-Editor ändert Draft, Preset-Status und Prognose ohne Shell-Rerender. Die Abschnittsstruktur bleibt reine Darstellung; bestehende Feld-IDs und Handler-Verträge tragen weiterhin Draft-, Preset- und Submit-Verhalten.
+- Die UI rendert daraus einen Live-Block im Bereich `Turnierübersicht` des fünfstufig gegliederten Turnierformulars. Die zentrale Create-Validation ergänzt dort Modus, Format, Teilnehmer, Spiele, Boards, Prognose und Status und kennzeichnet nicht belastbare Werte ausdrücklich. Eine separate kompakte Spielregel-Zusammenfassung wird aus denselben Draft-Werten abgeleitet; der Inline-Editor ändert Draft, Preset-Status, Validierung und Prognose ohne Shell-Rerender. Die Abschnittsstruktur bleibt reine Darstellung; bestehende Feld-IDs und Handler-Verträge tragen weiterhin Draft-, Preset- und Submit-Verhalten.
 - Bei `preliminary_final` werden Vorrunde und abhängige KO-/Doppel-KO-Finalphase als getrennte Tasks mit eigenen Leg-Erwartungen modelliert.
 - `src/ui/handlers.js` aktualisiert diesen Block gezielt bei jedem Formular-Input, ohne die gesamte Shell neu zu rendern.
 

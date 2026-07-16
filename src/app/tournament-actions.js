@@ -78,13 +78,13 @@
 
   function createTournamentSession(config) {
     const scopedConfig = scopeCreateConfigToMode(config);
-    const validationDetails = validateCreateConfigDetails(scopedConfig);
-    if (validationDetails.length) {
+    const validation = validateCreateConfiguration(scopedConfig, state.store?.settings);
+    if (!validation.valid) {
       return {
         ok: false,
-        reasonCode: validationDetails[0].reasonCode,
-        validationDetails,
-        message: validationDetails.map((entry) => entry.message).join(" "),
+        reasonCode: validation.issues[0].reasonCode,
+        validationDetails: validation.issues,
+        message: validation.issues.map((entry) => entry.message).join(" "),
       };
     }
 
@@ -94,6 +94,7 @@
     state.store.tournament = tournament;
     clearTransientMatchShortcutState();
     resetCreateHelpState();
+    resetCreateValidationState();
     state.activeTab = "matches";
     state.store.ui.activeTab = "matches";
     schedulePersist();
@@ -106,6 +107,7 @@
     state.store.tournament = null;
     clearTransientMatchShortcutState();
     resetCreateHelpState();
+    resetCreateValidationState();
     state.apiAutomation.startingMatchId = "";
     state.apiAutomation.authBackoffUntil = 0;
     state.activeTab = "tournament";
@@ -144,6 +146,7 @@
 
 
   function importTournamentPayload(rawObject) {
+    resetCreateValidationState();
     if (!rawObject || typeof rawObject !== "object") {
       return { ok: false, message: "JSON ist leer oder ungültig." };
     }
@@ -184,6 +187,7 @@
     state.store.tournament = normalizedTournament;
     clearTransientMatchShortcutState();
     resetCreateHelpState();
+    resetCreateValidationState();
     state.activeTab = "matches";
     state.store.ui.activeTab = "matches";
     schedulePersist();

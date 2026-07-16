@@ -2,7 +2,7 @@
 
 Lokales Turniermanagement direkt in `https://play.autodarts.io` als Userscript.
 
-Aktuelle Releaseversion: `0.10.0`.
+Aktuelle Releaseversion: `0.11.0`.
 
 [![Installieren](https://img.shields.io/badge/Installieren-Autodarts%20Tournament%20Assistant%20Loader-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js)
 
@@ -100,6 +100,8 @@ Nach Installation ist links im Hauptmenü der neue Eintrag sichtbar. Darüber ö
   - Zusatzregeln werden ausschließlich für den aktiven Modus angezeigt und sind in anderen Modi weder bedienbar noch Teil der erzeugten Create-Config
   - Kompakte Live-Zusammenfassung der wirksamen X01-Werte; `Spielregeln bearbeiten` öffnet den zugänglichen Inline-Editor
   - Kontextbezogene Fragezeichen-Hilfe mit nicht-modalem Panel, aktueller Auswahl, direkten Auswirkungen und themenspezifischen Quellen
+  - Zentrale Live-Validierung mit feldnahen Hinweisen, Teilnehmerstatus, barrierefreier Fokusführung und gesperrtem Submit bis zur gültigen Konfiguration
+  - Erweiterte Turnierübersicht für Modus, Format, Teilnehmer, Spiele, Boards, Prognose und offenen Validierungsstatus
   - Live-Prognose für die voraussichtliche Turnierzeit
   - Teilnehmerliste kann per Button gemischt werden
   - Formularentwurf bleibt erhalten (z. B. beim Moduswechsel)
@@ -207,7 +209,7 @@ Tab: `Turnier`
 
 ![Neues Turnier erstellen](assets/ss_Turnier_anlage-neu.png)
 
-Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten bis zum Anlegen. Auf breiten Ansichten steht die `Turnierübersicht` mit Boardzahl, Zeitprofil und Live-Prognose rechts neben dem Formular; bei geöffneter Regelhilfe wird sie an derselben Stelle durch das Hilfe-Panel ersetzt. Auf schmalen Ansichten folgen Übersicht oder Panel ohne horizontale Überbreite unter dem Formular. Die Preset-Karten stehen im Bereich `Turnierformat` und wenden eine bewusste Auswahl sofort an; einen separaten Apply-Button gibt es nicht mehr. `Zusätzliche Turnierregeln` zeigt nur die zum aktiven Modus gehörenden, bereits unterstützten Optionen. Inaktive Modusfelder bleiben für eine sichere Rückkehr im Draft erhalten, sind aber verborgen, deaktiviert und aus der Create-Config entfernt.
+Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten bis zum Anlegen. Auf breiten Ansichten steht die `Turnierübersicht` mit Modus, Format, Teilnehmerzahl, geplanter Spielanzahl, Boardzahl, Zeitprognose und aktuellem Validierungsstatus rechts neben dem Formular; bei geöffneter Regelhilfe wird sie an derselben Stelle durch das Hilfe-Panel ersetzt. Auf schmalen Ansichten folgen Übersicht oder Panel ohne horizontale Überbreite unter dem Formular. Die Preset-Karten stehen im Bereich `Turnierformat` und wenden eine bewusste Auswahl sofort an; einen separaten Apply-Button gibt es nicht mehr. `Zusätzliche Turnierregeln` zeigt nur die zum aktiven Modus gehörenden, bereits unterstützten Optionen. Inaktive Modusfelder bleiben für eine sichere Rückkehr im Draft erhalten, sind aber verborgen, deaktiviert und aus der Create-Config entfernt.
 
 `Spielregeln` zeigt standardmäßig eine kompakte Live-Zusammenfassung aus Preset-Herkunft, wirksamer Matchlänge, Startpunkten, In-/Out-Modus, Bull-off, gegebenenfalls Bull-Modus und Maximalrunden. `Spielregeln bearbeiten` öffnet diese vorhandenen X01-Felder als Inline-Bereich; beim Schließen aus einem Editorfeld kehrt der Fokus zum Button zurück. Für `preliminary_final` nennt die Zusammenfassung getrennt die festen zwei Vorrundenlegs und das eigene Best-of der Finalphase.
 
@@ -220,7 +222,16 @@ Die Turnieranlage führt in fünf klar getrennten Bereichen von den Grunddaten b
 - Teilnehmerzahl, Moduslimits, Seed-Wirkung, Gruppenverteilung, Vorrundenprofil, First-to, Bull-off/Bull-Modus, Grand-Final-Modus sowie Board-/Zeitprognose-Abhängigkeiten werden aus dem normalisierten Draft und vorhandener reiner Domain-Logik abgeleitet. Der Regelstatus ist bewusst keine pauschale Konformitätsbewertung des gesamten Turniers.
 - `Hilfe schließen` und `Escape` schließen nur das Panel, stellen die Turnierübersicht wieder her und geben den Fokus an den auslösenden `?`-Button zurück. Beim Schließen des Drawers, nach erfolgreicher Turnieranlage, beim Import und beim Turnier-Reset wird der flüchtige Hilfezustand verworfen.
 - Es gibt keinen globalen Hilfe-Schalter, keine Glühlampen und keine zusätzliche Regelarten-Legende im Formular.
-- Release 6 mit Live-Validierung und erweiterter Turnierübersicht ist noch nicht umgesetzt.
+
+### Live-Validierung und Anlagefreigabe
+
+- Name, Teilnehmer, Modusgrenzen, Zusatzregeln, X01-Rohwerte, Boardzahl und Zeitprofil werden aus einer gemeinsamen reinen Validierungslogik geprüft. Dieselbe Ableitung wird für Live-Anzeige, Submit und Session-Erzeugung verwendet.
+- Feldnahe Meldungen erscheinen nach Berührung des jeweiligen Felds oder nach einem Anlageversuch. Sie sind über `aria-describedby` mit dem Eingabefeld verbunden; ungültige Felder erhalten `aria-invalid="true"`.
+- Der Teilnehmerstatus zeigt erkannte Anzahl und erlaubte Modusgrenzen. Leere Zeilen werden ignoriert, doppelte Namen werden jedoch nicht still entfernt: Groß-/Kleinschreibung, Rand-/Mehrfachleerzeichen und diakritische Varianten werden für die Duplikatprüfung normalisiert und mit den betroffenen Zeilen gemeldet.
+- Reservierte Freilosbezeichnungen sind keine gültigen Teilnehmernamen. `Teilnehmer mischen` verändert nur die Reihenfolge der eingegebenen Zeilen und beseitigt keine Duplikate.
+- `Turnier anlegen` bleibt deaktiviert, solange ein Fehler offen ist. Beim Submit wird trotzdem noch einmal autoritativ validiert; bei einem Problem erscheint eine Zusammenfassung und der Fokus springt zum ersten relevanten Feld. Ein dafür geschlossener Spielregel-Editor wird geöffnet, ein störendes Hilfe-Panel geschlossen.
+- Die Live-Prüfung verhindert technisch ungültige oder widersprüchliche Konfigurationen. Sie ersetzt keine Prüfung externer DRA-, PDC-, WDF- oder Veranstalterregeln und behauptet keine Gesamt-Konformität des Turniers.
+- Der abschließende umfassende Accessibility-, Responsive- und Altcode-Cleanup-Audit gehört weiterhin zu Release 7 und ist nicht Teil von Version `0.11.0`.
 
 ### Pflichtfelder
 - Turniername

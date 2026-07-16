@@ -129,25 +129,95 @@
   }
 
 
-  function parseParticipantLines(rawLines) {
-    const lines = String(rawLines || "").split(/\r?\n/);
-    const seen = new Set();
-    const participants = [];
+  function analyzeCreateParticipantEntries(rawEntries) {
+    const source = Array.isArray(rawEntries) ? rawEntries : [];
+    const lines = source.map((entry) => String(entry?.rawLine ?? entry?.name ?? entry ?? ""));
+    const nonEmptyEntries = [];
+    const invalidEntries = [];
+    const groupsByLookupKey = new Map();
 
-    lines.forEach((line) => {
-      const name = normalizeText(line);
-      if (!name) {
+    source.forEach((entry, index) => {
+      const originalLine = String(entry?.rawLine ?? entry?.name ?? entry ?? "");
+      const normalizedName = normalizeText(originalLine);
+      if (!normalizedName) {
         return;
       }
-      const key = normalizeLookup(name);
-      if (seen.has(key)) {
+      const lookupKey = normalizeLookup(normalizedName);
+      const analyzedEntry = {
+        originalLine,
+        normalizedName,
+        lookupKey,
+        lineNumber: Number.isInteger(entry?.lineNumber) ? entry.lineNumber : index + 1,
+        sourceIndex: Number.isInteger(entry?.sourceIndex) ? entry.sourceIndex : index,
+      };
+      nonEmptyEntries.push(analyzedEntry);
+
+      if (!lookupKey) {
+        invalidEntries.push({
+          ...analyzedEntry,
+          reasonCode: "participant_name_invalid",
+          message: `Der Eintrag in Zeile ${analyzedEntry.lineNumber} ergibt keinen gültigen Teilnehmernamen.`,
+        });
         return;
       }
-      seen.add(key);
-      participants.push({ id: uuid("p"), name });
+      const placeholderToken = normalizeToken(normalizedName);
+      if (placeholderToken && BYE_PLACEHOLDER_TOKENS.has(placeholderToken)) {
+        invalidEntries.push({
+          ...analyzedEntry,
+          reasonCode: "participant_name_reserved",
+          message: `„${normalizedName}“ in Zeile ${analyzedEntry.lineNumber} ist als Freilos-Platzhalter reserviert.`,
+        });
+        return;
+      }
+      if (!groupsByLookupKey.has(lookupKey)) {
+        groupsByLookupKey.set(lookupKey, []);
+      }
+      groupsByLookupKey.get(lookupKey).push(analyzedEntry);
     });
 
-    return participants;
+    const uniqueEntries = [];
+    const duplicateGroups = [];
+    groupsByLookupKey.forEach((entries, lookupKey) => {
+      uniqueEntries.push(entries[0]);
+      if (entries.length > 1) {
+        duplicateGroups.push({
+          lookupKey,
+          displayName: entries[0].normalizedName,
+          entries: entries.slice(),
+          lineNumbers: entries.map((entry) => entry.lineNumber),
+        });
+      }
+    });
+    uniqueEntries.sort((left, right) => left.sourceIndex - right.sourceIndex);
+    duplicateGroups.sort((left, right) => left.entries[0].sourceIndex - right.entries[0].sourceIndex);
+
+    return {
+      lines,
+      nonEmptyEntries,
+      uniqueEntries,
+      participantCount: uniqueEntries.length,
+      duplicateGroups,
+      invalidEntries,
+    };
+  }
+
+
+  function analyzeCreateParticipantInput(rawText) {
+    const lines = String(rawText || "").split(/\r?\n/);
+    return analyzeCreateParticipantEntries(lines.map((rawLine, index) => ({
+      rawLine,
+      lineNumber: index + 1,
+      sourceIndex: index,
+    })));
+  }
+
+
+  function parseParticipantLines(rawLines) {
+    const analysis = analyzeCreateParticipantInput(rawLines);
+    return analysis.uniqueEntries.map((entry) => ({
+      id: uuid("p"),
+      name: entry.normalizedName,
+    }));
   }
 
 

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.11.0
+- Eine zentrale pure Create-Validation prüft Live-UI, Submit und Session-Erzeugung identisch. Bestehende Domain-Reason-Codes bleiben erhalten und werden um stabile Codes für Teilnehmernamen, Rohwerte, Boardzahl, Zeitprofil, Preset und Grand-Final-Regel ergänzt.
+- Die Teilnehmeranalyse meldet erkannte Anzahl und Modusgrenzen, ignoriert nur leere Zeilen und blockiert normalisierte Duplikate mit Zeilenbezug sowie reservierte Freilosnamen. Mischen verändert die Reihenfolge, entfernt aber keine Eingaben mehr still.
+- Feldnahe Fehlermeldungen erscheinen nach Feldberührung oder Submit, sind per `aria-describedby` verknüpft und setzen `aria-invalid`. Der neutrale Erstzustand erzeugt weder vorzeitige Feldfehler noch eine Alert-Ankündigung.
+- Die Turnierübersicht zeigt Modus, Format, Teilnehmer, berechenbare Spielanzahl, Boards, Zeitprognose und offene Punkte. Prognose und Spielanzahl verwenden vorhandene Domainlogik; nicht belastbare Werte werden ausdrücklich als noch nicht berechenbar angezeigt.
+- `Turnier anlegen` ist nur bei einer vollständigen gültigen Konfiguration aktiv. Ein manipulierter oder inzwischen veralteter UI-Zustand wird beim Submit erneut geprüft; die Fehlerzusammenfassung wird angekündigt und der Fokus führt zum ersten Problem, öffnet bei Bedarf den Spielregel-Editor oder schließt das Hilfe-Panel für Übersichtsfelder.
+- Die Live-Prüfung deckt alle fünf Modi einschließlich Gruppenpolicy/-bestätigung und vollständigem Vorrundenprofil ab. Eine Zweiergruppe bleibt als Warnung sichtbar, externe Regelkonformität wird nicht pauschal behauptet.
+- Domain-Tests decken Teilnehmernormalisierung, alle Modusgrenzen, Rohwerte, Gruppen-/Vorrundenfälle und Matchanzahlen ab. Runtime- und DOM-Contracts prüfen Live-Zustände, Submit-Sperre, ARIA, Fokusführung und zentrale Session-Validierung. Storage-Schema 5 bleibt unverändert.
+
 ## 0.10.0
 - Alle elf Hilfethemen der Turnieranlage lösen aktuelle Auswahl, direkte Auswirkungen, Beispiele, Tipps, Abhängigkeiten, Grenzen, Herkunft, Regelstatus und Quellen aus dem normalisierten Draft auf. Bestehende pure Domain-Logik liefert Moduslimits, First-to, Gruppen-/Vorrundenanalyse, Spielregelzusammenfassung und Zeitprognose.
 - Teilnehmer- und Draw-Hilfe erklärt erkannte Anzahl, Modusgrenzen, Setz-/Open-Draw-Wirkung und Freilose. Modusspezifische Hilfe reagiert auf Platz-3-Spiel, Grand-Final-Regel, gerade/ungerade Gruppen samt Bestätigung sowie das vollständige Vorrunden-/Finalphasenprofil.
