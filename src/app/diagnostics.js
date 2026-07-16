@@ -1271,6 +1271,232 @@
 
     {
       const previousTournament = state.store.tournament;
+      const previousDraft = cloneSerializable(state.store.ui?.createDraft);
+      const previousActiveTab = state.activeTab;
+      const previousStoredActiveTab = state.store.ui.activeTab;
+      const previousDrawerOpen = state.drawerOpen;
+      const previousExpanded = state.createGameRulesExpanded;
+      const previousHelpTopic = state.activeCreateHelpTopic;
+      const previousHelpTrigger = state.lastCreateHelpTriggerId;
+      const previousTouched = { ...(state.createValidationTouchedFields || {}) };
+      const previousRevealed = { ...(state.createValidationRevealedFields || {}) };
+      const previousSubmitAttempted = state.createValidationSubmitAttempted;
+      const previousSnapshot = state.createValidationSnapshot;
+      const previousLastFocused = state.lastFocused;
+      const previousNotice = { ...(state.notice || {}) };
+      let externalTrigger = null;
+      try {
+        state.store.tournament = null;
+        state.store.ui.createDraft = createDefaultCreateDraft(state.store.settings);
+        state.activeTab = "tournament";
+        state.store.ui.activeTab = "tournament";
+        state.drawerOpen = true;
+        state.createGameRulesExpanded = false;
+        resetCreateHelpState();
+        resetCreateValidationState();
+        state.notice.type = "info";
+        state.notice.message = "";
+        renderShell({ preserveFocus: false, preserveScroll: false });
+
+        let drawer = state.shadowRoot?.querySelector(".ata-drawer");
+        let nav = state.shadowRoot?.querySelector("nav.ata-tabs");
+        let currentNav = nav?.querySelectorAll("[aria-current='page']") || [];
+        const navSemanticsOk = nav instanceof HTMLElement
+          && nav.getAttribute("aria-label") === "Assistant-Bereiche"
+          && currentNav.length === 1
+          && currentNav[0].getAttribute("data-tab") === "tournament"
+          && nav.querySelector("[role='tab'], [role='tablist']") === null;
+        const settingsTab = nav?.querySelector("[data-tab='settings']");
+        if (!(settingsTab instanceof HTMLButtonElement)) throw new Error("Settings-Navigation fehlt.");
+        settingsTab.focus();
+        settingsTab.click();
+        nav = state.shadowRoot?.querySelector("nav.ata-tabs");
+        const restoredSettingsTab = nav?.querySelector("[data-tab='settings']");
+        const navFocusOk = restoredSettingsTab instanceof HTMLButtonElement
+          && restoredSettingsTab.getAttribute("aria-current") === "page"
+          && state.shadowRoot?.activeElement === restoredSettingsTab;
+        record(
+          "Accessibility Release 7: Navigation nutzt aktuelle Seite und erhält Fokus beim Re-Render",
+          navSemanticsOk && navFocusOk,
+          `semantics=${navSemanticsOk}, focus=${navFocusOk}`,
+        );
+
+        const debugCheckbox = state.shadowRoot?.getElementById("ata-setting-debug");
+        if (!(debugCheckbox instanceof HTMLInputElement)) throw new Error("Debug-Schalter fehlt.");
+        debugCheckbox.focus();
+        renderShell();
+        const restoredDebugCheckbox = state.shadowRoot?.getElementById("ata-setting-debug");
+        const settingsLabelOk = restoredDebugCheckbox instanceof HTMLInputElement
+          && restoredDebugCheckbox.getAttribute("aria-labelledby") === "ata-setting-debug-label"
+          && restoredDebugCheckbox.getAttribute("aria-describedby") === "ata-setting-debug-description"
+          && state.shadowRoot?.activeElement === restoredDebugCheckbox;
+
+        const tournamentTab = state.shadowRoot?.querySelector("[data-tab='tournament']");
+        if (!(tournamentTab instanceof HTMLButtonElement)) throw new Error("Turnier-Navigation fehlt.");
+        tournamentTab.focus();
+        tournamentTab.click();
+        let form = state.shadowRoot?.getElementById("ata-create-form");
+        if (!(form instanceof HTMLFormElement)) throw new Error("Release-7-Create-Formular fehlt.");
+        const controls = Array.from(form.querySelectorAll("input:not([type='hidden']), select, textarea"))
+          .filter((control) => !control.closest("[hidden]"));
+        const controlsNamed = controls.every((control) => (
+          (control.labels?.length || 0) > 0
+          || Boolean(normalizeText(control.getAttribute("aria-label") || ""))
+          || Boolean(normalizeText(control.getAttribute("aria-labelledby") || ""))
+        ));
+        const ids = Array.from(state.shadowRoot.querySelectorAll("[id]")).map((element) => element.id);
+        const liveRegions = Array.from(form.querySelectorAll("[aria-live]"));
+        const semanticControlsOk = settingsLabelOk
+          && controlsNamed
+          && ids.length === new Set(ids).size
+          && liveRegions.length === 1
+          && liveRegions[0].id === "ata-create-participant-status"
+          && liveRegions[0].getAttribute("aria-atomic") === "true"
+          && form.querySelector("[role='alert']") === null;
+        record(
+          "Accessibility Release 7: Formfelder sind benannt, IDs eindeutig und Live-Regionen sparsam",
+          semanticControlsOk,
+          `settings=${settingsLabelOk}, named=${controlsNamed}, ids=${ids.length}/${new Set(ids).size}, live=${liveRegions.length}`,
+        );
+
+        const participants = form.querySelector("#ata-participants");
+        const content = state.shadowRoot?.querySelector(".ata-content");
+        if (!(participants instanceof HTMLTextAreaElement) || !(content instanceof HTMLElement)) {
+          throw new Error("Fokus-/Scroll-Testfelder fehlen.");
+        }
+        participants.value = "Ada\nBerta\nClara\nDora";
+        participants.dispatchEvent(new Event("input", { bubbles: true }));
+        participants.focus();
+        participants.setSelectionRange(1, 3);
+        content.scrollTop = 120;
+        renderShell();
+        const restoredParticipants = state.shadowRoot?.getElementById("ata-participants");
+        const restoredContent = state.shadowRoot?.querySelector(".ata-content");
+        const rerenderFocusOk = restoredParticipants instanceof HTMLTextAreaElement
+          && state.shadowRoot?.activeElement === restoredParticipants
+          && restoredParticipants.selectionStart === 1
+          && restoredParticipants.selectionEnd === 3
+          && restoredContent?.scrollTop === 120;
+        record(
+          "Accessibility Release 7: Fokus, Textauswahl und Scrollposition überleben Shell-Re-Render",
+          rerenderFocusOk,
+          `focus=${state.shadowRoot?.activeElement?.id || "-"}, selection=${restoredParticipants?.selectionStart || 0}-${restoredParticipants?.selectionEnd || 0}, scroll=${restoredContent?.scrollTop || 0}`,
+        );
+
+        drawer = state.shadowRoot?.querySelector(".ata-drawer");
+        if (!(drawer instanceof HTMLElement)) throw new Error("Drawer fehlt.");
+        const hiddenEditor = state.shadowRoot?.getElementById("ata-game-rules-editor");
+        let focusables = getDrawerFocusableElements(drawer);
+        const hiddenControlsExcluded = hiddenEditor instanceof HTMLElement
+          && hiddenEditor.hidden
+          && !focusables.some((element) => hiddenEditor.contains(element));
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const focusBoundaryIdentity = (element) => [
+          element?.id || "",
+          element?.getAttribute?.("data-action") || "",
+          element?.getAttribute?.("data-tab") || "",
+          element?.getAttribute?.("name") || "",
+        ].join("|");
+        last?.focus();
+        handleDrawerKeydown({ key: "Tab", shiftKey: false, preventDefault() {}, stopPropagation() {} });
+        const forwardWrapped = focusBoundaryIdentity(state.shadowRoot?.activeElement) === focusBoundaryIdentity(first);
+        first?.focus();
+        handleDrawerKeydown({ key: "Tab", shiftKey: true, preventDefault() {}, stopPropagation() {} });
+        const backwardWrapped = focusBoundaryIdentity(state.shadowRoot?.activeElement) === focusBoundaryIdentity(last);
+        record(
+          "Accessibility Release 7: Fokusfalle umfasst nur sichtbare Controls und schließt in beide Richtungen",
+          hiddenControlsExcluded && forwardWrapped && backwardWrapped,
+          `hidden=${hiddenControlsExcluded}, forward=${forwardWrapped}, backward=${backwardWrapped}, count=${focusables.length}, first=${first?.id || first?.getAttribute("data-action") || "-"}, last=${last?.id || last?.getAttribute("data-action") || "-"}, active=${state.shadowRoot?.activeElement?.id || state.shadowRoot?.activeElement?.getAttribute?.("data-action") || "-"}`,
+        );
+
+        externalTrigger = document.createElement("button");
+        externalTrigger.type = "button";
+        externalTrigger.textContent = "Release-7-Testtrigger";
+        document.body.appendChild(externalTrigger);
+        closeDrawer();
+        externalTrigger.focus();
+        openDrawer();
+        const initialFocusOk = state.shadowRoot?.activeElement?.classList?.contains("ata-close-btn") === true;
+        form = state.shadowRoot?.getElementById("ata-create-form");
+        const modeHelp = form?.querySelector(`#${getCreateHelpTriggerId("tournamentMode")}`);
+        const gameRulesToggle = form?.querySelector("#ata-game-rules-editor-toggle");
+        if (
+          !(form instanceof HTMLFormElement)
+          || !(modeHelp instanceof HTMLButtonElement)
+          || !(gameRulesToggle instanceof HTMLButtonElement)
+        ) {
+          throw new Error("Kontexthilfe für Escape-Test fehlt.");
+        }
+        gameRulesToggle.click();
+        modeHelp.click();
+        const helpTitle = form.querySelector("#ata-create-help-title");
+        helpTitle?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+        const gameRulesEditor = form.querySelector("#ata-game-rules-editor");
+        const helpEscapedFirst = state.drawerOpen
+          && !state.activeCreateHelpTopic
+          && state.shadowRoot?.activeElement === modeHelp
+          && state.createGameRulesExpanded === true
+          && gameRulesEditor instanceof HTMLElement
+          && !gameRulesEditor.hidden;
+        modeHelp.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+        const drawerEscapedSecond = !state.drawerOpen && document.activeElement === externalTrigger;
+
+        externalTrigger.focus();
+        openDrawer();
+        externalTrigger.remove();
+        closeDrawer();
+        const removedTriggerFallbackOk = document.activeElement === state.host;
+        externalTrigger = null;
+        record(
+          "Accessibility Release 7: Öffnen, Escape-Priorität und Fokus-Rückgabe sind robust",
+          initialFocusOk && helpEscapedFirst && drawerEscapedSecond && removedTriggerFallbackOk,
+          `initial=${initialFocusOk}, helpFirst=${helpEscapedFirst}, drawerSecond=${drawerEscapedSecond}, fallback=${removedTriggerFallbackOk}`,
+        );
+
+        state.drawerOpen = true;
+        state.notice.type = "error";
+        state.notice.message = "Release-7-Fehler";
+        renderShell({ preserveFocus: false });
+        const errorNotice = state.shadowRoot?.querySelector(".ata-notice-error");
+        state.notice.type = "success";
+        state.notice.message = "Release-7-Erfolg";
+        renderShell({ preserveFocus: false });
+        const successNotice = state.shadowRoot?.querySelector(".ata-notice-success");
+        const noticeSemanticsOk = errorNotice?.getAttribute("role") === "alert"
+          && errorNotice?.getAttribute("aria-live") === "assertive"
+          && successNotice?.getAttribute("role") === "status"
+          && successNotice?.getAttribute("aria-live") === "polite";
+        record(
+          "Accessibility Release 7: globale Hinweise und Fehler nutzen passende Live-Semantik",
+          noticeSemanticsOk,
+          `error=${errorNotice?.getAttribute("role") || "-"}, success=${successNotice?.getAttribute("role") || "-"}`,
+        );
+      } catch (error) {
+        record("Accessibility Release 7: Drawer- und Formularvertrag", false, String(error?.message || error));
+      } finally {
+        externalTrigger?.remove();
+        state.store.tournament = previousTournament;
+        state.store.ui.createDraft = previousDraft || createDefaultCreateDraft(state.store.settings);
+        state.activeTab = previousActiveTab;
+        state.store.ui.activeTab = previousStoredActiveTab;
+        state.drawerOpen = previousDrawerOpen;
+        state.createGameRulesExpanded = previousExpanded;
+        state.activeCreateHelpTopic = previousHelpTopic;
+        state.lastCreateHelpTriggerId = previousHelpTrigger;
+        state.createValidationTouchedFields = previousTouched;
+        state.createValidationRevealedFields = previousRevealed;
+        state.createValidationSubmitAttempted = previousSubmitAttempted;
+        state.createValidationSnapshot = previousSnapshot;
+        state.lastFocused = previousLastFocused;
+        state.notice.type = previousNotice.type || "info";
+        state.notice.message = previousNotice.message || "";
+        renderShell({ preserveFocus: false, preserveScroll: false });
+      }
+    }
+
+    {
+      const previousTournament = state.store.tournament;
       const previousActiveTab = state.activeTab;
       const previousStoredActiveTab = state.store.ui.activeTab;
       try {

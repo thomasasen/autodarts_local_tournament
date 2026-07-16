@@ -221,7 +221,7 @@
         if (!qualification.ok) {
           const currentOrder = qualification.rows.map((row) => row.id);
           html += `<p><strong>Playoff/Veranstalterentscheidung erforderlich:</strong> ${escapeHtml(qualification.message)}</p>
-            <div class="ata-table-wrap"><table class="ata-table"><thead><tr><th>Reihenfolge</th><th>Teilnehmer</th></tr></thead><tbody>${qualification.rows.map((row, index) => `<tr><td><input type="number" min="1" max="${qualification.rows.length}" value="${index + 1}" data-field="qualification-order" data-participant-id="${escapeHtml(row.id)}"></td><td>${escapeHtml(row.name)}</td></tr>`).join("")}</tbody></table></div>
+            <div class="ata-table-wrap"><table class="ata-table"><thead><tr><th>Reihenfolge</th><th>Teilnehmer</th></tr></thead><tbody>${qualification.rows.map((row, index) => `<tr><td><input type="number" min="1" max="${qualification.rows.length}" value="${index + 1}" data-field="qualification-order" data-participant-id="${escapeHtml(row.id)}" aria-label="Reihenfolge für ${escapeHtml(row.name)}"></td><td>${escapeHtml(row.name)}</td></tr>`).join("")}</tbody></table></div>
             <div class="ata-field"><label for="ata-qualification-reason">Begr\u00fcndung der Veranstalterentscheidung</label><input id="ata-qualification-reason" type="text" placeholder="z. B. ausgespieltes Entscheidungsleg"></div>
             <button type="button" class="ata-btn" data-action="save-qualification-resolution">Reihenfolge best\u00e4tigen</button>`;
         } else if (!getMatchesByStage(tournament, MATCH_STAGE_KO).length) {

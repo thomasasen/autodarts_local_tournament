@@ -78,4 +78,11 @@
 - Bei vollständigem Deadlock wird keine automatische Entscheidung getroffen.
 - Der Systemstatus ist `playoff_required` und erfordert eine manuelle Turnierentscheidung.
 - `PDC World Championship` wird nicht als offizielles Preset behauptet, weil das reale Format `Sets` benötigt und die AutoDarts-/ATA-Integration hier nur `Legs / First to N` abbilden kann.
-- MultiBoard ist nicht Bestandteil von Version `0.10.0`. Die Board-Anzahl ist ausschließlich ein Kapazitätsparameter der Zeitprognose; Board-Zuweisung, parallele Lobbyverwaltung und mehrere gleichzeitig gestartete Matches bleiben außerhalb des Scopes.
+- MultiBoard ist nicht Bestandteil von Version `0.12.0`. Die Board-Anzahl ist ausschließlich ein Kapazitätsparameter der Zeitprognose; Board-Zuweisung, parallele Lobbyverwaltung und mehrere gleichzeitig gestartete Matches bleiben außerhalb des Scopes.
+
+## Accessibility-Abschluss in Release 7
+
+- Die Regel- und Compliance-Aussagen sind über echte Buttons/Links, sichtbaren Fokus, vollständige Drawer-Tastaturführung und programmatische Formularbeschriftungen erreichbar.
+- Hilfe-Escape wird vor Drawer-Escape behandelt; Fokus kehrt zum auslösenden Hilfebutton beziehungsweise beim Drawer-Schließen zum ursprünglichen Seitenauslöser zurück.
+- Live-Regionen kündigen nur veränderliche Teilnehmer- und globale Statusinformationen sowie echte Fehler an. Statische Regelzusammenfassungen werden nicht mehrfach vorgelesen.
+- Diese Änderungen verbessern ausschließlich Bedienbarkeit und Wahrnehmbarkeit. Sie automatisieren keine Veranstalterentscheidung, erweitern kein offizielles Format und ändern keine DRA-/PDC-Compliance-Einstufung.

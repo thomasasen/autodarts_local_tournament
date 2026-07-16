@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.12.0
+- Der Assistant-Drawer besitzt einen vollständigen Fokuslebenszyklus: definierter Initialfokus, sichtbare-Controls-Fokusfalle in beide Richtungen, Hilfe-vor-Drawer-Escape, offen bleibender Spielregel-Editor beim Schließen der Hilfe sowie sichere Rückgabe an den Auslöser oder den Assistant-Host, falls der Auslöser entfernt wurde.
+- Shell-Re-Render erhalten den aktiven Tab beziehungsweise das aktive Control, Textauswahl und relevante Scrollpositionen. Die native Navigation bleibt ein `nav`-Landmark mit genau einem `aria-current="page"`; es werden bewusst keine unvollständigen Tab-ARIA-Rollen simuliert.
+- Alle sichtbaren Formularfelder und Schalter haben programmatisch zugeordnete Namen und Beschreibungen. Das gilt nun auch für KO-/Platz-3- und Einstellungs-Checkboxen, Fixed-Leg-Auswahl sowie Veranstalter-Reihenfolgen. Match-Sortierung verwendet zusätzlich `aria-pressed`.
+- Live-Ankündigungen sind auf einen atomaren Teilnehmerstatus, globale Statusmeldungen und echte Fehler-Alerts begrenzt. Statische Spielregel-/Übersichtstexte und Submit-Hinweise werden nicht mehrfach als Live-Region angekündigt; der Submit verweist stattdessen per `aria-describedby` auf seinen Status.
+- Einheitliche `:focus-visible`-Darstellung, Forced-Colors-Fallback, globale Reduced-Motion-Abschaltung, mindestens 24-px-Ziele sowie 44-px-Ziele bei grober Zeigereingabe wurden ergänzt. Lange Namen, Pills, Matchkarten und die 320-px-Turnierübersicht brechen ohne unbeabsichtigten horizontalen Overflow um.
+- Tote CSS-Klassen wurden entfernt. Die neue Edge-Viewport-Matrix prüft Anlage, Spielregel-Editor, Hilfe, Validation, aktives Turnier, Matches, Turnierbaum, Import/Export und Einstellungen bei zwölf Größen von `1920 × 1080` bis `320 × 800`, `800 × 360`, niedrigen Desktop-Höhen und einem `200 %`-Reflow-Äquivalent; Grobzeiger-Emulation prüft 44-px-Touchziele.
+- Runtime-/DOM-Contracts umfassen jetzt 73 Selftests für Navigation, Labels, eindeutige IDs, Live-Regionen, Re-Render-Fokus, Fokusgrenzen, Escape-Priorität, entfernte Trigger und Notice-Semantik. Turnierlogik, Storage-Schema 5 und DRA-/PDC-Compliance-Status bleiben unverändert.
+
 ## 0.11.0
 - Eine zentrale pure Create-Validation prüft Live-UI, Submit und Session-Erzeugung identisch. Bestehende Domain-Reason-Codes bleiben erhalten und werden um stabile Codes für Teilnehmernamen, Rohwerte, Boardzahl, Zeitprofil, Preset und Grand-Final-Regel ergänzt.
 - Die Teilnehmeranalyse meldet erkannte Anzahl und Modusgrenzen, ignoriert nur leere Zeilen und blockiert normalisierte Duplikate mit Zeilenbezug sowie reservierte Freilosnamen. Mischen verändert die Reihenfolge, entfernt aber keine Eingaben mehr still.

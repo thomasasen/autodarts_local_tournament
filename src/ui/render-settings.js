@@ -138,10 +138,10 @@
         ])}
         <div class="ata-toggle">
           <div>
-            <strong>Debug-Mode</strong>
-            <div class="ata-small">Aktiviert detaillierte Logs in der Browser-Konsole sowie ein persistiertes Matchstart-Debug-Protokoll ohne Auth-Token.</div>
+            <strong id="ata-setting-debug-label">Debug-Mode</strong>
+            <div id="ata-setting-debug-description" class="ata-small">Aktiviert detaillierte Logs in der Browser-Konsole sowie ein persistiertes Matchstart-Debug-Protokoll ohne Auth-Token.</div>
           </div>
-          <input type="checkbox" id="ata-setting-debug" data-action="toggle-debug" ${debugEnabled}>
+          <input type="checkbox" id="ata-setting-debug" data-action="toggle-debug" aria-labelledby="ata-setting-debug-label" aria-describedby="ata-setting-debug-description" ${debugEnabled}>
         </div>
         <div class="ata-actions ata-debug-actions">
           <button type="button" class="ata-btn ata-btn-sm" data-action="copy-matchstart-debug" ${debugActionDisabledAttr}>Matchstart-Debug kopieren</button>
@@ -153,24 +153,24 @@
           : `<p class="ata-small">Noch keine Matchstart-Debugdaten vorhanden. Debug-Mode aktivieren, Match testen und das Protokoll danach hier kopieren.</p>`}
         <div class="ata-toggle">
           <div>
-            <strong>Automatischer Lobby-Start + API-Sync ${apiSyncHelpLinks}</strong>
-            <div class="ata-small">Standard: AUS. Aktiviert Matchstart per Klick und automatische Ergebnis\u00fcbernahme aus der Autodarts-API.</div>
+            <strong><span id="ata-setting-autolobby-label">Automatischer Lobby-Start + API-Sync</span> ${apiSyncHelpLinks}</strong>
+            <div id="ata-setting-autolobby-description" class="ata-small">Standard: AUS. Aktiviert Matchstart per Klick und automatische Ergebnis\u00fcbernahme aus der Autodarts-API.</div>
           </div>
-          <input type="checkbox" id="ata-setting-autolobby" data-action="toggle-autolobby" ${autoLobbyEnabled}>
+          <input type="checkbox" id="ata-setting-autolobby" data-action="toggle-autolobby" aria-labelledby="ata-setting-autolobby-label" aria-describedby="ata-setting-autolobby-description" ${autoLobbyEnabled}>
         </div>
         <div class="ata-toggle">
           <div>
-            <strong>KO-Erstrunde zuf\u00e4llig mischen (Standard) ${koDrawHelpLinks}</strong>
-            <div class="ata-small">Standard: EIN. Neue KO-Turniere nutzen damit Open Draw. Freilose werden anhand des gespeicherten Seed-Placements deterministisch verteilt.</div>
+            <strong><span id="ata-setting-randomize-ko-label">KO-Erstrunde zuf\u00e4llig mischen (Standard)</span> ${koDrawHelpLinks}</strong>
+            <div id="ata-setting-randomize-ko-description" class="ata-small">Standard: EIN. Neue KO-Turniere nutzen damit Open Draw. Freilose werden anhand des gespeicherten Seed-Placements deterministisch verteilt.</div>
           </div>
-          <input type="checkbox" id="ata-setting-randomize-ko" data-action="toggle-randomize-ko" ${randomizeKoEnabled}>
+          <input type="checkbox" id="ata-setting-randomize-ko" data-action="toggle-randomize-ko" aria-labelledby="ata-setting-randomize-ko-label" aria-describedby="ata-setting-randomize-ko-description" ${randomizeKoEnabled}>
         </div>
         <div class="ata-toggle">
           <div>
-            <strong>KO-Draw sperren (Standard) ${koDrawLockHelpLinks}</strong>
-            <div class="ata-small">Standard: EIN. Neue KO-Turniere behalten den initialen Draw unver\u00e4ndert.</div>
+            <strong><span id="ata-setting-ko-draw-lock-default-label">KO-Draw sperren (Standard)</span> ${koDrawLockHelpLinks}</strong>
+            <div id="ata-setting-ko-draw-lock-default-description" class="ata-small">Standard: EIN. Neue KO-Turniere behalten den initialen Draw unver\u00e4ndert.</div>
           </div>
-          <input type="checkbox" id="ata-setting-ko-draw-lock-default" data-action="toggle-ko-draw-lock-default" ${koDrawLockDefaultEnabled}>
+          <input type="checkbox" id="ata-setting-ko-draw-lock-default" data-action="toggle-ko-draw-lock-default" aria-labelledby="ata-setting-ko-draw-lock-default-label" aria-describedby="ata-setting-ko-draw-lock-default-description" ${koDrawLockDefaultEnabled}>
         </div>
       </section>
       <section class="ata-card tournamentCard">
@@ -187,10 +187,10 @@
         ])}
         <div class="ata-toggle">
           <div>
-            <strong>Draw unver\u00e4nderlich halten</strong>
-            <div class="ata-small">Wenn aktiv, bleibt die KO-Struktur dieses Turniers bestehen und wird nicht automatisch neu ausgelost.</div>
+            <strong id="ata-setting-ko-draw-locked-label">Draw unver\u00e4nderlich halten</strong>
+            <div id="ata-setting-ko-draw-locked-description" class="ata-small">Wenn aktiv, bleibt die KO-Struktur dieses Turniers bestehen und wird nicht automatisch neu ausgelost.</div>
           </div>
-          <input type="checkbox" id="ata-setting-ko-draw-locked" data-action="set-ko-draw-locked" ${activeKoDrawLocked} ${activeKoDrawLockDisabledAttr}>
+          <input type="checkbox" id="ata-setting-ko-draw-locked" data-action="set-ko-draw-locked" aria-labelledby="ata-setting-ko-draw-locked-label" aria-describedby="ata-setting-ko-draw-locked-description" ${activeKoDrawLocked} ${activeKoDrawLockDisabledAttr}>
         </div>
         <p class="ata-small">Nur f\u00fcr den Modus KO (Straight Knockout) verf\u00fcgbar. Entsperren erfordert einen expliziten Promoter-Override mit Best\u00e4tigung (DRA 6.12.1).</p>
       </section>

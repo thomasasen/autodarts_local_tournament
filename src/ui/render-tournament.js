@@ -251,8 +251,8 @@
               <label for="ata-participants">Teilnehmer (eine Zeile pro Person)</label>
               ${renderCreateHelpTrigger("participants", "Hilfe zur Teilnehmerliste öffnen")}
             </div>
-            <textarea id="ata-participants" name="participants" placeholder="Max Mustermann&#10;Erika Musterfrau">${escapeHtml(draft.participantsText)}</textarea>
-            <p id="ata-create-participant-status" class="ata-create-participant-status" data-validation-state="${participantStatus.state}" role="status" aria-live="polite">${escapeHtml(participantStatus.text)}</p>
+            <textarea id="ata-participants" name="participants" aria-describedby="ata-create-participant-status" placeholder="Max Mustermann&#10;Erika Musterfrau">${escapeHtml(draft.participantsText)}</textarea>
+            <p id="ata-create-participant-status" class="ata-create-participant-status" data-validation-state="${participantStatus.state}" role="status" aria-live="polite" aria-atomic="true">${escapeHtml(participantStatus.text)}</p>
             ${renderCreateFieldValidation("participants")}
           </div>
           <div class="ata-create-section-actions">
@@ -279,22 +279,22 @@
           <div class="ata-toggle ata-toggle-compact" data-role="ko-draw-field" data-mode-rule-group="ko_draw">
             <div>
               <div class="ata-field-label-row">
-                <strong>KO-Erstrunde zuf\u00e4llig mischen</strong>
+                <strong id="ata-randomize-ko-label">KO-Erstrunde zuf\u00e4llig mischen</strong>
                 ${renderCreateHelpTrigger("koDraw", "Hilfe zur Auslosung der ersten KO-Runde öffnen")}
               </div>
-              <div class="ata-small">Open Draw bei aktivem Schalter, sonst gesetzter Draw.</div>
+              <div id="ata-randomize-ko-description" class="ata-small">Open Draw bei aktivem Schalter, sonst gesetzter Draw.</div>
             </div>
-            <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" ${randomizeChecked}>
+            <input id="ata-randomize-ko" name="randomizeKoRound1" type="checkbox" aria-labelledby="ata-randomize-ko-label" aria-describedby="ata-randomize-ko-description" ${randomizeChecked}>
           </div>
           <div class="ata-toggle ata-toggle-compact" data-role="third-place-field" data-mode-rule-group="third_place">
             <div>
               <div class="ata-field-label-row">
-                <strong>Spiel um Platz 3 (optional)</strong>
+                <strong id="ata-enable-third-place-label">Spiel um Platz 3 (optional)</strong>
                 ${renderCreateHelpTrigger("thirdPlace", "Hilfe zum Spiel um Platz 3 öffnen")}
               </div>
-              <div class="ata-small">Nur im KO-Modus: Halbfinal-Verlierer spielen um Platz 3. Ohne Option bleibt klassischer Single-Elimination-Baum.</div>
+              <div id="ata-enable-third-place-description" class="ata-small">Nur im KO-Modus: Halbfinal-Verlierer spielen um Platz 3. Ohne Option bleibt klassischer Single-Elimination-Baum.</div>
             </div>
-            <input id="ata-enable-third-place" name="enableThirdPlaceMatch" type="checkbox" ${thirdPlaceChecked}>
+            <input id="ata-enable-third-place" name="enableThirdPlaceMatch" type="checkbox" aria-labelledby="ata-enable-third-place-label" aria-describedby="ata-enable-third-place-description" ${thirdPlaceChecked}>
           </div>
           <div class="ata-field" data-role="grand-final-field" data-mode-rule-group="grand_final">
             <div class="ata-field-label-row">
@@ -333,7 +333,7 @@
           renderCreateHelpTrigger("gameRules", "Hilfe zu Spielregeln und X01 öffnen"),
         )}
         <div class="ata-create-section-body">
-          <div class="ata-game-rules-summary" data-role="game-rules-summary" aria-live="polite">
+          <div class="ata-game-rules-summary" data-role="game-rules-summary">
             <p class="ata-game-rules-origin" data-role="game-rules-preset-origin"><strong>Format:</strong> ${escapeHtml(summary.presetLabel)}</p>
             <p class="ata-game-rules-summary-text" data-role="game-rules-summary-text">${escapeHtml(summary.text)}</p>
           </div>
@@ -440,7 +440,7 @@
       <aside id="ata-create-overview" class="ata-create-overview" data-create-section="overview" aria-labelledby="ata-create-overview-heading" ${helpActive ? "hidden" : ""}>
         ${renderCreateFormSectionHeading(5, "Turnierübersicht", "Zeitbedarf prüfen und das Turnier anlegen.", "ata-create-overview-heading")}
         <div class="ata-create-overview-body">
-          <div id="ata-create-overview-summary" class="ata-create-overview-summary" data-validation-state="${validationSnapshot.valid ? "valid" : "invalid"}" role="status" aria-live="polite">
+          <div id="ata-create-overview-summary" class="ata-create-overview-summary" data-validation-state="${validationSnapshot.valid ? "valid" : "invalid"}">
             ${renderCreateValidationOverview(validationSnapshot)}
           </div>
           <div class="ata-grid-2 ata-create-overview-controls">
@@ -464,9 +464,9 @@
           <div id="ata-create-duration-estimate">${renderTournamentDurationEstimate(durationEstimate, { visible: durationEstimateVisible, showHelpLinks: false })}</div>
           <p class="ata-small">Modus-Limits: ${escapeHtml(modeLimitSummary)}.</p>
           <div class="ata-actions ata-create-primary-actions">
-            <button type="submit" class="ata-btn ata-btn-primary" ${validationSnapshot.valid ? "" : "disabled"} aria-disabled="${validationSnapshot.valid ? "false" : "true"}">Turnier anlegen</button>
+            <button type="submit" class="ata-btn ata-btn-primary" ${validationSnapshot.valid ? "" : "disabled"} aria-disabled="${validationSnapshot.valid ? "false" : "true"}" aria-describedby="ata-create-submit-status">Turnier anlegen</button>
           </div>
-          <p id="ata-create-submit-status" class="ata-create-submit-status" data-validation-state="${validationSnapshot.valid ? "valid" : "invalid"}" role="status" aria-live="polite">${validationSnapshot.valid ? "Alle Pflichtangaben sind gültig." : `${validationSnapshot.issues.length} ${validationSnapshot.issues.length === 1 ? "Punkt" : "Punkte"} offen: ${escapeHtml(validationSnapshot.issues[0]?.message || "Konfiguration prüfen.")}`}</p>
+          <p id="ata-create-submit-status" class="ata-create-submit-status" data-validation-state="${validationSnapshot.valid ? "valid" : "invalid"}">${validationSnapshot.valid ? "Alle Pflichtangaben sind gültig." : `${validationSnapshot.issues.length} ${validationSnapshot.issues.length === 1 ? "Punkt" : "Punkte"} offen: ${escapeHtml(validationSnapshot.issues[0]?.message || "Konfiguration prüfen.")}`}</p>
         </div>
       </aside>
     `;

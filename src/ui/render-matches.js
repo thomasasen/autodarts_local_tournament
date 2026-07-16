@@ -163,7 +163,10 @@
       const fixedWinnerForLeg = (legIndex) => fixedEntries.find((entry) => entry.legIndex === legIndex)?.winnerId || "";
       const fixedEditorHtml = editable && isFixedPreliminary
         ? `<div class="ata-match-editor"><div class="ata-grid-2">
-            ${[1, 2].map((legIndex) => `<div class="ata-field"><label>Leg ${legIndex} gewonnen von</label><select data-field="fixed-leg-${legIndex}" data-match-id="${escapeHtml(match.id)}"><option value="">Noch offen</option><option value="${escapeHtml(match.player1Id)}" ${fixedWinnerForLeg(legIndex) === match.player1Id ? "selected" : ""}>${escapeHtml(player1)}</option><option value="${escapeHtml(match.player2Id)}" ${fixedWinnerForLeg(legIndex) === match.player2Id ? "selected" : ""}>${escapeHtml(player2)}</option></select></div>`).join("")}
+            ${[1, 2].map((legIndex) => {
+              const selectId = `ata-fixed-leg-${match.id}-${legIndex}`;
+              return `<div class="ata-field"><label for="${escapeHtml(selectId)}">Leg ${legIndex} gewonnen von</label><select id="${escapeHtml(selectId)}" data-field="fixed-leg-${legIndex}" data-match-id="${escapeHtml(match.id)}"><option value="">Noch offen</option><option value="${escapeHtml(match.player1Id)}" ${fixedWinnerForLeg(legIndex) === match.player1Id ? "selected" : ""}>${escapeHtml(player1)}</option><option value="${escapeHtml(match.player2Id)}" ${fixedWinnerForLeg(legIndex) === match.player2Id ? "selected" : ""}>${escapeHtml(player2)}</option></select></div>`;
+            }).join("")}
           </div><div class="ata-editor-actions"><button type="button" class="ata-btn" data-action="save-fixed-match" data-match-id="${escapeHtml(match.id)}">Leg-Stand speichern</button><button type="button" class="ata-btn ata-btn-primary" disabled title="API-Start gesperrt: keine exakte Fixed-2-Legs-Abbildung.">Manuell erfassen</button></div></div>`
         : "";
       const regularEditorHtml = editable && !isFixedPreliminary
@@ -252,7 +255,7 @@
       ? `<p class="ata-small ata-next-hint">Hinweis: Die Markierung "Nächstes Match" zeigt die empfohlene nächste Paarung (PDC: Next Match) ${nextMatchHelpLinks}.</p>`
       : "";
     const sortButtonsHtml = sortOptions.map((option) => `
-      <button type="button" class="ata-segmented-btn" data-action="set-matches-sort" data-sort-mode="${option.id}" data-active="${sortMode === option.id ? "1" : "0"}">${escapeHtml(option.label)}</button>
+      <button type="button" class="ata-segmented-btn" data-action="set-matches-sort" data-sort-mode="${option.id}" data-active="${sortMode === option.id ? "1" : "0"}" aria-pressed="${sortMode === option.id ? "true" : "false"}">${escapeHtml(option.label)}</button>
     `).join("");
 
     return `

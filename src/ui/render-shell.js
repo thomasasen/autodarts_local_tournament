@@ -5,16 +5,17 @@
 
   function buildShellHtml() {
     const tabs = TAB_META.map((tab) => `
-      <button type="button" class="ata-tab" data-tab="${tab.id}" data-active="${state.activeTab === tab.id ? "1" : "0"}">
+      <button type="button" class="ata-tab" data-tab="${tab.id}" data-active="${state.activeTab === tab.id ? "1" : "0"}" ${state.activeTab === tab.id ? "aria-current=\"page\"" : ""}>
         ${escapeHtml(tab.label)}
       </button>
     `).join("");
 
-    const noticeHtml = state.notice.message
-      ? renderDocLinkableMessage(state.notice.message, {
-        tagName: "div",
-        className: `ata-notice ata-notice-${state.notice.type}`,
-      })
+    const noticeRole = state.notice.type === "error" ? "alert" : "status";
+    const noticeContent = state.notice.message
+      ? renderDocLinkableMessage(state.notice.message, { className: "ata-notice-copy" })
+      : "";
+    const noticeHtml = noticeContent
+      ? `<div class="ata-notice ata-notice-${state.notice.type}" role="${noticeRole}" aria-live="${state.notice.type === "error" ? "assertive" : "polite"}" aria-atomic="true">${noticeContent}</div>`
       : "";
     const runtimeStatusHtml = renderRuntimeStatusBar();
 
@@ -30,7 +31,7 @@
             </div>
             <button type="button" class="ata-close-btn" data-action="close-drawer" aria-label="Schlie\u00dfen">Schlie\u00dfen</button>
           </header>
-          <nav class="ata-tabs">${tabs}</nav>
+          <nav class="ata-tabs" aria-label="Assistant-Bereiche">${tabs}</nav>
           ${runtimeStatusHtml}
           <main class="ata-content" data-role="content">${noticeHtml}${renderActiveTab()}</main>
         </aside>

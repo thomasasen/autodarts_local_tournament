@@ -87,6 +87,11 @@ const RUNTIME_API_CONTRACT = Object.freeze({
       "@media (max-width: 1250px)",
       "@media (max-width: 600px)",
       "@media (max-width: 480px)",
+      ".ata-drawer :where(a[href], button, input, select, textarea, [tabindex]):focus-visible",
+      "animation: none !important",
+      "scroll-behavior: auto !important",
+      "min-height: 44px",
+      "overflow-wrap: anywhere",
     ]),
   }),
 });

@@ -148,7 +148,9 @@
     const participantStatus = renderCreateParticipantStatus(snapshot);
     const participantStatusHost = form.querySelector("#ata-create-participant-status");
     if (participantStatusHost instanceof HTMLElement) {
-      participantStatusHost.textContent = participantStatus.text;
+      if (participantStatusHost.textContent !== participantStatus.text) {
+        participantStatusHost.textContent = participantStatus.text;
+      }
       participantStatusHost.setAttribute("data-validation-state", participantStatus.state);
     }
 

@@ -2,11 +2,57 @@
 
 ## Umsetzungsstatus
 
-- Aktueller Release: Release 6 – Live-Validierung und Turnierübersicht
-- Zielversion: `0.11.0`
+- Aktueller Release: Release 7 – Accessibility, Responsive Finish und Abschluss
+- Zielversion: `0.12.0`
 - Status: `ABGESCHLOSSEN`
 - Begonnen: 2026-07-16 CEST
-- Zuletzt aktualisiert: 2026-07-16 13:18 CEST
+- Abgeschlossen: 2026-07-16 14:12 CEST
+- Gesamtstatus nach Release 7: `ABGESCHLOSSEN`
+
+### Fortschritt Release 7
+
+- [x] Ausgangscommit `0bbc3648d869293616c7665bfeb03887158d9df1` und sauberer Release-6-Abschluss geprüft
+- [x] Baseline mit 194 Domain-Tests, 67 Runtime-Selftests und vollständigem QA bestätigt
+- [x] Drawer-/Modal-Fokusführung und Escape-Priorität vollständig auditiert
+- [x] Fokusfalle auf sichtbare, aktivierbare Controls begrenzt
+- [x] Initialfokus und sichere Fokus-Rückgabe einschließlich entferntem Trigger umgesetzt
+- [x] Fokus, Textauswahl und Scrollposition bei Shell-Re-Render erhalten
+- [x] Native Navigation als Landmark mit `aria-current="page"` umgesetzt; keine halb implementierten Tabs
+- [x] Formularbeschriftungen, Checkbox-Namen, Fixed-Leg-Labels und Qualifikationsfelder vervollständigt
+- [x] Live-Regionen auf Teilnehmerstatus, globale Statushinweise und echte Fehler-Alerts reduziert
+- [x] Sichtbare Fokusdarstellung einschließlich Forced-Colors-Fallback vereinheitlicht
+- [x] `prefers-reduced-motion` für sämtliche Animationen und Übergänge respektiert
+- [x] Touch-Ziele auf mindestens 24 px und bei grober Zeigereingabe auf 44 px gehärtet
+- [x] Lange Namen, Status-Pills, Matchkarten und schmale Drawer-Breiten gegen Overflow gehärtet
+- [x] Tote CSS-Klassen `.ata-pill` und `.ata-pill-open-slot` entfernt
+- [x] Accessibility- und Runtime-Contract-Tests erweitert
+- [x] Zwischenstand: 194 Domain-Tests und 73 browsergestützte Runtime-Selftests erfolgreich
+- [x] Automatisierte Viewport-Matrix einschließlich 200-%-Reflow-Äquivalent erfolgreich
+- [x] Physische Tastatur-/Screenreader-Prüfgrenze transparent dokumentiert
+- [x] Altcode-, tote Selektor-, Debug- und TODO-Suche abschließend geprüft
+- [x] README, Architektur, Codebase-Map, Changelog und Compliance-Dokumente synchronisiert
+- [x] Version auf `0.12.0` gesetzt und Distribution ausschließlich per Build erzeugt
+- [x] Finaler Screenshot bei `1366 × 768` aktualisiert und visuell geprüft
+- [x] Vollständiges `scripts/qa.ps1` erfolgreich
+- [x] Gesamtdiff gegen Ausgangscommit geprüft
+- [x] Release 7 und Gesamtprojekt ehrlich abgeschlossen
+
+### Arbeitsprotokoll Release 7
+
+| Zeitpunkt | Status | Arbeitsergebnis | Prüfung |
+|---|---|---|---|
+| 2026-07-16 13:28 CEST | IN ARBEIT | Verbindlichen Ausgangscommit `0bbc3648d869293616c7665bfeb03887158d9df1`, Release-6-Stand `0.11.0`, Repository-Anweisungen, Release-7-Startprompt, vollständigen UX-Plan, Architektur, Dokumentation und Regelquellen geprüft. | Sauberer Arbeitsbaum; unveränderte Baseline erfolgreich: 194 Domain-Tests, 67 Edge-Runtime-Selftests und gesamtes QA. DRA-PDF-Seiten zu Freilosen, Draw, Reihenfolge, Übung und Tie-Break gegen die Compliance-Dokumente verifiziert; keine Regeländerung erforderlich. |
+| 2026-07-16 13:52 CEST | IN ARBEIT | Zentralen Fokus-/Scroll-Lebenszyklus, robuste Fokusfalle und Rückgabe, Navigation-Semantik, vollständige Control-Beschriftungen, sparsame Live-Regionen, sichtbaren Fokus, Reduced Motion, Touch-Ziele, Overflow-Härtung und CSS-Bereinigung umgesetzt. | Zwischenbuild erfolgreich; 194 Domain-Tests und 73 Edge-Runtime-Selftests einschließlich Fokusgrenzen, Hilfe-vor-Drawer-Escape, offen bleibendem Spielregel-Editor, entferntem Trigger, Re-Render-Fokus, eindeutigen IDs und Live-Region-Vertrag erfolgreich. |
+| 2026-07-16 14:12 CEST | ABGESCHLOSSEN | Release 7 als `0.12.0` finalisiert; automatisierte Viewport-Matrix, zusätzliche Accessibility-Verträge, Dokumentation, Compliance-Hinweise, generierte Distribution und finalen Screenshot ergänzt. Altcode-, Selektor-, Debug- und TODO-Audit sowie Gesamtdiff gegen `0bbc3648d869293616c7665bfeb03887158d9df1` geprüft; keine verdeckten Release-8-Arbeiten begonnen. | Gesamtes QA erfolgreich: Architektur-, Encoding- und Regelcheck, 194 Domain-Tests, 73 Edge-Runtime-Selftests, zwölf Viewports mit zwölf simulierten Grobzeiger-Kontexten sowie Build-Disziplin. Alle zwölf Ansichten einschließlich `683 × 384` als 200-%-Reflow-Äquivalent visuell geprüft; Screenshot `1366 × 768` kontrolliert; `git diff --check` ohne Fehler. |
+
+### Prüfgrenze Release 7
+
+- Bereits automatisiert im echten Microsoft-Edge-Headless-Browser geprüft: Initialfokus, Vorwärts-/Rückwärts-Fokusfalle, Ausschluss versteckter Controls, Hilfe-vor-Drawer-Escape, offener Spielregel-Editor nach Hilfe-Escape, Fokus-Rückgabe und Host-Fallback, Navigationsfokus nach Re-Render, Formularnamen, eindeutige IDs und sparsame Live-Regionen.
+- Die vollständige Matrix wurde bei `1920 × 1080`, `1366 × 768`, `1024 × 768`, `768 × 1024`, `800 × 360`, `430 × 932`, `390 × 844`, `360 × 800`, `320 × 800`, `1024 × 600`, `1366 × 600` und `683 × 384` geprüft. Alle neun UI-Stufen blieben ohne horizontalen Dokument-, Drawer-, Content-, Karten- oder Formular-Overflow, doppelte IDs und unbenannte sichtbare Controls; in zwölf simulierten Grobzeiger-Kontexten erfüllten die wesentlichen Ziele 44 px.
+- Die Ansichten wurden zusätzlich visuell kontrolliert; der finale `1366 × 768`-Screenshot liegt versioniert vor. Dokumentation, Altcode-Suche, Gesamtdiff und finales QA sind abgeschlossen.
+- Ein authentifizierter Live-Account, physische Eingabegeräte und ein realer Screenreader stehen in der lokalen Automationsumgebung nicht zur Verfügung. Diese Grenze wird nicht als manuell ausgeführte Prüfung ausgegeben; native Semantik, Tastaturereignisse, Focus-Management, Forced Colors und Reduced Motion werden stattdessen browsergestützt und vertraglich abgesichert.
+
+### Historie Release 6
 
 ### Fortschritt Release 6
 

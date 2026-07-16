@@ -10,6 +10,8 @@
       throw new Error("ATA host element not available.");
     }
     state.host = host;
+    host.tabIndex = -1;
+    host.setAttribute("aria-label", "Autodarts Tournament Assistant");
 
     if (!host.shadowRoot) {
       host.attachShadow({ mode: "open" });
@@ -18,17 +20,167 @@
   }
 
 
-  function renderShell() {
+  function isElementAvailableForFocus(element) {
+    if (!(element instanceof HTMLElement) || !element.isConnected) {
+      return false;
+    }
+    if (element.hasAttribute("disabled") || element.getAttribute("aria-hidden") === "true") {
+      return false;
+    }
+    if (element.closest("[hidden], [aria-hidden='true']")) {
+      return false;
+    }
+    const style = typeof window.getComputedStyle === "function" ? window.getComputedStyle(element) : null;
+    return !style || (style.display !== "none" && style.visibility !== "hidden");
+  }
+
+
+  function focusElementWithoutScrolling(element) {
+    if (!isElementAvailableForFocus(element)) {
+      return false;
+    }
+    try {
+      element.focus({ preventScroll: true });
+    } catch (_error) {
+      element.focus();
+    }
+    return true;
+  }
+
+
+  function getDrawerFocusableElements(drawer) {
+    if (!(drawer instanceof HTMLElement)) {
+      return [];
+    }
+    return Array.from(drawer.querySelectorAll(
+      "a[href], button, input:not([type='hidden']), select, textarea, [tabindex]:not([tabindex='-1'])",
+    )).filter((element) => isElementAvailableForFocus(element));
+  }
+
+
+  function createShellFocusSnapshot() {
+    const shadow = state.shadowRoot;
+    const activeElement = shadow?.activeElement;
+    if (!(activeElement instanceof HTMLElement) || !shadow.contains(activeElement)) {
+      return null;
+    }
+    const attributes = {};
+    [
+      "name",
+      "type",
+      "value",
+      "data-tab",
+      "data-action",
+      "data-field",
+      "data-match-id",
+      "data-sort-mode",
+      "data-participant-id",
+      "data-create-help-topic",
+      "data-role",
+    ].forEach((name) => {
+      if (activeElement.hasAttribute(name)) {
+        attributes[name] = activeElement.getAttribute(name);
+      }
+    });
+    const sameTag = Array.from(shadow.querySelectorAll(activeElement.tagName.toLowerCase()));
+    const snapshot = {
+      id: activeElement.id || "",
+      tagName: activeElement.tagName,
+      attributes,
+      ordinal: sameTag.indexOf(activeElement),
+      selectionStart: null,
+      selectionEnd: null,
+    };
+    try {
+      snapshot.selectionStart = activeElement.selectionStart;
+      snapshot.selectionEnd = activeElement.selectionEnd;
+    } catch (_error) {
+      // Selection APIs are not available for every input type.
+    }
+    return snapshot;
+  }
+
+
+  function findShellFocusTarget(snapshot) {
+    const shadow = state.shadowRoot;
+    if (!shadow || !snapshot) {
+      return null;
+    }
+    if (snapshot.id) {
+      const byId = shadow.getElementById(snapshot.id);
+      if (isElementAvailableForFocus(byId)) {
+        return byId;
+      }
+    }
+    const candidates = Array.from(shadow.querySelectorAll(snapshot.tagName.toLowerCase()));
+    const exact = candidates.find((candidate) => Object.entries(snapshot.attributes).every(
+      ([name, value]) => candidate.getAttribute(name) === value,
+    ));
+    if (isElementAvailableForFocus(exact)) {
+      return exact;
+    }
+    const ordinal = candidates[snapshot.ordinal];
+    return isElementAvailableForFocus(ordinal) ? ordinal : null;
+  }
+
+
+  function captureShellScrollPositions() {
+    const shadow = state.shadowRoot;
+    if (!shadow) return [];
+    return [".ata-content", ".ata-tabs", ".ata-table-wrap", ".ata-bracket-frame"].flatMap((selector) => (
+      Array.from(shadow.querySelectorAll(selector)).map((element, index) => ({
+        selector,
+        index,
+        scrollTop: element.scrollTop,
+        scrollLeft: element.scrollLeft,
+      }))
+    ));
+  }
+
+
+  function restoreShellScrollPositions(positions) {
+    const shadow = state.shadowRoot;
+    if (!shadow || !Array.isArray(positions)) return;
+    positions.forEach((position) => {
+      const element = shadow.querySelectorAll(position.selector)[position.index];
+      if (element instanceof HTMLElement) {
+        element.scrollTop = position.scrollTop;
+        element.scrollLeft = position.scrollLeft;
+      }
+    });
+  }
+
+
+  function renderShell(options = {}) {
     if (!state.shadowRoot) {
       return;
     }
 
+    const preserveFocus = options.preserveFocus !== false && state.drawerOpen;
+    const preserveScroll = options.preserveScroll !== false && state.drawerOpen;
+    const focusSnapshot = preserveFocus ? createShellFocusSnapshot() : null;
+    const scrollPositions = preserveScroll ? captureShellScrollPositions() : [];
     state.shadowRoot.innerHTML = buildShellHtml();
     bindUiHandlers();
     syncLoaderMenuUpdateIndicator();
     if (state.activeTab === "view") {
       queueBracketRender();
       syncBracketFallbackVisibility();
+    }
+    restoreShellScrollPositions(scrollPositions);
+    const focusTarget = findShellFocusTarget(focusSnapshot);
+    if (focusElementWithoutScrolling(focusTarget)) {
+      try {
+        if (
+          Number.isInteger(focusSnapshot.selectionStart)
+          && Number.isInteger(focusSnapshot.selectionEnd)
+          && typeof focusTarget.setSelectionRange === "function"
+        ) {
+          focusTarget.setSelectionRange(focusSnapshot.selectionStart, focusSnapshot.selectionEnd);
+        }
+      } catch (_error) {
+        // Selection restoration is best-effort for text controls.
+      }
     }
   }
 
@@ -543,10 +695,10 @@
   function handleDrawerKeydown(event) {
     if (event.key === "Escape") {
       event.preventDefault();
+      event.stopPropagation();
       if (state.activeCreateHelpTopic) {
         const createForm = state.shadowRoot?.getElementById("ata-create-form");
         if (createForm instanceof HTMLFormElement) {
-          event.stopPropagation();
           closeCreateHelpPanel(createForm, { returnFocus: true });
           return;
         }
@@ -564,11 +716,11 @@
       return;
     }
 
-    const focusables = Array.from(drawer.querySelectorAll(
-      "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
-    )).filter((element) => !element.hasAttribute("disabled"));
+    const focusables = getDrawerFocusableElements(drawer);
 
     if (!focusables.length) {
+      event.preventDefault();
+      focusElementWithoutScrolling(drawer);
       return;
     }
 
@@ -576,38 +728,60 @@
     const last = focusables[focusables.length - 1];
     const current = drawer.getRootNode().activeElement;
 
+    if (!focusables.includes(current)) {
+      event.preventDefault();
+      focusElementWithoutScrolling(event.shiftKey ? last : first);
+      return;
+    }
+
     if (event.shiftKey && current === first) {
       event.preventDefault();
-      last.focus();
+      focusElementWithoutScrolling(last);
       return;
     }
 
     if (!event.shiftKey && current === last) {
       event.preventDefault();
-      first.focus();
+      focusElementWithoutScrolling(first);
     }
   }
 
 
   function openDrawer() {
-    state.lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    state.drawerOpen = true;
-    renderShell();
-    const firstInteractive = state.shadowRoot?.querySelector(".ata-drawer button, .ata-drawer input, .ata-drawer select, .ata-drawer textarea");
-    if (firstInteractive instanceof HTMLElement) {
-      firstInteractive.focus();
+    if (state.drawerOpen) {
+      const drawer = state.shadowRoot?.querySelector(".ata-drawer");
+      const activeElement = state.shadowRoot?.activeElement;
+      if (!(activeElement instanceof HTMLElement) || !drawer?.contains(activeElement)) {
+        const closeButton = state.shadowRoot?.querySelector(".ata-close-btn");
+        if (!focusElementWithoutScrolling(closeButton)) focusElementWithoutScrolling(drawer);
+      }
+      return;
     }
+    const activeElement = document.activeElement;
+    state.lastFocused = activeElement instanceof HTMLElement && activeElement !== state.host
+      ? activeElement
+      : null;
+    state.drawerOpen = true;
+    renderShell({ preserveFocus: false, preserveScroll: false });
+    const closeButton = state.shadowRoot?.querySelector(".ata-close-btn");
+    const drawer = state.shadowRoot?.querySelector(".ata-drawer");
+    if (!focusElementWithoutScrolling(closeButton)) focusElementWithoutScrolling(drawer);
   }
 
 
   function closeDrawer() {
+    if (!state.drawerOpen) {
+      return;
+    }
+    const returnFocusTarget = state.lastFocused;
+    state.lastFocused = null;
     state.drawerOpen = false;
     state.createGameRulesExpanded = false;
     resetCreateHelpState();
     resetCreateValidationState();
-    renderShell();
-    if (state.lastFocused instanceof HTMLElement) {
-      state.lastFocused.focus();
+    renderShell({ preserveFocus: false, preserveScroll: false });
+    if (!focusElementWithoutScrolling(returnFocusTarget)) {
+      focusElementWithoutScrolling(state.host);
     }
   }
 

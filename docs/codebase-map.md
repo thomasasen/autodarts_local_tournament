@@ -50,10 +50,14 @@ autodarts_local_tournament/
 |  |  |- normalization.js
 |  |  `- migration.js
 |  |- domain/
+|  |  |- create-validation.js
 |  |  |- match-state.js
 |  |  |- rules-config.js
 |  |  |- tournament-create.js
 |  |  |- tournament-duration.js
+|  |  |- preliminary-schedule.js
+|  |  |- preliminary-standings.js
+|  |  |- preliminary-final-stage.js
 |  |  |- standings-dra.js
 |  |  |- groups.js
 |  |  |- ko-engine.js
@@ -78,10 +82,12 @@ autodarts_local_tournament/
 |  |  |- route-hooks.js
 |  |  `- update-check.js
 |  |- ui/
+|  |  |- create-validation-state.js
 |  |  |- render-helpers.js
 |  |  |- tournament-help-topics.js
 |  |  |- tournament-help-state.js
 |  |  |- render-tournament-help.js
+|  |  |- render-create-validation.js
 |  |  |- render-shell.js
 |  |  |- render-tabs.js
 |  |  |- render-tournament.js
@@ -112,7 +118,8 @@ autodarts_local_tournament/
 |  |- qa-encoding.ps1
 |  |- qa-regelcheck.ps1
 |  |- test-domain.ps1
-|  `- test-runtime-contract.ps1
+|  |- test-runtime-contract.ps1
+|  `- test-ui-viewports.ps1
 |- tests/
 |  |- contracts/
 |  |- selftest-runtime.js
@@ -327,12 +334,13 @@ Die Tabellen unten beschreiben pro Datei:
 | `build/version.json` | zentrale Versionsquelle | liefert `APP_VERSION` für Runtime-Header, Runtime-Code und Meta-Datei | `scripts/build.ps1`, `src/core/constants.js`, `dist/autodarts-tournament-assistant.user.js`, `dist/autodarts-tournament-assistant.meta.js` |
 | `build/domain-test-manifest.json` | Test-Bundle-Vertrag | definiert, welche Dateien in den isolierten Domain-Harness geladen werden | `scripts/test-domain.ps1`, `tests/test-harness.js`, `tests/unit-*.js` |
 | `scripts/build.ps1` | Build-Orchestrierung | liest Manifest und Version, fügt Module zusammen, injiziert Version, bettet CSS und Logo ein, schreibt Runtime- und Meta-Artefakte nach `dist/*` | `build/manifest.json`, `build/version.json`, `src/ui/styles/main.css`, `assets/pdc_logo.png`, `dist/autodarts-tournament-assistant.user.js`, `dist/autodarts-tournament-assistant.meta.js` |
-| `scripts/qa.ps1` | Gesamt-QA | ruft Build, Architektur-QA, Encoding, Regelcheck, Domain-Harness, Runtime-Contract und Build-Disziplin auf | `scripts/build.ps1`, `scripts/qa-architecture.ps1`, `scripts/test-domain.ps1`, `scripts/test-runtime-contract.ps1`, `scripts/qa-build-discipline.ps1` |
+| `scripts/qa.ps1` | Gesamt-QA | ruft Build, Architektur-QA, Encoding, Regelcheck, Domain-Harness, Runtime-Contract, UI-Viewport-Matrix und Build-Disziplin auf | `scripts/build.ps1`, `scripts/qa-architecture.ps1`, `scripts/test-domain.ps1`, `scripts/test-runtime-contract.ps1`, `scripts/test-ui-viewports.ps1`, `scripts/qa-build-discipline.ps1` |
 | `scripts/qa-architecture.ps1` | Architektur-Gate | prüft Domain-Reinheit, Runtime-/Bracket-/Storage-Grenzen und UI-Renderer-Regeln | `src/domain/*`, `src/bracket/*`, `src/data/storage.js`, `src/runtime/*`, `src/ui/render-*.js` |
 | `scripts/qa-encoding.ps1` | Zeichensatz- und Terminologie-Prüfung | prüft UTF-8, Mojibake und zentrale UI-Begriffe in Quell-, Dist- und Doku-Dateien | `src/*`, `dist/autodarts-tournament-assistant.user.js`, `docs/*`, `README.md` |
 | `scripts/qa-regelcheck.ps1` | fachlicher Regex-Check | prüft in `dist/*`, ob zentrale Regelmappings, KO-Logik und Terminologie im Bundle vorkommen | `dist/autodarts-tournament-assistant.user.js`, Domain-Logik aus `src/domain/*` |
 | `scripts/test-domain.ps1` | isolierter Domain-Harness | baut einen no-deps Test-Bundle für pure Domain-Logik und führt ihn im Headless-Browser aus | `build/domain-test-manifest.json`, `tests/test-harness.js`, `tests/domain-isolation.js`, `tests/unit-*.js` |
 | `scripts/test-runtime-contract.ps1` | Runtime-Contract-Test | lädt `dist/*` im Headless-Browser und prüft `window.__ATA_RUNTIME` plus `runSelfTests()` | `dist/autodarts-tournament-assistant.user.js`, `tests/contracts/*` |
+| `scripts/test-ui-viewports.ps1` | Responsive-/Touch-Browsermatrix | prüft im echten Edge zwölf Desktop-/Tablet-/Mobil-/Querformatgrößen samt 200-%-Reflow-Äquivalent, alle Hauptzustände, Overflow und erzwungene 44-px-Grobzeigerziele | `dist/autodarts-tournament-assistant.user.js`, `src/ui/styles/main.css`, `scripts/qa.ps1` |
 | `scripts/qa-build-discipline.ps1` | Build-Disziplin | prüft Placeholder-Nutzung, Versionseinbau und generierte Runtime-/Meta-Artefakte | `build/version.json`, `src/core/constants.js`, `dist/autodarts-tournament-assistant.user.js`, `dist/autodarts-tournament-assistant.meta.js` |
 | `installer/Autodarts Tournament Assistant Loader.user.js` | Loader-Skript, nicht App-Logik | lädt die veröffentlichte Dist-Datei remote, validiert sie, cached sie lokal und erzeugt den Menü-Einstieg | `dist/autodarts-tournament-assistant.user.js`, GitHub Raw URL, Tampermonkey GM APIs |
 | `dist/autodarts-tournament-assistant.user.js` | generiertes Auslieferungsartefakt | enthält das komplette Userscript als eine Datei; ist Loader-kompatibel und direkt installierbar | `scripts/build.ps1`, `installer/Autodarts Tournament Assistant Loader.user.js`, Browser/Tampermonkey |
@@ -406,7 +414,7 @@ Hier liegt die eigentliche Turnierlogik. Wenn sich eine fachliche Regel ändert,
 | `src/app/bracket-controller.js` | Bracket-Orchestrierung | Render-Queue, Timeout, Height-Sync, Fallback-Sichtbarkeit und Fehlermeldungen | `src/bracket/frame-bridge.js`, `src/bracket/payload.js`, `src/ui/render-view.js` |
 | `src/app/browser-lifecycle.js` | Browser-Lifecycle | Cleanup, Event-Bridge und Runtime-nahe UI-Helfer | `src/infra/history-import.js`, `src/app/bracket-controller.js`, `src/runtime/bootstrap.js` |
 | `src/app/update-status.js` | Update-Status-Orchestrierung | hält den GitHub-Versionsstatus im Runtime-State und spiegelt ihn in UI und Loader-Menü | `src/infra/update-check.js`, `src/ui/render-settings.js`, `src/ui/handlers.js`, `src/runtime/bootstrap.js` |
-| `src/app/diagnostics.js` | Runtime-Diagnostik | `runSelfTests()` für Browser-Konsole und Contract-Test, einschließlich Modussichtbarkeit, Draft-Rückkehr, Spielregel-Disclosure, Fokus sowie stabiler Turnieranlage-Hooks | `src/domain/*`, `src/infra/*`, `src/ui/*`, `src/app/public-api.js`, `scripts/test-runtime-contract.ps1` |
+| `src/app/diagnostics.js` | Runtime-Diagnostik | `runSelfTests()` für Browser-Konsole und Contract-Test, einschließlich Modussichtbarkeit, Draft-Rückkehr, Spielregel-Disclosure, Navigation, Labels, Live-Regionen, Fokusgrenzen/-Rückgabe, Re-Render-Erhalt und stabiler Turnieranlage-Hooks | `src/domain/*`, `src/infra/*`, `src/ui/*`, `src/app/public-api.js`, `scripts/test-runtime-contract.ps1` |
 | `src/app/public-api.js` | Public Runtime API | veröffentlicht `window.__ATA_RUNTIME` und bindet Cleanup daran | `src/app/diagnostics.js`, `src/runtime/bootstrap.js`, Browser-Konsole |
 
 ### Infra
@@ -424,7 +432,7 @@ Hier liegt die eigentliche Turnierlogik. Wenn sich eine fachliche Regel ändert,
 
 | Datei | Rolle | Wichtige Inhalte / Hauptfunktionen | Primäre Verbindungen |
 |---|---|---|---|
-| `src/ui/render-shell.js` | äußerer Drawer-Rahmen | rendert Shadow-DOM-Shell, Tabs, Notices und Runtime-Status-Bar | `src/ui/render-tabs.js`, `src/infra/api-client.js`, `src/ui/handlers.js` |
+| `src/ui/render-shell.js` | äußerer Drawer-Rahmen | rendert modalen Shadow-DOM-Drawer, natives Navigations-Landmark mit `aria-current`, typgerechte Notice-Live-Semantik und Runtime-Status-Bar | `src/ui/render-tabs.js`, `src/infra/api-client.js`, `src/ui/handlers.js` |
 | `src/ui/render-tabs.js` | Tab-Verteiler | entscheidet, welcher Tab-Renderer für den aktiven Tab ausgeführt wird | `src/ui/render-tournament.js`, `src/ui/render-matches.js`, `src/ui/render-view.js`, `src/ui/render-io.js`, `src/ui/render-settings.js` |
 | `src/ui/render-helpers.js` | UI-Helfer | `renderInfoLinks()`, Abschnitts-, Turnierzeit- und pure Spielregel-Zusammenfassung für wiederverwendbare HTML-Bausteine | `src/ui/render-*.js` |
 | `src/ui/tournament-help-topics.js` | Hilfekatalog und Resolver | elf stabile Themen mit dynamischer Auswahl, Auswirkungen, Beispielen, Tipps, Abhängigkeiten, Grenzen, Herkunft, Regelstatus und sicheren Quellen; nutzt bestehende pure Domain-Analysen | `src/data/normalization.js`, `src/domain/tournament-create.js`, `src/domain/preliminary-schedule.js`, `src/domain/tournament-duration.js`, `src/ui/render-helpers.js` |
@@ -437,7 +445,7 @@ Hier liegt die eigentliche Turnierlogik. Wenn sich eine fachliche Regel ändert,
 | `src/ui/render-view.js` | Tabellen- und Bracket-Ansicht | rendert Liga-/Gruppentabellen, Fallback-Bracket und den Einstieg ins iframe-Bracket | `src/domain/standings-dra.js`, `src/domain/groups.js`, `src/domain/ko-engine.js`, `src/bracket/*` |
 | `src/ui/render-io.js` | Import/Export-Tab | rendert Export- und Import-Oberfläche | `src/ui/handlers.js`, `src/data/storage.js` |
 | `src/ui/render-settings.js` | Settings-Tab | rendert Debug-Flag, API-Automation, GitHub-Update-Panel, KO-Defaults, Zeitprofil, Tie-Break-Profil und Storage-Hinweise | `src/data/normalization.js`, `src/domain/tournament-duration.js`, `src/ui/render-helpers.js`, `src/app/update-status.js`, `src/ui/handlers.js` |
-| `src/ui/handlers.js` | UI-Orchestrator | erstellt Host, bindet Events, erhält Drafts, synchronisiert Modusgruppen/Disclosure, wendet Presets an und aktualisiert Validierung, Übersicht, Hilfe sowie Live-Prognose; Submit revalidiert autoritativ und fokussiert das erste Problem | `src/ui/render-shell.js`, `src/ui/render-create-validation.js`, `src/ui/render-tournament-help.js`, `src/app/tournament-actions.js`, `src/app/match-actions.js`, `src/infra/api-automation.js`, `src/infra/update-check.js`, `src/app/bracket-controller.js`, `src/domain/create-validation.js` |
+| `src/ui/handlers.js` | UI-Orchestrator | erstellt Host, bindet Events, kapselt Drawer-Fokusfalle/-Rückgabe sowie Fokus-/Auswahl-/Scroll-Erhalt, synchronisiert Modusgruppen/Disclosure, wendet Presets an und aktualisiert Validierung, Übersicht, Hilfe sowie Live-Prognose; Submit revalidiert autoritativ und fokussiert das erste Problem | `src/ui/render-shell.js`, `src/ui/render-create-validation.js`, `src/ui/render-tournament-help.js`, `src/app/tournament-actions.js`, `src/app/match-actions.js`, `src/infra/api-automation.js`, `src/infra/update-check.js`, `src/app/bracket-controller.js`, `src/domain/create-validation.js` |
 
 `handlers.js` ist die Datei, in der Bedienung, State-Änderung und Re-Render zusammenlaufen. Die Render-Dateien bleiben dagegen weitgehend beschreibend.
 

@@ -75,6 +75,13 @@
         box-shadow: var(--ata-shadow-lg);
         border: 1px solid var(--ata-color-border);
         pointer-events: auto;
+        box-sizing: border-box;
+      }
+
+      .ata-drawer *,
+      .ata-drawer *::before,
+      .ata-drawer *::after {
+        box-sizing: border-box;
       }
 
       .ata-root[data-open="1"] {
@@ -203,7 +210,9 @@
         padding: 4px 10px;
         font-size: 15px;
         line-height: 1.2;
-        white-space: nowrap;
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: anywhere;
       }
 
       .ata-doc-linkable {
@@ -412,8 +421,10 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 20px;
-        height: 20px;
+        width: 24px;
+        height: 24px;
+        min-width: 24px;
+        min-height: 24px;
         border-radius: 999px;
         border: 1px solid rgba(255, 255, 255, 0.38);
         background: rgba(255, 255, 255, 0.11);
@@ -761,6 +772,12 @@
         padding: 12px 14px 14px;
       }
 
+      .ata-create-section-body > *,
+      .ata-create-overview-body > * {
+        min-width: 0;
+        max-width: 100%;
+      }
+
       .ata-create-overview-controls {
         grid-template-columns: minmax(0, 1fr);
       }
@@ -864,11 +881,13 @@
       }
 
       .ata-create-overview-summary-list dt {
+        min-width: 0;
         color: var(--ata-color-muted);
         font-size: 12px;
         font-weight: 750;
         letter-spacing: 0.03em;
         text-transform: uppercase;
+        overflow-wrap: anywhere;
       }
 
       .ata-create-overview-summary-list dd {
@@ -1387,17 +1406,6 @@
         background: rgba(252, 129, 129, 0.2);
       }
 
-      .ata-pill {
-        display: inline-flex;
-        align-items: center;
-        border: 1px solid var(--ata-color-border);
-        border-radius: 999px;
-        padding: 2px 9px;
-        margin-right: 6px;
-        margin-bottom: 6px;
-        font-size: 13px;
-      }
-
       .ata-tournament-title {
         display: flex;
         align-items: center;
@@ -1452,7 +1460,9 @@
         font-size: 12px;
         line-height: 1.2;
         padding: 2px 8px;
-        white-space: nowrap;
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: anywhere;
       }
 
       .ata-info-tag.ata-info-tag-key {
@@ -1484,6 +1494,8 @@
         font-size: 13px;
         line-height: 1.2;
         padding: 2px 9px;
+        max-width: 100%;
+        overflow-wrap: anywhere;
       }
 
       .ata-player-chip-count {
@@ -1545,19 +1557,14 @@
         border-bottom-color: rgba(90, 210, 153, 0.28);
       }
 
-      .ata-pill-open-slot {
-        display: inline-block;
-        color: #ffd34f;
-        font-weight: 700;
-      }
-
       .ata-match-list {
         display: grid;
         gap: 8px;
       }
 
       .ata-matches-card {
-        max-width: min(1240px, calc(100vw - 28px));
+        width: auto;
+        max-width: 100%;
         margin: 0 auto;
       }
 
@@ -1691,7 +1698,7 @@
         gap: 8px;
         flex-wrap: wrap;
         flex: 1 1 420px;
-        min-width: 280px;
+        min-width: 0;
       }
 
       .ata-match-title-row {
@@ -1720,6 +1727,8 @@
         padding: 1px 7px;
         font-size: 11px;
         line-height: 1.2;
+        max-width: 100%;
+        overflow-wrap: anywhere;
       }
 
       .ata-match-advance-pill {
@@ -1811,6 +1820,8 @@
       .ata-pairing-player {
         font-weight: 700;
         color: #edf3ff;
+        max-width: 100%;
+        overflow-wrap: anywhere;
       }
 
       .ata-pairing-player.is-winner {
@@ -2085,6 +2096,11 @@
         background: rgba(255, 255, 255, 0.06);
       }
 
+      .ata-toggle > :first-child {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
       .ata-toggle-compact {
         padding: 8px 10px;
         margin-bottom: 0;
@@ -2096,8 +2112,10 @@
       }
 
       .ata-toggle input {
-        width: 18px;
-        height: 18px;
+        width: 24px;
+        height: 24px;
+        min-width: 24px;
+        min-height: 24px;
         accent-color: var(--ata-color-accent);
       }
 
@@ -2281,6 +2299,11 @@
           font-size: 18px;
         }
 
+        .ata-create-overview-summary-list > div {
+          grid-template-columns: minmax(70px, 0.8fr) minmax(0, 1.4fr);
+          gap: 6px;
+        }
+
         .ata-create-section-body,
         .ata-create-overview-body,
         .ata-create-help-panel-body {
@@ -2332,15 +2355,55 @@
           min-height: 44px;
           margin: -10px 0;
         }
+
+        .ata-close-btn,
+        .ata-tab,
+        .ata-btn,
+        .ata-help-link,
+        .ata-segmented-btn,
+        .ata-score-grid input,
+        .ata-score-grid select {
+          min-height: 44px;
+        }
+
+        .ata-help-link {
+          width: 44px;
+          height: 44px;
+          min-width: 44px;
+        }
+
+        .ata-toggle input[type="checkbox"] {
+          width: 44px;
+          height: 44px;
+          min-width: 44px;
+          min-height: 44px;
+        }
       }
 
       @media (prefers-reduced-motion: reduce) {
-        .ata-help-trigger {
-          transition: none;
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          scroll-behavior: auto !important;
+          transition: none !important;
         }
 
-        .ata-help-trigger:hover {
-          transform: none;
+        .ata-help-link:hover,
+        .ata-help-trigger:hover,
+        .ata-btn:active {
+          transform: none !important;
+        }
+      }
+
+      .ata-drawer :where(a[href], button, input, select, textarea, [tabindex]):focus-visible {
+        outline: 2px solid var(--ata-color-focus) !important;
+        outline-offset: 2px;
+      }
+
+      @media (forced-colors: active) {
+        .ata-drawer :where(a[href], button, input, select, textarea, [tabindex]):focus-visible {
+          outline-color: CanvasText !important;
         }
       }
     

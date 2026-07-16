@@ -169,17 +169,68 @@ $checkScript = @'
     const createSubmitButton = createForm?.querySelector("button[type='submit']") || null;
     const participantStatus = createForm?.querySelector("#ata-create-participant-status") || null;
     const validationOverview = createForm?.querySelector("#ata-create-overview-summary") || null;
+    const submitStatus = createForm?.querySelector("#ata-create-submit-status") || null;
     const validationSummary = createForm?.querySelector("#ata-create-error-summary") || null;
     const validationInitialOk = Boolean(createSubmitButton)
       && createSubmitButton.disabled
       && createSubmitButton.getAttribute("aria-disabled") === "true"
+      && createSubmitButton.getAttribute("aria-describedby") === "ata-create-submit-status"
       && participantStatus?.getAttribute("role") === "status"
       && participantStatus?.getAttribute("aria-live") === "polite"
-      && validationOverview?.getAttribute("role") === "status"
-      && validationOverview?.getAttribute("aria-live") === "polite"
+      && participantStatus?.getAttribute("aria-atomic") === "true"
+      && validationOverview?.hasAttribute("role") === false
+      && validationOverview?.hasAttribute("aria-live") === false
+      && submitStatus?.hasAttribute("role") === false
+      && submitStatus?.hasAttribute("aria-live") === false
       && normalizeContractText(validationOverview?.textContent || "").includes("Noch nicht bereit")
       && Boolean(validationSummary?.hidden)
       && createForm.querySelector("[role='alert']") === null;
+    const navigation = shadowRoot?.querySelector("nav.ata-tabs") || null;
+    const currentNavigationItems = navigation
+      ? Array.from(navigation.querySelectorAll("[aria-current='page']"))
+      : [];
+    const navigationOk = Boolean(navigation)
+      && navigation.getAttribute("aria-label") === "Assistant-Bereiche"
+      && currentNavigationItems.length === 1
+      && currentNavigationItems[0].getAttribute("data-tab") === "tournament"
+      && navigation.querySelector("[role='tab'], [role='tablist']") === null;
+    const visibleControls = createForm
+      ? Array.from(createForm.querySelectorAll("input:not([type='hidden']), select, textarea"))
+        .filter((control) => !control.closest("[hidden]"))
+      : [];
+    const controlsNamedOk = visibleControls.length > 0 && visibleControls.every((control) => (
+      (control.labels?.length || 0) > 0
+      || Boolean(normalizeContractText(control.getAttribute("aria-label") || ""))
+      || Boolean(normalizeContractText(control.getAttribute("aria-labelledby") || ""))
+    ));
+    const allIds = shadowRoot ? Array.from(shadowRoot.querySelectorAll("[id]")).map((element) => element.id) : [];
+    const liveRegions = createForm ? Array.from(createForm.querySelectorAll("[aria-live]")) : [];
+    const accessibilityMarkupOk = controlsNamedOk
+      && allIds.length === new Set(allIds).size
+      && liveRegions.length === 1
+      && liveRegions[0].id === "ata-create-participant-status";
+    const drawer = shadowRoot?.querySelector(".ata-drawer") || null;
+    const initialDrawerFocusOk = shadowRoot?.activeElement?.classList?.contains("ata-close-btn") === true;
+    const isVisibleFocusable = (element) => !element.hasAttribute("disabled")
+      && !element.closest("[hidden], [aria-hidden='true']")
+      && window.getComputedStyle(element).display !== "none"
+      && window.getComputedStyle(element).visibility !== "hidden";
+    const drawerFocusables = drawer
+      ? Array.from(drawer.querySelectorAll("a[href], button, input:not([type='hidden']), select, textarea, [tabindex]:not([tabindex='-1'])"))
+        .filter(isVisibleFocusable)
+      : [];
+    const hiddenEditor = createForm?.querySelector("#ata-game-rules-editor") || null;
+    const visibleFocusablesOk = Boolean(hiddenEditor?.hidden)
+      && !drawerFocusables.some((element) => hiddenEditor.contains(element));
+    const firstFocusable = drawerFocusables[0] || null;
+    const lastFocusable = drawerFocusables[drawerFocusables.length - 1] || null;
+    lastFocusable?.focus();
+    lastFocusable?.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+    const tabForwardOk = shadowRoot?.activeElement === firstFocusable;
+    firstFocusable?.focus();
+    firstFocusable?.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true }));
+    const tabBackwardOk = shadowRoot?.activeElement === lastFocusable;
+    const drawerKeyboardOk = initialDrawerFocusOk && visibleFocusablesOk && tabForwardOk && tabBackwardOk;
     const modeHelpTrigger = createForm?.querySelector("#ata-create-help-trigger-tournamentMode") || null;
     modeHelpTrigger?.click();
     const helpTitle = helpPanel?.querySelector("#ata-create-help-title") || null;
@@ -211,6 +262,9 @@ $checkScript = @'
       helpOpenOk,
       helpCloseOk,
       validationInitialOk,
+      navigationOk,
+      accessibilityMarkupOk,
+      drawerKeyboardOk,
       presetMarkupDetails: {
         fieldsetTag: presetFieldset?.tagName || "",
         legend: normalizeContractText(presetFieldset?.querySelector("legend")?.textContent || ""),
@@ -261,6 +315,18 @@ $checkScript = @'
     if (!validationInitialOk) {
       result.ok = false;
       result.failures.push("Live-Validierung verletzt Initial-, Status- oder Disabled-Vertrag.");
+    }
+    if (!navigationOk) {
+      result.ok = false;
+      result.failures.push("Navigation verletzt Landmark-, aria-current- oder No-Half-Tabs-Vertrag.");
+    }
+    if (!accessibilityMarkupOk) {
+      result.ok = false;
+      result.failures.push("Formular verletzt Beschriftungs-, ID- oder Live-Region-Vertrag.");
+    }
+    if (!drawerKeyboardOk) {
+      result.ok = false;
+      result.failures.push(`Drawer verletzt Fokusstart oder Fokusfalle: initial=${initialDrawerFocusOk}, visible=${visibleFocusablesOk}, forward=${tabForwardOk}, backward=${tabBackwardOk}.`);
     }
   }
 
