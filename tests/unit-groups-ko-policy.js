@@ -196,7 +196,7 @@
 
     assertEqual(roundTripped.rules.groupsKoOddParticipantPolicy, GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL);
     assertEqual(roundTripped.rules.groupsKoOddParticipantAcknowledged, true);
-    assertEqual(migratedStore.schemaVersion, 5);
+    assertEqual(migratedStore.schemaVersion, STORAGE_SCHEMA_VERSION);
     assertEqual(migratedStore.tournament.rules.groupsKoOddParticipantPolicy, GROUPS_KO_ODD_PARTICIPANT_POLICY_ALLOW_UNEQUAL);
     assertEqual(migratedStore.tournament.rules.groupsKoOddParticipantAcknowledged, true);
   });

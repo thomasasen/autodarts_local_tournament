@@ -44,6 +44,7 @@ autodarts_local_tournament/
 |  |  |- state.js
 |  |  |- utils.js
 |  |  |- match-start-tools.js
+|  |  |- fixed-legs-match-state.js
 |  |  |- logging.js
 |  |  `- events.js
 |  |- data/
@@ -78,6 +79,7 @@ autodarts_local_tournament/
 |  |- infra/
 |  |  |- api-client.js
 |  |  |- api-automation.js
+|  |  |- fixed-legs-live-controller.js
 |  |  |- dom-autodetect.js
 |  |  |- history-import.js
 |  |  |- route-hooks.js
@@ -233,7 +235,7 @@ Die Hauptkette sieht so aus:
 1. `src/runtime/bootstrap.js` startet `init()`.
 2. `src/app/session-store.js` lädt, migriert und schreibt den gespeicherten Zustand.
 3. `src/ui/handlers.js` erzeugt Host und Shell im Shadow DOM.
-4. `src/app/browser-lifecycle.js`, `src/infra/dom-autodetect.js`, `src/infra/history-import.js` und `src/infra/route-hooks.js` beobachten DOM, SPA-Routen und History-Seiten.
+4. `src/app/browser-lifecycle.js`, `src/infra/dom-autodetect.js`, `src/infra/history-import.js`, `src/infra/fixed-legs-live-controller.js` und `src/infra/route-hooks.js` beobachten DOM, SPA-Routen, Live-Matches und History-Seiten.
 5. `src/infra/api-automation.js` arbeitet bei aktiviertem Feature-Flag mit `src/infra/api-client.js` gegen die Autodarts-API.
 6. `src/ui/render-view.js` stößt für KO-Ansichten das Bracket-Rendering über `src/app/bracket-controller.js` und `src/bracket/*` an.
 7. `src/app/public-api.js` veröffentlicht `window.__ATA_RUNTIME`, `src/app/diagnostics.js` hält die Runtime-Selbsttests.
@@ -389,6 +391,7 @@ Die Tabellen unten beschreiben pro Datei:
 | `tests/unit-groups-ko-policy.js` | Gruppenpolicy-Tests | prüft gerade/ungerade Gruppenfelder, Bestätigung und Legacy-Verhalten | `src/domain/tournament-create.js`, `tests/test-harness.js` |
 | `tests/unit-ko-engine.js` | KO-Unit-Tests | prüft Seeded-9, Draw-Lock, Winner-Advancement und KO-Migration v3 | `src/domain/ko-engine.js`, `src/domain/tournament-create.js`, `tests/test-harness.js` |
 | `tests/unit-match-start-tools.js` | Matchstart-Tests | prüft Payload-, Ablauf- und Debug-Helfer ohne Live-API | `src/core/match-start-tools.js`, `tests/test-harness.js` |
+| `tests/unit-fixed-legs-automation.js` | Fixed-Legs-Automationstests | prüft Resolverphasen, Spielerzuordnung, Draw/Overrun, Migration, Roundtrip, Idempotenz und simulierte API-Fehler | `src/core/fixed-legs-match-state.js`, `src/domain/results.js`, `tests/test-harness.js` |
 | `tests/unit-message-doc-links.js` | Dokumentlink-Tests | prüft die Zuordnung klickbarer Runtime-Meldungen zu README-Ankern | `src/ui/render-helpers.js`, `README.md`, `tests/test-harness.js` |
 | `tests/unit-preliminary-final.js` | Vorrunden-/Finalphasen-Tests | prüft Paarungsplan, Wertung, Qualifikation und Finalphasenerzeugung | `src/domain/preliminary-*.js`, `tests/test-harness.js` |
 | `tests/unit-presets.js` | Preset-Tests | prüft Katalog, Anwendung, Custom-Umschaltung und Legacy-Alias | `src/data/normalization.js`, `src/domain/tournament-create.js`, `tests/test-harness.js` |
@@ -408,6 +411,7 @@ Die Tabellen unten beschreiben pro Datei:
 | `src/core/state.js` | zentraler Laufzeitzustand | hält Drawer-, Tab-, Notice-, Bracket-, API-, Observer- und Store-State | `src/core/utils.js`, `src/data/normalization.js`, `src/data/storage.js`, `src/ui/handlers.js` |
 | `src/core/utils.js` | Querschnitts-Helfer | Sanitizing, HTML-Escaping, IDs, Zufall, verlustfreie Teilnehmeranalyse/-Parsing und Routing-Key | `src/data/normalization.js`, `src/domain/*`, `src/ui/*`, `src/infra/*`, `src/runtime/*` |
 | `src/core/match-start-tools.js` | pure Matchstart-Helfer | baut Matchstart-Abläufe, Debug-Sessions und sichere Fehlerdetails ohne Live-Request | `src/infra/api-automation.js`, `src/app/diagnostics.js`, `tests/unit-match-start-tools.js` |
+| `src/core/fixed-legs-match-state.js` | purer Fixed-Legs-Resolver und Aktionsablauf | ordnet Spieler eindeutig zu, validiert Legstand/Phase/Overrun und revalidiert idempotente Next-/Finish-Aktionen über injizierte Abhängigkeiten | `src/infra/fixed-legs-live-controller.js`, `src/infra/api-automation.js`, `tests/unit-fixed-legs-automation.js` |
 | `src/core/logging.js` | Debug- und Fehlerlogging | `logDebug`, `logWarn`, `logError` mit ATA-Präfixen | `src/data/storage.js`, `src/domain/ko-engine.js`, `src/infra/*`, `src/runtime/*`, `src/ui/handlers.js` |
 | `src/core/events.js` | Cleanup- und Lifecycle-Utilities | registriert Cleanup-Funktionen, Listener, Intervalle und Observer zentral | `src/infra/route-hooks.js`, `src/runtime/bootstrap.js`, `src/runtime/lifecycle.js`, `src/runtime/public-api.js` |
 
@@ -464,6 +468,7 @@ Hier liegt die eigentliche Turnierlogik. Wenn sich eine fachliche Regel ändert,
 |---|---|---|---|
 | `src/infra/api-client.js` | dünne API-Grundschicht | liest Auth-Token und Board-ID, baut Status-Bar-Infos auf, kapselt HTTP-Requests und Autodarts-Endpunkte | `src/ui/render-shell.js`, `src/infra/api-automation.js`, `src/app/diagnostics.js` |
 | `src/infra/api-automation.js` | Matchstart und Ergebnis-Sync | erstellt Lobbys, fügt Spieler hinzu, startet Matches, synchronisiert API-Ergebnisse und löst Zuordnungsfälle auf | `src/infra/api-client.js`, `src/app/match-actions.js`, `src/app/session-store.js`, `src/app/notifications.js`, `src/ui/handlers.js`, `src/infra/history-import.js` |
+| `src/infra/fixed-legs-live-controller.js` | Live-Steuerkarte für zwei feste Legs | erscheint nur auf der verknüpften Matchroute, rendert Phase/Stand/eine zulässige Aktion, führt bestätigtes Next/Finish aus und entfernt sich bei Routenwechsel | `src/core/fixed-legs-match-state.js`, `src/infra/api-client.js`, `src/infra/route-hooks.js`, `src/app/session-store.js` |
 | `src/infra/dom-autodetect.js` | DOM-basierte Autoerkennung | erkennt laufende Matchseiten und versucht Ergebnisübernahme aus der DOM | `src/app/match-actions.js`, `src/app/notifications.js`, `src/runtime/bootstrap.js` |
 | `src/infra/history-import.js` | History-Import | Statistik-Parsen, Match-Zuordnung auf `/history/matches/{id}` und Inline-Import-UI | `src/infra/api-automation.js`, `src/app/match-actions.js`, `src/app/session-store.js`, `src/app/notifications.js` |
 | `src/infra/route-hooks.js` | SPA-Integration | patched `history.pushState` und `replaceState`, reagiert auf Routenwechsel und stößt Re-Render an | `src/core/events.js`, `src/ui/handlers.js`, `src/infra/history-import.js` |

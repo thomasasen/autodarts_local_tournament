@@ -5,7 +5,7 @@ Diese manuelle Checkliste ergänzt die lokale und GitHub-basierte QA um Prüfung
 ## Installation und Start
 
 - [ ] Loader beziehungsweise Userscript aktualisieren.
-- [ ] Version `0.13.0` im Assistant prüfen.
+- [ ] Version `0.14.0` im Assistant prüfen.
 - [ ] Assistant öffnen und schließen.
 - [ ] Fokus-Rückgabe an den Seitenauslöser prüfen.
 
@@ -36,12 +36,18 @@ Diese manuelle Checkliste ergänzt die lokale und GitHub-basierte QA um Prüfung
 ## Live-Integration
 
 - [ ] Match mit authentifiziertem AutoDarts-Account starten.
+- [ ] Optionaler echter Board-Smoke: Fixed-Legs-Vorrunde `2:0` durch beide Bestätigungen führen.
+- [ ] Optionaler echter Board-Smoke: Fixed-Legs-Vorrunde `1:1` abschließen und Tabellenpunkt/Leg-Differenz prüfen.
+- [ ] Optionaler echter Board-Smoke: nach Leg 1 sowie nach Start von Leg 2 neu laden und die rekonstruierte Aktion prüfen.
+- [ ] Optionaler echter Board-Smoke: Lobby mit Bull-off `Off` und mit aktivem Bull-off starten; beide Varianten dürfen Matchmodus `Off` nicht verändern.
 - [ ] Ergebnis erfassen beziehungsweise synchronisieren.
 - [ ] Aktualisierung im Tab `Spiele` prüfen.
 - [ ] Turnierbaum prüfen.
 - [ ] Turnier exportieren.
 - [ ] Export reimportieren und resultierende Spieleansicht prüfen.
 - [ ] Turnier zurücksetzen und Fokus auf die Turniererstellung prüfen.
+
+Diese Board-Smokes sind dokumentierte Freigabeempfehlungen, aber kein Aktivierungs-Gate für 0.14.0. Automatisierte Domain-, Runtime- und Build-Gates bleiben verbindlich.
 
 ## Grenzen
 

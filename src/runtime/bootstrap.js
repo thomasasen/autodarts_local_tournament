@@ -7,6 +7,7 @@
     renderShell();
     removeMatchReturnShortcut();
     renderHistoryImportButton();
+    renderFixedLegsLiveControl({ force: true }).catch((error) => logWarn("api", "Initial Fixed-Legs render failed.", error));
 
     initEventBridge();
     installRouteHooks();

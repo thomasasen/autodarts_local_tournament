@@ -2,7 +2,7 @@
 
 Lokale Dartturniere direkt in [play.autodarts.io](https://play.autodarts.io) planen, spielen und auswerten.
 
-Aktuelle Version: `0.13.0`
+Aktuelle Version: `0.14.0`
 
 [![ATA Loader installieren](https://img.shields.io/badge/ATA%20Loader-installieren-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js)
 
@@ -50,7 +50,7 @@ Der Loader lädt beim Seitenaufruf die aktuelle Version. Alternativ kann das [Ru
 - verständliche Live-Zusammenfassung und aufklappbare Fach-/Regelhilfe
 - deterministische Paarungen, Freilose, Turnierfortschritt und Turnierbaum
 - manuelle Leg-Erfassung als verlässlicher Standard
-- optionaler AutoDarts-Lobbystart und API-Ergebnissync
+- optionaler AutoDarts-Lobbystart und API-Ergebnissync, einschließlich geführter Vorrundenmatches mit genau zwei Legs und möglichem `1:1`
 - Zeitprognose anhand Matchplan, nutzbaren Boards und Spieltempo
 - Sicherungsdatei mit Vorschau und Bestätigung vor dem Wiederherstellen
 - DRA-bezogene Hinweise, Draw-Lock und dokumentierte Veranstalterentscheidungen
@@ -59,6 +59,7 @@ Der Loader lädt beim Seitenaufruf die aktuelle Version. Alternativ kann das [Ru
 
 - Die Boardanzahl in der Turnieranlage ist nur ein Parameter der Zeitprognose. Sie weist keine Boards zu und startet keine parallelen Lobbys.
 - Die Automatik unterstützt einen aktiven Board-/Lobby-Flow. Manuelle Ergebnisführung bleibt immer verfügbar.
+- Zwei feste Vorrundenlegs laufen in einer Matchmodus-Off-Lobby. Der Assistant verlangt Klicks vor Leg 2 und vor dem Matchabschluss; dieser technische Übergang ist deshalb bewusst `assisted`.
 - Die Anwendung kann organisatorische Regeln wie Anwurf, Practice, Board-Etikette oder lokale Sonderregeln nicht selbst durchsetzen.
 - `PDC European Tour - Runden 1 bis 4` bildet nur die dort genannten Best-of-11-Runden ab. Halbfinale und Finale benötigen längere Distanzen.
 - Das lokale Best-of-5-Profil ist eine Produktempfehlung, kein offizielles PDC-Eventformat.

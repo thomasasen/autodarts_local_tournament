@@ -706,6 +706,12 @@
   }
 
 
+  function normalizeFixedLegsSyncStatus(value, fallback = "idle") {
+    const normalized = normalizeText(value || "");
+    return FIXED_LEGS_SYNC_STATUSES.includes(normalized) ? normalized : fallback;
+  }
+
+
   function normalizeStoredMatchAverage(value) {
     if (value === null || value === undefined || value === "") {
       return null;
@@ -767,7 +773,7 @@
         ? {
           count: PRELIMINARY_FIXED_LEG_COUNT,
           entries: normalizeFixedLegEntries(meta.fixedLegs),
-          syncStatus: "manual_only",
+          syncStatus: normalizeFixedLegsSyncStatus(meta.fixedLegs.syncStatus),
         }
         : null,
     };
@@ -1029,25 +1035,36 @@
     }));
 
     const matchesRaw = Array.isArray(rawTournament.matches) ? rawTournament.matches : [];
-    const matches = matchesRaw.map((match, index) => ({
-      id: normalizeText(match?.id || `match-${index + 1}`),
-      stage: [MATCH_STAGE_KO, MATCH_STAGE_GROUP, MATCH_STAGE_LEAGUE, MATCH_STAGE_PRELIMINARY].includes(match?.stage) ? match.stage : MATCH_STAGE_KO,
-      round: clampInt(match?.round, 1, 1, 64),
-      number: clampInt(match?.number, index + 1, 1, 256),
-      groupId: match?.groupId ? normalizeText(match.groupId) : null,
-      player1Id: match?.player1Id ? normalizeText(match.player1Id) : null,
-      player2Id: match?.player2Id ? normalizeText(match.player2Id) : null,
-      status: match?.status === STATUS_COMPLETED ? STATUS_COMPLETED : STATUS_PENDING,
-      winnerId: match?.winnerId ? normalizeText(match.winnerId) : null,
-      source: match?.source === "auto" || match?.source === "manual" ? match.source : null,
-      legs: {
-        p1: clampInt(match?.legs?.p1, 0, 0, 50),
-        p2: clampInt(match?.legs?.p2, 0, 0, 50),
-      },
-      stats: normalizeStoredMatchStats(match?.stats),
-      updatedAt: normalizeText(match?.updatedAt || nowIso()),
-      meta: normalizeMatchMeta(match?.meta),
-    }));
+    const matches = matchesRaw.map((match, index) => {
+      const normalizedMatch = {
+        id: normalizeText(match?.id || `match-${index + 1}`),
+        stage: [MATCH_STAGE_KO, MATCH_STAGE_GROUP, MATCH_STAGE_LEAGUE, MATCH_STAGE_PRELIMINARY].includes(match?.stage) ? match.stage : MATCH_STAGE_KO,
+        round: clampInt(match?.round, 1, 1, 64),
+        number: clampInt(match?.number, index + 1, 1, 256),
+        groupId: match?.groupId ? normalizeText(match.groupId) : null,
+        player1Id: match?.player1Id ? normalizeText(match.player1Id) : null,
+        player2Id: match?.player2Id ? normalizeText(match.player2Id) : null,
+        status: match?.status === STATUS_COMPLETED ? STATUS_COMPLETED : STATUS_PENDING,
+        winnerId: match?.winnerId ? normalizeText(match.winnerId) : null,
+        source: match?.source === "auto" || match?.source === "manual" ? match.source : null,
+        legs: {
+          p1: clampInt(match?.legs?.p1, 0, 0, 50),
+          p2: clampInt(match?.legs?.p2, 0, 0, 50),
+        },
+        stats: normalizeStoredMatchStats(match?.stats),
+        updatedAt: normalizeText(match?.updatedAt || nowIso()),
+        meta: normalizeMatchMeta(match?.meta),
+      };
+      if (normalizedMatch.meta.fixedLegs) {
+        const rawSyncStatus = normalizeText(match?.meta?.fixedLegs?.syncStatus || "");
+        if (!FIXED_LEGS_SYNC_STATUSES.includes(rawSyncStatus)) {
+          normalizedMatch.meta.fixedLegs.syncStatus = normalizedMatch.meta.auto.lobbyId
+            ? "linked"
+            : (normalizedMatch.status === STATUS_COMPLETED ? "manual" : "idle");
+        }
+      }
+      return normalizedMatch;
+    });
     const resultsRaw = Array.isArray(rawTournament.results) ? rawTournament.results : [];
     const results = resultsRaw.map((entry, index) => normalizeTournamentResultEntry(entry, index + 1));
 

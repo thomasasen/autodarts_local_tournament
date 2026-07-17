@@ -56,6 +56,17 @@
     match.source = source === "auto" ? "auto" : "manual";
     match.legs = { p1: p1Legs, p2: p2Legs };
     setMatchResultKind(match, derivedWinnerId ? null : "draw");
+    if (match?.meta?.fixedLegs) {
+      match.meta.fixedLegs.syncStatus = source === "auto" ? "completed" : "manual";
+    }
+    const auto = ensureMatchAutoMeta(match);
+    if (source === "auto" || auto.lobbyId) {
+      const finishedAt = nowIso();
+      auto.status = "completed";
+      auto.finishedAt = finishedAt;
+      auto.lastSyncAt = finishedAt;
+      auto.lastError = null;
+    }
     match.updatedAt = nowIso();
     return { ok: true, completed: true, resultKind: derivedWinnerId ? null : "draw" };
   }
@@ -87,13 +98,15 @@
     const fixedLegs = {
       count: PRELIMINARY_FIXED_LEG_COUNT,
       entries: entries.map((entry) => ({ ...entry, source: source === "auto" ? "auto" : "manual", recordedAt: now })),
-      syncStatus: "manual_only",
+      syncStatus: source === "auto"
+        ? (entries.length >= PRELIMINARY_FIXED_LEG_COUNT ? "completed" : "awaiting_leg_2")
+        : "manual",
     };
     match.meta = normalizeMatchMeta({ ...(match.meta || {}), fixedLegs });
     const p1Legs = entries.filter((entry) => entry.winnerId === match.player1Id).length;
     const p2Legs = entries.filter((entry) => entry.winnerId === match.player2Id).length;
     match.legs = { p1: p1Legs, p2: p2Legs };
-    match.source = entries.length ? "manual" : null;
+    match.source = entries.length ? (source === "auto" ? "auto" : "manual") : null;
     if (entries.length < PRELIMINARY_FIXED_LEG_COUNT) {
       match.status = STATUS_PENDING;
       match.winnerId = null;

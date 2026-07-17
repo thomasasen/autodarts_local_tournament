@@ -1715,19 +1715,123 @@
         participants: participantList(5, "FL"),
       });
       const match = tournament.matches.find((entry) => entry.stage === MATCH_STAGE_PRELIMINARY);
-      let reasonCode = "";
-      try {
-        buildLobbyCreatePayload(tournament, match);
-      } catch (error) {
-        reasonCode = normalizeText(error?.reasonCode);
-      }
+      const payload = buildLobbyCreatePayload(tournament, match);
       record(
-        "Fixed 2 Legs: API-Start wird ohne exakte Abbildung explizit gesperrt",
-        reasonCode === "fixed_legs_api_unsupported",
-        `reasonCode=${reasonCode || "-"}`,
+        "Fixed 2 Legs: Matchmodus Off lässt legs und sets gezielt weg",
+        !Object.prototype.hasOwnProperty.call(payload, "legs")
+          && !Object.prototype.hasOwnProperty.call(payload, "sets")
+          && payload.variant === X01_VARIANT,
+        `payload=${JSON.stringify(payload)}`,
       );
     } catch (error) {
-      record("Fixed 2 Legs: API-Start wird ohne exakte Abbildung explizit gesperrt", false, String(error?.message || error));
+      record("Fixed 2 Legs: Matchmodus Off lässt legs und sets gezielt weg", false, String(error?.message || error));
+    }
+
+    try {
+      const expectedPlayers = [{ id: "a", name: "Anna" }, { id: "b", name: "Berta" }];
+      const leg1 = resolveFixedLegsMatchState({
+        providerState: {
+          players: [{ name: "Berta" }, { name: "Anna" }],
+          scores: [{ legs: 0 }, { legs: 1 }],
+          gameFinished: true,
+        },
+        expectedPlayers,
+        allowPositionalFallback: true,
+      });
+      const draw = resolveFixedLegsMatchState({
+        providerState: {
+          players: [{ name: "Anna" }, { name: "Berta" }],
+          scores: [{ legs: 1 }, { legs: 1 }],
+          matchFinished: true,
+        },
+        expectedPlayers,
+        storedEntries: [{ legIndex: 1, winnerId: "a" }],
+        allowPositionalFallback: true,
+      });
+      record(
+        "Fixed 2 Legs: Resolver erkennt vertauschte Reihenfolge und finalen Draw",
+        leg1.phase === "awaiting_leg_2_confirmation"
+          && leg1.leg1WinnerId === "a"
+          && draw.phase === "completed"
+          && draw.legs.p1 === 1
+          && draw.legs.p2 === 1,
+        `leg1=${JSON.stringify(leg1)}, draw=${JSON.stringify(draw)}`,
+      );
+    } catch (error) {
+      record("Fixed 2 Legs: Resolver erkennt vertauschte Reihenfolge und finalen Draw", false, String(error?.message || error));
+    }
+
+    try {
+      record(
+        "Fixed 2 Legs: Live-Steuerung ist auf exakte Matchrouten begrenzt",
+        getFixedLegsLiveRouteId("/matches/lobby-1") === "lobby-1"
+          && getFixedLegsLiveRouteId("/lobbies/lobby-1") === ""
+          && getFixedLegsLiveRouteId("/history/matches/lobby-1") === ""
+          && getFixedLegsLiveRouteId("/matches/lobby-1/details") === "",
+        "Nur /matches/{id} ist zulässig.",
+      );
+    } catch (error) {
+      record("Fixed 2 Legs: Live-Steuerung ist auf exakte Matchrouten begrenzt", false, String(error?.message || error));
+    }
+
+    try {
+      const previousTournament = state.store.tournament;
+      const previousActionState = state.fixedLegsLive.actionInProgress;
+      try {
+        const tournament = createTournament({
+          name: "FixedLiveDom",
+          mode: "preliminary_final",
+          preliminaryMatchesPerParticipant: 4,
+          finalStageType: "ko",
+          finalStageQualifierCount: 4,
+          finalStageBestOfLegs: 5,
+          participants: participantList(5, "FLD"),
+        });
+        const match = tournament.matches.find((entry) => entry.stage === MATCH_STAGE_PRELIMINARY);
+        ensureMatchAutoMeta(match).lobbyId = "fixed-live-dom";
+        state.store.tournament = tournament;
+        state.fixedLegsLive.actionInProgress = false;
+        paintFixedLegsLiveControl(match, {
+          ok: true,
+          phase: "awaiting_leg_2_confirmation",
+          syncStatus: "awaiting_leg_2",
+          legs: { p1: 1, p2: 0 },
+          completedLegs: 1,
+          leg1WinnerId: match.player1Id,
+        });
+        const root = document.querySelector("[data-ata-fixed-legs-live='1']");
+        const buttons = root ? root.querySelectorAll("button") : [];
+        const liveRegions = root ? root.querySelectorAll("[aria-live='polite'][aria-atomic='true']") : [];
+        const button = buttons[0];
+        const heading = root?.querySelector("h2[tabindex='-1']");
+        state.fixedLegsLive.actionInProgress = true;
+        paintFixedLegsLiveControl(match, {
+          ok: true,
+          phase: "awaiting_leg_2_confirmation",
+          syncStatus: "awaiting_leg_2",
+          legs: { p1: 1, p2: 0 },
+          completedLegs: 1,
+          leg1WinnerId: match.player1Id,
+        });
+        const busyButton = document.querySelector("[data-ata-fixed-legs-live='1'] button");
+        record(
+          "Fixed 2 Legs: Live-Steuerkarte hat genau eine Aktion, höfliche Live-Region und 44px-Ziel",
+          buttons.length === 1
+            && normalizeText(button?.textContent).includes("Leg 1")
+            && liveRegions.length === 1
+            && normalizeText(button?.style?.minHeight || "") === "44px"
+            && heading instanceof HTMLElement
+            && busyButton instanceof HTMLButtonElement
+            && busyButton.disabled,
+          `buttons=${buttons.length}, liveRegions=${liveRegions.length}, minHeight=${button?.style?.minHeight || "-"}, busyDisabled=${Boolean(busyButton?.disabled)}`,
+        );
+      } finally {
+        removeFixedLegsLiveControl();
+        state.store.tournament = previousTournament;
+        state.fixedLegsLive.actionInProgress = previousActionState;
+      }
+    } catch (error) {
+      record("Fixed 2 Legs: Live-Steuerkarte hat genau eine Aktion, höfliche Live-Region und 44px-Ziel", false, String(error?.message || error));
     }
 
     try {
@@ -2797,7 +2901,7 @@
       const migrated = migrateStorage(rawStoreV2);
       record(
         "Migration: v2 -> v5 setzt Tie-Break-Profil",
-        migrated.schemaVersion === 5
+        migrated.schemaVersion === STORAGE_SCHEMA_VERSION
           && migrated.tournament?.rules?.tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE
           && migrated.settings?.tournamentTimeProfile === TOURNAMENT_TIME_PROFILE_NORMAL
           && migrated.settings?.featureFlags?.koDrawLockDefault === true,

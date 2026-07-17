@@ -1,8 +1,8 @@
 # DRA Compliance Matrix
 
-Stand: Release `0.13.0` / DRA Rules `2026` / `schemaVersion 5` / KO-Engine `v3` mit vollständiger KO-Materialisierung.
+Stand: Release `0.14.0` / DRA Rules `2026` / `schemaVersion 6` / KO-Engine `v3` mit vollständiger KO-Materialisierung.
 
-Release `0.13.0` ändert keine Turnierregel, Reason-Code-Wirkung oder Compliance-Einstufung. Die lokale Best-of-5-Vorlage wird als Produktprofil zum verständlichen Standard; das offizielle European-Tour-Profil ist sichtbar auf Runden 1 bis 4 begrenzt. Progressive Regelhilfe und neue Zielgruppendokumentation machen `enforced`, `assisted` und organisatorische Grenzen schneller erkennbar.
+Release `0.14.0` ändert nicht die Zwei-Leg-Ergebnisregel, sondern deren AutoDarts-Abbildung: Eine Matchmodus-Off-Lobby wird über zwei bestätigte Übergänge geführt. Die zulässigen Ergebnisse bleiben technisch auf `2:0`, `1:1` und `0:2` begrenzt; der externe Lobbyübergang bleibt `assisted`.
 
 Statuswerte:
 - `enforced`: technisch erzwungen
@@ -17,7 +17,7 @@ Statuswerte:
 | 6.8.2, p.18 | Round Robin zulässig | enforced | `src/domain/tournament-create.js` (`buildLeagueMatches`, Gruppenmatches), `src/domain/standings-dra.js` |
 | 1.2 / 6.8.4 / Veranstalterregeln | Ungerade Teilnehmerzahl im bestehenden `groups_ko` | assisted / enforced | `require_even` ist sicherer Produktstandard; `allow_unequal` erfordert bei ungerader Anzahl eine ausdrückliche Bestätigung. Die Anwendung analysiert nur zwei Round-Robin-Gruppen mit Top 2 und behauptet keine universelle DRA-Regel oder Unterstützung anderer offizieller Formate. |
 | 1.2 / 6.8.2 / 6.8.4 / Veranstalterregeln | `preliminary_final`: verkürzte Vorrunde und Finalphase | enforced / assisted | `src/domain/preliminary-schedule.js` erzwingt gleiche reale Matchanzahl und eindeutige Gegner; `src/domain/preliminary-standings.js` wertet das gespeicherte Veranstalterprofil; `src/domain/preliminary-final-stage.js` blockiert ungeklärte Qualifikation und erzeugt KO/Doppel-KO aus Tabellen-Seeds. Keine universelle Verbandskonformitätsaussage. |
-| Veranstalterregel / technische Integrationsgrenze | Zwei feste Legs mit möglichem `1:1` | enforced | Nur `2:0`, `1:1`, `0:2` sind zulässig. Mangels belegbarer exakter Zwei-Lobby-/Anwurfabbildung ist der AutoDarts-API-Start mit `fixed_legs_api_unsupported` gesperrt; manuelle Leg-Erfassung statt Approximation. |
+| Veranstalterregel / technische Integrationsgrenze | Zwei feste Legs mit möglichem `1:1` | enforced / assisted | Nur `2:0`, `1:1`, `0:2` sind zulässig. `src/core/fixed-legs-match-state.js` validiert Zustand und Spielerzuordnung; `src/infra/fixed-legs-live-controller.js` führt eine Matchmodus-Off-Lobby mit bestätigtem `games/next` und `finish`. Kein First-to-/Best-of-Ersatz; manuelle Erfassung bleibt Fallback. |
 | 6.10.1, p.18 | Zulassung liegt beim Promoter; kein globales DRA-Softwarelimit | assisted | Projektlimits sind technische/organisatorische Produktleitplanken in `src/domain/tournament-create.js`, `src/ui/render-settings.js`, `README.md` |
 | 6.12.1, p.19 | Draw bleibt bestehen | enforced / assisted | `drawLocked` je Turnier in `src/domain/ko-engine.js`, Entsperren nur als expliziter Promoter-Override in `src/domain/rules-config.js` + `src/app/tournament-actions.js`; Platz-3-Option ist als Anlage/Import-Regel ausgelegt (kein Live-Toggle im laufenden Turnier) |
 | 6.16.1, p.21 | Tie-Break im Ermessen des Promoters | enforced | Profilmodell `tieBreakProfile` in `src/data/normalization.js`, Ranking in `src/domain/standings-dra.js`, Profilsperre nach erstem relevanten Ergebnis in `src/domain/rules-config.js` |
@@ -36,4 +36,4 @@ Statuswerte:
   - `dra_strict -> promoter_h2h_minitable`
   - `legacy -> promoter_points_legdiff`
 - Legacy-`groups_ko` ohne neue Policy werden bei ungerader oder gespeicherter ungleicher Gruppenverteilung als bestehendes `allow_unequal`-Verhalten normalisiert. Gruppen und Matches bleiben unverändert; eine Bestätigung wird nicht abgeleitet.
-- Storage ist auf `schemaVersion: 5`; bestehende Modi und Turniere werden ohne strukturelle Neuauslosung weiter normalisiert.
+- Storage ist auf `schemaVersion: 6`. Schema 5 behält Paarungen, Leg-Einträge und Ergebnisse unverändert; `manual_only` wird abhängig von offenem, verknüpftem oder manuell abgeschlossenem Match nach `idle`, `linked` beziehungsweise `manual` überführt. Es wird nichts neu ausgelost oder inhaltlich umgewertet.

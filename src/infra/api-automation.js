@@ -1,4 +1,141 @@
 ﻿// Auto-generated module split from dist source.
+  function getFixedLegsExpectedPlayers(tournament, match) {
+    return [participantById(tournament, match?.player1Id), participantById(tournament, match?.player2Id)].map((participant, index) => ({
+      id: normalizeText(participant?.id || (index === 0 ? match?.player1Id : match?.player2Id) || ""),
+      name: normalizeText(participant?.name || ""),
+    }));
+  }
+
+
+  function resolveFixedLegsFromApiStats(tournament, match, stats) {
+    const matchStats = Array.isArray(stats?.matchStats) ? stats.matchStats : [];
+    if (matchStats.length !== 2) return { ok: false, phase: "blocked", reasonCode: "fixed_legs_result_not_ready" };
+    const players = Array.isArray(stats?.players) && stats.players.length === 2
+      ? stats.players
+      : matchStats;
+    return resolveFixedLegsMatchState({
+      providerState: {
+        players,
+        scores: matchStats,
+        matchFinished: true,
+      },
+      expectedPlayers: getFixedLegsExpectedPlayers(tournament, match),
+      storedEntries: match?.meta?.fixedLegs?.entries || [],
+      allowPositionalFallback: false,
+    });
+  }
+
+
+  function getFixedLegsSyncErrorMessage(reasonCode) {
+    const messages = {
+      fixed_legs_player_mapping_ambiguous: "Spieler konnten nicht eindeutig dem Vorrundenmatch zugeordnet werden.",
+      fixed_legs_state_invalid: "Der AutoDarts-Matchzustand ist für zwei feste Legs ungültig.",
+      fixed_legs_state_conflict: "Gespeicherter Legstand und AutoDarts-Matchzustand widersprechen sich.",
+      fixed_legs_overrun: "Mehr als zwei Legs wurden abgeschlossen. Bitte Ergebnis manuell prüfen und korrigieren.",
+      fixed_legs_result_not_ready: "Das Ergebnis aus genau zwei Legs ist noch nicht verfügbar.",
+      fixed_legs_next_failed: "Leg 2 konnte nicht gestartet werden.",
+      fixed_legs_finish_failed: "Das AutoDarts-Match konnte nicht beendet werden.",
+    };
+    return messages[reasonCode] || "Fixed-Legs-Synchronisierung fehlgeschlagen.";
+  }
+
+
+  function persistResolvedFixedLegsResult(tournament, match, resolved, source = "auto") {
+    if (!resolved?.ok || resolved.completedLegs !== PRELIMINARY_FIXED_LEG_COUNT) {
+      return { ok: false, reasonCode: "fixed_legs_result_not_ready", message: getFixedLegsSyncErrorMessage("fixed_legs_result_not_ready") };
+    }
+    const expectedPlayers = getFixedLegsExpectedPlayers(tournament, match);
+    const storedEntries = match?.meta?.fixedLegs?.entries || [];
+    const entries = buildFixedLegEntriesFromResolvedState(resolved, expectedPlayers, storedEntries);
+    const result = entries.length === PRELIMINARY_FIXED_LEG_COUNT
+      ? applyFixedLegEntriesToTournament(tournament, match.id, entries, source)
+      : applyFixedLegAggregateResult(tournament, match, null, resolved.legs, source);
+    if (!result.ok) return result;
+    const updatedMatch = findMatch(tournament, match.id) || match;
+    if (updatedMatch?.meta?.fixedLegs) updatedMatch.meta.fixedLegs.syncStatus = source === "auto" ? "completed" : "manual";
+    refreshDerivedMatches(tournament);
+    tournament.updatedAt = nowIso();
+    return { ok: true, completed: true, legs: resolved.legs };
+  }
+
+
+  async function syncFixedLegsApiMatchResult(tournament, match, token, options = {}) {
+    const auto = ensureMatchAutoMeta(match);
+    const lobbyId = normalizeText(auto.lobbyId || "");
+    let updated = false;
+    try {
+      let providerState = options.prefetchedState || null;
+      let resolved = null;
+      if (!providerState) {
+        try {
+          providerState = await fetchMatchState(lobbyId, token);
+        } catch (stateError) {
+          if (Number(stateError?.status || 0) !== 404) throw stateError;
+          const statsAfterFinish = options.prefetchedStats || await fetchMatchStats(lobbyId, token);
+          resolved = resolveFixedLegsFromApiStats(tournament, match, statsAfterFinish);
+        }
+      }
+      if (!resolved) {
+        resolved = resolveFixedLegsMatchState({
+          providerState,
+          expectedPlayers: getFixedLegsExpectedPlayers(tournament, match),
+          storedEntries: match?.meta?.fixedLegs?.entries || [],
+          allowPositionalFallback: true,
+        });
+      }
+      if (resolved.ok && resolved.phase === "awaiting_finish_confirmation") {
+        const finalStats = options.prefetchedStats || await fetchMatchStats(lobbyId, token).catch(() => null);
+        const statsResolved = finalStats ? resolveFixedLegsFromApiStats(tournament, match, finalStats) : null;
+        if (statsResolved?.ok && statsResolved.phase === "completed") resolved = statsResolved;
+      }
+      const timestamp = nowIso();
+      if (!resolved.ok) {
+        const message = getFixedLegsSyncErrorMessage(resolved.reasonCode);
+        auto.status = "error";
+        auto.lastError = message;
+        auto.lastSyncAt = timestamp;
+        if (match?.meta?.fixedLegs) match.meta.fixedLegs.syncStatus = "error";
+        match.updatedAt = timestamp;
+        return { ok: false, updated: true, completed: false, pending: true, recoverable: Boolean(resolved.recoveryAvailable), reasonCode: resolved.reasonCode, message, resolved };
+      }
+      const previousAutoStatus = auto.status;
+      const previousError = normalizeText(auto.lastError || "");
+      const previousSyncStatus = normalizeText(match?.meta?.fixedLegs?.syncStatus || "");
+      auto.status = "started";
+      auto.lastError = null;
+      if (match?.meta?.fixedLegs) match.meta.fixedLegs.syncStatus = resolved.syncStatus;
+      updated = previousAutoStatus !== auto.status
+        || Boolean(previousError)
+        || previousSyncStatus !== resolved.syncStatus;
+      if (updated) {
+        auto.lastSyncAt = timestamp;
+        match.updatedAt = timestamp;
+      }
+      if (resolved.phase !== "completed") {
+        return { ok: true, updated, completed: false, pending: true, recoverable: true, reasonCode: resolved.phase, message: "Fixed-Legs-Match läuft.", resolved };
+      }
+      const result = persistResolvedFixedLegsResult(tournament, match, resolved, "auto");
+      if (!result.ok) return { ...result, updated: true, completed: false, pending: true, recoverable: false, resolved };
+      return { ok: true, updated: true, completed: true, pending: false, reasonCode: "completed", message: "Ergebnis übernommen.", resolved };
+    } catch (error) {
+      const status = Number(error?.status || 0);
+      if (status === 401 || status === 403) {
+        return { ok: false, updated, completed: false, pending: true, authError: true, reasonCode: "auth", message: "Auth abgelaufen." };
+      }
+      if (status === 404) {
+        return { ok: false, updated, completed: false, pending: true, recoverable: true, reasonCode: "fixed_legs_result_not_ready", message: getFixedLegsSyncErrorMessage("fixed_legs_result_not_ready") };
+      }
+      const message = normalizeText(error?.message || "Matchzustand konnte nicht geladen werden.");
+      auto.status = "error";
+      auto.lastError = message;
+      auto.lastSyncAt = nowIso();
+      if (match?.meta?.fixedLegs) match.meta.fixedLegs.syncStatus = "error";
+      match.updatedAt = nowIso();
+      return { ok: false, updated: true, completed: false, pending: true, recoverable: false, reasonCode: "fixed_legs_state_invalid", message };
+    }
+  }
+
+
   async function syncApiMatchResult(tournament, match, token, options = {}) {
     const notifyErrors = Boolean(options.notifyErrors);
     const notifyNotReady = Boolean(options.notifyNotReady);
@@ -25,6 +162,10 @@
         reasonCode: "error",
         message: "Match ist im Fehlerstatus.",
       };
+    }
+
+    if (isFixedLegsPreliminaryMatch(tournament, match)) {
+      return syncFixedLegsApiMatchResult(tournament, match, token, options);
     }
 
     let updated = false;
@@ -360,15 +501,12 @@
         return false;
       }
       const auto = ensureMatchAutoMeta(match);
-      return Boolean(auto.lobbyId && auto.status === "started");
+      return Boolean(auto.lobbyId && (auto.status === "started" || auto.status === "error"));
     }) || null;
   }
 
 
   function buildLobbyCreatePayload(tournament, match = null) {
-    if (isFixedLegsPreliminaryMatch(tournament, match) || (tournament?.mode === "preliminary_final" && !match)) {
-      throw Object.assign(new Error("Zwei feste Legs k\u00f6nnen nicht exakt als AutoDarts-First-to-N-Lobby gestartet werden."), { reasonCode: "fixed_legs_api_unsupported" });
-    }
     const legsToWin = getLegsToWin(getMatchBestOfLegs(tournament, match));
     const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
     const bullOffMode = sanitizeX01BullOffMode(x01Settings.bullOffMode);
@@ -379,13 +517,16 @@
       maxRounds: x01Settings.maxRounds,
       bullMode: sanitizeX01BullMode(x01Settings.bullMode),
     };
-    return {
+    const payload = {
       variant: x01Settings.variant,
       isPrivate: true,
       bullOffMode,
-      legs: legsToWin,
       settings,
     };
+    if (!isFixedLegsPreliminaryMatch(tournament, match) && !(tournament?.mode === "preliminary_final" && !match)) {
+      payload.legs = legsToWin;
+    }
+    return payload;
   }
 
 
@@ -753,15 +894,6 @@
         title: "\u00d6ffnet das bereits gestartete Match.",
       };
     }
-    if (isFixedLegsPreliminaryMatch(tournament, match)) {
-      return {
-        label: "Manuell erfassen",
-        disabled: true,
-        reasonCode: "fixed_legs_api_unsupported",
-        title: "API-Start gesperrt: AutoDarts bildet zwei feste Legs mit geregeltem Anwurf derzeit nicht exakt ab.",
-      };
-    }
-
     if (!state.store.settings.featureFlags.autoLobbyStart) {
       return {
         label: "Match starten",
@@ -845,6 +977,16 @@
       return "Freilos (Bye): kein API-Sync erforderlich";
     }
     const auto = ensureMatchAutoMeta(match);
+    const fixedSyncStatus = normalizeText(match?.meta?.fixedLegs?.syncStatus || "");
+    const fixedLabels = {
+      linked: "Fixed Legs: Leg 1 läuft",
+      awaiting_leg_2: "Fixed Legs: Bestätigung für Leg 2 erforderlich",
+      playing_leg_2: "Fixed Legs: Leg 2 läuft",
+      awaiting_finish: "Fixed Legs: Bestätigung zum Abschluss erforderlich",
+      manual: "Fixed Legs: manuell erfasst",
+      error: "Fixed Legs: Prüfung erforderlich",
+    };
+    if (fixedLabels[fixedSyncStatus]) return fixedLabels[fixedSyncStatus];
     if (auto.status === "completed") {
       return "API-Sync: abgeschlossen";
     }
@@ -869,11 +1011,6 @@
       setNotice("error", "Match nicht gefunden.");
       return;
     }
-    if (isFixedLegsPreliminaryMatch(tournament, match)) {
-      setNotice("error", "API-Start gesperrt: Zwei feste Legs werden nicht durch First to 2 oder Best of 3 angen\u00e4hert.");
-      return { ok: false, reasonCode: "fixed_legs_api_unsupported" };
-    }
-
     const auto = ensureMatchAutoMeta(match);
     const editability = getMatchEditability(tournament, match);
     const duplicates = getDuplicateParticipantNames(tournament);
@@ -1149,6 +1286,9 @@
       auto.finishedAt = null;
       auto.lastSyncAt = now;
       auto.lastError = null;
+      if (isFixedLegsPreliminaryMatch(tournament, match) && match?.meta?.fixedLegs) {
+        match.meta.fixedLegs.syncStatus = "linked";
+      }
       match.updatedAt = now;
       tournament.updatedAt = now;
 

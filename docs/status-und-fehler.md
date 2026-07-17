@@ -141,6 +141,40 @@ Die Übernahme war schon erfolgreich. Keine erneute Aktion nötig.
 
 Das Ergebnis wurde erfolgreich ins lokale Turnier geschrieben.
 
+## Geführte Zwei-Leg-Vorrunde
+
+### `Fixed Legs: Leg 1 läuft`
+
+Die Matchmodus-Off-Lobby ist eindeutig verknüpft. Leg 1 normal spielen; der Assistant wechselt nicht automatisch weiter.
+
+### `Fixed Legs: Bestätigung für Leg 2 erforderlich`
+
+Leg 1 ist abgeschlossen. Stand prüfen und auf der Matchseite `Leg 1 übernehmen & Leg 2 starten` wählen.
+
+### `Fixed Legs: Leg 2 läuft`
+
+Leg 1 wurde gespeichert und Leg 2 gestartet. Nach dem zweiten Checkout auf die Abschlussaktion warten.
+
+### `Fixed Legs: Bestätigung zum Abschluss erforderlich`
+
+Genau zwei Legs sind abgeschlossen. `Match abschließen & Ergebnis übernehmen` prüft `2:0`, `1:1` oder `0:2`, beendet das AutoDarts-Match und aktualisiert die Tabelle.
+
+### `Fixed Legs: Prüfung erforderlich`
+
+Der API-Zustand ist nicht sicher automatisch übernehmbar. Die konkrete Ursache steht im Detailtext:
+
+| Reason Code | Bedeutung | Handlung |
+|---|---|---|
+| `fixed_legs_player_mapping_ambiguous` | Namen oder IDs ordnen die zwei Personen nicht eindeutig zu. | Namen und Lobby prüfen; anschließend kontrolliert manuell erfassen. |
+| `fixed_legs_state_invalid` | Der gelesene Matchzustand enthält keinen plausiblen Zwei-Spieler-/Legstand. | Seite neu laden, Auth prüfen und Matchzustand in AutoDarts kontrollieren. |
+| `fixed_legs_state_conflict` | Gespeicherter Stand und API-Stand laufen auseinander; eventuell wurde Leg 3 begonnen. | Bei begonnenem Leg 3 nur die angebotene bestätigte Wiederherstellung nutzen, sonst manuell prüfen. |
+| `fixed_legs_overrun` | Mehr als zwei Legs sind abgeschlossen. | Nichts wird gekürzt. AutoDarts-Ergebnis prüfen und Vorrundenmatch manuell korrigieren. |
+| `fixed_legs_next_failed` | `games/next` konnte Leg 2 nicht sicher starten. | Prüfen, ob Leg 2 nativ bereits läuft; dann neu laden. Andernfalls manuell fortfahren. |
+| `fixed_legs_finish_failed` | `finish` konnte das Match nicht sicher beenden. | AutoDarts-Match prüfen, gegebenenfalls nativ beenden und neu laden. |
+| `fixed_legs_result_not_ready` | Es sind noch nicht exakt zwei abgeschlossene Legs verfügbar. | Match weiterspielen oder kurz warten; keinen Endstand erzwingen. |
+
+Bei manueller Speicherung mit verknüpfter Lobby bestätigt die Turnierleitung ausdrücklich, dass das AutoDarts-Match beendet wurde. Die Verknüpfung bleibt zur Nachvollziehbarkeit erhalten.
+
 ## History-Seite und Statistikimport
 
 <a id="statusmeldung-kein-eindeutiger-statistik-host"></a>

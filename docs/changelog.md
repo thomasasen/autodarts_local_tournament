@@ -4,6 +4,15 @@
 
 - Dokumentation um reproduzierbare GUI-Abbildungen für Turnieranlage, manuelle Ergebnisführung, Automatik, Kontext-Hilfe, Veranstalterregeln, Sicherung und Statuszustände ergänzt; Screenshot-Erzeugung und visueller Release-Check sind im Viewport-Skript beziehungsweise in der Release-Checkliste festgehalten.
 
+## 0.14.0
+
+- Vorrundenmatches mit genau zwei festen Legs können bei aktiver AutoDarts-Automatik gestartet werden. Die Lobby verwendet Matchmodus `Off`, indem `legs` und `sets` im Create-Payload fehlen; alle anderen Modi behalten unverändert ihr First-to-Payload.
+- Eine eigene Steuerkarte auf der eindeutig verknüpften Route `/matches/{id}` führt durch `Leg 1 übernehmen & Leg 2 starten` und `Match abschließen & Ergebnis übernehmen`. Jeder API-Write wird durch einen Klick ausgelöst und nach erneutem `GET state` ausgeführt.
+- Der pure Fixed-Legs-Resolver ordnet Spieler über eindeutige Namen/IDs zu, erkennt vertauschte API-Reihenfolge, Reloads, native Next-/Finish-Aktionen, rückläufige Zustände und Overruns. Ein begonnenes drittes Leg kann nur nach zusätzlicher Bestätigung beendet werden; mehr als zwei abgeschlossene Legs werden nie still gekürzt.
+- `POST games/next` und `POST finish` sind idempotent abgesichert. `2:0`, `1:1` und `0:2` werden einschließlich History-/Background-Sync ohne vorausgesetzten API-Gewinner übernommen; die manuelle Leg-Erfassung bleibt kontrollierter Fallback.
+- Persistenzschema auf `schemaVersion: 6` angehoben. Schema 5 erhält vorhandene Paarungen, Leg-Einträge und Ergebnisse; Legacy-`manual_only` wird ohne Neuauslosung nach `idle`, `linked` oder `manual` migriert.
+- Domain-, Integrationssimulations- und Runtime-Selftests decken Phasen, Fehlercodes, wiederholte Klicks, verspätete Antworten, Routenbegrenzung, Draws, Migration und JSON-Roundtrip ab. Die historische Sicherheitsgrenze aus 0.5.0 bleibt als damaliger Stand unverändert dokumentiert.
+
 ## 0.13.0
 
 - Die Oberfläche trennt Einsteiger- und Fachinformationen konsequent: Format- und Moduswahl erklären ihre Wirkung in Klartext, Spielregeln zeigen zuerst das Matchziel und technische Details erst danach, die kontextbezogene Hilfe klappt Beispiele, Einschränkungen, Regelstatus und Quellen progressiv auf.

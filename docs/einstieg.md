@@ -78,6 +78,21 @@ _In den beiden Zahlenfeldern stehen die gewonnenen Legs. `Ergebnis speichern` be
 
 Aktiviere in `Einstellungen` die `AutoDarts-Automatik für Matchstart und Ergebnis`. Dann werden ein gültiger AutoDarts-Login und ein erkanntes Board benötigt. `Match starten` erstellt beziehungsweise startet die Lobby; das Endergebnis wird anschließend synchronisiert.
 
+#### Beispiel: Vorrundenmatch endet 1:1
+
+Bei `Vorrunde + Finalphase` werden immer genau zwei Legs gespielt. Die AutoDarts-Lobby läuft dafür im Matchmodus `Off`, damit kein First-to-2 oder Best-of-3 daraus wird.
+
+1. `Match starten` wählen und Leg 1 spielen.
+2. Nach dem Checkout in der Steuerkarte `Leg 1 übernehmen & Leg 2 starten` wählen.
+3. Leg 2 spielen.
+4. Danach `Match abschließen & Ergebnis übernehmen` wählen.
+
+Gewinnt Anna das erste und Berta das zweite Leg, speichert der Assistant `1:1`. Das ist ein vollständiges und gültiges Vorrundenergebnis. Die zwei Klicks sind absichtlich nötig: AutoDarts kennt in `Off` kein automatisches Ende nach genau zwei Legs, der Assistant prüft den aktuellen Stand deshalb vor jedem schreibenden Schritt erneut.
+
+![Geführter Vorrundenablauf nach beendetem ersten Leg](../assets/gui-vorrunde-fixed-legs.png)
+
+_Die Karte zeigt Paarung, Legstand und nur die jetzt zulässige Aktion. Die manuellen Leg-Auswahlen im Assistant bleiben als Fallback verfügbar._
+
 ![Einstellungen für AutoDarts-Automatik, Auslosung und Draw-Lock](../assets/gui-einstellungen-automatik.png)
 
 _Der erste Schalter aktiviert die API-Automatik. Auslosung und Draw-Lock darunter sind davon unabhängige Turnierstandards._

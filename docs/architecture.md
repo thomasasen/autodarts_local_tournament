@@ -11,7 +11,7 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
 - `src/data`: Storage-I/O, Normalisierung, Migration
 - `src/bracket`: low-level Bracket-Payload, Iframe-Template und Frame-Transport
 - `src/app`: Orchestrierung zwischen Domain, Persistenz, Bracket und UI
-- `src/infra`: API-Client, API-Automation, DOM-Autodetect, History-Import, Route-Hooks
+- `src/infra`: API-Client, API-Automation, Fixed-Legs-Live-Controller, DOM-Autodetect, History-Import, Route-Hooks
 - `src/ui`: Rendering, View-Helper, Handler, Styles
 - `src/runtime`: nur Bootstrap-/Wiring-Dateien
 
@@ -40,12 +40,12 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
   - `runSelfTests()` für lokale Diagnose
 - `src/runtime/bootstrap.js` startet den Ablauf.
 - `src/app/public-api.js` veröffentlicht die Runtime-API.
-- `src/app/browser-lifecycle.js`, `src/infra/dom-autodetect.js` und `src/infra/history-import.js` tragen die eigentliche Browser-/DOM-Logik.
+- `src/app/browser-lifecycle.js`, `src/infra/dom-autodetect.js`, `src/infra/history-import.js` und `src/infra/fixed-legs-live-controller.js` tragen die eigentliche Browser-/DOM-Logik.
 - `src/infra/update-check.js` prüft best-effort die veröffentlichte GitHub-Version; `src/app/update-status.js` spiegelt den Status in UI und Loader-Menü.
 
 ## Datenmodell
 - Storage-Key: `ata:tournament:v1`
-- `schemaVersion: 5`
+- `schemaVersion: 6`
 - Neues Regelobjekt pro Turnier:
   - `tournament.rules.tieBreakProfile: "promoter_h2h_minitable" | "promoter_points_legdiff"`
 - Neues globales Settings-Feld:
@@ -87,6 +87,10 @@ Der Assistent ist in fachliche Schichten aufgeteilt und wird weiterhin als einze
 - Vorrunde + Finalphase:
   - `tournament.preliminary` hält den deterministischen regulären Paarungsplan, Fixed-2-Legs-Format und das Veranstalter-Punkteprofil
   - `tournament.finalStage` hält Qualifikantenzahl, unabhängiges Best-of, Status, Tabellen-Seeds und wiederverwendete KO-Metadaten
+  - `match.meta.fixedLegs.syncStatus` verwendet `idle | linked | awaiting_leg_2 | playing_leg_2 | awaiting_finish | completed | manual | error`; Schema 5 wird ohne Änderung vorhandener Ergebnisse oder Paarungen normalisiert
+  - `src/core/fixed-legs-match-state.js` enthält den DOM-/Storage-freien Resolver und den injizierbaren, idempotenten Aktionsablauf. Spieler werden über eindeutige Namen/IDs zugeordnet; ein Positionsfallback ist nur mit separat validierter Reihenfolge zulässig
+  - `src/infra/fixed-legs-live-controller.js` ist nur auf der exakt verknüpften Route `/matches/{id}` aktiv, liest vor jedem Write den Zustand neu und kapselt die bestätigten Übergänge `games/next` und `finish`
+  - Datenfluss: Lobby-ID + gespeicherte Leg-Einträge + `GET state` → purer Resolver → genau eine zulässige UI-Aktion → Revalidierung → API-Write → Domainergebnis → Persistenz/Tabellenrefresh
 
 ## Zeitprognose
 - Details zur Formel und zur externen Kalibrierung stehen in `docs/tournament-duration.md`.

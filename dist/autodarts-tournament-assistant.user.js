@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.13.0
+// @version      0.14.0
 // @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
@@ -22,9 +22,9 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.13.0";
+  const APP_VERSION = "0.14.0";
   const STORAGE_KEY = "ata:tournament:v1";
-  const STORAGE_SCHEMA_VERSION = 5;
+  const STORAGE_SCHEMA_VERSION = 6;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
   const SAVE_DEBOUNCE_MS = 150;
   const UI_HOST_ID = "ata-ui-host";
@@ -2634,6 +2634,16 @@
   const PRELIMINARY_PAIRING_METHOD_BALANCED_REGULAR = "balanced_regular";
   const PRELIMINARY_MATCH_FORMAT_FIXED_LEGS = "fixed_legs";
   const PRELIMINARY_FIXED_LEG_COUNT = 2;
+  const FIXED_LEGS_SYNC_STATUSES = Object.freeze([
+    "idle",
+    "linked",
+    "awaiting_leg_2",
+    "playing_leg_2",
+    "awaiting_finish",
+    "completed",
+    "manual",
+    "error",
+  ]);
   const FINAL_STAGE_TYPE_KO = "ko";
   const FINAL_STAGE_TYPE_DOUBLE_KO = "double_ko";
   const FINAL_STAGE_TYPES = Object.freeze([FINAL_STAGE_TYPE_KO, FINAL_STAGE_TYPE_DOUBLE_KO]);
@@ -2799,6 +2809,15 @@
       inlineOutcomeByLobby: {},
       pendingConfirmationByLobby: {},
       pendingDrawUnlockOverride: null,
+    },
+    fixedLegsLive: {
+      root: null,
+      polling: false,
+      actionInProgress: false,
+      requestVersion: 0,
+      lastFetchAt: 0,
+      lastLobbyId: "",
+      outcome: null,
     },
     updateStatus: {
       capable: false,
@@ -3559,6 +3578,284 @@
         error,
       };
     }
+  }
+
+// Pure helpers for the guided two-leg AutoDarts match flow.
+
+  function getFixedLegsProviderPlayerRef(player) {
+    const candidate = player && typeof player === "object" ? player : {};
+    const nested = candidate.player && typeof candidate.player === "object" ? candidate.player : {};
+    return {
+      id: normalizeText(candidate.id || candidate.playerId || candidate.userId || nested.id || nested.playerId || ""),
+      name: normalizeText(candidate.name || candidate.displayName || candidate.username || nested.name || nested.displayName || nested.username || ""),
+    };
+  }
+
+
+  function getFixedLegsProviderPlayers(providerState) {
+    const candidates = [providerState?.players, providerState?.match?.players, providerState?.game?.players];
+    const source = candidates.find((entry) => Array.isArray(entry) && entry.length === 2) || [];
+    return source.map(getFixedLegsProviderPlayerRef);
+  }
+
+
+  function getFixedLegsScoreArray(providerState) {
+    const candidates = [
+      { value: providerState?.legs, allowNumeric: true },
+      { value: providerState?.legsWon, allowNumeric: true },
+      { value: providerState?.score?.legs, allowNumeric: true },
+      { value: providerState?.scores, allowNumeric: false },
+      { value: providerState?.matchStats, allowNumeric: false },
+      { value: providerState?.match?.scores, allowNumeric: false },
+    ];
+    for (const candidate of candidates) {
+      if (!Array.isArray(candidate.value) || candidate.value.length < 2) continue;
+      const values = candidate.value.slice(0, 2).map((entry) => {
+        if (candidate.allowNumeric && Number.isInteger(Number(entry))) return Number(entry);
+        const source = entry && typeof entry === "object" ? entry : {};
+        const value = source.legsWon ?? source.legs ?? source.legWins ?? source.score?.legs;
+        return Number.isInteger(Number(value)) ? Number(value) : NaN;
+      });
+      if (values.every((value) => Number.isInteger(value) && value >= 0)) return values;
+    }
+    return null;
+  }
+
+
+  function mapFixedLegsProviderPlayers(expectedPlayers, providerPlayers, options = {}) {
+    const expected = (Array.isArray(expectedPlayers) ? expectedPlayers : []).slice(0, 2).map((player) => ({
+      id: normalizeText(player?.id || ""),
+      name: normalizeText(player?.name || ""),
+    }));
+    if (expected.length !== 2 || expected.some((player) => !player.id || !player.name)) {
+      return { ok: false, reasonCode: "fixed_legs_player_mapping_ambiguous" };
+    }
+    const expectedNames = expected.map((player) => normalizeLookup(player.name));
+    if (!expectedNames[0] || expectedNames[0] === expectedNames[1]) {
+      return { ok: false, reasonCode: "fixed_legs_player_mapping_ambiguous" };
+    }
+    if (!Array.isArray(providerPlayers) || providerPlayers.length !== 2) {
+      return { ok: false, reasonCode: "fixed_legs_player_mapping_ambiguous" };
+    }
+
+    const mapped = providerPlayers.map((provider) => {
+      const providerId = normalizeText(provider?.id || "");
+      const providerName = normalizeLookup(provider?.name || "");
+      const matches = expected.map((player, index) => (
+        (providerId && providerId === player.id) || (providerName && providerName === expectedNames[index])
+          ? index
+          : -1
+      )).filter((index) => index >= 0);
+      return matches.length === 1 ? matches[0] : -1;
+    });
+    if (mapped[0] >= 0 && mapped[1] >= 0 && mapped[0] !== mapped[1]) {
+      return { ok: true, providerToExpected: mapped, fallback: false };
+    }
+
+    const validatedPositionIds = Array.isArray(options.validatedPositionIds) ? options.validatedPositionIds.map((id) => normalizeText(id || "")) : [];
+    if (options.allowPositionalFallback === true
+      && validatedPositionIds.length === 2
+      && validatedPositionIds[0] === expected[0].id
+      && validatedPositionIds[1] === expected[1].id) {
+      return { ok: true, providerToExpected: [0, 1], fallback: true };
+    }
+    return { ok: false, reasonCode: "fixed_legs_player_mapping_ambiguous" };
+  }
+
+
+  function getFixedLegsGameProgress(providerState) {
+    const rawNumber = providerState?.game?.number
+      ?? providerState?.gameNumber
+      ?? providerState?.currentGameNumber
+      ?? (Number.isInteger(Number(providerState?.gameIndex)) ? Number(providerState.gameIndex) + 1 : null);
+    const gameNumber = Number.isInteger(Number(rawNumber)) ? Number(rawNumber) : 0;
+    const games = Array.isArray(providerState?.games) ? providerState.games : [];
+    const startedGames = Math.max(gameNumber, games.length);
+    const gameFinished = providerState?.gameFinished === true
+      || providerState?.currentGameFinished === true
+      || providerState?.game?.finished === true;
+    const matchFinished = providerState?.matchFinished === true
+      || normalizeLookup(providerState?.status || "") === "finished"
+      || normalizeLookup(providerState?.status || "") === "completed";
+    const finishReady = providerState?.finished === true;
+    return { startedGames, gameFinished, matchFinished, finishReady };
+  }
+
+
+  function resolveFixedLegsMatchState(input) {
+    const providerState = input?.providerState;
+    if (!providerState || typeof providerState !== "object") {
+      return { ok: false, phase: "blocked", reasonCode: "fixed_legs_state_invalid" };
+    }
+    const scoreByProvider = getFixedLegsScoreArray(providerState);
+    if (!scoreByProvider) {
+      return { ok: false, phase: "blocked", reasonCode: "fixed_legs_state_invalid" };
+    }
+    const mapping = mapFixedLegsProviderPlayers(
+      input?.expectedPlayers,
+      getFixedLegsProviderPlayers(providerState),
+      {
+        allowPositionalFallback: input?.allowPositionalFallback === true,
+        validatedPositionIds: input?.validatedPositionIds,
+      },
+    );
+    if (!mapping.ok) {
+      return { ok: false, phase: "blocked", reasonCode: mapping.reasonCode };
+    }
+    const score = [0, 0];
+    mapping.providerToExpected.forEach((expectedIndex, providerIndex) => {
+      score[expectedIndex] = scoreByProvider[providerIndex];
+    });
+    const legs = { p1: score[0], p2: score[1] };
+    const completedLegs = legs.p1 + legs.p2;
+    const storedEntries = Array.isArray(input?.storedEntries) ? input.storedEntries : [];
+    const storedP1 = storedEntries.filter((entry) => normalizeText(entry?.winnerId || "") === normalizeText(input?.expectedPlayers?.[0]?.id || "")).length;
+    const storedP2 = storedEntries.filter((entry) => normalizeText(entry?.winnerId || "") === normalizeText(input?.expectedPlayers?.[1]?.id || "")).length;
+    if (storedEntries.length > completedLegs || storedP1 > legs.p1 || storedP2 > legs.p2) {
+      return { ok: false, phase: "blocked", reasonCode: "fixed_legs_state_conflict", legs, completedLegs };
+    }
+    if (completedLegs > PRELIMINARY_FIXED_LEG_COUNT) {
+      return { ok: false, phase: "blocked", reasonCode: "fixed_legs_overrun", legs, completedLegs };
+    }
+    const progress = getFixedLegsGameProgress(providerState);
+    if (completedLegs === 0) {
+      if (progress.gameFinished || progress.matchFinished || progress.finishReady) {
+        return { ok: false, phase: "blocked", reasonCode: "fixed_legs_state_invalid", legs, completedLegs };
+      }
+      return { ok: true, phase: "playing_leg_1", syncStatus: "linked", legs, completedLegs, mappingFallback: mapping.fallback };
+    }
+    if (completedLegs === 1) {
+      const leg1WinnerId = legs.p1 === 1 ? input.expectedPlayers[0].id : input.expectedPlayers[1].id;
+      if (progress.matchFinished) {
+        return { ok: false, phase: "blocked", reasonCode: "fixed_legs_state_invalid", legs, completedLegs };
+      }
+      if (!progress.gameFinished && !progress.finishReady) {
+        return { ok: true, phase: "playing_leg_2", syncStatus: "playing_leg_2", legs, completedLegs, leg1WinnerId, mappingFallback: mapping.fallback };
+      }
+      return { ok: true, phase: "awaiting_leg_2_confirmation", syncStatus: "awaiting_leg_2", legs, completedLegs, leg1WinnerId, mappingFallback: mapping.fallback };
+    }
+    const thirdGameInProgress = !progress.matchFinished && !progress.gameFinished && !progress.finishReady;
+    if ((progress.startedGames >= 3 || thirdGameInProgress) && !progress.matchFinished) {
+      if (progress.gameFinished) {
+        return { ok: false, phase: "blocked", reasonCode: "fixed_legs_overrun", legs, completedLegs };
+      }
+      return {
+        ok: false,
+        phase: "blocked",
+        reasonCode: "fixed_legs_state_conflict",
+        recoveryAvailable: true,
+        legs,
+        completedLegs,
+      };
+    }
+    if (progress.matchFinished) {
+      return { ok: true, phase: "completed", syncStatus: "completed", legs, completedLegs, mappingFallback: mapping.fallback };
+    }
+    return { ok: true, phase: "awaiting_finish_confirmation", syncStatus: "awaiting_finish", legs, completedLegs, mappingFallback: mapping.fallback };
+  }
+
+
+  function buildFixedLegEntriesFromResolvedState(resolved, expectedPlayers, storedEntries = []) {
+    if (!resolved?.ok || resolved.completedLegs < 1) return [];
+    const existing = (Array.isArray(storedEntries) ? storedEntries : []).map((entry) => ({
+      legIndex: Number(entry?.legIndex),
+      winnerId: normalizeText(entry?.winnerId || ""),
+    })).filter((entry) => entry.legIndex === 1 || entry.legIndex === 2);
+    if (!existing.some((entry) => entry.legIndex === 1) && resolved.leg1WinnerId) {
+      existing.push({ legIndex: 1, winnerId: resolved.leg1WinnerId });
+    }
+    if (resolved.completedLegs === 2 && !existing.length && (resolved.legs?.p1 === 2 || resolved.legs?.p2 === 2)) {
+      const winnerId = resolved.legs.p1 === 2
+        ? normalizeText(expectedPlayers?.[0]?.id || "")
+        : normalizeText(expectedPlayers?.[1]?.id || "");
+      if (winnerId) existing.push({ legIndex: 1, winnerId }, { legIndex: 2, winnerId });
+    }
+    if (resolved.completedLegs === 2 && existing.some((entry) => entry.legIndex === 1) && !existing.some((entry) => entry.legIndex === 2)) {
+      const firstWinner = existing.find((entry) => entry.legIndex === 1)?.winnerId;
+      const p1Id = normalizeText(expectedPlayers?.[0]?.id || "");
+      const p2Id = normalizeText(expectedPlayers?.[1]?.id || "");
+      const totals = new Map([[p1Id, Number(resolved.legs?.p1 || 0)], [p2Id, Number(resolved.legs?.p2 || 0)]]);
+      totals.set(firstWinner, Math.max(0, (totals.get(firstWinner) || 0) - 1));
+      const secondWinner = [...totals.entries()].find(([, count]) => count === 1)?.[0] || "";
+      if (secondWinner) existing.push({ legIndex: 2, winnerId: secondWinner });
+    }
+    return existing.sort((left, right) => left.legIndex - right.legIndex);
+  }
+
+
+  function getFixedLegsActionFailureReason(actionId, error, fallback) {
+    const status = Number(error?.status || 0);
+    if (status === 401 || status === 403) return "auth";
+    if (normalizeText(error?.reasonCode || "")) return normalizeText(error.reasonCode);
+    if (fallback) return fallback;
+    return actionId === "next" ? "fixed_legs_next_failed" : "fixed_legs_finish_failed";
+  }
+
+
+  async function executeFixedLegsGuidedAction(actionId, deps = {}) {
+    const load = typeof deps.load === "function" ? deps.load : null;
+    if (!load) return { ok: false, reasonCode: "fixed_legs_state_invalid" };
+    let resolved;
+    try {
+      resolved = await load();
+    } catch (error) {
+      const status = Number(error?.status || 0);
+      return {
+        ok: false,
+        reasonCode: status === 401 || status === 403
+          ? "auth"
+          : (status === 404 ? "fixed_legs_result_not_ready" : "fixed_legs_state_invalid"),
+        error,
+      };
+    }
+
+    if (actionId === "next") {
+      if (resolved?.phase === "playing_leg_2") return { ok: true, idempotent: true, resolved };
+      if (!resolved?.ok || resolved.phase !== "awaiting_leg_2_confirmation") {
+        return { ok: false, reasonCode: resolved?.reasonCode || "fixed_legs_state_conflict", resolved };
+      }
+      const saveLeg1 = typeof deps.saveLeg1 === "function" ? deps.saveLeg1 : null;
+      const next = typeof deps.next === "function" ? deps.next : null;
+      if (!saveLeg1 || !next) return { ok: false, reasonCode: "fixed_legs_state_invalid", resolved };
+      const saved = await saveLeg1(resolved);
+      if (saved?.ok === false) return { ok: false, reasonCode: saved.reasonCode || "fixed_legs_state_conflict", message: saved.message, resolved };
+      try {
+        await next();
+      } catch (error) {
+        const afterFailure = await load().catch(() => null);
+        if (afterFailure?.phase === "playing_leg_2") return { ok: true, idempotent: true, resolved: afterFailure };
+        return { ok: false, reasonCode: getFixedLegsActionFailureReason(actionId, error, "fixed_legs_next_failed"), error, resolved: afterFailure || resolved };
+      }
+      return { ok: true, resolved };
+    }
+
+    if (actionId === "finish" || actionId === "recover" || actionId === "adopt") {
+      const recoveryAllowed = actionId === "recover" && resolved?.recoveryAvailable;
+      const canFinish = resolved?.phase === "awaiting_finish_confirmation" || recoveryAllowed;
+      if (resolved?.phase !== "completed" && !canFinish) {
+        return { ok: false, reasonCode: resolved?.reasonCode || "fixed_legs_result_not_ready", resolved };
+      }
+      if (resolved.phase !== "completed" && actionId !== "adopt") {
+        const finish = typeof deps.finish === "function" ? deps.finish : null;
+        if (!finish) return { ok: false, reasonCode: "fixed_legs_state_invalid", resolved };
+        try {
+          await finish();
+        } catch (error) {
+          const afterFailure = await load().catch(() => null);
+          if (afterFailure?.phase !== "completed") {
+            return { ok: false, reasonCode: getFixedLegsActionFailureReason(actionId, error, "fixed_legs_finish_failed"), error, resolved: afterFailure || resolved };
+          }
+          resolved = afterFailure;
+        }
+      }
+      const saveResult = typeof deps.saveResult === "function" ? deps.saveResult : null;
+      if (!saveResult) return { ok: false, reasonCode: "fixed_legs_state_invalid", resolved };
+      const saved = await saveResult(resolved);
+      if (saved?.ok === false) return { ok: false, reasonCode: saved.reasonCode || "fixed_legs_result_not_ready", message: saved.message, resolved };
+      return { ok: true, idempotent: resolved.phase === "completed", resolved };
+    }
+
+    return { ok: false, reasonCode: "fixed_legs_state_invalid", resolved };
   }
 
   function logDebug(category, message, ...args) {
@@ -4351,6 +4648,12 @@
   }
 
 
+  function normalizeFixedLegsSyncStatus(value, fallback = "idle") {
+    const normalized = normalizeText(value || "");
+    return FIXED_LEGS_SYNC_STATUSES.includes(normalized) ? normalized : fallback;
+  }
+
+
   function normalizeStoredMatchAverage(value) {
     if (value === null || value === undefined || value === "") {
       return null;
@@ -4412,7 +4715,7 @@
         ? {
           count: PRELIMINARY_FIXED_LEG_COUNT,
           entries: normalizeFixedLegEntries(meta.fixedLegs),
-          syncStatus: "manual_only",
+          syncStatus: normalizeFixedLegsSyncStatus(meta.fixedLegs.syncStatus),
         }
         : null,
     };
@@ -4674,25 +4977,36 @@
     }));
 
     const matchesRaw = Array.isArray(rawTournament.matches) ? rawTournament.matches : [];
-    const matches = matchesRaw.map((match, index) => ({
-      id: normalizeText(match?.id || `match-${index + 1}`),
-      stage: [MATCH_STAGE_KO, MATCH_STAGE_GROUP, MATCH_STAGE_LEAGUE, MATCH_STAGE_PRELIMINARY].includes(match?.stage) ? match.stage : MATCH_STAGE_KO,
-      round: clampInt(match?.round, 1, 1, 64),
-      number: clampInt(match?.number, index + 1, 1, 256),
-      groupId: match?.groupId ? normalizeText(match.groupId) : null,
-      player1Id: match?.player1Id ? normalizeText(match.player1Id) : null,
-      player2Id: match?.player2Id ? normalizeText(match.player2Id) : null,
-      status: match?.status === STATUS_COMPLETED ? STATUS_COMPLETED : STATUS_PENDING,
-      winnerId: match?.winnerId ? normalizeText(match.winnerId) : null,
-      source: match?.source === "auto" || match?.source === "manual" ? match.source : null,
-      legs: {
-        p1: clampInt(match?.legs?.p1, 0, 0, 50),
-        p2: clampInt(match?.legs?.p2, 0, 0, 50),
-      },
-      stats: normalizeStoredMatchStats(match?.stats),
-      updatedAt: normalizeText(match?.updatedAt || nowIso()),
-      meta: normalizeMatchMeta(match?.meta),
-    }));
+    const matches = matchesRaw.map((match, index) => {
+      const normalizedMatch = {
+        id: normalizeText(match?.id || `match-${index + 1}`),
+        stage: [MATCH_STAGE_KO, MATCH_STAGE_GROUP, MATCH_STAGE_LEAGUE, MATCH_STAGE_PRELIMINARY].includes(match?.stage) ? match.stage : MATCH_STAGE_KO,
+        round: clampInt(match?.round, 1, 1, 64),
+        number: clampInt(match?.number, index + 1, 1, 256),
+        groupId: match?.groupId ? normalizeText(match.groupId) : null,
+        player1Id: match?.player1Id ? normalizeText(match.player1Id) : null,
+        player2Id: match?.player2Id ? normalizeText(match.player2Id) : null,
+        status: match?.status === STATUS_COMPLETED ? STATUS_COMPLETED : STATUS_PENDING,
+        winnerId: match?.winnerId ? normalizeText(match.winnerId) : null,
+        source: match?.source === "auto" || match?.source === "manual" ? match.source : null,
+        legs: {
+          p1: clampInt(match?.legs?.p1, 0, 0, 50),
+          p2: clampInt(match?.legs?.p2, 0, 0, 50),
+        },
+        stats: normalizeStoredMatchStats(match?.stats),
+        updatedAt: normalizeText(match?.updatedAt || nowIso()),
+        meta: normalizeMatchMeta(match?.meta),
+      };
+      if (normalizedMatch.meta.fixedLegs) {
+        const rawSyncStatus = normalizeText(match?.meta?.fixedLegs?.syncStatus || "");
+        if (!FIXED_LEGS_SYNC_STATUSES.includes(rawSyncStatus)) {
+          normalizedMatch.meta.fixedLegs.syncStatus = normalizedMatch.meta.auto.lobbyId
+            ? "linked"
+            : (normalizedMatch.status === STATUS_COMPLETED ? "manual" : "idle");
+        }
+      }
+      return normalizedMatch;
+    });
     const resultsRaw = Array.isArray(rawTournament.results) ? rawTournament.results : [];
     const results = resultsRaw.map((entry, index) => normalizeTournamentResultEntry(entry, index + 1));
 
@@ -4862,6 +5176,7 @@
 
     const version = Number(rawValue.schemaVersion || 0);
     switch (version) {
+      case 6:
       case 5:
       case 4:
       case 3:
@@ -4891,7 +5206,7 @@
       match.meta.fixedLegs = {
         count: PRELIMINARY_FIXED_LEG_COUNT,
         entries: [],
-        syncStatus: "manual_only",
+        syncStatus: "idle",
       };
     }
     match.updatedAt = nowIso();
@@ -5645,7 +5960,7 @@
             fixedLegs: {
               count: PRELIMINARY_FIXED_LEG_COUNT,
               entries: [],
-              syncStatus: "manual_only",
+              syncStatus: "idle",
             },
           },
         }));
@@ -8707,6 +9022,17 @@
     match.source = source === "auto" ? "auto" : "manual";
     match.legs = { p1: p1Legs, p2: p2Legs };
     setMatchResultKind(match, derivedWinnerId ? null : "draw");
+    if (match?.meta?.fixedLegs) {
+      match.meta.fixedLegs.syncStatus = source === "auto" ? "completed" : "manual";
+    }
+    const auto = ensureMatchAutoMeta(match);
+    if (source === "auto" || auto.lobbyId) {
+      const finishedAt = nowIso();
+      auto.status = "completed";
+      auto.finishedAt = finishedAt;
+      auto.lastSyncAt = finishedAt;
+      auto.lastError = null;
+    }
     match.updatedAt = nowIso();
     return { ok: true, completed: true, resultKind: derivedWinnerId ? null : "draw" };
   }
@@ -8738,13 +9064,15 @@
     const fixedLegs = {
       count: PRELIMINARY_FIXED_LEG_COUNT,
       entries: entries.map((entry) => ({ ...entry, source: source === "auto" ? "auto" : "manual", recordedAt: now })),
-      syncStatus: "manual_only",
+      syncStatus: source === "auto"
+        ? (entries.length >= PRELIMINARY_FIXED_LEG_COUNT ? "completed" : "awaiting_leg_2")
+        : "manual",
     };
     match.meta = normalizeMatchMeta({ ...(match.meta || {}), fixedLegs });
     const p1Legs = entries.filter((entry) => entry.winnerId === match.player1Id).length;
     const p2Legs = entries.filter((entry) => entry.winnerId === match.player2Id).length;
     match.legs = { p1: p1Legs, p2: p2Legs };
-    match.source = entries.length ? "manual" : null;
+    match.source = entries.length ? (source === "auto" ? "auto" : "manual") : null;
     if (entries.length < PRELIMINARY_FIXED_LEG_COUNT) {
       match.status = STATUS_PENDING;
       match.winnerId = null;
@@ -10275,6 +10603,7 @@
     }
     clearBracketFrameTimeout(state.bracket);
     removeMatchReturnShortcut();
+    removeFixedLegsLiveControl();
     removeHistoryImportButton();
     while (state.cleanupStack.length) {
       const cleanup = state.cleanupStack.pop();
@@ -12093,19 +12422,123 @@
         participants: participantList(5, "FL"),
       });
       const match = tournament.matches.find((entry) => entry.stage === MATCH_STAGE_PRELIMINARY);
-      let reasonCode = "";
-      try {
-        buildLobbyCreatePayload(tournament, match);
-      } catch (error) {
-        reasonCode = normalizeText(error?.reasonCode);
-      }
+      const payload = buildLobbyCreatePayload(tournament, match);
       record(
-        "Fixed 2 Legs: API-Start wird ohne exakte Abbildung explizit gesperrt",
-        reasonCode === "fixed_legs_api_unsupported",
-        `reasonCode=${reasonCode || "-"}`,
+        "Fixed 2 Legs: Matchmodus Off lässt legs und sets gezielt weg",
+        !Object.prototype.hasOwnProperty.call(payload, "legs")
+          && !Object.prototype.hasOwnProperty.call(payload, "sets")
+          && payload.variant === X01_VARIANT,
+        `payload=${JSON.stringify(payload)}`,
       );
     } catch (error) {
-      record("Fixed 2 Legs: API-Start wird ohne exakte Abbildung explizit gesperrt", false, String(error?.message || error));
+      record("Fixed 2 Legs: Matchmodus Off lässt legs und sets gezielt weg", false, String(error?.message || error));
+    }
+
+    try {
+      const expectedPlayers = [{ id: "a", name: "Anna" }, { id: "b", name: "Berta" }];
+      const leg1 = resolveFixedLegsMatchState({
+        providerState: {
+          players: [{ name: "Berta" }, { name: "Anna" }],
+          scores: [{ legs: 0 }, { legs: 1 }],
+          gameFinished: true,
+        },
+        expectedPlayers,
+        allowPositionalFallback: true,
+      });
+      const draw = resolveFixedLegsMatchState({
+        providerState: {
+          players: [{ name: "Anna" }, { name: "Berta" }],
+          scores: [{ legs: 1 }, { legs: 1 }],
+          matchFinished: true,
+        },
+        expectedPlayers,
+        storedEntries: [{ legIndex: 1, winnerId: "a" }],
+        allowPositionalFallback: true,
+      });
+      record(
+        "Fixed 2 Legs: Resolver erkennt vertauschte Reihenfolge und finalen Draw",
+        leg1.phase === "awaiting_leg_2_confirmation"
+          && leg1.leg1WinnerId === "a"
+          && draw.phase === "completed"
+          && draw.legs.p1 === 1
+          && draw.legs.p2 === 1,
+        `leg1=${JSON.stringify(leg1)}, draw=${JSON.stringify(draw)}`,
+      );
+    } catch (error) {
+      record("Fixed 2 Legs: Resolver erkennt vertauschte Reihenfolge und finalen Draw", false, String(error?.message || error));
+    }
+
+    try {
+      record(
+        "Fixed 2 Legs: Live-Steuerung ist auf exakte Matchrouten begrenzt",
+        getFixedLegsLiveRouteId("/matches/lobby-1") === "lobby-1"
+          && getFixedLegsLiveRouteId("/lobbies/lobby-1") === ""
+          && getFixedLegsLiveRouteId("/history/matches/lobby-1") === ""
+          && getFixedLegsLiveRouteId("/matches/lobby-1/details") === "",
+        "Nur /matches/{id} ist zulässig.",
+      );
+    } catch (error) {
+      record("Fixed 2 Legs: Live-Steuerung ist auf exakte Matchrouten begrenzt", false, String(error?.message || error));
+    }
+
+    try {
+      const previousTournament = state.store.tournament;
+      const previousActionState = state.fixedLegsLive.actionInProgress;
+      try {
+        const tournament = createTournament({
+          name: "FixedLiveDom",
+          mode: "preliminary_final",
+          preliminaryMatchesPerParticipant: 4,
+          finalStageType: "ko",
+          finalStageQualifierCount: 4,
+          finalStageBestOfLegs: 5,
+          participants: participantList(5, "FLD"),
+        });
+        const match = tournament.matches.find((entry) => entry.stage === MATCH_STAGE_PRELIMINARY);
+        ensureMatchAutoMeta(match).lobbyId = "fixed-live-dom";
+        state.store.tournament = tournament;
+        state.fixedLegsLive.actionInProgress = false;
+        paintFixedLegsLiveControl(match, {
+          ok: true,
+          phase: "awaiting_leg_2_confirmation",
+          syncStatus: "awaiting_leg_2",
+          legs: { p1: 1, p2: 0 },
+          completedLegs: 1,
+          leg1WinnerId: match.player1Id,
+        });
+        const root = document.querySelector("[data-ata-fixed-legs-live='1']");
+        const buttons = root ? root.querySelectorAll("button") : [];
+        const liveRegions = root ? root.querySelectorAll("[aria-live='polite'][aria-atomic='true']") : [];
+        const button = buttons[0];
+        const heading = root?.querySelector("h2[tabindex='-1']");
+        state.fixedLegsLive.actionInProgress = true;
+        paintFixedLegsLiveControl(match, {
+          ok: true,
+          phase: "awaiting_leg_2_confirmation",
+          syncStatus: "awaiting_leg_2",
+          legs: { p1: 1, p2: 0 },
+          completedLegs: 1,
+          leg1WinnerId: match.player1Id,
+        });
+        const busyButton = document.querySelector("[data-ata-fixed-legs-live='1'] button");
+        record(
+          "Fixed 2 Legs: Live-Steuerkarte hat genau eine Aktion, höfliche Live-Region und 44px-Ziel",
+          buttons.length === 1
+            && normalizeText(button?.textContent).includes("Leg 1")
+            && liveRegions.length === 1
+            && normalizeText(button?.style?.minHeight || "") === "44px"
+            && heading instanceof HTMLElement
+            && busyButton instanceof HTMLButtonElement
+            && busyButton.disabled,
+          `buttons=${buttons.length}, liveRegions=${liveRegions.length}, minHeight=${button?.style?.minHeight || "-"}, busyDisabled=${Boolean(busyButton?.disabled)}`,
+        );
+      } finally {
+        removeFixedLegsLiveControl();
+        state.store.tournament = previousTournament;
+        state.fixedLegsLive.actionInProgress = previousActionState;
+      }
+    } catch (error) {
+      record("Fixed 2 Legs: Live-Steuerkarte hat genau eine Aktion, höfliche Live-Region und 44px-Ziel", false, String(error?.message || error));
     }
 
     try {
@@ -13175,7 +13608,7 @@
       const migrated = migrateStorage(rawStoreV2);
       record(
         "Migration: v2 -> v5 setzt Tie-Break-Profil",
-        migrated.schemaVersion === 5
+        migrated.schemaVersion === STORAGE_SCHEMA_VERSION
           && migrated.tournament?.rules?.tieBreakProfile === TIE_BREAK_PROFILE_PROMOTER_H2H_MINITABLE
           && migrated.settings?.tournamentTimeProfile === TOURNAMENT_TIME_PROFILE_NORMAL
           && migrated.settings?.featureFlags?.koDrawLockDefault === true,
@@ -14033,6 +14466,21 @@
   }
 
 
+  async function fetchMatchState(matchId, token) {
+    return apiRequestJson("GET", `${API_GS_BASE}/matches/${encodeURIComponent(matchId)}/state`, null, token);
+  }
+
+
+  async function startNextMatchGame(matchId, token) {
+    return apiRequestJson("POST", `${API_GS_BASE}/matches/${encodeURIComponent(matchId)}/games/next`, null, token);
+  }
+
+
+  async function finishApiMatch(matchId, token) {
+    return apiRequestJson("POST", `${API_GS_BASE}/matches/${encodeURIComponent(matchId)}/finish`, null, token);
+  }
+
+
   function getRouteLobbyId(pathname = location.pathname) {
     const route = normalizeText(pathname || "");
     if (!route) {
@@ -14082,6 +14530,143 @@
     }) || null;
   }
 
+  function getFixedLegsExpectedPlayers(tournament, match) {
+    return [participantById(tournament, match?.player1Id), participantById(tournament, match?.player2Id)].map((participant, index) => ({
+      id: normalizeText(participant?.id || (index === 0 ? match?.player1Id : match?.player2Id) || ""),
+      name: normalizeText(participant?.name || ""),
+    }));
+  }
+
+
+  function resolveFixedLegsFromApiStats(tournament, match, stats) {
+    const matchStats = Array.isArray(stats?.matchStats) ? stats.matchStats : [];
+    if (matchStats.length !== 2) return { ok: false, phase: "blocked", reasonCode: "fixed_legs_result_not_ready" };
+    const players = Array.isArray(stats?.players) && stats.players.length === 2
+      ? stats.players
+      : matchStats;
+    return resolveFixedLegsMatchState({
+      providerState: {
+        players,
+        scores: matchStats,
+        matchFinished: true,
+      },
+      expectedPlayers: getFixedLegsExpectedPlayers(tournament, match),
+      storedEntries: match?.meta?.fixedLegs?.entries || [],
+      allowPositionalFallback: false,
+    });
+  }
+
+
+  function getFixedLegsSyncErrorMessage(reasonCode) {
+    const messages = {
+      fixed_legs_player_mapping_ambiguous: "Spieler konnten nicht eindeutig dem Vorrundenmatch zugeordnet werden.",
+      fixed_legs_state_invalid: "Der AutoDarts-Matchzustand ist für zwei feste Legs ungültig.",
+      fixed_legs_state_conflict: "Gespeicherter Legstand und AutoDarts-Matchzustand widersprechen sich.",
+      fixed_legs_overrun: "Mehr als zwei Legs wurden abgeschlossen. Bitte Ergebnis manuell prüfen und korrigieren.",
+      fixed_legs_result_not_ready: "Das Ergebnis aus genau zwei Legs ist noch nicht verfügbar.",
+      fixed_legs_next_failed: "Leg 2 konnte nicht gestartet werden.",
+      fixed_legs_finish_failed: "Das AutoDarts-Match konnte nicht beendet werden.",
+    };
+    return messages[reasonCode] || "Fixed-Legs-Synchronisierung fehlgeschlagen.";
+  }
+
+
+  function persistResolvedFixedLegsResult(tournament, match, resolved, source = "auto") {
+    if (!resolved?.ok || resolved.completedLegs !== PRELIMINARY_FIXED_LEG_COUNT) {
+      return { ok: false, reasonCode: "fixed_legs_result_not_ready", message: getFixedLegsSyncErrorMessage("fixed_legs_result_not_ready") };
+    }
+    const expectedPlayers = getFixedLegsExpectedPlayers(tournament, match);
+    const storedEntries = match?.meta?.fixedLegs?.entries || [];
+    const entries = buildFixedLegEntriesFromResolvedState(resolved, expectedPlayers, storedEntries);
+    const result = entries.length === PRELIMINARY_FIXED_LEG_COUNT
+      ? applyFixedLegEntriesToTournament(tournament, match.id, entries, source)
+      : applyFixedLegAggregateResult(tournament, match, null, resolved.legs, source);
+    if (!result.ok) return result;
+    const updatedMatch = findMatch(tournament, match.id) || match;
+    if (updatedMatch?.meta?.fixedLegs) updatedMatch.meta.fixedLegs.syncStatus = source === "auto" ? "completed" : "manual";
+    refreshDerivedMatches(tournament);
+    tournament.updatedAt = nowIso();
+    return { ok: true, completed: true, legs: resolved.legs };
+  }
+
+
+  async function syncFixedLegsApiMatchResult(tournament, match, token, options = {}) {
+    const auto = ensureMatchAutoMeta(match);
+    const lobbyId = normalizeText(auto.lobbyId || "");
+    let updated = false;
+    try {
+      let providerState = options.prefetchedState || null;
+      let resolved = null;
+      if (!providerState) {
+        try {
+          providerState = await fetchMatchState(lobbyId, token);
+        } catch (stateError) {
+          if (Number(stateError?.status || 0) !== 404) throw stateError;
+          const statsAfterFinish = options.prefetchedStats || await fetchMatchStats(lobbyId, token);
+          resolved = resolveFixedLegsFromApiStats(tournament, match, statsAfterFinish);
+        }
+      }
+      if (!resolved) {
+        resolved = resolveFixedLegsMatchState({
+          providerState,
+          expectedPlayers: getFixedLegsExpectedPlayers(tournament, match),
+          storedEntries: match?.meta?.fixedLegs?.entries || [],
+          allowPositionalFallback: true,
+        });
+      }
+      if (resolved.ok && resolved.phase === "awaiting_finish_confirmation") {
+        const finalStats = options.prefetchedStats || await fetchMatchStats(lobbyId, token).catch(() => null);
+        const statsResolved = finalStats ? resolveFixedLegsFromApiStats(tournament, match, finalStats) : null;
+        if (statsResolved?.ok && statsResolved.phase === "completed") resolved = statsResolved;
+      }
+      const timestamp = nowIso();
+      if (!resolved.ok) {
+        const message = getFixedLegsSyncErrorMessage(resolved.reasonCode);
+        auto.status = "error";
+        auto.lastError = message;
+        auto.lastSyncAt = timestamp;
+        if (match?.meta?.fixedLegs) match.meta.fixedLegs.syncStatus = "error";
+        match.updatedAt = timestamp;
+        return { ok: false, updated: true, completed: false, pending: true, recoverable: Boolean(resolved.recoveryAvailable), reasonCode: resolved.reasonCode, message, resolved };
+      }
+      const previousAutoStatus = auto.status;
+      const previousError = normalizeText(auto.lastError || "");
+      const previousSyncStatus = normalizeText(match?.meta?.fixedLegs?.syncStatus || "");
+      auto.status = "started";
+      auto.lastError = null;
+      if (match?.meta?.fixedLegs) match.meta.fixedLegs.syncStatus = resolved.syncStatus;
+      updated = previousAutoStatus !== auto.status
+        || Boolean(previousError)
+        || previousSyncStatus !== resolved.syncStatus;
+      if (updated) {
+        auto.lastSyncAt = timestamp;
+        match.updatedAt = timestamp;
+      }
+      if (resolved.phase !== "completed") {
+        return { ok: true, updated, completed: false, pending: true, recoverable: true, reasonCode: resolved.phase, message: "Fixed-Legs-Match läuft.", resolved };
+      }
+      const result = persistResolvedFixedLegsResult(tournament, match, resolved, "auto");
+      if (!result.ok) return { ...result, updated: true, completed: false, pending: true, recoverable: false, resolved };
+      return { ok: true, updated: true, completed: true, pending: false, reasonCode: "completed", message: "Ergebnis übernommen.", resolved };
+    } catch (error) {
+      const status = Number(error?.status || 0);
+      if (status === 401 || status === 403) {
+        return { ok: false, updated, completed: false, pending: true, authError: true, reasonCode: "auth", message: "Auth abgelaufen." };
+      }
+      if (status === 404) {
+        return { ok: false, updated, completed: false, pending: true, recoverable: true, reasonCode: "fixed_legs_result_not_ready", message: getFixedLegsSyncErrorMessage("fixed_legs_result_not_ready") };
+      }
+      const message = normalizeText(error?.message || "Matchzustand konnte nicht geladen werden.");
+      auto.status = "error";
+      auto.lastError = message;
+      auto.lastSyncAt = nowIso();
+      if (match?.meta?.fixedLegs) match.meta.fixedLegs.syncStatus = "error";
+      match.updatedAt = nowIso();
+      return { ok: false, updated: true, completed: false, pending: true, recoverable: false, reasonCode: "fixed_legs_state_invalid", message };
+    }
+  }
+
+
   async function syncApiMatchResult(tournament, match, token, options = {}) {
     const notifyErrors = Boolean(options.notifyErrors);
     const notifyNotReady = Boolean(options.notifyNotReady);
@@ -14108,6 +14693,10 @@
         reasonCode: "error",
         message: "Match ist im Fehlerstatus.",
       };
+    }
+
+    if (isFixedLegsPreliminaryMatch(tournament, match)) {
+      return syncFixedLegsApiMatchResult(tournament, match, token, options);
     }
 
     let updated = false;
@@ -14443,15 +15032,12 @@
         return false;
       }
       const auto = ensureMatchAutoMeta(match);
-      return Boolean(auto.lobbyId && auto.status === "started");
+      return Boolean(auto.lobbyId && (auto.status === "started" || auto.status === "error"));
     }) || null;
   }
 
 
   function buildLobbyCreatePayload(tournament, match = null) {
-    if (isFixedLegsPreliminaryMatch(tournament, match) || (tournament?.mode === "preliminary_final" && !match)) {
-      throw Object.assign(new Error("Zwei feste Legs k\u00f6nnen nicht exakt als AutoDarts-First-to-N-Lobby gestartet werden."), { reasonCode: "fixed_legs_api_unsupported" });
-    }
     const legsToWin = getLegsToWin(getMatchBestOfLegs(tournament, match));
     const x01Settings = normalizeTournamentX01Settings(tournament?.x01, tournament?.startScore);
     const bullOffMode = sanitizeX01BullOffMode(x01Settings.bullOffMode);
@@ -14462,13 +15048,16 @@
       maxRounds: x01Settings.maxRounds,
       bullMode: sanitizeX01BullMode(x01Settings.bullMode),
     };
-    return {
+    const payload = {
       variant: x01Settings.variant,
       isPrivate: true,
       bullOffMode,
-      legs: legsToWin,
       settings,
     };
+    if (!isFixedLegsPreliminaryMatch(tournament, match) && !(tournament?.mode === "preliminary_final" && !match)) {
+      payload.legs = legsToWin;
+    }
+    return payload;
   }
 
 
@@ -14836,15 +15425,6 @@
         title: "\u00d6ffnet das bereits gestartete Match.",
       };
     }
-    if (isFixedLegsPreliminaryMatch(tournament, match)) {
-      return {
-        label: "Manuell erfassen",
-        disabled: true,
-        reasonCode: "fixed_legs_api_unsupported",
-        title: "API-Start gesperrt: AutoDarts bildet zwei feste Legs mit geregeltem Anwurf derzeit nicht exakt ab.",
-      };
-    }
-
     if (!state.store.settings.featureFlags.autoLobbyStart) {
       return {
         label: "Match starten",
@@ -14928,6 +15508,16 @@
       return "Freilos (Bye): kein API-Sync erforderlich";
     }
     const auto = ensureMatchAutoMeta(match);
+    const fixedSyncStatus = normalizeText(match?.meta?.fixedLegs?.syncStatus || "");
+    const fixedLabels = {
+      linked: "Fixed Legs: Leg 1 läuft",
+      awaiting_leg_2: "Fixed Legs: Bestätigung für Leg 2 erforderlich",
+      playing_leg_2: "Fixed Legs: Leg 2 läuft",
+      awaiting_finish: "Fixed Legs: Bestätigung zum Abschluss erforderlich",
+      manual: "Fixed Legs: manuell erfasst",
+      error: "Fixed Legs: Prüfung erforderlich",
+    };
+    if (fixedLabels[fixedSyncStatus]) return fixedLabels[fixedSyncStatus];
     if (auto.status === "completed") {
       return "API-Sync: abgeschlossen";
     }
@@ -14952,11 +15542,6 @@
       setNotice("error", "Match nicht gefunden.");
       return;
     }
-    if (isFixedLegsPreliminaryMatch(tournament, match)) {
-      setNotice("error", "API-Start gesperrt: Zwei feste Legs werden nicht durch First to 2 oder Best of 3 angen\u00e4hert.");
-      return { ok: false, reasonCode: "fixed_legs_api_unsupported" };
-    }
-
     const auto = ensureMatchAutoMeta(match);
     const editability = getMatchEditability(tournament, match);
     const duplicates = getDuplicateParticipantNames(tournament);
@@ -15232,6 +15817,9 @@
       auto.finishedAt = null;
       auto.lastSyncAt = now;
       auto.lastError = null;
+      if (isFixedLegsPreliminaryMatch(tournament, match) && match?.meta?.fixedLegs) {
+        match.meta.fixedLegs.syncStatus = "linked";
+      }
       match.updatedAt = now;
       tournament.updatedAt = now;
 
@@ -15383,6 +15971,254 @@
   }
 
   // Presentation layer: UI rendering and interaction wiring.
+
+// Guided controls shown only on the linked AutoDarts match route.
+
+  function getFixedLegsLiveRouteId(pathname = location.pathname) {
+    const routeMatch = normalizeText(pathname || "").match(/^\/matches\/([^/?#]+)\/?$/i);
+    if (!routeMatch?.[1]) return "";
+    try {
+      return normalizeText(decodeURIComponent(routeMatch[1]));
+    } catch (_) {
+      return normalizeText(routeMatch[1]);
+    }
+  }
+
+
+  function removeFixedLegsLiveControl() {
+    Array.from(document.querySelectorAll("[data-ata-fixed-legs-live='1']")).forEach((node) => node.remove());
+    state.fixedLegsLive.root = null;
+    state.fixedLegsLive.polling = false;
+    state.fixedLegsLive.lastLobbyId = "";
+    state.fixedLegsLive.requestVersion += 1;
+  }
+
+
+  function findFixedLegsLiveMatch(tournament, lobbyId) {
+    return (tournament?.matches || []).find((match) => (
+      isFixedLegsPreliminaryMatch(tournament, match)
+      && normalizeText(match?.meta?.auto?.lobbyId || "") === normalizeText(lobbyId || "")
+    )) || null;
+  }
+
+
+  function getFixedLegsLivePhaseCopy(resolved) {
+    const copy = {
+      playing_leg_1: { phase: "Leg 1 läuft", detail: "Nach dem Checkout erscheint die Bestätigung für Leg 2." },
+      awaiting_leg_2_confirmation: { phase: "Leg 1 beendet", detail: "Der Leg-Sieger wird gespeichert; Leg 2 startet erst nach deinem Klick." },
+      playing_leg_2: { phase: "Leg 2 läuft", detail: "Nach dem Checkout erscheint die Bestätigung zum Matchabschluss." },
+      awaiting_finish_confirmation: { phase: "Zwei Legs beendet", detail: "Prüfe den Stand und beende das Match anschließend ausdrücklich." },
+      completed: { phase: "Abgeschlossen", detail: "Das Ergebnis wurde aus genau zwei Legs übernommen." },
+      blocked: { phase: "Prüfung erforderlich", detail: getFixedLegsSyncErrorMessage(resolved?.reasonCode) },
+    };
+    return copy[resolved?.phase] || copy.blocked;
+  }
+
+
+  function getFixedLegsLiveAction(resolved, match) {
+    if (state.fixedLegsLive.actionInProgress) return { id: "", label: "Wird ausgeführt …" };
+    if (resolved?.phase === "awaiting_leg_2_confirmation") {
+      return { id: "next", label: "Leg 1 übernehmen & Leg 2 starten" };
+    }
+    if (resolved?.phase === "awaiting_finish_confirmation") {
+      return { id: "finish", label: "Match abschließen & Ergebnis übernehmen" };
+    }
+    if (resolved?.recoveryAvailable) {
+      return { id: "recover", label: "Match jetzt nach zwei Legs beenden" };
+    }
+    if (resolved?.phase === "completed" && match?.status !== STATUS_COMPLETED) {
+      return { id: "adopt", label: "Ergebnis übernehmen" };
+    }
+    return null;
+  }
+
+
+  function mountFixedLegsLiveControl() {
+    let root = document.querySelector("[data-ata-fixed-legs-live='1']");
+    if (root instanceof HTMLElement) return root;
+    root = document.createElement("section");
+    root.setAttribute("data-ata-fixed-legs-live", "1");
+    const mount = document.querySelector("main") || document.body;
+    if (!mount) return null;
+    mount.prepend(root);
+    state.fixedLegsLive.root = root;
+    return root;
+  }
+
+
+  function paintFixedLegsLiveControl(match, resolved, outcome = null) {
+    const tournament = state.store.tournament;
+    const root = mountFixedLegsLiveControl();
+    if (!root) return;
+    const player1 = participantNameById(tournament, match.player1Id);
+    const player2 = participantNameById(tournament, match.player2Id);
+    const phaseCopy = getFixedLegsLivePhaseCopy(resolved);
+    const action = getFixedLegsLiveAction(resolved, match);
+    const busy = state.fixedLegsLive.actionInProgress;
+    const score = `${Number(resolved?.legs?.p1 || 0)}:${Number(resolved?.legs?.p2 || 0)}`;
+    const outcomeText = normalizeText(outcome?.message || "");
+    const outcomeColor = outcome?.type === "error" ? "#ffd2d2" : "#d8ffea";
+    root.innerHTML = `
+      <div style="margin:10px 12px 14px;padding:14px;border-radius:12px;border:1px solid rgba(120,203,255,.55);background:linear-gradient(180deg,rgba(43,62,126,.97),rgba(29,72,122,.97));color:#f4f7ff;box-shadow:0 10px 24px rgba(7,11,25,.28);font-family:system-ui,sans-serif;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <div><div style="font-size:12px;font-weight:800;letter-spacing:.3px;color:#bfe7ff;">VORRUNDE · ZWEI FESTE LEGS</div><h2 tabindex="-1" style="font-size:18px;line-height:1.3;margin:3px 0 0;">${escapeHtml(player1)} vs ${escapeHtml(player2)}</h2></div>
+          <div style="font-size:24px;font-weight:900;min-width:58px;text-align:center;">${escapeHtml(score)}</div>
+        </div>
+        <p style="margin:10px 0 2px;font-size:15px;font-weight:800;">${escapeHtml(phaseCopy.phase)}</p>
+        <p style="margin:0 0 12px;font-size:13px;line-height:1.45;color:#deebff;">${escapeHtml(phaseCopy.detail)}</p>
+        ${action ? `<button type="button" data-action="ata-fixed-legs-${escapeHtml(action.id)}" style="display:block;width:100%;min-height:44px;border:1px solid rgba(99,231,173,.75);background:linear-gradient(180deg,rgba(83,221,163,.38),rgba(58,197,141,.38));color:#f2fff8;border-radius:10px;padding:11px 14px;font-size:14px;font-weight:850;cursor:${busy ? "wait" : "pointer"};" ${busy ? "disabled" : ""}>${escapeHtml(action.label)}</button>` : ""}
+        <div aria-live="polite" aria-atomic="true" style="min-height:18px;margin-top:${outcomeText ? "9px" : "0"};font-size:12px;line-height:1.4;color:${outcomeColor};">${escapeHtml(outcomeText)}</div>
+      </div>`;
+    if (action?.id && !busy) {
+      root.querySelector(`[data-action='ata-fixed-legs-${action.id}']`)?.addEventListener("click", () => {
+        handleFixedLegsLiveAction(action.id, match.id, match.meta.auto.lobbyId).catch((error) => {
+          logWarn("api", "Fixed-Legs live action failed.", error);
+        });
+      });
+    }
+  }
+
+
+  function setFixedLegsLiveError(match, reasonCode, fallbackMessage = "") {
+    const message = normalizeText(fallbackMessage || getFixedLegsSyncErrorMessage(reasonCode));
+    const auto = ensureMatchAutoMeta(match);
+    auto.status = "error";
+    auto.lastError = message;
+    auto.lastSyncAt = nowIso();
+    if (match?.meta?.fixedLegs) match.meta.fixedLegs.syncStatus = "error";
+    match.updatedAt = nowIso();
+    state.fixedLegsLive.outcome = { type: "error", reasonCode, message };
+    schedulePersist();
+  }
+
+
+  async function resolveCurrentFixedLegsLiveState(tournament, match, token) {
+    let providerState;
+    try {
+      providerState = await fetchMatchState(match.meta.auto.lobbyId, token);
+    } catch (error) {
+      if (Number(error?.status || 0) !== 404) throw error;
+      const stats = await fetchMatchStats(match.meta.auto.lobbyId, token);
+      return resolveFixedLegsFromApiStats(tournament, match, stats);
+    }
+    return resolveFixedLegsMatchState({
+      providerState,
+      expectedPlayers: getFixedLegsExpectedPlayers(tournament, match),
+      storedEntries: match?.meta?.fixedLegs?.entries || [],
+      allowPositionalFallback: true,
+    });
+  }
+
+
+  async function handleFixedLegsLiveAction(actionId, matchId, lobbyId) {
+    if (state.fixedLegsLive.actionInProgress) return { ok: false, reasonCode: "fixed_legs_state_conflict" };
+    const tournament = state.store.tournament;
+    const match = findMatch(tournament, matchId);
+    if (!match || normalizeText(match?.meta?.auto?.lobbyId || "") !== normalizeText(lobbyId || "")) return { ok: false, reasonCode: "fixed_legs_state_conflict" };
+    if (actionId === "recover" && !window.confirm("Leg 3 wurde bereits begonnen. Match jetzt beenden und ausschließlich den Stand nach zwei abgeschlossenen Legs übernehmen?")) {
+      return { ok: false, reasonCode: "cancelled" };
+    }
+    state.fixedLegsLive.actionInProgress = true;
+    state.fixedLegsLive.outcome = null;
+    paintFixedLegsLiveControl(match, { phase: "blocked", legs: match.legs, reasonCode: "fixed_legs_result_not_ready" });
+    let token = "";
+    try {
+      token = await resolveAuthToken();
+      if (!token) throw Object.assign(new Error("Kein Auth-Token gefunden. Bitte neu einloggen."), { status: 401 });
+      const flow = await executeFixedLegsGuidedAction(actionId, {
+        load: () => resolveCurrentFixedLegsLiveState(tournament, match, token),
+        saveLeg1: (resolved) => {
+          const entries = buildFixedLegEntriesFromResolvedState(resolved, getFixedLegsExpectedPlayers(tournament, match), match?.meta?.fixedLegs?.entries || []);
+          return applyFixedLegEntriesToTournament(tournament, match.id, entries, "auto");
+        },
+        next: () => startNextMatchGame(lobbyId, token),
+        finish: () => finishApiMatch(lobbyId, token),
+        saveResult: (resolved) => persistResolvedFixedLegsResult(tournament, match, resolved, "auto"),
+      });
+      if (!flow.ok) {
+        throw Object.assign(new Error(flow.message || getFixedLegsSyncErrorMessage(flow.reasonCode)), { reasonCode: flow.reasonCode });
+      }
+      const resolved = flow.resolved;
+      if (actionId === "next") {
+        match.meta.fixedLegs.syncStatus = "playing_leg_2";
+        state.fixedLegsLive.outcome = { type: "success", message: flow.idempotent ? "Leg 2 läuft bereits." : "Leg 1 übernommen. Leg 2 wurde gestartet." };
+      } else {
+        state.fixedLegsLive.outcome = { type: "success", message: `Ergebnis ${resolved.legs.p1}:${resolved.legs.p2} übernommen.` };
+      }
+      tournament.updatedAt = nowIso();
+      await persistStore().catch(() => schedulePersist());
+      renderShell();
+      return { ok: true };
+    } catch (error) {
+      const reasonCode = normalizeText(error?.reasonCode || (actionId === "next" ? "fixed_legs_next_failed" : "fixed_legs_finish_failed"));
+      setFixedLegsLiveError(match, reasonCode, normalizeText(error?.message || ""));
+      return { ok: false, reasonCode, message: error?.message };
+    } finally {
+      state.fixedLegsLive.actionInProgress = false;
+      renderFixedLegsLiveControl({ force: true }).then(() => {
+        const heading = state.fixedLegsLive.root?.querySelector("h2[tabindex='-1']");
+        if (heading instanceof HTMLElement) heading.focus({ preventScroll: true });
+      }).catch((error) => logWarn("api", "Fixed-Legs live refresh failed.", error));
+    }
+  }
+
+
+  async function renderFixedLegsLiveControl(options = {}) {
+    const lobbyId = getFixedLegsLiveRouteId();
+    const tournament = state.store.tournament;
+    if (!lobbyId || !tournament || !state.store.settings.featureFlags.autoLobbyStart) {
+      removeFixedLegsLiveControl();
+      return;
+    }
+    const match = findFixedLegsLiveMatch(tournament, lobbyId);
+    if (!match) {
+      removeFixedLegsLiveControl();
+      return;
+    }
+    if (state.fixedLegsLive.actionInProgress || state.fixedLegsLive.polling) return;
+    if (!options.force && state.fixedLegsLive.lastLobbyId === lobbyId && Date.now() - state.fixedLegsLive.lastFetchAt < 900) return;
+    state.fixedLegsLive.polling = true;
+    state.fixedLegsLive.lastLobbyId = lobbyId;
+    state.fixedLegsLive.lastFetchAt = Date.now();
+    const requestVersion = ++state.fixedLegsLive.requestVersion;
+    try {
+      const token = await resolveAuthToken();
+      if (!token) {
+        paintFixedLegsLiveControl(match, { phase: "blocked", legs: match.legs, reasonCode: "fixed_legs_state_invalid" }, { type: "error", message: "Kein Auth-Token gefunden. Bitte neu einloggen." });
+        return;
+      }
+      let resolved = await resolveCurrentFixedLegsLiveState(tournament, match, token);
+      if (requestVersion !== state.fixedLegsLive.requestVersion || getFixedLegsLiveRouteId() !== lobbyId) return;
+      if (resolved.phase === "completed" && match.status !== STATUS_COMPLETED) {
+        const saved = persistResolvedFixedLegsResult(tournament, match, resolved, "auto");
+        if (saved.ok) {
+          state.fixedLegsLive.outcome = { type: "success", message: `Nativ beendetes Match erkannt. Ergebnis ${resolved.legs.p1}:${resolved.legs.p2} übernommen.` };
+          schedulePersist();
+          renderShell();
+        }
+      }
+      if (match.status === STATUS_COMPLETED) {
+        resolved = {
+          ...resolved,
+          ok: true,
+          phase: "completed",
+          syncStatus: "completed",
+          legs: { p1: Number(match.legs?.p1 || 0), p2: Number(match.legs?.p2 || 0) },
+          completedLegs: PRELIMINARY_FIXED_LEG_COUNT,
+        };
+      }
+      if (resolved.ok && match?.meta?.fixedLegs && match.meta.fixedLegs.syncStatus !== resolved.syncStatus) {
+        match.meta.fixedLegs.syncStatus = resolved.syncStatus;
+        schedulePersist();
+      }
+      paintFixedLegsLiveControl(match, resolved, state.fixedLegsLive.outcome);
+    } catch (error) {
+      if (requestVersion !== state.fixedLegsLive.requestVersion) return;
+      paintFixedLegsLiveControl(match, { phase: "blocked", legs: match.legs, reasonCode: "fixed_legs_state_invalid" }, { type: "error", message: normalizeText(error?.message || "Matchzustand konnte nicht geladen werden.") });
+    } finally {
+      if (requestVersion === state.fixedLegsLive.requestVersion) state.fixedLegsLive.polling = false;
+    }
+  }
 
 // Infrastructure layer: browser integration and Autodarts page coupling.
   function isAutoDetectMatchRoute(pathname = location.pathname) {
@@ -16245,6 +17081,54 @@
       ? { p1: parsed.p1Legs, p2: parsed.p2Legs }
       : { p1: parsed.p2Legs, p2: parsed.p1Legs };
 
+    if (isFixedLegsPreliminaryMatch(tournament, match)) {
+      const completedLegs = Number(legsRaw.p1) + Number(legsRaw.p2);
+      if (completedLegs > PRELIMINARY_FIXED_LEG_COUNT) {
+        clearPendingHistoryConfirmation(targetLobbyId);
+        return {
+          ok: false,
+          completed: false,
+          reasonCode: "fixed_legs_overrun",
+          message: getFixedLegsSyncErrorMessage("fixed_legs_overrun"),
+        };
+      }
+      if (completedLegs !== PRELIMINARY_FIXED_LEG_COUNT) {
+        clearPendingHistoryConfirmation(targetLobbyId);
+        return {
+          ok: true,
+          completed: false,
+          reasonCode: "fixed_legs_result_not_ready",
+          message: getFixedLegsSyncErrorMessage("fixed_legs_result_not_ready"),
+        };
+      }
+      const fixedWinnerId = legsRaw.p1 === legsRaw.p2
+        ? null
+        : (legsRaw.p1 > legsRaw.p2 ? match.player1Id : match.player2Id);
+      const fixedResult = updateMatchResult(match.id, fixedWinnerId, legsRaw, "auto");
+      if (!fixedResult.ok) {
+        return { ok: false, completed: false, reasonCode: fixedResult.reasonCode || "error", message: fixedResult.message };
+      }
+      const updatedMatch = findMatch(tournament, match.id);
+      if (updatedMatch) {
+        const auto = ensureMatchAutoMeta(updatedMatch);
+        const now = nowIso();
+        auto.lobbyId = auto.lobbyId || targetLobbyId;
+        auto.status = "completed";
+        auto.finishedAt = auto.finishedAt || now;
+        auto.lastSyncAt = now;
+        auto.lastError = null;
+        if (updatedMatch?.meta?.fixedLegs) updatedMatch.meta.fixedLegs.syncStatus = "completed";
+        schedulePersist();
+      }
+      clearPendingHistoryConfirmation(targetLobbyId);
+      return {
+        ok: true,
+        completed: true,
+        reasonCode: "completed",
+        message: `Vorrundenergebnis ${legsRaw.p1}:${legsRaw.p2} wurde aus der Match-Statistik übernommen.`,
+      };
+    }
+
     let winnerId = "";
     if (parsed.winnerIndex === 0) {
       winnerId = tableMapsDirect ? match.player1Id : match.player2Id;
@@ -16634,6 +17518,7 @@
     ensureHost();
     renderShell();
     renderHistoryImportButton();
+    renderFixedLegsLiveControl({ force: true }).catch((error) => logWarn("api", "Fixed-Legs route render failed.", error));
   }
 
 
@@ -16677,6 +17562,7 @@
       }
       onRouteChange();
       renderHistoryImportButton();
+      renderFixedLegsLiveControl().catch((error) => logWarn("api", "Fixed-Legs live render failed.", error));
     }, 1000);
   }
 
@@ -19830,7 +20716,7 @@
               const selectId = `ata-fixed-leg-${match.id}-${legIndex}`;
               return `<div class="ata-field"><label for="${escapeHtml(selectId)}">Leg ${legIndex} gewonnen von</label><select id="${escapeHtml(selectId)}" data-field="fixed-leg-${legIndex}" data-match-id="${escapeHtml(match.id)}"><option value="">Noch offen</option><option value="${escapeHtml(match.player1Id)}" ${fixedWinnerForLeg(legIndex) === match.player1Id ? "selected" : ""}>${escapeHtml(player1)}</option><option value="${escapeHtml(match.player2Id)}" ${fixedWinnerForLeg(legIndex) === match.player2Id ? "selected" : ""}>${escapeHtml(player2)}</option></select></div>`;
             }).join("")}
-          </div><div class="ata-editor-actions"><button type="button" class="ata-btn" data-action="save-fixed-match" data-match-id="${escapeHtml(match.id)}">Leg-Stand speichern</button><button type="button" class="ata-btn ata-btn-primary" disabled title="API-Start gesperrt: keine exakte Fixed-2-Legs-Abbildung.">Manuell erfassen</button></div></div>`
+          </div><div class="ata-editor-actions"><button type="button" class="ata-btn" data-action="save-fixed-match" data-match-id="${escapeHtml(match.id)}">Leg-Stand speichern</button><button type="button" class="ata-btn ata-btn-primary" data-action="start-match" data-match-id="${escapeHtml(match.id)}" ${startDisabledAttr} ${startTitleAttr}>${escapeHtml(startUi.label)}</button></div></div>`
         : "";
       const regularEditorHtml = editable && !isFixedPreliminary
         ? `
@@ -19935,7 +20821,7 @@
           programmaticFocus: true,
         })}
         <p class="ata-small">${autoLobbyEnabled
-          ? "Automatik aktiv: Match per Klick starten; das Ergebnis wird nach Matchende synchronisiert. Die manuelle Eingabe bleibt als Fallback verfügbar."
+          ? "Automatik aktiv: Match per Klick starten. Vorrundenmatches mit zwei festen Legs werden im Matchmodus Off geführt; Leg 2 und der Matchabschluss benötigen jeweils einen ausdrücklichen Klick. Die manuelle Eingabe bleibt als Fallback verfügbar."
           : "Manuelle Ergebnisführung: Trage für beide Personen die gewonnenen Legs ein und speichere das Ergebnis. Die optionale AutoDarts-Automatik kannst du in den Einstellungen aktivieren."} ${renderInfoLinks([
           { href: README_API_AUTOMATION_URL, kind: "tech", label: "Voraussetzungen und Ablauf öffnen", title: "Einsteigerleitfaden: Ergebnisführung" },
         ])}</p>
@@ -21950,6 +22836,12 @@
 
   function handleSaveFixedLegResult(matchId) {
     const shadow = state.shadowRoot;
+    const tournament = state.store.tournament;
+    const match = findMatch(tournament, matchId);
+    if (match?.meta?.auto?.lobbyId) {
+      const confirmed = window.confirm("Bitte bestätige: Das verknüpfte AutoDarts-Match wurde beendet. Die Lobby-Verknüpfung bleibt für Nachvollziehbarkeit erhalten. Ergebnis jetzt manuell speichern?");
+      if (!confirmed) return;
+    }
     const leg1 = getMatchFieldElement(shadow, "fixed-leg-1", matchId);
     const leg2 = getMatchFieldElement(shadow, "fixed-leg-2", matchId);
     if (!(leg1 instanceof HTMLSelectElement) || !(leg2 instanceof HTMLSelectElement)) return;
@@ -22145,6 +23037,7 @@
     renderShell();
     removeMatchReturnShortcut();
     renderHistoryImportButton();
+    renderFixedLegsLiveControl({ force: true }).catch((error) => logWarn("api", "Initial Fixed-Legs render failed.", error));
 
     initEventBridge();
     installRouteHooks();

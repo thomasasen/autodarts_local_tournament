@@ -33,8 +33,8 @@ $dist = Get-Content $distPath -Raw -Encoding utf8
 if (-not ($dist -match 'runSelfTests')) {
   throw "Smoke QA failed: runSelfTests not found in dist."
 }
-if (-not ($dist -match 'STORAGE_SCHEMA_VERSION\s*=\s*5')) {
-  throw "Smoke QA failed: STORAGE_SCHEMA_VERSION=5 not found in dist."
+if (-not ($dist -match 'STORAGE_SCHEMA_VERSION\s*=\s*6')) {
+  throw "Smoke QA failed: STORAGE_SCHEMA_VERSION=6 not found in dist."
 }
 if (-not ($dist -match 'function\s+standingsForMatches')) {
   throw "Smoke QA failed: standingsForMatches not found in dist."

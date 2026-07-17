@@ -168,7 +168,7 @@
               const selectId = `ata-fixed-leg-${match.id}-${legIndex}`;
               return `<div class="ata-field"><label for="${escapeHtml(selectId)}">Leg ${legIndex} gewonnen von</label><select id="${escapeHtml(selectId)}" data-field="fixed-leg-${legIndex}" data-match-id="${escapeHtml(match.id)}"><option value="">Noch offen</option><option value="${escapeHtml(match.player1Id)}" ${fixedWinnerForLeg(legIndex) === match.player1Id ? "selected" : ""}>${escapeHtml(player1)}</option><option value="${escapeHtml(match.player2Id)}" ${fixedWinnerForLeg(legIndex) === match.player2Id ? "selected" : ""}>${escapeHtml(player2)}</option></select></div>`;
             }).join("")}
-          </div><div class="ata-editor-actions"><button type="button" class="ata-btn" data-action="save-fixed-match" data-match-id="${escapeHtml(match.id)}">Leg-Stand speichern</button><button type="button" class="ata-btn ata-btn-primary" disabled title="API-Start gesperrt: keine exakte Fixed-2-Legs-Abbildung.">Manuell erfassen</button></div></div>`
+          </div><div class="ata-editor-actions"><button type="button" class="ata-btn" data-action="save-fixed-match" data-match-id="${escapeHtml(match.id)}">Leg-Stand speichern</button><button type="button" class="ata-btn ata-btn-primary" data-action="start-match" data-match-id="${escapeHtml(match.id)}" ${startDisabledAttr} ${startTitleAttr}>${escapeHtml(startUi.label)}</button></div></div>`
         : "";
       const regularEditorHtml = editable && !isFixedPreliminary
         ? `
@@ -273,7 +273,7 @@
           programmaticFocus: true,
         })}
         <p class="ata-small">${autoLobbyEnabled
-          ? "Automatik aktiv: Match per Klick starten; das Ergebnis wird nach Matchende synchronisiert. Die manuelle Eingabe bleibt als Fallback verfügbar."
+          ? "Automatik aktiv: Match per Klick starten. Vorrundenmatches mit zwei festen Legs werden im Matchmodus Off geführt; Leg 2 und der Matchabschluss benötigen jeweils einen ausdrücklichen Klick. Die manuelle Eingabe bleibt als Fallback verfügbar."
           : "Manuelle Ergebnisführung: Trage für beide Personen die gewonnenen Legs ein und speichere das Ergebnis. Die optionale AutoDarts-Automatik kannst du in den Einstellungen aktivieren."} ${renderInfoLinks([
           { href: README_API_AUTOMATION_URL, kind: "tech", label: "Voraussetzungen und Ablauf öffnen", title: "Einsteigerleitfaden: Ergebnisführung" },
         ])}</p>

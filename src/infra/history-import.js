@@ -636,6 +636,54 @@
       ? { p1: parsed.p1Legs, p2: parsed.p2Legs }
       : { p1: parsed.p2Legs, p2: parsed.p1Legs };
 
+    if (isFixedLegsPreliminaryMatch(tournament, match)) {
+      const completedLegs = Number(legsRaw.p1) + Number(legsRaw.p2);
+      if (completedLegs > PRELIMINARY_FIXED_LEG_COUNT) {
+        clearPendingHistoryConfirmation(targetLobbyId);
+        return {
+          ok: false,
+          completed: false,
+          reasonCode: "fixed_legs_overrun",
+          message: getFixedLegsSyncErrorMessage("fixed_legs_overrun"),
+        };
+      }
+      if (completedLegs !== PRELIMINARY_FIXED_LEG_COUNT) {
+        clearPendingHistoryConfirmation(targetLobbyId);
+        return {
+          ok: true,
+          completed: false,
+          reasonCode: "fixed_legs_result_not_ready",
+          message: getFixedLegsSyncErrorMessage("fixed_legs_result_not_ready"),
+        };
+      }
+      const fixedWinnerId = legsRaw.p1 === legsRaw.p2
+        ? null
+        : (legsRaw.p1 > legsRaw.p2 ? match.player1Id : match.player2Id);
+      const fixedResult = updateMatchResult(match.id, fixedWinnerId, legsRaw, "auto");
+      if (!fixedResult.ok) {
+        return { ok: false, completed: false, reasonCode: fixedResult.reasonCode || "error", message: fixedResult.message };
+      }
+      const updatedMatch = findMatch(tournament, match.id);
+      if (updatedMatch) {
+        const auto = ensureMatchAutoMeta(updatedMatch);
+        const now = nowIso();
+        auto.lobbyId = auto.lobbyId || targetLobbyId;
+        auto.status = "completed";
+        auto.finishedAt = auto.finishedAt || now;
+        auto.lastSyncAt = now;
+        auto.lastError = null;
+        if (updatedMatch?.meta?.fixedLegs) updatedMatch.meta.fixedLegs.syncStatus = "completed";
+        schedulePersist();
+      }
+      clearPendingHistoryConfirmation(targetLobbyId);
+      return {
+        ok: true,
+        completed: true,
+        reasonCode: "completed",
+        message: `Vorrundenergebnis ${legsRaw.p1}:${legsRaw.p2} wurde aus der Match-Statistik übernommen.`,
+      };
+    }
+
     let winnerId = "";
     if (parsed.winnerIndex === 0) {
       winnerId = tableMapsDirect ? match.player1Id : match.player2Id;

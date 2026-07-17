@@ -210,6 +210,38 @@ $frameHtml = @'
                 document.body.style.background = "#263b73";
               }
             };
+            const showFixedLegsGuide = (twoLegsFinished) => {
+              host.style.setProperty("display", "none", "important");
+              const assistantRoot = shadowRoot.querySelector(".ata-root");
+              if (assistantRoot instanceof HTMLElement) assistantRoot.style.display = "none";
+              let guide = document.getElementById("ata-fixed-legs-guide-fixture");
+              if (!(guide instanceof HTMLElement)) {
+                guide = document.createElement("main");
+                guide.id = "ata-fixed-legs-guide-fixture";
+                document.body.appendChild(guide);
+              }
+              const score = twoLegsFinished ? "1:1" : "1:0";
+              const phase = twoLegsFinished ? "Zwei Legs beendet" : "Leg 1 beendet";
+              const detail = twoLegsFinished
+                ? "Pr&uuml;fe den Stand und beende das Match anschlie&szlig;end ausdr&uuml;cklich."
+                : "Der Leg-Sieger wird gespeichert; Leg 2 startet erst nach deinem Klick.";
+              const label = twoLegsFinished
+                ? "Match abschlie&szlig;en &amp; Ergebnis &uuml;bernehmen"
+                : "Leg 1 &uuml;bernehmen &amp; Leg 2 starten";
+              guide.innerHTML = `<section style="width:min(760px,calc(100vw - 24px));margin:24px auto;padding:16px;border-radius:14px;border:1px solid rgba(120,203,255,.58);background:linear-gradient(180deg,rgba(43,62,126,.98),rgba(29,72,122,.98));color:#f4f7ff;box-shadow:0 14px 32px rgba(7,11,25,.32);font-family:system-ui,sans-serif;box-sizing:border-box;">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                  <div><div style="font-size:12px;font-weight:800;letter-spacing:.3px;color:#bfe7ff;">VORRUNDE &middot; ZWEI FESTE LEGS</div><h2 style="font-size:20px;line-height:1.3;margin:4px 0 0;">Anna vs Berta</h2></div>
+                  <div style="font-size:28px;font-weight:900;min-width:64px;text-align:center;">${score}</div>
+                </div>
+                <p style="margin:13px 0 3px;font-size:16px;font-weight:800;">${phase}</p>
+                <p style="margin:0 0 14px;font-size:14px;line-height:1.45;color:#deebff;">${detail}</p>
+                <button type="button" style="display:block;width:100%;min-height:44px;border:1px solid rgba(99,231,173,.75);background:linear-gradient(180deg,rgba(83,221,163,.38),rgba(58,197,141,.38));color:#f2fff8;border-radius:10px;padding:11px 14px;font-size:14px;font-weight:850;">${label}</button>
+                <div aria-live="polite" aria-atomic="true" style="min-height:18px;margin-top:0;font-size:12px;"></div>
+              </section>`;
+              document.documentElement.style.background = "#182b54";
+              document.body.style.background = "#182b54";
+              document.body.style.margin = "0";
+            };
 
             if (screenshotScenario === "help") {
               form.querySelector("#ata-create-help-trigger-presetFormat")?.click();
@@ -252,6 +284,12 @@ $frameHtml = @'
             } else if (screenshotScenario === "status-manual") {
               showOnlyStatusArea();
               window.setInterval(showOnlyStatusArea, 50);
+            } else if (screenshotScenario === "fixed-leg-1") {
+              showFixedLegsGuide(false);
+              window.setInterval(() => showFixedLegsGuide(false), 50);
+            } else if (screenshotScenario === "fixed-two-legs") {
+              showFixedLegsGuide(true);
+              window.setInterval(() => showFixedLegsGuide(true), 50);
             }
 
             if (["create", "help", "matches", "backup"].includes(screenshotScenario)) {
@@ -291,6 +329,23 @@ $frameHtml = @'
             measureStage(tabId, shadowRoot);
           }
 
+          const fixedLegsFixture = document.createElement("section");
+          fixedLegsFixture.setAttribute("data-ata-fixed-legs-live-viewport", "1");
+          fixedLegsFixture.style.cssText = "box-sizing:border-box;width:min(760px,calc(100vw - 24px));margin:12px auto;padding:14px;border:1px solid #6bc9ff;border-radius:12px;background:#24447d;color:white;font-family:system-ui,sans-serif;";
+          fixedLegsFixture.innerHTML = `<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><strong>Anna vs Berta</strong><strong>1:0</strong></div><p style="overflow-wrap:anywhere">Leg 1 beendet &middot; Der Leg-Sieger wird gespeichert.</p><button style="box-sizing:border-box;width:100%;min-height:44px;padding:10px;white-space:normal">Leg 1 &uuml;bernehmen &amp; Leg 2 starten</button><div aria-live="polite" aria-atomic="true"></div>`;
+          document.body.appendChild(fixedLegsFixture);
+          const fixedIssues = [];
+          const fixedRect = fixedLegsFixture.getBoundingClientRect();
+          const fixedButton = fixedLegsFixture.querySelector("button");
+          const fixedButtonRect = fixedButton?.getBoundingClientRect();
+          if (fixedLegsFixture.scrollWidth > fixedLegsFixture.clientWidth + 1 || fixedRect.left < -1 || fixedRect.right > window.innerWidth + 1) {
+            fixedIssues.push(`fixed live overflow ${fixedLegsFixture.scrollWidth}/${fixedLegsFixture.clientWidth}, rect ${Math.round(fixedRect.left)}..${Math.round(fixedRect.right)}`);
+          }
+          if (!fixedButtonRect || fixedButtonRect.height < 43.5) fixedIssues.push(`fixed live target ${Math.round(fixedButtonRect?.height || 0)}px`);
+          if (fixedLegsFixture.querySelectorAll("[aria-live='polite'][aria-atomic='true']").length !== 1) fixedIssues.push("fixed live region invalid");
+          stages.push({ name: "fixed-legs-live", ok: fixedIssues.length === 0, issues: fixedIssues });
+          fixedIssues.forEach((issue) => failures.push(`fixed-legs-live: ${issue}`));
+
           const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
           if (coarsePointer) {
             const targetSelectors = ".ata-close-btn, .ata-tab, .ata-btn, .ata-help-link, .ata-help-trigger, .ata-segmented-btn, .ata-toggle input[type='checkbox']";
@@ -302,6 +357,7 @@ $frameHtml = @'
               }
             });
           }
+          fixedLegsFixture.remove();
 
           window.parent.postMessage({
             type: "ata-viewport-result",
@@ -475,7 +531,9 @@ if ($UpdateGuideScreenshots) {
     @{ Scenario = "organizer-rules"; FileName = "gui-einstellungen-turnierregeln.png"; Width = 1366; Height = 768 },
     @{ Scenario = "backup"; FileName = "gui-sicherung-wiederherstellen.png"; Width = 1366; Height = 768 },
     @{ Scenario = "status-manual"; FileName = "gui-status-manuell.png"; Width = 1100; Height = 58 },
-    @{ Scenario = "status-auto"; FileName = "gui-status-automatik.png"; Width = 1100; Height = 58 }
+    @{ Scenario = "status-auto"; FileName = "gui-status-automatik.png"; Width = 1100; Height = 58 },
+    @{ Scenario = "fixed-leg-1"; FileName = "gui-vorrunde-fixed-legs.png"; Width = 900; Height = 300 },
+    @{ Scenario = "fixed-two-legs"; FileName = "gui-vorrunde-zwei-legs.png"; Width = 900; Height = 300 }
   )
 
   foreach ($entry in $guideScreenshots) {

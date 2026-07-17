@@ -12,7 +12,7 @@
       match.meta.fixedLegs = {
         count: PRELIMINARY_FIXED_LEG_COUNT,
         entries: [],
-        syncStatus: "manual_only",
+        syncStatus: "idle",
       };
     }
     match.updatedAt = nowIso();

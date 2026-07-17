@@ -22,6 +22,7 @@
     }
     clearBracketFrameTimeout(state.bracket);
     removeMatchReturnShortcut();
+    removeFixedLegsLiveControl();
     removeHistoryImportButton();
     while (state.cleanupStack.length) {
       const cleanup = state.cleanupStack.pop();

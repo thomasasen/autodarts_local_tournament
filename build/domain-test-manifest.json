@@ -3,6 +3,7 @@
     "src/core/constants.js",
     "src/core/utils.js",
     "src/core/match-start-tools.js",
+    "src/core/fixed-legs-match-state.js",
     "src/infra/update-check.js",
     "src/data/normalization.js",
     "src/data/migration.js",
@@ -40,6 +41,7 @@
     "tests/unit-standings-dra.js",
     "tests/unit-message-doc-links.js",
     "tests/unit-match-start-tools.js",
+    "tests/unit-fixed-legs-automation.js",
     "tests/unit-tournament-help.js"
   ]
 }

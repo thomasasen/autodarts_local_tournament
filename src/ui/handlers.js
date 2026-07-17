@@ -1421,6 +1421,12 @@
 
   function handleSaveFixedLegResult(matchId) {
     const shadow = state.shadowRoot;
+    const tournament = state.store.tournament;
+    const match = findMatch(tournament, matchId);
+    if (match?.meta?.auto?.lobbyId) {
+      const confirmed = window.confirm("Bitte bestätige: Das verknüpfte AutoDarts-Match wurde beendet. Die Lobby-Verknüpfung bleibt für Nachvollziehbarkeit erhalten. Ergebnis jetzt manuell speichern?");
+      if (!confirmed) return;
+    }
     const leg1 = getMatchFieldElement(shadow, "fixed-leg-1", matchId);
     const leg2 = getMatchFieldElement(shadow, "fixed-leg-2", matchId);
     if (!(leg1 instanceof HTMLSelectElement) || !(leg2 instanceof HTMLSelectElement)) return;

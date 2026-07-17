@@ -25,7 +25,7 @@
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
   const APP_VERSION = "__ATA_APP_VERSION__";
   const STORAGE_KEY = "ata:tournament:v1";
-  const STORAGE_SCHEMA_VERSION = 5;
+  const STORAGE_SCHEMA_VERSION = 6;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
   const SAVE_DEBOUNCE_MS = 150;
   const UI_HOST_ID = "ata-ui-host";
@@ -94,6 +94,16 @@
   const PRELIMINARY_PAIRING_METHOD_BALANCED_REGULAR = "balanced_regular";
   const PRELIMINARY_MATCH_FORMAT_FIXED_LEGS = "fixed_legs";
   const PRELIMINARY_FIXED_LEG_COUNT = 2;
+  const FIXED_LEGS_SYNC_STATUSES = Object.freeze([
+    "idle",
+    "linked",
+    "awaiting_leg_2",
+    "playing_leg_2",
+    "awaiting_finish",
+    "completed",
+    "manual",
+    "error",
+  ]);
   const FINAL_STAGE_TYPE_KO = "ko";
   const FINAL_STAGE_TYPE_DOUBLE_KO = "double_ko";
   const FINAL_STAGE_TYPES = Object.freeze([FINAL_STAGE_TYPE_KO, FINAL_STAGE_TYPE_DOUBLE_KO]);

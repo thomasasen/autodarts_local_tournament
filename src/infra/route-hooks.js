@@ -9,6 +9,7 @@
     ensureHost();
     renderShell();
     renderHistoryImportButton();
+    renderFixedLegsLiveControl({ force: true }).catch((error) => logWarn("api", "Fixed-Legs route render failed.", error));
   }
 
 
@@ -52,6 +53,7 @@
       }
       onRouteChange();
       renderHistoryImportButton();
+      renderFixedLegsLiveControl().catch((error) => logWarn("api", "Fixed-Legs live render failed.", error));
     }, 1000);
   }
 

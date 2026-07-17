@@ -71,7 +71,8 @@ _Die erste Ebene beantwortet Auswahl und Auswirkung. Beispiele, Grenzen, Regelst
 - Das Vorrundenformat spielt immer genau zwei Legs und erlaubt `1:1`. Punktevergabe, Rangfolge `Punkte -> Leg-Differenz -> gewonnene Legs`, Qualifikantenzahl und Finalphasentyp werden als Veranstalterregeln gespeichert.
 - Ein Gleichstand am Qualifikations-Cutoff wird nicht zufällig entschieden. Die Finalphase bleibt bis zu einer sichtbaren, begründeten Veranstalterentscheidung gesperrt.
 - Die Finalphase verwendet Tabellenplatz 1 als Seed 1 usw. und wird nicht neu ausgelost.
-- Weil die belegbare AutoDarts-API keine exakte Abbildung zweier einzelner Legs samt geregeltem Anwurf garantiert, bleibt der API-Start für dieses Vorrundenformat gesperrt. Die Anwendung verwendet weder First to 2 noch Best of 3 als Näherung.
+- Die Automatik verwendet eine einzige Matchmodus-Off-Lobby und weder First to 2 noch Best of 3 als Näherung. Der Assistant erzwingt lokal genau zwei abgeschlossene Legs und akzeptiert nur `2:0`, `1:1` oder `0:2`.
+- Der Wechsel zu Leg 2 und der Abschluss der offenen AutoDarts-Lobby brauchen jeweils eine ausdrückliche Bestätigung. Die Ergebnisregel ist `enforced`; der technische Übergang zur externen Lobby bleibt `assisted`.
 - Diese konkrete Paarung, Wertung und Qualifikation ist kein allgemeines DRA-, PDC-, WDF- oder Verbandsformat. Ein offizielles Turnier ist nur korrekt abgebildet, wenn das gespeicherte Profil der veröffentlichten Turnierordnung entspricht.
 
 <a id="dra-gui-rule-open-draw"></a>

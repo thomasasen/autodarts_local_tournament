@@ -53,6 +53,15 @@
       pendingConfirmationByLobby: {},
       pendingDrawUnlockOverride: null,
     },
+    fixedLegsLive: {
+      root: null,
+      polling: false,
+      actionInProgress: false,
+      requestVersion: 0,
+      lastFetchAt: 0,
+      lastLobbyId: "",
+      outcome: null,
+    },
     updateStatus: {
       capable: false,
       status: "idle",

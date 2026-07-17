@@ -815,6 +815,21 @@
   }
 
 
+  async function fetchMatchState(matchId, token) {
+    return apiRequestJson("GET", `${API_GS_BASE}/matches/${encodeURIComponent(matchId)}/state`, null, token);
+  }
+
+
+  async function startNextMatchGame(matchId, token) {
+    return apiRequestJson("POST", `${API_GS_BASE}/matches/${encodeURIComponent(matchId)}/games/next`, null, token);
+  }
+
+
+  async function finishApiMatch(matchId, token) {
+    return apiRequestJson("POST", `${API_GS_BASE}/matches/${encodeURIComponent(matchId)}/finish`, null, token);
+  }
+
+
   function getRouteLobbyId(pathname = location.pathname) {
     const route = normalizeText(pathname || "");
     if (!route) {

@@ -55,7 +55,7 @@ Geeignet für Hausregeln und veröffentlichte Veranstaltungsformate. Die Turnier
 
 Bei `groups_ko` ist eine gerade Teilnehmerzahl der sichere Produktstandard. Ungleiche Gruppengrößen sind nur nach ausdrücklicher Bestätigung der Turnierleitung zulässig. Der Assistant behauptet dabei keine universelle Verbandsregel.
 
-Bei `preliminary_final` werden genau zwei Legs pro Vorrundenmatch gespielt; `1:1` ist möglich. Mangels exakter API-Abbildung bleibt dieser Teil manuell. Ein ungeklärter Gleichstand am Qualifikations-Cutoff blockiert die Finalphase, bis eine begründete Entscheidung dokumentiert wurde.
+Bei `preliminary_final` werden genau zwei Legs pro Vorrundenmatch gespielt; `1:1` ist möglich. Die Automatik bildet das als eine Matchmodus-Off-Lobby mit bestätigtem Legwechsel und bestätigtem Abschluss ab. Ein ungeklärter Gleichstand am Qualifikations-Cutoff blockiert die Finalphase, bis eine begründete Entscheidung dokumentiert wurde.
 
 ## Auslosung, Setzung und Draw-Lock
 
@@ -105,6 +105,17 @@ Bei Aktivierung werden benötigt:
 - kein zweites gleichzeitig aktives API-Match.
 
 Die Integration ist best effort. Mehrdeutige Zuordnungen, ungültige Ergebnisse oder unklare Statistikdaten werden nicht still übernommen. Die manuelle Leg-Erfassung bleibt als Fallback erhalten. Technische Details stehen in [AutoDarts API Capabilities](autodarts-api-capabilities.md).
+
+#### Geführte Zwei-Leg-Vorrunde
+
+- `Match starten` erzeugt eine Lobby ohne `legs` und `sets`; AutoDarts zeigt damit Matchmodus `Off`.
+- Nach Leg 1 übernimmt `Leg 1 übernehmen & Leg 2 starten` den eindeutigen Leg-Sieger und sendet erst dann den Legwechsel.
+- Nach Leg 2 prüft `Match abschließen & Ergebnis übernehmen` exakt `2:0`, `1:1` oder `0:2`, beendet die Lobby und aktualisiert sofort die Vorrundentabelle.
+- Ein Reload rekonstruiert den Ablauf aus Lobby-ID, gespeichertem Leg 1 und aktuellem API-Zustand. Ein nativ ausgelöster Legwechsel oder Abschluss wird erkannt.
+- Mehr als zwei abgeschlossene Legs werden nie gekürzt. Bei einem erst begonnenen dritten Leg ist eine zusätzliche Wiederherstellungsbestätigung möglich; ein abgeschlossenes drittes Leg erfordert manuelle Prüfung.
+- Beim manuellen Speichern einer weiterhin verknüpften Lobby muss die Turnierleitung bestätigen, dass das AutoDarts-Match beendet wurde. Die Lobby-ID wird nicht still entfernt.
+
+Korrektur und Reset bleiben vor Beginn der Finalphase möglich. Nach Beginn der Finalphase sind Vorrundenergebnisse gesperrt. Bei API-, Auth- oder Zuordnungsfehlern bleibt die manuelle Leg-Erfassung nutzbar; vor einer manuellen Übernahme den AutoDarts-Matchzustand kontrollieren und gegebenenfalls das Match dort beenden.
 
 ![Einstellungen für optionale AutoDarts-Automatik und neue Turnierstandards](../assets/gui-einstellungen-automatik.png)
 

@@ -51,7 +51,7 @@
 - `preliminary_final` erzeugt deterministisch einen einfachen regulären Paarungsgraphen mit gleicher realer Matchanzahl für alle Teilnehmer.
 - Das gespeicherte Profil regelt zwei feste Legs, Punkte, Rangfolge, Qualifikantenzahl und KO-/Doppel-KO-Finalphase. Diese Details werden nicht als universelle DRA-/PDC-/WDF-Regel bezeichnet.
 - Bei weiterem Gleichstand am Cutoff bleibt der Status `playoff_required`; die gespeicherte Veranstalterentscheidung braucht sichtbare Reihenfolge und Begründung.
-- Fixed-2-Legs wird mangels belegbarer exakter AutoDarts-Anwurfabbildung nur manuell erfasst. Der API-Start ist gesperrt; First to 2 und Best of 3 sind keine Ersatzregeln.
+- Fixed-2-Legs wird in einer Matchmodus-Off-Lobby geführt; First to 2 und Best of 3 bleiben ausdrücklich ausgeschlossen. Der Assistant erzwingt genau zwei abgeschlossene Legs und verlangt bestätigte Übergänge zu Leg 2 und zum Matchabschluss. Die Ergebnisregel ist technisch erzwungen, der externe Lobbyübergang bleibt `assisted`.
 
 4. **Regelbezogene Terminologie mit technischer Abgrenzung**
 - Die UI nutzt deutsche Begriffe mit PDC-Bezug, z. B.:
@@ -79,13 +79,13 @@
 - Bei vollständigem Deadlock wird keine automatische Entscheidung getroffen.
 - Der Systemstatus ist `playoff_required` und erfordert eine manuelle Turnierentscheidung.
 - `PDC World Championship` wird nicht als offizielles Preset behauptet, weil das reale Format `Sets` benötigt und die AutoDarts-/ATA-Integration hier nur `Legs / First to N` abbilden kann.
-- MultiBoard ist nicht Bestandteil von Version `0.13.0`. Die Board-Anzahl ist ausschließlich ein Kapazitätsparameter der Zeitprognose; Board-Zuweisung, parallele Lobbyverwaltung und mehrere gleichzeitig gestartete Matches bleiben außerhalb des Scopes.
+- MultiBoard ist nicht Bestandteil von Version `0.14.0`. Die Board-Anzahl ist ausschließlich ein Kapazitätsparameter der Zeitprognose; Board-Zuweisung, parallele Lobbyverwaltung und mehrere gleichzeitig gestartete Matches bleiben außerhalb des Scopes.
 
 ## Zugänglichkeit und progressive Regelhilfe
 
 - Die Regel- und Compliance-Aussagen sind über echte Buttons/Links, sichtbaren Fokus, vollständige Drawer-Tastaturführung und programmatische Formularbeschriftungen erreichbar.
 - Hilfe-Escape wird vor Drawer-Escape behandelt; Fokus kehrt zum auslösenden Hilfebutton beziehungsweise beim Drawer-Schließen zum ursprünglichen Seitenauslöser zurück.
 - Strukturelle Ansichtswechsel fokussieren explizit die resultierende Spiele- oder Turniererstellungsüberschrift beziehungsweise den aktivierten Navigationsbutton; ein DOM-Positionsfallback ist über Ansichtsgrenzen gesperrt.
-- Release `0.13.0` zeigt die unmittelbare Wirkung einer Einstellung zuerst. Beispiele, Einschränkungen, Regelstatus und Quellen bleiben in zwei nativen, tastaturbedienbaren Detailbereichen vollständig erreichbar.
+- Release `0.14.0` zeigt die unmittelbare Wirkung einer Einstellung zuerst. Beispiele, Einschränkungen, Regelstatus und Quellen bleiben in zwei nativen, tastaturbedienbaren Detailbereichen vollständig erreichbar.
 - Live-Regionen kündigen nur veränderliche Teilnehmer- und globale Statusinformationen sowie echte Fehler an. Statische Regelzusammenfassungen werden nicht mehrfach vorgelesen.
 - Diese Änderungen verbessern ausschließlich Bedienbarkeit und Wahrnehmbarkeit. Sie automatisieren keine Veranstalterentscheidung, erweitern kein offizielles Format und ändern keine DRA-/PDC-Compliance-Einstufung.

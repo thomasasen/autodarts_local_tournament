@@ -47,11 +47,12 @@ In short:
 | `DELETE` | `/gs/v0/lobbies/{lobbyId}/players/by-index/{playerIndex}` | `write-safe` | `C` | No | Entfernt Spieler in Lobby über Positionsindex (Community-Script). |
 | `POST` | `/gs/v0/lobbies/{lobbyId}/start` | `write-critical` | `A` | Yes | Startet Lobby und erzeugt aktives Match. |
 | `GET` | `/gs/v0/matches/{matchId}` | `read` | `B` | No | Match-Metadaten und Stand. |
-| `GET` | `/gs/v0/matches/{matchId}/state` | `read` | `B` | No | Detaillierter Match-State (Turn, Legs, Würfe etc. je nach Matchphase). |
+| `GET` | `/gs/v0/matches/{matchId}/state` | `read` | `A` | Yes | Detaillierter Match-State; ATA nutzt Spieler- und Legstand zur geführten Fixed-Legs-Steuerung. |
 | `GET` | `/gs/v0/matches/{matchId}/challenge` | `observed-not-used` | `B` | No | App-Call, oft `404`; blockiert ATA-Flow nicht. |
 | `DELETE` | `/gs/v0/matches/{matchId}` | `write-critical` | `B` | No | Matchabbruch/-löschung (in Traffic beobachtet). |
 | `POST` | `/gs/v0/matches/{matchId}/players/next` | `write-critical` | `B` | No | Erzwingt Wechsel zum nächsten Spieler (Turn-Fortschritt). |
-| `POST` | `/gs/v0/matches/{matchId}/games/next` | `write-critical` | `B` | No | Erzwingt Wechsel zum nächsten Leg/Game. |
+| `POST` | `/gs/v0/matches/{matchId}/games/next` | `write-critical` | `A` | Yes | Startet nach bestätigtem Leg-1-Stand das nächste Leg/Game. |
+| `POST` | `/gs/v0/matches/{matchId}/finish` | `write-critical` | `A` | Yes | Beendet die Matchmodus-Off-Lobby nach bestätigtem Stand aus genau zwei Legs. |
 | `POST` | `/gs/v0/matches/{matchId}/undo` | `write-critical` | `C` | No | Undo-Operation im laufenden Match (Community-Client). |
 | `POST` | `/gs/v0/matches/{matchId}/corrections` | `write-critical` | `C` | No | Aktiviert/Korrigiert einzelne Würfe im Korrektur-Flow. |
 | `PATCH` | `/gs/v0/matches/{matchId}/throws` | `write-critical` | `C` | No | Patcht Wurfdaten (z. B. `normal`, `bouncer`, Koordinaten). |
@@ -100,6 +101,27 @@ Diese Pfade wurden in HAR-Dateien vor allem als `OPTIONS` gesehen:
   }
 }
 ```
+
+Für ein Vorrundenmatch mit genau zwei festen Legs verwendet ATA Matchmodus `Off`. Dafür fehlen `legs` und `sets` bewusst vollständig:
+
+```json
+{
+  "variant": "X01",
+  "isPrivate": true,
+  "bullOffMode": "Normal",
+  "settings": {
+    "baseScore": 501,
+    "inMode": "Straight",
+    "outMode": "Double",
+    "maxRounds": 50,
+    "bullMode": "25/50"
+  }
+}
+```
+
+Alle normalen KO-, Doppel-KO-, Liga-, Gruppen- und Finalphasenmatches senden weiterhin `legs: <First-to-N>`. Der Fixed-Legs-Controller liest vor jeder schreibenden Aktion erneut `GET state`, sendet `games/next` nur nach Leg 1 und `finish` nur bei exakt zwei abgeschlossenen Legs. Diese drei Calls sind ab Release 0.14.0 produktiv genutzt; die Confidence wurde nach Implementierungs- und Vertragstests auf `A` gesetzt.
+
+Im Live-State ist `scores[].legs` der abgeschlossene Legstand; `gameScores[]` enthält dagegen die X01-Restpunkte und darf dafür nicht verwendet werden. `legs`/`sets` bezeichnen das konfigurierte Matchziel. Bei Matchmodus `Off` kann `finished` bereits nach einem Leg gesetzt sein, während die native Oberfläche zugleich `Next Leg` und `Finish` anbietet; ATA behandelt dieses Feld deshalb nicht allein als final persistiertes Match. Ein nativ abgeschlossener Lauf wird zusätzlich über die final verfügbare `/as/v0/matches/{id}/stats`-Antwort erkannt.
 
 ### `POST /gs/v0/lobbies/{lobbyId}/players`
 - ATA minimal:
