@@ -187,7 +187,7 @@
   }
 
   function isApiHost(host) {
-    return String(host || "").toLowerCase() === "api.autodarts.io";
+    return String(host || "").toLowerCase() === "api.autodarts.com";
   }
 
   function getStatusPills() {

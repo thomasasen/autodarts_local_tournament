@@ -5,7 +5,7 @@ Diese manuelle Checkliste ergänzt die lokale und GitHub-basierte QA um Prüfung
 ## Installation und Start
 
 - [ ] Loader beziehungsweise Userscript aktualisieren.
-- [ ] Version `0.14.0` im Assistant prüfen.
+- [ ] Version `0.14.1` im Assistant prüfen.
 - [ ] Assistant öffnen und schließen.
 - [ ] Fokus-Rückgabe an den Seitenauslöser prüfen.
 
@@ -35,6 +35,8 @@ Diese manuelle Checkliste ergänzt die lokale und GitHub-basierte QA um Prüfung
 
 ## Live-Integration
 
+- [ ] `play.autodarts.com` öffnen und prüfen, dass Loader-Menü sowie Assistant erscheinen.
+- [ ] In den Netzwerkaufrufen prüfen, dass die Automatik `api.autodarts.com` verwendet.
 - [ ] Match mit authentifiziertem AutoDarts-Account starten.
 - [ ] Optionaler echter Board-Smoke: Fixed-Legs-Vorrunde `2:0` durch beide Bestätigungen führen.
 - [ ] Optionaler echter Board-Smoke: Fixed-Legs-Vorrunde `1:1` abschließen und Tabellenpunkt/Leg-Differenz prüfen.
@@ -47,7 +49,7 @@ Diese manuelle Checkliste ergänzt die lokale und GitHub-basierte QA um Prüfung
 - [ ] Export reimportieren und resultierende Spieleansicht prüfen.
 - [ ] Turnier zurücksetzen und Fokus auf die Turniererstellung prüfen.
 
-Diese Board-Smokes sind dokumentierte Freigabeempfehlungen, aber kein Aktivierungs-Gate für 0.14.0. Automatisierte Domain-, Runtime- und Build-Gates bleiben verbindlich.
+Diese Board-Smokes sind dokumentierte Freigabeempfehlungen, aber kein Aktivierungs-Gate für 0.14.1. Automatisierte Domain-, Runtime- und Build-Gates bleiben verbindlich.
 
 ## Grenzen
 

@@ -2798,7 +2798,7 @@
         );
         const snapshot = getAuthStateSnapshot();
         record(
-          "API Auth: Header-Capture übernimmt nur api.autodarts.io und setzt Cache-Quelle",
+          `API Auth: Header-Capture übernimmt nur ${API_PROVIDER} und setzt Cache-Quelle`,
           ignored === ""
             && captured === "captured.token"
             && snapshot.hasCachedToken === true
@@ -2811,7 +2811,7 @@
         state.apiAutomation.authTokenExpiresAt = Number(previousExpiry || 0);
       }
     } catch (error) {
-      record("API Auth: Header-Capture übernimmt nur api.autodarts.io und setzt Cache-Quelle", false, String(error?.message || error));
+      record(`API Auth: Header-Capture übernimmt nur ${API_PROVIDER} und setzt Cache-Quelle`, false, String(error?.message || error));
     }
 
     try {

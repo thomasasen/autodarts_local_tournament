@@ -27,7 +27,7 @@ _Bei aktiver Automatik zeigen die einzelnen Statusfelder konkret, welche technis
 <a id="statusmeldung-api-auth-fehlt"></a>
 ### `API Auth fehlt`
 
-Die aktuelle Seite liefert keinen nutzbaren AutoDarts-Anmeldenachweis. Neu einloggen, `play.autodarts.io` vollständig neu laden und prüfen, ob Tampermonkey auf derselben Seite aktiv ist.
+Die aktuelle Seite liefert keinen nutzbaren AutoDarts-Anmeldenachweis. Neu einloggen, `play.autodarts.com` vollständig neu laden und prüfen, ob Tampermonkey auf derselben Seite aktiv ist.
 
 <a id="statusmeldung-api-auth-abgelaufen"></a>
 ### `API Auth abgelaufen`

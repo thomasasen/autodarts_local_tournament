@@ -1,16 +1,16 @@
 # Autodarts API Capabilities (Known Set)
 
-Stand: **17.03.2026** für `https://play.autodarts.io/`.
+Stand: **13.08.2026** für `https://play.autodarts.com/`.
 
 Diese Datei ist die aktuell vollständigste bekannte Liste aus:
 - ATA-Runtime-Code und produktiven Laufzeittraces (HAR/Probe/Logs).
 - öffentlichem Community-Code aus dem Internet (GitHub/Greasyfork).
 
-Wichtig: Es gibt aktuell keine öffentliche, offizielle OpenAPI/Swagger-Spezifikation für `api.autodarts.io`.  
+Wichtig: Es gibt aktuell keine öffentliche, offizielle OpenAPI/Swagger-Spezifikation für `api.autodarts.com`.
 Die Liste ist daher **"known complete"**, nicht offiziell garantiert.
 
 ## Scope
-- Host: `https://api.autodarts.io`
+- Host: `https://api.autodarts.com`
 - Auth: i. d. R. `Authorization: Bearer <token>`
 - Services (aus Pfadpräfix):
   - `auth` (`/auth/v1/*`)

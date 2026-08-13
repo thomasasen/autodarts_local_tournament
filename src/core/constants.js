@@ -3,17 +3,18 @@
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
 // @version      __ATA_APP_VERSION__
-// @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
+// @description  Local tournament manager for play.autodarts.com (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
 // @match        *://play.autodarts.io/*
+// @match        *://play.autodarts.com/*
 // @run-at       document-start
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_xmlhttpRequest
 // @connect      cdn.jsdelivr.net
 // @connect      raw.githubusercontent.com
-// @connect      api.autodarts.io
+// @connect      api.autodarts.com
 // @downloadURL  https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.user.js
 // @updateURL    https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.meta.js
 // ==/UserScript==
@@ -33,7 +34,7 @@
   const READY_EVENT = "ata:ready";
   const LOADER_GUARD_KEY = "__ATA_LOADER_BOOTSTRAPPED";
   const LOADER_MENU_ITEM_ID = "ata-loader-menu-item";
-  const API_PROVIDER = "api.autodarts.io";
+  const API_PROVIDER = "api.autodarts.com";
   const API_GS_BASE = `https://${API_PROVIDER}/gs/v0`;
   const API_AS_BASE = `https://${API_PROVIDER}/as/v0`;
   const API_AUTH_BASE = `https://${API_PROVIDER}/auth/v1`;

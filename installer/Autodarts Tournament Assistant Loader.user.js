@@ -1,17 +1,18 @@
 // ==UserScript==
 // @name         Autodarts Tournament Assistant Loader
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.1.4
+// @version      0.1.5
 // @description  Loads the latest Autodarts Tournament Assistant userscript with cache fallback.
 // @author       Thomas Asen
 // @license      MIT
 // @match        *://play.autodarts.io/*
+// @match        *://play.autodarts.com/*
 // @run-at       document-start
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_xmlhttpRequest
 // @connect      raw.githubusercontent.com
-// @connect      api.autodarts.io
+// @connect      api.autodarts.com
 // @downloadURL  https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js
 // @updateURL    https://github.com/thomasasen/autodarts_local_tournament/raw/refs/heads/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js
 // ==/UserScript==

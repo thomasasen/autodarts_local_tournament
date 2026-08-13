@@ -7,7 +7,7 @@ Dieser Leitfaden führt ohne Vorwissen durch die Turnieranlage und Ergebnisführ
 Du benötigst:
 
 - einen Browser mit Tampermonkey und installiertem ATA Loader,
-- eine geöffnete Sitzung in `play.autodarts.io`,
+- eine geöffnete Sitzung in `play.autodarts.com`,
 - mindestens zwei Teilnehmer,
 - mindestens ein Dartboard.
 

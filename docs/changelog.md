@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.14.1
+
+- AutoDarts-Domainwechsel unterstützt: Hauptskript und Loader starten auf `play.autodarts.com`; `play.autodarts.io` bleibt während des Redirect-Übergangs als zusätzlicher Match-Eintrag erhalten.
+- API-Automatik, Auth-Header-Erkennung, Tampermonkey-Verbindungsrecht und Diagnose verwenden nun `api.autodarts.com`. Das Build-Gate prüft Play-Domains und API-Provider in Quelle, Runtime, Meta-Datei und Loader gegen Regressionen.
+- Installations-, Einstiegs-, Status-, API- und Release-Dokumentation auf die neue Domain aktualisiert. Die API-Pfade `/gs/v0`, `/as/v0` und `/auth/v1` sowie die relevanten Play-Routen bleiben unverändert.
 - Dokumentation um reproduzierbare GUI-Abbildungen für Turnieranlage, manuelle Ergebnisführung, Automatik, Kontext-Hilfe, Veranstalterregeln, Sicherung und Statuszustände ergänzt; Screenshot-Erzeugung und visueller Release-Check sind im Viewport-Skript beziehungsweise in der Release-Checkliste festgehalten.
 
 ## 0.14.0

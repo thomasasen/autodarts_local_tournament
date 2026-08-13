@@ -53,7 +53,7 @@
     if (panelState === "available") {
       titleText = loaderActive ? "Neue Version bereit" : "Update verfügbar";
       copyText = loaderActive
-        ? `Installiert: v${installedVersion}. Auf GitHub liegt bereits v${remoteVersion}. Da der Loader aktiv ist, reicht ein Reload von play.autodarts.io.`
+        ? `Installiert: v${installedVersion}. Auf GitHub liegt bereits v${remoteVersion}. Da der Loader aktiv ist, reicht ein Reload von play.autodarts.com.`
         : `Installiert: v${installedVersion}. Auf GitHub liegt bereits v${remoteVersion}.`;
     } else if (panelState === "current") {
       titleText = "Version ist aktuell";

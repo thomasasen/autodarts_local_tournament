@@ -1,18 +1,19 @@
 ﻿// ==UserScript==
 // @name         Autodarts Tournament Assistant
 // @namespace    https://github.com/thomasasen/autodarts_local_tournament
-// @version      0.14.0
-// @description  Local tournament manager for play.autodarts.io (KO, Liga, Gruppen + KO)
+// @version      0.14.1
+// @description  Local tournament manager for play.autodarts.com (KO, Liga, Gruppen + KO)
 // @author       Thomas Asen
 // @license      MIT
 // @match        *://play.autodarts.io/*
+// @match        *://play.autodarts.com/*
 // @run-at       document-start
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_xmlhttpRequest
 // @connect      cdn.jsdelivr.net
 // @connect      raw.githubusercontent.com
-// @connect      api.autodarts.io
+// @connect      api.autodarts.com
 // @downloadURL  https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.user.js
 // @updateURL    https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.meta.js
 // ==/UserScript==
@@ -22,7 +23,7 @@
 
   const RUNTIME_GUARD_KEY = "__ATA_RUNTIME_BOOTSTRAPPED";
   const RUNTIME_GLOBAL_KEY = "__ATA_RUNTIME";
-  const APP_VERSION = "0.14.0";
+  const APP_VERSION = "0.14.1";
   const STORAGE_KEY = "ata:tournament:v1";
   const STORAGE_SCHEMA_VERSION = 6;
   const STORAGE_KO_MIGRATION_BACKUPS_KEY = "ata:tournament:ko-migration-backups:v2";
@@ -32,7 +33,7 @@
   const READY_EVENT = "ata:ready";
   const LOADER_GUARD_KEY = "__ATA_LOADER_BOOTSTRAPPED";
   const LOADER_MENU_ITEM_ID = "ata-loader-menu-item";
-  const API_PROVIDER = "api.autodarts.io";
+  const API_PROVIDER = "api.autodarts.com";
   const API_GS_BASE = `https://${API_PROVIDER}/gs/v0`;
   const API_AS_BASE = `https://${API_PROVIDER}/as/v0`;
   const API_AUTH_BASE = `https://${API_PROVIDER}/auth/v1`;
@@ -13505,7 +13506,7 @@
         );
         const snapshot = getAuthStateSnapshot();
         record(
-          "API Auth: Header-Capture übernimmt nur api.autodarts.io und setzt Cache-Quelle",
+          `API Auth: Header-Capture übernimmt nur ${API_PROVIDER} und setzt Cache-Quelle`,
           ignored === ""
             && captured === "captured.token"
             && snapshot.hasCachedToken === true
@@ -13518,7 +13519,7 @@
         state.apiAutomation.authTokenExpiresAt = Number(previousExpiry || 0);
       }
     } catch (error) {
-      record("API Auth: Header-Capture übernimmt nur api.autodarts.io und setzt Cache-Quelle", false, String(error?.message || error));
+      record(`API Auth: Header-Capture übernimmt nur ${API_PROVIDER} und setzt Cache-Quelle`, false, String(error?.message || error));
     }
 
     try {
@@ -21223,7 +21224,7 @@
     if (panelState === "available") {
       titleText = loaderActive ? "Neue Version bereit" : "Update verfügbar";
       copyText = loaderActive
-        ? `Installiert: v${installedVersion}. Auf GitHub liegt bereits v${remoteVersion}. Da der Loader aktiv ist, reicht ein Reload von play.autodarts.io.`
+        ? `Installiert: v${installedVersion}. Auf GitHub liegt bereits v${remoteVersion}. Da der Loader aktiv ist, reicht ein Reload von play.autodarts.com.`
         : `Installiert: v${installedVersion}. Auf GitHub liegt bereits v${remoteVersion}.`;
     } else if (panelState === "current") {
       titleText = "Version ist aktuell";

@@ -3,7 +3,7 @@
 Repository guide for humans and coding agents.
 
 ## Project goal
-- Local tournament assistant for `play.autodarts.io`.
+- Local tournament assistant for `play.autodarts.com`.
 - Keep tournament logic deterministic, testable, and aligned with DRA/PDC terminology.
 
 ## Source of truth

@@ -1,8 +1,8 @@
 # Autodarts Tournament Assistant
 
-Lokale Dartturniere direkt in [play.autodarts.io](https://play.autodarts.io) planen, spielen und auswerten.
+Lokale Dartturniere direkt in [play.autodarts.com](https://play.autodarts.com) planen, spielen und auswerten.
 
-Aktuelle Version: `0.14.0`
+Aktuelle Version: `0.14.1`
 
 [![ATA Loader installieren](https://img.shields.io/badge/ATA%20Loader-installieren-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js)
 
@@ -28,7 +28,7 @@ _Die Turnieranlage führt links durch die Formatwahl; rechts fasst die Turnierü
 
 1. [Tampermonkey](https://www.tampermonkey.net/) installieren.
 2. Auf `ATA Loader installieren` klicken und die Installation bestätigen.
-3. [play.autodarts.io](https://play.autodarts.io) neu laden.
+3. [play.autodarts.com](https://play.autodarts.com) neu laden.
 4. Links im Menü `xLokales Turnier` öffnen.
 
 Der Loader lädt beim Seitenaufruf die aktuelle Version. Alternativ kann das [Runtime-Userscript](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/dist/autodarts-tournament-assistant.user.js) direkt installiert werden. Falls Tampermonkey nicht in AutoDarts startet, hilft die [Tampermonkey-FAQ zur Skriptinjektion](https://www.tampermonkey.net/faq.php#Q209).
