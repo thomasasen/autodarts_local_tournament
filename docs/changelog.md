@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.14.2
+
+- Windows-Checkout-Kompatibilität des Build-Disziplin-Gates korrigiert: Eingelesene Prüfdateien werden vor zeilenbasierten Metadaten- und Versionschecks auf ein einheitliches Zeilenende normalisiert. Dadurch läuft die verbindliche GitHub-QA auch bei CRLF-Dateien deterministisch.
+
 ## 0.14.1
 
 - AutoDarts-Domainwechsel unterstützt: Hauptskript und Loader starten auf `play.autodarts.com`; `play.autodarts.io` bleibt während des Redirect-Übergangs als zusätzlicher Match-Eintrag erhalten.

@@ -2,7 +2,7 @@
 
 Lokale Dartturniere direkt in [play.autodarts.com](https://play.autodarts.com) planen, spielen und auswerten.
 
-Aktuelle Version: `0.14.1`
+Aktuelle Version: `0.14.2`
 
 [![ATA Loader installieren](https://img.shields.io/badge/ATA%20Loader-installieren-1f6feb?style=for-the-badge)](https://raw.githubusercontent.com/thomasasen/autodarts_local_tournament/main/installer/Autodarts%20Tournament%20Assistant%20Loader.user.js)
 

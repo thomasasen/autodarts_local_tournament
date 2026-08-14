@@ -8,6 +8,10 @@ function Resolve-RepoPath([string]$RelativePath) {
   return (Join-Path $repoRoot $RelativePath)
 }
 
+function Normalize-LineEndings([string]$Content) {
+  return $Content.Replace("`r`n", "`n").Replace("`r", "`n")
+}
+
 $versionPath = Resolve-RepoPath "build/version.json"
 $constantsPath = Resolve-RepoPath "src/core/constants.js"
 $distPath = Resolve-RepoPath "dist/autodarts-tournament-assistant.user.js"
@@ -22,16 +26,16 @@ if (-not $appVersion) {
   throw "Build discipline QA failed: appVersion missing in build/version.json."
 }
 
-$constants = Get-Content $constantsPath -Raw -Encoding utf8
+$constants = Normalize-LineEndings (Get-Content $constantsPath -Raw -Encoding utf8)
 if ($constants -notmatch '__ATA_APP_VERSION__') {
   throw "Build discipline QA failed: src/core/constants.js must use __ATA_APP_VERSION__ placeholder."
 }
 
-$dist = Get-Content $distPath -Raw -Encoding utf8
-$meta = Get-Content $metaPath -Raw -Encoding utf8
-$loader = Get-Content $loaderPath -Raw -Encoding utf8
-$readme = Get-Content $readmePath -Raw -Encoding utf8
-$changelog = Get-Content $changelogPath -Raw -Encoding utf8
+$dist = Normalize-LineEndings (Get-Content $distPath -Raw -Encoding utf8)
+$meta = Normalize-LineEndings (Get-Content $metaPath -Raw -Encoding utf8)
+$loader = Normalize-LineEndings (Get-Content $loaderPath -Raw -Encoding utf8)
+$readme = Normalize-LineEndings (Get-Content $readmePath -Raw -Encoding utf8)
+$changelog = Normalize-LineEndings (Get-Content $changelogPath -Raw -Encoding utf8)
 if ($dist -match '__ATA_APP_VERSION__') {
   throw "Build discipline QA failed: unresolved __ATA_APP_VERSION__ placeholder found in dist."
 }
